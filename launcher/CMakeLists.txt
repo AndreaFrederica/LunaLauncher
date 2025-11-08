@@ -1492,7 +1492,6 @@ target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
 target_link_libraries(Launcher_logic
-    systeminfo
     Launcher_murmur2
     nbt++
     ${ZLIB_LIBRARIES}
@@ -1616,7 +1615,6 @@ if(Launcher_BUILD_UPDATER)
     target_precompile_headers(prism_updater_logic PRIVATE ${PRECOMPILED_HEADERS})
     target_link_libraries(prism_updater_logic
         ${ZLIB_LIBRARIES}
-        systeminfo
         BuildConfig
         Qt${QT_VERSION_MAJOR}::Widgets
         Qt${QT_VERSION_MAJOR}::Core
@@ -1667,7 +1665,6 @@ if(WIN32 OR (DEFINED Launcher_BUILD_FILELINKER AND Launcher_BUILD_FILELINKER))
     target_precompile_headers(filelink_logic PRIVATE ${PRECOMPILED_HEADERS})
 
     target_link_libraries(filelink_logic
-        systeminfo
         BuildConfig
         Qt${QT_VERSION_MAJOR}::Widgets
         Qt${QT_VERSION_MAJOR}::Core

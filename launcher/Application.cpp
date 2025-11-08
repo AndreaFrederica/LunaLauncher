@@ -138,7 +138,7 @@
 #include <LocalPeer.h>
 
 #include <stdlib.h>
-#include <sys.h>
+#include <QStringLiteral>
 #include "SysInfo.h"
 
 #ifdef Q_OS_LINUX

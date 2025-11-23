@@ -337,7 +337,6 @@ int main(int argc, char* argv[])
 
     // Install message handler
     qInstallMessageHandler(messageHandler);
-
     // initialize Qt
     Application app(argc, argv);
 

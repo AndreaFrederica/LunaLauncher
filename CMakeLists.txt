@@ -313,11 +313,35 @@ if(Launcher_QT_VERSION_MAJOR EQUAL 6)
     set(QT_BINS_DIR     ${QT${QT_VERSION_MAJOR}_INSTALL_PREFIX}/${QT${QT_VERSION_MAJOR}_INSTALL_BINS})
 endif()
 
-find_package(cmark REQUIRED)
+# Find libqrencode
+## NOTE(@getchoo): Never use pkg-config with MSVC since the vcpkg port makes our install bundle fail to find the dll
+if(MSVC)
+    find_path(LIBQRENCODE_INCLUDE_DIR qrencode.h REQUIRED)
+    find_library(LIBQRENCODE_LIBRARY_RELEASE qrencode REQUIRED)
+    find_library(LIBQRENCODE_LIBRARY_DEBUG qrencoded)
+    set(LIBQRENCODE_LIBRARIES optimized ${LIBQRENCODE_LIBRARY_RELEASE} debug ${LIBQRENCODE_LIBRARY_DEBUG})
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(libqrencode REQUIRED IMPORTED_TARGET libqrencode)
+endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(PkgConfig REQUIRED)
     pkg_check_modules(gamemode REQUIRED IMPORTED_TARGET gamemode)
+endif()
+
+if(NOT Launcher_FORCE_BUNDLED_LIBS)
+    # Find toml++
+    find_package(tomlplusplus 3.2.0 QUIET)
+    # Fallback to pkg-config (if available) if CMake files aren't found
+    if(NOT tomlplusplus_FOUND)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(tomlplusplus IMPORTED_TARGET tomlplusplus>=3.2.0)
+        endif()
+    endif()
+
+    # Find cmark
+    find_package(cmark QUIET)
 endif()
 
 # Find libqrencode
@@ -505,6 +529,29 @@ add_subdirectory(libraries/javacheck) # java compatibility checker
 
 add_subdirectory(libraries/rainbow) # Qt extension for colors
 add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
+
+if(NOT tomlplusplus_FOUND)
+    message(STATUS "Using bundled tomlplusplus")
+    add_subdirectory(libraries/tomlplusplus) # toml parser
+else()
+    message(STATUS "Using system tomlplusplus")
+endif()
+
+if(NOT cmark_FOUND)
+    message(STATUS "Using bundled cmark")
+    set(ORIGINAL_BUILD_TESTING ${BUILD_TESTING})
+    set(BUILD_TESTING 0)
+    set(BUILD_SHARED_LIBS 0)
+    add_subdirectory(libraries/cmark EXCLUDE_FROM_ALL) # Markdown parser
+    add_library(cmark::cmark ALIAS cmark)
+    set(BUILD_TESTING ${ORIGINAL_BUILD_TESTING})
+else()
+    message(STATUS "Using system cmark")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_subdirectory(libraries/gamemode)
+endif()
 add_subdirectory(libraries/murmur2) # Hash for usage with the CurseForge API
 add_subdirectory(libraries/qdcss) # css parser
 add_subdirectory(libraries/simplewebp) # WebP image decoder

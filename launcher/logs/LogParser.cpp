@@ -352,6 +352,9 @@ MessageLevel LogParser::guessLevel(const QString& line, MessageLevel previous)
     if (line.contains("overwriting existing"))
         return MessageLevel::Fatal;
 
+    if (line == "---- Minecraft Crash Report ----")
+        return MessageLevel::Error;
+
     if (line.startsWith("\t") || line.startsWith(" "))
         return previous;
 

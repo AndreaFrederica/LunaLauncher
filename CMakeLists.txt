@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.22)  # minimum version required by Qt
 
-project(Launcher LANGUAGES C CXX)
-if(APPLE)
-    enable_language(OBJC OBJCXX)
-endif()
+project(Launcher)
 
 string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_BUILD_DIR}" IS_IN_SOURCE_BUILD)
 if(IS_IN_SOURCE_BUILD)
@@ -82,11 +79,24 @@ else()
     if(WIN32)
         set(CMAKE_EXE_LINKER_FLAGS "-Wl,--stack,8388608 ${CMAKE_EXE_LINKER_FLAGS}")
 
+        # Emit PDBs for WinDbg, etc.
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            set(CMAKE_EXE_LINKER_FLAGS "-Wl,--pdb= ${CMAKE_EXE_LINKER_FLAGS}")
+
+            foreach(lang C CXX)
+                set("CMAKE_${lang}_FLAGS" "-gcodeview ${CMAKE_${lang}_FLAGS}")
+
+                # Force-enabling this to use generator expressions like TARGET_PDB_FILE
+                # (and because we can actually emit PDBs)
+                set("CMAKE_${lang}_LINKER_SUPPORTS_PDB" ON)
+            endforeach()
+        endif()
+
         # -ffunction-sections and -fdata-sections help reduce binary size
-        # -mguard=cf enables Control Flow Guard (not supported by GCC 15, use -fcf-protection instead)
+        # -mguard=cf enables Control Flow Guard
         # TODO: Look into -gc-sections to further reduce binary size
         foreach(lang C CXX)
-            set("CMAKE_${lang}_FLAGS_RELEASE" "-ffunction-sections -fdata-sections")
+            set("CMAKE_${lang}_FLAGS_RELEASE" "-ffunction-sections -fdata-sections -mguard=cf")
         endforeach()
     endif()
 endif()
@@ -110,24 +120,30 @@ endif()
 option(DEBUG_ADDRESS_SANITIZER "Enable Address Sanitizer in Debug builds" OFF)
 
 # If this is a Debug build turn on address sanitiser
-if (DEBUG_ADDRESS_SANITIZER)
+if ((CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo") AND DEBUG_ADDRESS_SANITIZER)
     message(STATUS "Address Sanitizer enabled for Debug builds, Turn it off with -DDEBUG_ADDRESS_SANITIZER=off")
-
-    set(USE_ASAN_COMPILE_OPTIONS $<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>)
-    if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-        message(STATUS "Using Address Sanitizer compile options for MSVC frontend")
-        add_compile_options(
-                $<${USE_ASAN_COMPILE_OPTIONS}:/fsanitize=address>
-                $<${USE_ASAN_COMPILE_OPTIONS}:/Oy->
-        )
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-        message(STATUS "Using Address Sanitizer compile options for GCC/Clang")
-        add_compile_options(
-                $<${USE_ASAN_COMPILE_OPTIONS}:-fsanitize=address,undefined>
-                $<${USE_ASAN_COMPILE_OPTIONS}:-fno-omit-frame-pointer>
-                $<${USE_ASAN_COMPILE_OPTIONS}:-fno-sanitize-recover=null>
-        )
-        link_libraries("asan" "ubsan")
+    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+        if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+            # using clang with clang-cl front end
+            message(STATUS "Address Sanitizer available on Clang MSVC frontend")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fsanitize=address /Oy-")
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /fsanitize=address /Oy-")
+        else()
+            # AppleClang and Clang
+            message(STATUS "Address Sanitizer available on Clang")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=null")
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=null")
+        endif()
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        # GCC
+        message(STATUS "Address Sanitizer available on GCC")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover")
+        link_libraries("asan")
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+        message(STATUS "Address Sanitizer available on MSVC")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fsanitize=address /Oy-")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /fsanitize=address /Oy-")
     else()
         message(STATUS "Address Sanitizer not available on compiler ${CMAKE_CXX_COMPILER_ID}")
     endif()
@@ -178,16 +194,16 @@ endif()
 ##################################### Set Application options #####################################
 
 ######## Set URLs ########
-set(Launcher_NEWS_RSS_URL "https://prismlauncher.org/feed/feed.xml" CACHE STRING "URL to fetch Luna Launcher's news RSS feed from.")
+set(Launcher_NEWS_RSS_URL "https://prismlauncher.org/feed/feed.xml" CACHE STRING "URL to fetch Prism Launcher's news RSS feed from.")
 set(Launcher_NEWS_OPEN_URL "https://prismlauncher.org/news" CACHE STRING "URL that gets opened when the user clicks 'More News'")
 set(Launcher_HELP_URL "https://prismlauncher.org/wiki/help-pages/%1" CACHE STRING "URL (with arg %1 to be substituted with page-id) that gets opened when the user requests help")
-set(Launcher_LOGIN_CALLBACK_URL "https://lunalauncher.sirrus.cc/oauth-callback.html" CACHE STRING "URL that gets opened when the user successfully logins.")
+set(Launcher_LOGIN_CALLBACK_URL "https://prismlauncher.org/successful-login" CACHE STRING "URL that gets opened when the user successfully logins.")
 set(Launcher_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" CACHE STRING "URL for FML Libraries.")
 
 ######## Set version numbers ########
 set(Launcher_VERSION_MAJOR 10)
 set(Launcher_VERSION_MINOR 0)
-set(Launcher_VERSION_PATCH 1)
+set(Launcher_VERSION_PATCH 0)
 
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")
 set(Launcher_VERSION_NAME4 "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}.0")
@@ -197,7 +213,7 @@ set(Launcher_VERSION_NAME4_COMMA "${Launcher_VERSION_MAJOR},${Launcher_VERSION_M
 set(Launcher_BUILD_PLATFORM "unknown" CACHE STRING "A short string identifying the platform that this build was built for. Only used to display in the about dialog.")
 
 # Github repo URL with releases for updater
-set(Launcher_UPDATER_GITHUB_REPO "https://github.com/AndreaFrederica/LunaLauncher" CACHE STRING "Base github URL for the updater.")
+set(Launcher_UPDATER_GITHUB_REPO "https://github.com/PrismLauncher/PrismLauncher" CACHE STRING "Base github URL for the updater.")
 
 # Name to help updater identify valid artifacts
 set(Launcher_BUILD_ARTIFACT "" CACHE STRING "Artifact name to help the updater identify valid artifacts.")
@@ -209,7 +225,7 @@ set(Launcher_META_URL "https://meta.prismlauncher.org/v1/" CACHE STRING "URL to 
 set(Launcher_IMGUR_CLIENT_ID "5b97b0713fba4a3" CACHE STRING "Client ID you can get from Imgur when you register an application")
 
 # Bug tracker URL
-set(Launcher_BUG_TRACKER_URL "https://github.com/AndreaFrederica/LunaLauncher/issues" CACHE STRING "URL for the bug tracker.")
+set(Launcher_BUG_TRACKER_URL "https://github.com/PrismLauncher/PrismLauncher/issues" CACHE STRING "URL for the bug tracker.")
 
 # Translations Platform URL
 set(Launcher_TRANSLATIONS_URL "https://hosted.weblate.org/projects/prismlauncher/launcher/" CACHE STRING "URL for the translations platform.")
@@ -240,13 +256,6 @@ endif()
 # Java downloader
 option(Launcher_ENABLE_JAVA_DOWNLOADER "Build the java downloader feature" ${Launcher_ENABLE_JAVA_DOWNLOADER_DEFAULT})
 
-# Ownership check
-# WARNING: This option is for TESTING PURPOSES ONLY. Do NOT use this in normal builds.
-# It disables the Minecraft ownership verification, allowing the launcher to be used
-# without a legitimate game purchase. Only enable this when testing the launcher's
-# functionality in a controlled development environment.
-option(Launcher_DISABLE_OWNERSHIP_CHECK "Disable Minecraft ownership check. FOR TESTING ONLY - Do NOT use in production builds." OFF)
-
 # Native libraries
 if(UNIX AND APPLE)
     set(Launcher_GLFW_LIBRARY_NAME "libglfw.dylib" CACHE STRING "Name of native glfw library")
@@ -268,13 +277,13 @@ endif()
 
 # By using this key in your builds you accept the terms of use laid down in
 # https://docs.microsoft.com/en-us/legal/microsoft-identity-platform/terms-of-use
-set(Launcher_MSA_CLIENT_ID "a60a8e54-8c3c-4b25-9fe4-8ec4e616c410" CACHE STRING "Client ID you can get from Microsoft Identity Platform when you register an application")
+set(Launcher_MSA_CLIENT_ID "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb" CACHE STRING "Client ID you can get from Microsoft Identity Platform when you register an application")
 
 # By using this key in your builds you accept the terms and conditions laid down in
 # https://support.curseforge.com/en/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions
 # NOTE: CurseForge requires you to change this if you make any kind of derivative work.
 # This key was issued specifically for Prism Launcher
-set(Launcher_CURSEFORGE_API_KEY "$2a$10$nbP6.E4D5Ci/BuQkAomWCeD.UR1.H2bretosui.HpHyeQFSsVV5B6" CACHE STRING "API key for the CurseForge platform")
+set(Launcher_CURSEFORGE_API_KEY "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC" CACHE STRING "API key for the CurseForge platform")
 
 set(Launcher_COMPILER_NAME ${CMAKE_CXX_COMPILER_ID})
 set(Launcher_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})
@@ -310,38 +319,13 @@ if(Launcher_QT_VERSION_MAJOR EQUAL 6)
     set(QT_PLUGINS_DIR  ${QT${QT_VERSION_MAJOR}_INSTALL_PREFIX}/${QT${QT_VERSION_MAJOR}_INSTALL_PLUGINS})
     set(QT_LIBS_DIR     ${QT${QT_VERSION_MAJOR}_INSTALL_PREFIX}/${QT${QT_VERSION_MAJOR}_INSTALL_LIBS})
     set(QT_LIBEXECS_DIR ${QT${QT_VERSION_MAJOR}_INSTALL_PREFIX}/${QT${QT_VERSION_MAJOR}_INSTALL_LIBEXECS})
-    set(QT_BINS_DIR     ${QT${QT_VERSION_MAJOR}_INSTALL_PREFIX}/${QT${QT_VERSION_MAJOR}_INSTALL_BINS})
 endif()
 
-# Find libqrencode
-## NOTE(@getchoo): Never use pkg-config with MSVC since the vcpkg port makes our install bundle fail to find the dll
-if(MSVC)
-    find_path(LIBQRENCODE_INCLUDE_DIR qrencode.h REQUIRED)
-    find_library(LIBQRENCODE_LIBRARY_RELEASE qrencode REQUIRED)
-    find_library(LIBQRENCODE_LIBRARY_DEBUG qrencoded)
-    set(LIBQRENCODE_LIBRARIES optimized ${LIBQRENCODE_LIBRARY_RELEASE} debug ${LIBQRENCODE_LIBRARY_DEBUG})
-else()
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(libqrencode REQUIRED IMPORTED_TARGET libqrencode)
-endif()
+find_package(cmark REQUIRED)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(PkgConfig REQUIRED)
     pkg_check_modules(gamemode REQUIRED IMPORTED_TARGET gamemode)
-endif()
-
-if(NOT Launcher_FORCE_BUNDLED_LIBS)
-    # Find toml++
-    find_package(tomlplusplus 3.2.0 QUIET)
-    # Fallback to pkg-config (if available) if CMake files aren't found
-    if(NOT tomlplusplus_FOUND)
-        find_package(PkgConfig QUIET)
-        if(PkgConfig_FOUND)
-            pkg_check_modules(tomlplusplus IMPORTED_TARGET tomlplusplus>=3.2.0)
-        endif()
-    endif()
-
-    # Find cmark
-    find_package(cmark QUIET)
 endif()
 
 # Find libqrencode
@@ -364,7 +348,7 @@ if(NOT LibArchive_FOUND)
     pkg_check_modules(libarchive REQUIRED IMPORTED_TARGET libarchive)
 endif()
 
-find_package(tomlplusplus 3.2.0)
+find_package(tomlplusplus 3.2.0 REQUIRED)
 # fallback to pkgconfig, important especially as many distros package toml++ built with meson
 if(NOT tomlplusplus_FOUND)
     find_package(PkgConfig REQUIRED)
@@ -406,7 +390,7 @@ if(UNIX AND APPLE)
     # Mac bundle settings
     set(MACOSX_BUNDLE_BUNDLE_NAME "${Launcher_DisplayName}")
     set(MACOSX_BUNDLE_INFO_STRING "${Launcher_DisplayName}: A custom launcher for Minecraft that allows you to easily manage multiple installations of Minecraft at once.")
-    set(MACOSX_BUNDLE_GUI_IDENTIFIER "${Launcher_AppID}")
+    set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.prismlauncher.${Launcher_Name}")
     set(MACOSX_BUNDLE_BUNDLE_VERSION "${Launcher_VERSION_NAME}")
     set(MACOSX_BUNDLE_SHORT_VERSION_STRING "${Launcher_VERSION_NAME}")
     set(MACOSX_BUNDLE_LONG_VERSION_STRING "${Launcher_VERSION_NAME}")
@@ -425,52 +409,6 @@ if(UNIX AND APPLE)
 
     # Add the icon
     install(FILES ${Launcher_Branding_ICNS} DESTINATION ${RESOURCES_DEST_DIR} RENAME ${Launcher_Name}.icns)
-
-    find_program(ACTOOL_EXE actool DOC "Path to the apple asset catalog compiler")
-    if(ACTOOL_EXE)
-        execute_process(
-            COMMAND xcodebuild -version
-            OUTPUT_VARIABLE XCODE_VERSION_OUTPUT
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-
-        string(REGEX MATCH "Xcode ([0-9]+\.[0-9]+)" XCODE_VERSION_MATCH "${XCODE_VERSION_OUTPUT}")
-        if(XCODE_VERSION_MATCH)
-            set(XCODE_VERSION ${CMAKE_MATCH_1})
-        else()
-            set(XCODE_VERSION 0.0)
-        endif()
-
-        if(XCODE_VERSION VERSION_GREATER_EQUAL 26.0)
-            set(ASSETS_OUT_DIR "${CMAKE_BINARY_DIR}/program_info")
-            set(GENERATED_ASSETS_CAR "${ASSETS_OUT_DIR}/Assets.car")
-            set(ICON_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${Launcher_Branding_MAC_ICON}")
-
-            add_custom_command(
-                OUTPUT "${GENERATED_ASSETS_CAR}"
-                COMMAND ${ACTOOL_EXE} "${ICON_SOURCE}"
-                        --compile "${ASSETS_OUT_DIR}"
-                        --output-partial-info-plist /dev/null
-                        --app-icon LunaLauncher
-                        --enable-on-demand-resources NO
-                        --target-device mac
-                        --minimum-deployment-target ${CMAKE_OSX_DEPLOYMENT_TARGET}
-                        --platform macosx
-                DEPENDS "${ICON_SOURCE}"
-                COMMENT "Compiling asset catalog (${ICON_SOURCE})"
-                VERBATIM
-            )
-            add_custom_target(compile_assets ALL DEPENDS "${GENERATED_ASSETS_CAR}")
-            install(FILES "${GENERATED_ASSETS_CAR}" DESTINATION "${RESOURCES_DEST_DIR}")
-        else()
-            message(WARNING "Xcode ${XCODE_VERSION} is too old. Minimum required version is 26.0. Not compiling liquid glass icons.")
-        endif()
-
-    else()
-        message(WARNING "actool not found. Cannot compile macOS app icons.\n"
-				"Install Xcode command line tools: 'xcode-select --install'")
-    endif()
-
 
 elseif(UNIX)
     include(KDEInstallDirs)
@@ -529,29 +467,6 @@ add_subdirectory(libraries/javacheck) # java compatibility checker
 
 add_subdirectory(libraries/rainbow) # Qt extension for colors
 add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
-
-if(NOT tomlplusplus_FOUND)
-    message(STATUS "Using bundled tomlplusplus")
-    add_subdirectory(libraries/tomlplusplus) # toml parser
-else()
-    message(STATUS "Using system tomlplusplus")
-endif()
-
-if(NOT cmark_FOUND)
-    message(STATUS "Using bundled cmark")
-    set(ORIGINAL_BUILD_TESTING ${BUILD_TESTING})
-    set(BUILD_TESTING 0)
-    set(BUILD_SHARED_LIBS 0)
-    add_subdirectory(libraries/cmark EXCLUDE_FROM_ALL) # Markdown parser
-    add_library(cmark::cmark ALIAS cmark)
-    set(BUILD_TESTING ${ORIGINAL_BUILD_TESTING})
-else()
-    message(STATUS "Using system cmark")
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    add_subdirectory(libraries/gamemode)
-endif()
 add_subdirectory(libraries/murmur2) # Hash for usage with the CurseForge API
 add_subdirectory(libraries/qdcss) # css parser
 add_subdirectory(libraries/simplewebp) # WebP image decoder

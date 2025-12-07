@@ -25,14 +25,14 @@ namespace MMCZip {
 
 void ExtractZipTask::executeTask()
 {
-    m_zipFuture = QtConcurrent::run(QThreadPool::globalInstance(), [this]() { return extractZip(); });
-    connect(&m_zipWatcher, &QFutureWatcher<ZipResult>::finished, this, &ExtractZipTask::finish);
-    m_zipWatcher.setFuture(m_zipFuture);
+    m_zip_future = QtConcurrent::run(QThreadPool::globalInstance(), [this]() { return extractZip(); });
+    connect(&m_zip_watcher, &QFutureWatcher<ZipResult>::finished, this, &ExtractZipTask::finish);
+    m_zip_watcher.setFuture(m_zip_future);
 }
 
 auto ExtractZipTask::extractZip() -> ZipResult
 {
-    auto target = m_outputDir.absolutePath();
+    auto target = m_output_dir.absolutePath();
     auto target_top_dir = QUrl::fromLocalFile(target);
 
     QStringList extracted;
@@ -52,9 +52,8 @@ auto ExtractZipTask::extractZip() -> ZipResult
     setStatus("Extracting files...");
     setProgress(0, m_input.getFiles().count());
     ZipResult result;
-    auto fileName = m_input.getZipName();
     if (!m_input.parse([this, &result, &target, &target_top_dir, ext, &extracted](ArchiveReader::File* f) {
-            if (m_zipFuture.isCanceled())
+            if (m_zip_future.isCanceled())
                 return false;
             setProgress(m_progress + 1, m_progressTotal);
             QString file_name = f->filename();
@@ -105,16 +104,17 @@ auto ExtractZipTask::extractZip() -> ZipResult
             return true;
         })) {
         FS::removeFiles(extracted);
-        return result.has_value() ? result : ZipResult(tr("Failed to parse file %1").arg(fileName));
+        return result.has_value() || m_zip_future.isCanceled() ? result
+                                                               : ZipResult(tr("Failed to parse file %1").arg(m_input.getZipName()));
     }
     return ZipResult();
 }
 
 void ExtractZipTask::finish()
 {
-    if (m_zipFuture.isCanceled()) {
+    if (m_zip_future.isCanceled()) {
         emitAborted();
-    } else if (auto result = m_zipFuture.result(); result.has_value()) {
+    } else if (auto result = m_zip_future.result(); result.has_value()) {
         emitFailed(result.value());
     } else {
         emitSucceeded();
@@ -123,8 +123,8 @@ void ExtractZipTask::finish()
 
 bool ExtractZipTask::abort()
 {
-    if (m_zipFuture.isRunning()) {
-        m_zipFuture.cancel();
+    if (m_zip_future.isRunning()) {
+        m_zip_future.cancel();
         // NOTE: Here we don't do `emitAborted()` because it will be done when `m_build_zip_future` actually cancels, which may not occur
         // immediately.
         return true;

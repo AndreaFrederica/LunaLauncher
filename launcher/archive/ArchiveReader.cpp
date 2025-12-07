@@ -23,7 +23,6 @@
 #include <archive_entry.h>
 #include <QDir>
 #include <QFileInfo>
-#include <memory>
 
 namespace MMCZip {
 QStringList ArchiveReader::getFiles()
@@ -42,7 +41,7 @@ bool ArchiveReader::collectFiles(bool onlyFiles)
 
 QString ArchiveReader::File::filename()
 {
-    return QString::fromUtf8(archive_entry_pathname_utf8(m_entry));
+    return QString::fromUtf8(archive_entry_pathname(m_entry));
 }
 
 QByteArray ArchiveReader::File::readAll(int* outStatus)
@@ -84,8 +83,8 @@ auto ArchiveReader::goToFile(QString filename) -> std::unique_ptr<File>
     auto a = f->m_archive.get();
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
-    auto fileName = m_archivePath.toStdWString();
-    if (archive_read_open_filename_w(a, fileName.data(), m_blockSize) != ARCHIVE_OK) {
+    auto fileName = m_archivePath.toUtf8();
+    if (archive_read_open_filename(a, fileName.constData(), m_blockSize) != ARCHIVE_OK) {
         qCritical() << "Failed to open archive file:" << m_archivePath << "-" << archive_error_string(a);
         return nullptr;
     }
@@ -131,12 +130,10 @@ static int copy_data(struct archive* ar, struct archive* aw, bool notBlock = fal
 bool ArchiveReader::File::writeFile(archive* out, QString targetFileName, bool notBlock)
 {
     auto entry = m_entry;
-    std::unique_ptr<archive_entry, decltype(&archive_entry_free)> entryClone(nullptr, &archive_entry_free);
     if (!targetFileName.isEmpty()) {
-        entryClone.reset(archive_entry_clone(m_entry));
-        entry = entryClone.get();
+        entry = archive_entry_clone(m_entry);
         auto nameUtf8 = targetFileName.toUtf8();
-        archive_entry_set_pathname_utf8(entry, nameUtf8.constData());
+        archive_entry_set_pathname(entry, nameUtf8.constData());
     }
     if (archive_write_header(out, entry) < ARCHIVE_OK) {
         qCritical() << "Failed to write header to entry:" << filename() << "-" << archive_error_string(out);
@@ -160,15 +157,15 @@ bool ArchiveReader::parse(std::function<bool(File*, bool&)> doStuff)
     auto a = f->m_archive.get();
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
-    auto fileName = m_archivePath.toStdWString();
-    if (archive_read_open_filename_w(a, fileName.data(), m_blockSize) != ARCHIVE_OK) {
+    auto fileName = m_archivePath.toUtf8();
+    if (archive_read_open_filename(a, fileName.constData(), m_blockSize) != ARCHIVE_OK) {
         qCritical() << "Failed to open archive file:" << m_archivePath << "-" << f->error();
         return false;
     }
 
     bool breakControl = false;
     while (f->readNextHeader() == ARCHIVE_OK) {
-        if (f && !doStuff(f.get(), breakControl)) {
+        if (!doStuff(f.get(), breakControl)) {
             qCritical() << "Failed to parse file:" << f->filename() << "-" << f->error();
             return false;
         }

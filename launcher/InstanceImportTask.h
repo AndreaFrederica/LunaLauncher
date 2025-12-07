@@ -56,6 +56,7 @@ class InstanceImportTask : public InstanceTask {
     void processTechnic();
     void processFlame();
     void processModrinth();
+    QString getRootFromZip(QStringList files);
 
    private slots:
     void processZipPack();

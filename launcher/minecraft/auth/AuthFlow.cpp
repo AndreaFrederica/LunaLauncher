@@ -12,6 +12,9 @@
 #include "minecraft/auth/steps/XboxAuthorizationStep.h"
 #include "minecraft/auth/steps/XboxProfileStep.h"
 #include "minecraft/auth/steps/XboxUserStep.h"
+#include "minecraft/auth/steps/YggdrasilAuthStep.h"
+#include "minecraft/auth/steps/YggdrasilProfileStep.h"
+#include "minecraft/auth/steps/YggdrasilProfileSelectStep.h"
 #include "tasks/Task.h"
 
 #include "AuthFlow.h"
@@ -40,7 +43,19 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
         m_steps.append(makeShared<EntitlementsStep>(m_data));
         m_steps.append(makeShared<MinecraftProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
+    } else if (data->type == AccountType::Yggdrasil) {
+        // Yggdrasil authentication flow
+        if (action == Action::Refresh) {
+            m_steps.append(makeShared<YggdrasilAuthStep>(m_data, YggdrasilAuthStep::RequestType::Refresh));
+        } else {
+            m_steps.append(makeShared<YggdrasilAuthStep>(m_data, YggdrasilAuthStep::RequestType::Authenticate));
+        }
+        // Profile selection step - it will auto-select if only one profile, show dialog if multiple
+        m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
+        m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
+        m_steps.append(makeShared<GetSkinStep>(m_data));
     }
+    // Offline accounts don't need any steps
     changeState(AccountTaskState::STATE_CREATED);
 }
 

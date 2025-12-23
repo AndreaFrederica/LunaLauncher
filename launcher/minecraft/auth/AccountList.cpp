@@ -309,8 +309,25 @@ QVariant AccountList::data(const QModelIndex& index, int role) const
                         case AccountType::Offline: {
                             return tr("Offline", "Account type");
                         }
+                        case AccountType::Yggdrasil: {
+                            return tr("Yggdrasil", "Account type");
+                        }
                     }
                     return tr("Unknown", "Account type");
+                }
+                case SourceColumn: {
+                    switch (account->accountType()) {
+                        case AccountType::MSA: {
+                            return tr("Microsoft");
+                        }
+                        case AccountType::Offline: {
+                            return QString();
+                        }
+                        case AccountType::Yggdrasil: {
+                            return account->accountData()->yggdrasilConfig.sourceName;
+                        }
+                    }
+                    return QString();
                 }
                 case StatusColumn:
                     return getAccountStatus(account->accountState());
@@ -345,6 +362,8 @@ QVariant AccountList::headerData(int section, [[maybe_unused]] Qt::Orientation o
                     return tr("Account");
                 case TypeColumn:
                     return tr("Type");
+                case SourceColumn:
+                    return tr("Source");
                 case StatusColumn:
                     return tr("Status");
                 default:
@@ -359,6 +378,8 @@ QVariant AccountList::headerData(int section, [[maybe_unused]] Qt::Orientation o
                     return tr("User name of the account.");
                 case TypeColumn:
                     return tr("Type of the account (MSA or Offline)");
+                case SourceColumn:
+                    return tr("Source of the account (e.g., Microsoft, skin server name)");
                 case StatusColumn:
                     return tr("Current status of the account.");
                 default:

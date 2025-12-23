@@ -87,6 +87,16 @@ class MinecraftAccount : public QObject, public Usable {
 
     static MinecraftAccountPtr createOffline(const QString& username);
 
+    static MinecraftAccountPtr createYggdrasil(const QString& username,
+                                                  const QString& password,
+                                                  const QString& authServerUrl,
+                                                  const QString& sessionServerUrl,
+                                                  const QString& sourceName = QString(),
+                                                  const QString& refreshEndpoint = QString(),
+                                                  const QString& validateEndpoint = QString(),
+                                                  const QString& authenticateEndpoint = QString(),
+                                                  const QString& profileEndpoint = QString());
+
     static MinecraftAccountPtr loadFromJsonV3(const QJsonObject& json);
 
     static QUuid uuidFromUsername(QString username);
@@ -128,6 +138,9 @@ class MinecraftAccount : public QObject, public Usable {
             } break;
             case AccountType::Offline: {
                 return "offline";
+            } break;
+            case AccountType::Yggdrasil: {
+                return "yggdrasil";
             } break;
             default: {
                 return "unknown";

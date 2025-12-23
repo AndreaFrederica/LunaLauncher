@@ -291,6 +291,8 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
         type = AccountType::MSA;
     } else if (typeS == "Offline") {
         type = AccountType::Offline;
+    } else if (typeS == "Yggdrasil") {
+        type = AccountType::Yggdrasil;
     } else {
         qWarning() << "Failed to parse account data: type is not recognized.";
         return false;
@@ -305,6 +307,18 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
         userToken = tokenFromJSONV3(data, "utoken");
         xboxApiToken = tokenFromJSONV3(data, "xrp-main");
         mojangservicesToken = tokenFromJSONV3(data, "xrp-mc");
+    } else if (type == AccountType::Yggdrasil) {
+        auto configV = data.value("yggdrasilConfig");
+        if (configV.isObject()) {
+            auto configObj = configV.toObject();
+            yggdrasilConfig.authServerUrl = configObj.value("authServerUrl").toString();
+            yggdrasilConfig.sessionServerUrl = configObj.value("sessionServerUrl").toString();
+            yggdrasilConfig.sourceName = configObj.value("sourceName").toString();
+            yggdrasilConfig.authenticateEndpoint = configObj.value("authenticateEndpoint").toString();
+            yggdrasilConfig.refreshEndpoint = configObj.value("refreshEndpoint").toString();
+            yggdrasilConfig.validateEndpoint = configObj.value("validateEndpoint").toString();
+            yggdrasilConfig.profileEndpoint = configObj.value("profileEndpoint").toString();
+        }
     }
 
     yggdrasilToken = tokenFromJSONV3(data, "ygg");
@@ -337,6 +351,27 @@ QJsonObject AccountData::saveState() const
         tokenToJSONV3(output, mojangservicesToken, "xrp-mc");
     } else if (type == AccountType::Offline) {
         output["type"] = "Offline";
+    } else if (type == AccountType::Yggdrasil) {
+        output["type"] = "Yggdrasil";
+        QJsonObject configObj;
+        configObj["authServerUrl"] = yggdrasilConfig.authServerUrl;
+        configObj["sessionServerUrl"] = yggdrasilConfig.sessionServerUrl;
+        if (!yggdrasilConfig.sourceName.isEmpty()) {
+            configObj["sourceName"] = yggdrasilConfig.sourceName;
+        }
+        if (!yggdrasilConfig.authenticateEndpoint.isEmpty()) {
+            configObj["authenticateEndpoint"] = yggdrasilConfig.authenticateEndpoint;
+        }
+        if (!yggdrasilConfig.refreshEndpoint.isEmpty()) {
+            configObj["refreshEndpoint"] = yggdrasilConfig.refreshEndpoint;
+        }
+        if (!yggdrasilConfig.validateEndpoint.isEmpty()) {
+            configObj["validateEndpoint"] = yggdrasilConfig.validateEndpoint;
+        }
+        if (!yggdrasilConfig.profileEndpoint.isEmpty()) {
+            configObj["profileEndpoint"] = yggdrasilConfig.profileEndpoint;
+        }
+        output["yggdrasilConfig"] = configObj;
     }
 
     tokenToJSONV3(output, yggdrasilToken, "ygg");
@@ -375,6 +410,15 @@ QString AccountData::accountDisplayString() const
                 return xboxApiToken.extra["gtg"].toString();
             }
             return "Xbox profile missing";
+        }
+        case AccountType::Yggdrasil: {
+            if (yggdrasilToken.extra.contains("userName")) {
+                return yggdrasilToken.extra["userName"].toString();
+            }
+            if (!minecraftProfile.name.isEmpty()) {
+                return minecraftProfile.name;
+            }
+            return QObject::tr("<Yggdrasil>");
         }
         default: {
             return "Invalid Account";

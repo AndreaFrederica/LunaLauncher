@@ -91,6 +91,42 @@ MinecraftAccountPtr MinecraftAccount::createOffline(const QString& username)
     return account;
 }
 
+MinecraftAccountPtr MinecraftAccount::createYggdrasil(const QString& username,
+                                                        const QString& password,
+                                                        const QString& authServerUrl,
+                                                        const QString& sessionServerUrl,
+                                                        const QString& sourceName,
+                                                        const QString& refreshEndpoint,
+                                                        const QString& validateEndpoint,
+                                                        const QString& authenticateEndpoint,
+                                                        const QString& profileEndpoint)
+{
+    static const QRegularExpression s_removeChars("[{}-]");
+    auto account = makeShared<MinecraftAccount>();
+    account->data.type = AccountType::Yggdrasil;
+
+    // Store Yggdrasil service configuration
+    account->data.yggdrasilConfig.authServerUrl = authServerUrl;
+    account->data.yggdrasilConfig.sessionServerUrl = sessionServerUrl;
+    account->data.yggdrasilConfig.sourceName = sourceName;
+    account->data.yggdrasilConfig.refreshEndpoint = refreshEndpoint;
+    account->data.yggdrasilConfig.validateEndpoint = validateEndpoint;
+    account->data.yggdrasilConfig.authenticateEndpoint = authenticateEndpoint;
+    account->data.yggdrasilConfig.profileEndpoint = profileEndpoint;
+
+    // Store temporary credentials (password will be cleared after successful auth)
+    account->data.yggdrasilToken.extra["username"] = username;
+    account->data.yggdrasilToken.extra["password"] = password;
+    account->data.yggdrasilToken.extra["clientToken"] = QUuid::createUuid().toString().remove(s_removeChars);
+
+    // Yggdrasil accounts are assumed to own Minecraft
+    account->data.minecraftEntitlement.canPlayMinecraft = true;
+    account->data.minecraftEntitlement.ownsMinecraft = true;
+    account->data.minecraftEntitlement.validity = Validity::Assumed;
+
+    return account;
+}
+
 QJsonObject MinecraftAccount::saveToJson() const
 {
     return data.saveState();

@@ -87,9 +87,20 @@ struct MinecraftProfile {
     Validity validity = Validity::None;
 };
 
-enum class AccountType { MSA, Offline };
+enum class AccountType { MSA, Offline, Yggdrasil };
 
 enum class AccountState { Unchecked, Offline, Working, Online, Disabled, Errored, Expired, Gone };
+
+struct YggdrasilServerConfig {
+    QString authServerUrl;
+    QString sessionServerUrl;
+    QString sourceName;  // e.g., "LittleSkin", "Custom Server", etc.
+    // Custom endpoints (empty means use default)
+    QString authenticateEndpoint;  // default: "/authserver/authenticate"
+    QString refreshEndpoint;       // default: "/sessionserver/refresh"
+    QString validateEndpoint;      // default: "/sessionserver/validate"
+    QString profileEndpoint;       // default: "/sessionserver/session/minecraft/profile/{uuid}"
+};
 
 struct AccountData {
     QJsonObject saveState() const;
@@ -107,6 +118,9 @@ struct AccountData {
     QString lastError() const;
 
     AccountType type = AccountType::MSA;
+
+    // Yggdrasil service configuration
+    YggdrasilServerConfig yggdrasilConfig;
 
     QString msaClientID;
     Token msaToken;

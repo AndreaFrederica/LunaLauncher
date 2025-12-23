@@ -225,6 +225,8 @@ set(MINECRAFT_SOURCES
     minecraft/auth/MinecraftAccount.h
     minecraft/auth/Parsers.cpp
     minecraft/auth/Parsers.h
+    minecraft/auth/YggdrasilPresets.cpp
+    minecraft/auth/YggdrasilPresets.h
 
     minecraft/auth/AuthFlow.cpp
     minecraft/auth/AuthFlow.h
@@ -247,6 +249,12 @@ set(MINECRAFT_SOURCES
     minecraft/auth/steps/XboxProfileStep.h
     minecraft/auth/steps/XboxUserStep.cpp
     minecraft/auth/steps/XboxUserStep.h
+    minecraft/auth/steps/YggdrasilAuthStep.cpp
+    minecraft/auth/steps/YggdrasilAuthStep.h
+    minecraft/auth/steps/YggdrasilProfileStep.cpp
+    minecraft/auth/steps/YggdrasilProfileStep.h
+    minecraft/auth/steps/YggdrasilProfileSelectStep.cpp
+    minecraft/auth/steps/YggdrasilProfileSelectStep.h
 
     minecraft/update/AssetUpdateTask.h
     minecraft/update/AssetUpdateTask.cpp
@@ -1069,6 +1077,14 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/NewInstanceDialog.h
     ui/dialogs/NewsDialog.cpp
     ui/dialogs/NewsDialog.h
+    ui/dialogs/YggdrasilLoginDialog.cpp
+    ui/dialogs/YggdrasilLoginDialog.h
+    ui/dialogs/YggdrasilProfileSelectDialog.cpp
+    ui/dialogs/YggdrasilProfileSelectDialog.h
+    ui/dialogs/YggdrasilPresetEditDialog.cpp
+    ui/dialogs/YggdrasilPresetEditDialog.h
+    ui/dialogs/YggdrasilPresetsDialog.cpp
+    ui/dialogs/YggdrasilPresetsDialog.h
     ui/pagedialog/PageDialog.cpp
     ui/pagedialog/PageDialog.h
     ui/dialogs/ProgressDialog.cpp
@@ -1240,6 +1256,10 @@ qt_wrap_ui(LAUNCHER_UI
     ui/widgets/MinecraftSettingsWidget.ui
     ui/widgets/JavaSettingsWidget.ui
     ui/dialogs/CopyInstanceDialog.ui
+    ui/dialogs/YggdrasilLoginDialog.ui
+    ui/dialogs/YggdrasilProfileSelectDialog.ui
+    ui/dialogs/YggdrasilPresetEditDialog.ui
+    ui/dialogs/YggdrasilPresetsDialog.ui
     ui/dialogs/CreateShortcutDialog.ui
     ui/dialogs/ProfileSetupDialog.ui
     ui/dialogs/ProgressDialog.ui

@@ -57,6 +57,7 @@ class AccountList : public QAbstractListModel {
         ProfileNameColumn = 0,
         NameColumn,
         TypeColumn,
+        SourceColumn,
         StatusColumn,
 
         NUM_COLUMNS

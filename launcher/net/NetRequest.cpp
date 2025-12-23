@@ -43,6 +43,7 @@
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QUrl>
+#include <QTimer>
 #include <memory>
 
 #if defined(LAUNCHER_APPLICATION)
@@ -247,6 +248,52 @@ void NetRequest::downloadFinished()
     if (handleRedirect()) {
         qCDebug(logCat) << getUid().toString() << "Request redirected:" << m_url.toString();
         return;
+    }
+
+    // Check for BMCLAPI 429 error - handle internal retry
+    if (m_state == State::Failed && m_reply && replyStatusCode() == 429) {
+        QString urlStr = m_url.toString();
+        if (urlStr.contains("bmclapi2.bangbang93.com")) {
+            m_retry_count++;
+
+            if (m_retry_count < MAX_RETRIES) {
+                // Retry with delay
+                int delay_ms = 100 * m_retry_count;  // 100ms, 200ms, 300ms...
+                qCWarning(logCat) << getUid().toString() << "BMCLAPI 429 error, retrying in" << delay_ms << "ms (attempt" << m_retry_count << "of" << MAX_RETRIES << ")";
+
+                // Reset state for retry
+                m_state = State::Inactive;
+                m_reply.reset();
+
+                QTimer::singleShot(delay_ms, this, [this]() { executeTask(); });
+                return;
+            } else {
+                // After MAX_RETRIES, switch to official source
+                qCWarning(logCat) << getUid().toString() << "BMCLAPI 429 error after" << MAX_RETRIES << "retries, switching to official source";
+
+                // Store original URL on first fallback
+                if (m_original_url.isEmpty()) {
+                    m_original_url = m_url;
+                }
+
+                // Replace BMCLAPI URL with official Mojang URL
+                QString newUrlStr = urlStr;
+                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://launcher.mojang.com/");
+                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://piston-data.mojang.com/");
+                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://piston-meta.mojang.com/");
+                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://launchermeta.mojang.com/");
+
+                m_url = QUrl(newUrlStr);
+                m_state = State::Inactive;
+                m_reply.reset();
+                m_retry_count = 0;  // Reset retry count for the new URL
+
+                qCWarning(logCat) << getUid().toString() << "Retrying with official source:" << m_url.toString();
+
+                QTimer::singleShot(0, this, [this]() { executeTask(); });
+                return;
+            }
+        }
     }
 
     // if the download failed before this point ...

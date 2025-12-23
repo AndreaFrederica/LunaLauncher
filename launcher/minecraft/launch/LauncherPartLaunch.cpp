@@ -93,7 +93,7 @@ void LauncherPartLaunch::executeTask()
     }
 
     m_launchScript = instance->createLaunchScript(m_session, m_targetToJoin);
-    QStringList args = instance->javaArguments();
+    QStringList args = instance->javaArguments(m_session);
     QString allArgs = args.join(", ");
     emit logLine("Java Arguments:\n[" + m_parent->censorPrivateInfo(allArgs) + "]\n\n", MessageLevel::Launcher);
 

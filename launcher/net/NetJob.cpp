@@ -37,10 +37,12 @@
 
 #include "NetJob.h"
 #include <QNetworkReply>
+#include <QTimer>
 #include "net/NetRequest.h"
 #include "tasks/ConcurrentTask.h"
 #if defined(LAUNCHER_APPLICATION)
 #include "Application.h"
+#include "minecraft/MirrorDownload.h"
 #include "ui/dialogs/CustomMessageBox.h"
 #endif
 
@@ -48,8 +50,16 @@ NetJob::NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> netwo
     : ConcurrentTask(job_name), m_network(network)
 {
 #if defined(LAUNCHER_APPLICATION)
-    if (APPLICATION_DYN && max_concurrent < 0)
+    if (APPLICATION_DYN && max_concurrent < 0) {
         max_concurrent = APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt();
+
+        // Check if using BMCLAPI for dynamic rate limiting
+        int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
+        if (mirrorType == MirrorDownload::BMCLAPI) {
+            m_is_bmclapi = true;
+            // Don't limit concurrency by default - will add delay dynamically if 429 occurs
+        }
+    }
 #endif
     if (max_concurrent > 0)
         setMaxConcurrent(max_concurrent);
@@ -64,18 +74,24 @@ auto NetJob::addNetAction(Net::NetRequest::Ptr action) -> bool
     return true;
 }
 
+void NetJob::executeTask()
+{
+    // For BMCLAPI, start only 1 task at a time to avoid 429 errors
+    if (m_is_bmclapi) {
+        QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection);
+    } else {
+        ConcurrentTask::executeTask();
+    }
+}
+
 void NetJob::executeNextSubTask()
 {
-    // We're finished, check for failures and retry if we can (up to 3 times)
-    if (isRunning() && m_queue.isEmpty() && m_doing.isEmpty() && !m_failed.isEmpty() && m_try < 3) {
-        m_try += 1;
-        while (!m_failed.isEmpty()) {
-            auto task = m_failed.take(*m_failed.keyBegin());
-            m_done.remove(task.get());
-            m_queue.enqueue(task);
-        }
+    // For BMCLAPI with active rate limiting, add delay between requests
+    if (m_is_bmclapi && m_bmclapi_delay_ms > 0 && !m_queue.isEmpty()) {
+        QTimer::singleShot(m_bmclapi_delay_ms, this, [this]() { QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection); });
+    } else {
+        ConcurrentTask::executeNextSubTask();
     }
-    ConcurrentTask::executeNextSubTask();
 }
 
 auto NetJob::size() const -> int
@@ -142,8 +158,20 @@ auto NetJob::getFailedFiles() -> QList<QString>
 void NetJob::updateState()
 {
     emit progress(m_done.count(), totalSize());
-    setStatus(tr("Executing %1 task(s) (%2 out of %3 are done)")
-                  .arg(QString::number(m_doing.count()), QString::number(m_done.count()), QString::number(totalSize())));
+    QString status = tr("Executing %1 task(s) (%2 out of %3 are done)")
+                         .arg(QString::number(m_doing.count()), QString::number(m_done.count()), QString::number(totalSize()));
+
+#if defined(LAUNCHER_APPLICATION)
+    // Add BMCLAPI attribution if using BMCLAPI mirror
+    if (APPLICATION_DYN) {
+        int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
+        if (mirrorType == MirrorDownload::BMCLAPI) {
+            status += " | " + tr("Powered by BMCLAPI");
+        }
+    }
+#endif
+
+    setStatus(status);
 }
 
 bool NetJob::isOnline()

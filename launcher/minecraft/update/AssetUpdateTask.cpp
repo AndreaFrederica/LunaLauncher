@@ -4,6 +4,7 @@
 #include "launch/LaunchStep.h"
 #include "minecraft/AssetsUtils.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/MirrorDownload.h"
 #include "minecraft/PackProfile.h"
 #include "net/ChecksumValidator.h"
 
@@ -23,6 +24,33 @@ void AssetUpdateTask::executeTask()
     auto profile = components->getProfile();
     auto assets = profile->getMinecraftAssets();
     QUrl indexUrl = assets->url;
+
+    // Rewrite URL for mirror support
+    int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
+    QString replacementUrl;
+
+    if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
+        replacementUrl = "https://bmclapi2.bangbang93.com";
+    } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
+        replacementUrl = APPLICATION->settings()->get("MojangDownloadsMirrorURL").toString();
+    }
+
+    if (!replacementUrl.isEmpty()) {
+        QString urlString = indexUrl.toString();
+        // Replace Mojang URLs with mirror URL using QString::replace
+        // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
+        if (!replacementUrl.endsWith('/')) {
+            replacementUrl += '/';
+        }
+        urlString.replace("https://launchermeta.mojang.com/", replacementUrl);
+        urlString.replace("https://launcher.mojang.com/", replacementUrl);
+        urlString.replace("https://piston-meta.mojang.com/", replacementUrl);
+        urlString.replace("http://launchermeta.mojang.com/", replacementUrl);
+        urlString.replace("http://launcher.mojang.com/", replacementUrl);
+        urlString.replace("http://piston-meta.mojang.com/", replacementUrl);
+        indexUrl = QUrl(urlString);
+    }
+
     QString localPath = assets->id + ".json";
     auto job = makeShared<NetJob>(tr("Asset index for %1").arg(m_inst->name()), APPLICATION->network());
 

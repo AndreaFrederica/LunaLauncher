@@ -70,6 +70,7 @@ class NetJob : public ConcurrentTask {
     void emitFailed(QString reason) override;
 
    protected slots:
+    void executeTask() override;
     void executeNextSubTask() override;
 
    protected:
@@ -82,4 +83,6 @@ class NetJob : public ConcurrentTask {
     int m_try = 1;
     bool m_ask_retry = true;
     int m_manual_try = 0;
+    bool m_is_bmclapi = false;
+    int m_bmclapi_delay_ms = 0;  // Dynamic delay for BMCLAPI rate limiting
 };

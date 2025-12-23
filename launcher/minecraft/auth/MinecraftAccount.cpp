@@ -301,6 +301,16 @@ void MinecraftAccount::fillSession(AuthSessionPtr session)
     } else {
         session->session = "-";
     }
+
+    // Yggdrasil / authlib-injector specific fields
+    if (data.type == AccountType::Yggdrasil) {
+        session->yggdrasil = true;
+        session->yggdrasilApiUrl = data.yggdrasilConfig.authServerUrl;
+    } else {
+        session->yggdrasil = false;
+        session->yggdrasilApiUrl.clear();
+        session->yggdrasilPrefetched.clear();
+    }
 }
 
 void MinecraftAccount::decrementUses()

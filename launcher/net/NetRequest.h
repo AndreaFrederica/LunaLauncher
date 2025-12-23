@@ -109,6 +109,11 @@ class NetRequest : public Task {
     /// source URL
     QUrl m_url;
     std::vector<std::shared_ptr<Net::HeaderProxy>> m_headerProxies;
+
+    /// BMCLAPI retry state
+    int m_retry_count = 0;
+    QUrl m_original_url;  // Store original URL for fallback
+    static const int MAX_RETRIES = 3;
 };
 }  // namespace Net
 

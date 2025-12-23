@@ -45,6 +45,7 @@
 
 #include "DataMigrationTask.h"
 #include "java/JavaInstallList.h"
+#include "minecraft/MirrorDownload.h"
 #include "net/PasteUpload.h"
 #include "tasks/Task.h"
 #include "tools/GenericProfiler.h"
@@ -59,6 +60,7 @@
 #include "ui/pages/global/APIPage.h"
 #include "ui/pages/global/AccountListPage.h"
 #include "ui/pages/global/AppearancePage.h"
+#include "ui/pages/global/AuthlibInjectorPage.h"
 #include "ui/pages/global/ExternalToolsPage.h"
 #include "ui/pages/global/JavaPage.h"
 #include "ui/pages/global/LanguagePage.h"
@@ -879,6 +881,34 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             if (!resourceUrl.isValid() || (resourceUrl.scheme() != "http" && resourceUrl.scheme() != "https"))
                 m_settings->reset("ResourceURL");
         }
+        {
+            // Download Mirror Settings
+            m_settings->registerSetting("DownloadMirrorType", MirrorDownload::MirrorType::Official);
+            m_settings->registerSetting("LibrariesURL", "");
+            m_settings->registerSetting("FMLLibsURL", "");
+            m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON
+
+            QUrl librariesUrl(m_settings->get("LibrariesURL").toString());
+            // get rid of invalid libraries urls
+            if (!librariesUrl.isEmpty() &&
+                (!librariesUrl.isValid() || (librariesUrl.scheme() != "http" && librariesUrl.scheme() != "https"))) {
+                m_settings->reset("LibrariesURL");
+            }
+
+            QUrl fmlLibsUrl(m_settings->get("FMLLibsURL").toString());
+            // get rid of invalid fml libs urls
+            if (!fmlLibsUrl.isEmpty() &&
+                (!fmlLibsUrl.isValid() || (fmlLibsUrl.scheme() != "http" && fmlLibsUrl.scheme() != "https"))) {
+                m_settings->reset("FMLLibsURL");
+            }
+
+            QUrl mojangDownloadsMirrorUrl(m_settings->get("MojangDownloadsMirrorURL").toString());
+            // get rid of invalid mojang downloads mirror urls
+            if (!mojangDownloadsMirrorUrl.isEmpty() &&
+                (!mojangDownloadsMirrorUrl.isValid() || (mojangDownloadsMirrorUrl.scheme() != "http" && mojangDownloadsMirrorUrl.scheme() != "https"))) {
+                m_settings->reset("MojangDownloadsMirrorURL");
+            }
+        }
 
         m_settings->registerSetting("CloseAfterLaunch", false);
         m_settings->registerSetting("QuitAfterGameStop", false);
@@ -918,6 +948,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
             m_globalSettingsProvider->addPage<APIPage>();
+            m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<ExternalToolsPage>();
             m_globalSettingsProvider->addPage<ProxyPage>();
         }

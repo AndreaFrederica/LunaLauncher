@@ -98,6 +98,45 @@
         </widget>
        </item>
        <item>
+        <widget class="QGroupBox" name="groupBox_mirrors">
+         <property name="title">
+          <string>Download &amp;Mirrors</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_mirrors">
+          <item>
+           <widget class="QLabel" name="mirrorTypeLabel">
+            <property name="text">
+             <string>Mirror &amp;Source</string>
+            </property>
+            <property name="buddy">
+             <cstring>mirrorTypeComboBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="mirrorTypeComboBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="mirrorDescriptionLabel">
+            <property name="text">
+             <string>Select a download mirror source. Custom mode allows individual URL configuration below.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="groupBox_meta">
          <property name="title">
           <string>Meta&amp;data Server</string>
@@ -153,6 +192,102 @@
           </item>
           <item>
            <widget class="QLineEdit" name="resourceURL">
+            <property name="placeholderText">
+             <string>Use Default</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_libraries">
+         <property name="title">
+          <string>Libraries Server</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_libraries">
+          <item>
+           <widget class="QLabel" name="label_libraries">
+            <property name="text">
+             <string>You can set this to another server if you have problems with downloading libraries.</string>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::RichText</enum>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="libraryURL">
+            <property name="placeholderText">
+             <string>Use Default</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_fmllibs">
+         <property name="title">
+          <string>FML Libraries Server</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_fmllibs">
+          <item>
+           <widget class="QLabel" name="label_fmllibs">
+            <property name="text">
+             <string>You can set this to another server if you have problems with downloading FML libraries (legacy Forge only).</string>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::RichText</enum>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="fmlLibsURL">
+            <property name="placeholderText">
+             <string>Use Default</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_mojang_downloads">
+         <property name="title">
+          <string>Mojang Downloads Mirror</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_mojang_downloads">
+          <item>
+           <widget class="QLabel" name="label_mojang_downloads">
+            <property name="text">
+             <string>For custom mirrors: URL to replace Mojang's download URLs in version JSON (e.g., client JAR, asset index). This replaces launcher.mojang.com and piston-data.mojang.com URLs.</string>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::RichText</enum>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="mojangDownloadsMirrorURL">
             <property name="placeholderText">
              <string>Use Default</string>
             </property>

@@ -49,6 +49,7 @@
 
 #include "Application.h"
 #include "BuildConfig.h"
+#include "minecraft/MirrorDownload.h"
 #include "net/PasteUpload.h"
 #include "settings/SettingsObject.h"
 #include "tools/BaseProfiler.h"
@@ -70,6 +71,12 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
         ui->pasteTypeComboBox->addItem(PasteUpload::PasteTypes.at(pasteType).name, pasteType);
     }
 
+    // Add mirror type dropdown
+    int mirrorTypes[] = { MirrorDownload::Official, MirrorDownload::BMCLAPI, MirrorDownload::Custom };
+    for (auto mirrorType : mirrorTypes) {
+        ui->mirrorTypeComboBox->addItem(tr(MirrorDownload::MirrorTypes.at(mirrorType).name.toUtf8()), mirrorType);
+    }
+
     void (QComboBox::*currentIndexChangedSignal)(int)(&QComboBox::currentIndexChanged);
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLPlaceholder);
     // This function needs to be called even when the ComboBox's index is still in its default state.
@@ -77,14 +84,24 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     // NOTE: this allows http://, but we replace that with https later anyway
     ui->metaURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->metaURL));
     ui->resourceURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->resourceURL));
+    ui->libraryURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->libraryURL));
+    ui->fmlLibsURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->fmlLibsURL));
+    ui->mojangDownloadsMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->mojangDownloadsMirrorURL));
     ui->baseURLEntry->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->baseURLEntry));
     ui->msaClientID->setValidator(new QRegularExpressionValidator(s_validMSAClientID, ui->msaClientID));
     ui->flameKey->setValidator(new QRegularExpressionValidator(s_validFlameKey, ui->flameKey));
 
     ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+    ui->resourceURL->setPlaceholderText(BuildConfig.DEFAULT_RESOURCE_BASE);
+    ui->libraryURL->setPlaceholderText(BuildConfig.LIBRARY_BASE);
+    ui->fmlLibsURL->setPlaceholderText(BuildConfig.FMLLIBS_BASE_URL);
     ui->userAgentLineEdit->setPlaceholderText(BuildConfig.USER_AGENT);
 
+    // Connect mirror selection change
+    connect(ui->mirrorTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateMirrorSelection);
+
     loadSettings();
+    updateMirrorSelection();  // Initialize UI state
 
     resetBaseURLNote();
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLNote);
@@ -118,6 +135,48 @@ void APIPage::updateBaseURLPlaceholder(int index)
     ui->baseURLEntry->setPlaceholderText(pasteDefaultURL);
 }
 
+void APIPage::updateMirrorSelection()
+{
+    int mirrorType = ui->mirrorTypeComboBox->currentData().toInt();
+    bool isCustom = (mirrorType == MirrorDownload::Custom);
+
+    // Enable/disable individual URL fields based on selection
+    ui->metaURL->setEnabled(isCustom);
+    ui->resourceURL->setEnabled(isCustom);
+    ui->libraryURL->setEnabled(isCustom);
+    ui->fmlLibsURL->setEnabled(isCustom);
+    ui->mojangDownloadsMirrorURL->setEnabled(isCustom);
+
+    if (!isCustom) {
+        // Populate fields with preset values (for display only)
+        const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(mirrorType);
+
+        if (mirrorType == MirrorDownload::Official) {
+            ui->metaURL->setText("");
+            ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+            ui->resourceURL->setText("");
+            ui->resourceURL->setPlaceholderText(BuildConfig.DEFAULT_RESOURCE_BASE);
+            ui->libraryURL->setText("");
+            ui->libraryURL->setPlaceholderText(BuildConfig.LIBRARY_BASE);
+            ui->fmlLibsURL->setText("");
+            ui->fmlLibsURL->setPlaceholderText(BuildConfig.FMLLIBS_BASE_URL);
+            ui->mojangDownloadsMirrorURL->setText("");
+            ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("Use Default"));
+        } else if (mirrorType == MirrorDownload::BMCLAPI) {
+            // BMCLAPI does not provide Prism Launcher's meta files, only Minecraft assets
+            // So metaURL should remain empty (uses default)
+            ui->metaURL->setText("");
+            ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+            ui->resourceURL->setText(mirrorInfo.defaultAssetsUrl);
+            ui->libraryURL->setText(mirrorInfo.defaultLibrariesUrl);
+            ui->fmlLibsURL->setText("");
+            ui->fmlLibsURL->setPlaceholderText(BuildConfig.FMLLIBS_BASE_URL);
+            ui->mojangDownloadsMirrorURL->setText("");
+            ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("BMCLAPI (auto)"));
+        }
+    }
+}
+
 void APIPage::loadSettings()
 {
     auto s = APPLICATION->settings();
@@ -134,12 +193,26 @@ void APIPage::loadSettings()
 
     ui->pasteTypeComboBox->setCurrentIndex(pasteTypeIndex);
 
+    // Load mirror type
+    int mirrorType = s->get("DownloadMirrorType").toInt();
+    int mirrorTypeIndex = ui->mirrorTypeComboBox->findData(mirrorType);
+    if (mirrorTypeIndex == -1) {
+        mirrorTypeIndex = ui->mirrorTypeComboBox->findData(MirrorDownload::Official);
+    }
+    ui->mirrorTypeComboBox->setCurrentIndex(mirrorTypeIndex);
+
     QString msaClientID = s->get("MSAClientIDOverride").toString();
     ui->msaClientID->setText(msaClientID);
     QString metaURL = s->get("MetaURLOverride").toString();
     ui->metaURL->setText(metaURL);
     QString resourceURL = s->get("ResourceURL").toString();
     ui->resourceURL->setText(resourceURL);
+    QString libraryURL = s->get("LibrariesURL").toString();
+    ui->libraryURL->setText(libraryURL);
+    QString fmlLibsURL = s->get("FMLLibsURL").toString();
+    ui->fmlLibsURL->setText(fmlLibsURL);
+    QString mojangDownloadsMirrorURL = s->get("MojangDownloadsMirrorURL").toString();
+    ui->mojangDownloadsMirrorURL->setText(mojangDownloadsMirrorURL);
     QString flameKey = s->get("FlameKeyOverride").toString();
     ui->flameKey->setText(flameKey);
     QString modrinthToken = s->get("ModrinthToken").toString();
@@ -156,38 +229,96 @@ void APIPage::applySettings()
     s->set("PastebinType", ui->pasteTypeComboBox->currentData().toInt());
     s->set("PastebinCustomAPIBase", ui->baseURLEntry->text());
 
+    // Save mirror type and URLs based on selection
+    int mirrorType = ui->mirrorTypeComboBox->currentData().toInt();
+    s->set("DownloadMirrorType", mirrorType);
+
+    if (mirrorType == MirrorDownload::Custom) {
+        // Save custom URLs
+        QUrl metaURL(ui->metaURL->text());
+        QUrl resourceURL(ui->resourceURL->text());
+        QUrl libraryURL(ui->libraryURL->text());
+        QUrl fmlLibsURL(ui->fmlLibsURL->text());
+        QUrl mojangDownloadsMirrorURL(ui->mojangDownloadsMirrorURL->text());
+
+        // Add required trailing slash
+        if (!metaURL.isEmpty() && !metaURL.path().endsWith('/')) {
+            QString path = metaURL.path();
+            path.append('/');
+            metaURL.setPath(path);
+        }
+
+        if (!resourceURL.isEmpty() && !resourceURL.path().endsWith('/')) {
+            QString path = resourceURL.path();
+            path.append('/');
+            resourceURL.setPath(path);
+        }
+
+        if (!libraryURL.isEmpty() && !libraryURL.path().endsWith('/')) {
+            QString path = libraryURL.path();
+            path.append('/');
+            libraryURL.setPath(path);
+        }
+
+        if (!fmlLibsURL.isEmpty() && !fmlLibsURL.path().endsWith('/')) {
+            QString path = fmlLibsURL.path();
+            path.append('/');
+            fmlLibsURL.setPath(path);
+        }
+
+        // Mojang Downloads Mirror URL doesn't need trailing slash (it's a base URL for path replacement)
+
+        auto isLocalhost = [](const QUrl& url) { return url.host() == "localhost" || url.host() == "127.0.0.1" || url.host() == "::1"; };
+        auto isUnsafe = [isLocalhost](const QUrl& url) { return !url.isEmpty() && url.scheme() == "http" && !isLocalhost(url); };
+
+        // Don't allow HTTP, since meta is basically RCE with all the jar files.
+        if (isUnsafe(metaURL)) {
+            metaURL.setScheme("https");
+        }
+
+        // Also don't allow HTTP
+        if (isUnsafe(resourceURL)) {
+            resourceURL.setScheme("https");
+        }
+
+        if (isUnsafe(libraryURL)) {
+            libraryURL.setScheme("https");
+        }
+
+        if (isUnsafe(fmlLibsURL)) {
+            fmlLibsURL.setScheme("https");
+        }
+
+        if (isUnsafe(mojangDownloadsMirrorURL)) {
+            mojangDownloadsMirrorURL.setScheme("https");
+        }
+
+        s->set("MetaURLOverride", metaURL.toString());
+        s->set("ResourceURL", resourceURL.toString());
+        s->set("LibrariesURL", libraryURL.toString());
+        s->set("FMLLibsURL", fmlLibsURL.toString());
+        s->set("MojangDownloadsMirrorURL", mojangDownloadsMirrorURL.toString());
+    } else if (mirrorType == MirrorDownload::Official) {
+        // Clear overrides to use official servers
+        s->set("MetaURLOverride", "");
+        s->set("ResourceURL", BuildConfig.DEFAULT_RESOURCE_BASE);
+        s->set("LibrariesURL", "");
+        s->set("FMLLibsURL", "");
+        s->set("MojangDownloadsMirrorURL", "");
+    } else if (mirrorType == MirrorDownload::BMCLAPI) {
+        // Set BMCLAPI URLs for Minecraft assets only
+        // BMCLAPI does NOT provide Prism Launcher's meta files, so don't override MetaURLOverride
+        const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::BMCLAPI);
+        s->set("MetaURLOverride", "");  // Keep default for Prism Launcher meta
+        s->set("ResourceURL", mirrorInfo.defaultAssetsUrl);
+        s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
+        s->set("FMLLibsURL", "");
+        s->set("MojangDownloadsMirrorURL", "");  // BMCLAPI URL is handled in code, not stored
+    }
+
+    // Save other settings (independent of mirror mode)
     QString msaClientID = ui->msaClientID->text();
     s->set("MSAClientIDOverride", msaClientID);
-    QUrl metaURL(ui->metaURL->text());
-    QUrl resourceURL(ui->resourceURL->text());
-    // Add required trailing slash
-    if (!metaURL.isEmpty() && !metaURL.path().endsWith('/')) {
-        QString path = metaURL.path();
-        path.append('/');
-        metaURL.setPath(path);
-    }
-
-    if (!resourceURL.isEmpty() && !resourceURL.path().endsWith('/')) {
-        QString path = resourceURL.path();
-        path.append('/');
-        resourceURL.setPath(path);
-    }
-
-    auto isLocalhost = [](const QUrl& url) { return url.host() == "localhost" || url.host() == "127.0.0.1" || url.host() == "::1"; };
-    auto isUnsafe = [isLocalhost](const QUrl& url) { return !url.isEmpty() && url.scheme() == "http" && !isLocalhost(url); };
-
-    // Don't allow HTTP, since meta is basically RCE with all the jar files.
-    if (isUnsafe(metaURL)) {
-        metaURL.setScheme("https");
-    }
-
-    // Also don't allow HTTP
-    if (isUnsafe(resourceURL)) {
-        resourceURL.setScheme("https");
-    }
-
-    s->set("MetaURLOverride", metaURL.toString());
-    s->set("ResourceURL", resourceURL.toString());
     QString flameKey = ui->flameKey->text();
     s->set("FlameKeyOverride", flameKey);
     QString modrinthToken = ui->modrinthToken->text();

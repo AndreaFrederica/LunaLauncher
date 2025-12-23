@@ -61,9 +61,16 @@ void FMLLibrariesTask::executeTask()
     NetJob::Ptr dljob{ new NetJob("FML libraries", APPLICATION->network()) };
     auto metacache = APPLICATION->metacache();
     Net::Download::Options options = Net::Download::Option::MakeEternal;
+
+    // Check for FMLLibsURL override setting
+    auto fmlLibsUrl = APPLICATION->settings()->get("FMLLibsURL").toString();
+    if (fmlLibsUrl.isEmpty()) {
+        fmlLibsUrl = BuildConfig.FMLLIBS_BASE_URL;
+    }
+
     for (auto& lib : fmlLibsToProcess) {
         auto entry = metacache->resolveEntry("fmllibs", lib.filename);
-        QString urlString = BuildConfig.FMLLIBS_BASE_URL + lib.filename;
+        QString urlString = fmlLibsUrl + lib.filename;
         dljob->addNetAction(Net::ApiDownload::makeCached(QUrl(urlString), entry, options));
     }
 

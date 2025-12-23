@@ -24,6 +24,7 @@
 #include "net/HttpMetaCache.h"
 #include "net/Mode.h"
 #include "net/NetJob.h"
+#include "Version.h"
 
 #include "Application.h"
 #include "BuildConfig.h"
@@ -75,6 +76,7 @@ QUrl BaseEntity::url() const
 {
     auto s = APPLICATION->settings();
     QString metaOverride = s->get("MetaURLOverride").toString();
+
     if (metaOverride.isEmpty()) {
         return QUrl(BuildConfig.META_URL).resolved(localFilename());
     }

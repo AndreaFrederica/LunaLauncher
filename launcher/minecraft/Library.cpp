@@ -35,8 +35,10 @@
 
 #include "Library.h"
 #include "MinecraftInstance.h"
+#include "MirrorDownload.h"
 #include "net/NetRequest.h"
 
+#include "Application.h"
 #include <BuildConfig.h>
 #include <FileSystem.h>
 #include <net/ApiDownload.h>
@@ -127,11 +129,43 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
         return true;
     };
 
+    // Lambda function to rewrite Mojang URLs to mirror URLs
+    auto rewrite_url = [](QString url) -> QString {
+        auto s = APPLICATION->settings();
+        int mirrorType = s->get("DownloadMirrorType").toInt();
+        QString replacementUrl;
+
+        if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
+            replacementUrl = "https://bmclapi2.bangbang93.com";
+        } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
+            // For custom mirrors, use the user-provided URL
+            replacementUrl = s->get("MojangDownloadsMirrorURL").toString();
+        }
+
+        if (!replacementUrl.isEmpty()) {
+            // Replace Mojang URLs with mirror URL using QString::replace
+            // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
+            if (!replacementUrl.endsWith('/')) {
+                replacementUrl += '/';
+            }
+            url.replace("https://launcher.mojang.com/", replacementUrl);
+            url.replace("https://piston-data.mojang.com/", replacementUrl);
+            url.replace("https://piston-meta.mojang.com/", replacementUrl);
+            url.replace("http://launcher.mojang.com/", replacementUrl);
+            url.replace("http://piston-data.mojang.com/", replacementUrl);
+            url.replace("http://piston-meta.mojang.com/", replacementUrl);
+        }
+        return url;
+    };
+
     // Lambda function to add a download request
-    auto add_download = [this, local, check_local_file, cache, stale, &out](QString storage, QString url, QString sha1) {
+    auto add_download = [this, local, check_local_file, cache, stale, &out, &rewrite_url](QString storage, QString url, QString sha1) {
         if (local) {
             return check_local_file(storage);
         }
+        // Rewrite URL for mirror support
+        url = rewrite_url(url);
+
         auto entry = cache->resolveEntry("libraries", storage);
         if (stale) {
             entry->setStale(true);
@@ -204,6 +238,11 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
             }
 
             if (m_repositoryURL.isEmpty()) {
+                // Check for LibrariesURL override setting
+                auto librariesUrl = APPLICATION->settings()->get("LibrariesURL").toString();
+                if (!librariesUrl.isEmpty()) {
+                    return librariesUrl + raw_storage;
+                }
                 return BuildConfig.LIBRARY_BASE + raw_storage;
             }
 

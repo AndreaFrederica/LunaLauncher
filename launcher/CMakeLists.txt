@@ -227,6 +227,12 @@ set(MINECRAFT_SOURCES
     minecraft/auth/Parsers.h
     minecraft/auth/YggdrasilPresets.cpp
     minecraft/auth/YggdrasilPresets.h
+    minecraft/auth/AuthlibInjector.cpp
+    minecraft/auth/AuthlibInjector.h
+    minecraft/auth/AuthlibInjectorDownload.cpp
+    minecraft/auth/AuthlibInjectorDownload.h
+    minecraft/auth/AuthlibInjectorDownloadTask.cpp
+    minecraft/auth/AuthlibInjectorDownloadTask.h
 
     minecraft/auth/AuthFlow.cpp
     minecraft/auth/AuthFlow.h
@@ -315,6 +321,8 @@ set(MINECRAFT_SOURCES
     minecraft/ShortcutUtils.h
     minecraft/Library.cpp
     minecraft/Library.h
+    minecraft/MirrorDownload.cpp
+    minecraft/MirrorDownload.h
     minecraft/MojangDownloadInfo.h
     minecraft/VanillaInstanceCreationTask.cpp
     minecraft/VanillaInstanceCreationTask.h
@@ -967,6 +975,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/ProxyPage.h
     ui/pages/global/APIPage.cpp
     ui/pages/global/APIPage.h
+    ui/pages/global/AuthlibInjectorPage.cpp
+    ui/pages/global/AuthlibInjectorPage.h
 
     # GUI - platform pages
     ui/pages/modplatform/CustomPage.cpp
@@ -1225,6 +1235,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/global/JavaPage.ui
     ui/pages/global/LauncherPage.ui
     ui/pages/global/APIPage.ui
+    ui/pages/global/AuthlibInjectorPage.ui
     ui/pages/global/ProxyPage.ui
     ui/pages/global/ExternalToolsPage.ui
     ui/pages/instance/ExternalResourcesPage.ui

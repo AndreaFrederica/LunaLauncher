@@ -130,7 +130,7 @@ class MinecraftInstance : public BaseInstance {
     QList<Mod*> getJarMods() const;
     QString createLaunchScript(AuthSessionPtr session, MinecraftTarget::Ptr targetToJoin);
     /// get arguments passed to java
-    QStringList javaArguments();
+    QStringList javaArguments(AuthSessionPtr session = nullptr);
     QString getLauncher();
     bool shouldApplyOnlineFixes();
 

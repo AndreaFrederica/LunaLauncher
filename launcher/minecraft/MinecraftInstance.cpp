@@ -40,6 +40,8 @@
 #include "BuildConfig.h"
 #include "Json.h"
 #include "QObjectPtr.h"
+#include "minecraft/auth/AuthlibInjector.h"
+#include "minecraft/auth/AuthlibInjectorDownloadTask.h"
 #include "minecraft/launch/AutoInstallJava.h"
 #include "minecraft/launch/CreateGameFolders.h"
 #include "minecraft/launch/ExtractNatives.h"
@@ -560,9 +562,33 @@ QStringList MinecraftInstance::extraArguments()
     return list;
 }
 
-QStringList MinecraftInstance::javaArguments()
+QStringList MinecraftInstance::javaArguments(AuthSessionPtr session)
 {
     QStringList args;
+
+    // Add authlib-injector javaagent for Yggdrasil accounts
+    // Note: AuthlibInjectorDownloadTask will handle downloading the jar file during launch
+    if (session && session->yggdrasil) {
+        QString authlibInjectorPath = AuthlibInjector::instance().getLocalPath();
+
+        // Check if authlib-injector exists (download task should have downloaded it)
+        if (QFile::exists(authlibInjectorPath)) {
+            // Add javaagent parameter
+            args << QString("-javaagent:%1=%2").arg(authlibInjectorPath, session->yggdrasilApiUrl);
+
+            // Fetch and add prefetched metadata if available
+            if (!session->yggdrasilApiUrl.isEmpty()) {
+                session->yggdrasilPrefetched = AuthlibInjector::instance().getYggdrasilMeta(session->yggdrasilApiUrl);
+                if (!session->yggdrasilPrefetched.isEmpty()) {
+                    args << QString("-Dauthlibinjector.yggdrasil.prefetched=%1").arg(session->yggdrasilPrefetched);
+                }
+            }
+
+            qDebug() << "Added authlib-injector for Yggdrasil account:" << session->yggdrasilApiUrl;
+        } else {
+            qWarning() << "authlib-injector.jar not found at" << authlibInjectorPath << "- Yggdrasil authentication may not work";
+        }
+    }
 
     // custom args go first. we want to override them if we have our own here.
     args.append(extraArguments());
@@ -1146,6 +1172,11 @@ shared_qobject_ptr<LaunchTask> MinecraftInstance::createLaunchTask(AuthSessionPt
     {
         process->appendStep(makeShared<AutoInstallJava>(pptr));
         process->appendStep(makeShared<CheckJava>(pptr));
+    }
+
+    // download authlib-injector if using Yggdrasil account
+    if (session->yggdrasil) {
+        process->appendStep(makeShared<AuthlibInjectorDownloadTask>(pptr));
     }
 
     // run pre-launch command if that's needed

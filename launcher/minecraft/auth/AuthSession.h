@@ -38,6 +38,11 @@ struct AuthSession {
 
     // Is this a demo session?
     bool demo = false;
+
+    // Yggdrasil / authlib-injector specific fields
+    bool yggdrasil = false;                   // Whether this is a Yggdrasil account
+    QString yggdrasilApiUrl;                  // Yggdrasil API URL
+    QString yggdrasilPrefetched;              // Base64-encoded prefetched metadata
 };
 
 using AuthSessionPtr = std::shared_ptr<AuthSession>;

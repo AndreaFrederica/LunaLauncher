@@ -133,6 +133,15 @@ bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset)
     if (!preset.profileEndpoint.isEmpty()) {
         obj["profileEndpoint"] = preset.profileEndpoint;
     }
+    if (!preset.oauthTokenEndpoint.isEmpty()) {
+        obj["oauthTokenEndpoint"] = preset.oauthTokenEndpoint;
+    }
+    // Store token type as string for JSON serialization
+    if (preset.tokenType == YggdrasilTokenType::OAuth) {
+        obj["tokenType"] = "OAuth";
+    } else {
+        obj["tokenType"] = "Standard";
+    }
     array.append(obj);
 
     return saveCustomPresets(array);
@@ -172,6 +181,14 @@ QVector<YggdrasilPreset> YggdrasilPresets::getCustomPresets()
         preset.refreshEndpoint = obj.value("refreshEndpoint").toString();
         preset.validateEndpoint = obj.value("validateEndpoint").toString();
         preset.profileEndpoint = obj.value("profileEndpoint").toString();
+        preset.oauthTokenEndpoint = obj.value("oauthTokenEndpoint").toString();
+        // Parse token type from string
+        QString tokenTypeStr = obj.value("tokenType").toString();
+        if (tokenTypeStr == "OAuth") {
+            preset.tokenType = YggdrasilTokenType::OAuth;
+        } else {
+            preset.tokenType = YggdrasilTokenType::Standard;
+        }
         presets.append(preset);
     }
 

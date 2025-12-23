@@ -99,7 +99,7 @@ void YggdrasilAuthStep::perform()
                 : m_data->yggdrasilConfig.authenticateEndpoint;
             url = getAuthServerEndpoint(endpoint);
             QString username = m_data->yggdrasilToken.extra["username"].toString();
-            QString password = m_data->yggdrasilToken.extra["password"].toString();
+            QString password = m_data->yggdrasilToken.extra["credentials"].toString();
             QString clientToken = m_data->yggdrasilToken.extra["clientToken"].toString();
 
             QJsonObject reqObj;
@@ -115,28 +115,88 @@ void YggdrasilAuthStep::perform()
             reqObj["requestUser"] = true;
 
             requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+
+            qDebug() << "Yggdrasil authenticate request to:" << url.toString();
+            qDebug() << "Username:" << username;
+            qDebug() << "Password length:" << password.length();
+            qDebug() << "ClientToken:" << clientToken;
+            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             break;
         }
         case RequestType::Refresh: {
-            QString endpoint = m_data->yggdrasilConfig.refreshEndpoint.isEmpty()
-                ? "/sessionserver/refresh"
-                : m_data->yggdrasilConfig.refreshEndpoint;
-            url = getSessionServerEndpoint(endpoint);
             QString accessToken = m_data->yggdrasilToken.token;
             QString clientToken = m_data->yggdrasilToken.extra["clientToken"].toString();
 
-            QJsonObject reqObj;
-            reqObj["accessToken"] = accessToken;
-            if (!clientToken.isEmpty()) {
-                reqObj["clientToken"] = clientToken;
-            }
-            // Note: requestUser is NOT part of the standard Yggdrasil refresh endpoint
-            // It's only used in authenticate endpoint
+            // Check if we have a refresh_token available
+            QString refreshToken = m_data->yggdrasilToken.extra["refreshToken"].toString();
+            bool hasRefreshToken = !refreshToken.isEmpty();
 
-            requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
-            // Debug: log the request details
-            qDebug() << "Yggdrasil refresh request to:" << url.toString();
-            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
+            // For OAuth accounts with refresh_token, use OAuth refresh endpoint
+            if (m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && hasRefreshToken) {
+                // OAuth 2.0 token refresh with refresh_token
+                QString endpoint = m_data->yggdrasilConfig.oauthTokenEndpoint.isEmpty()
+                    ? "/oauth2/token"
+                    : m_data->yggdrasilConfig.oauthTokenEndpoint;
+                url = getAuthServerEndpoint(endpoint);
+
+                // OAuth 2.0 refresh request format (form-encoded)
+                requestBody = QString("grant_type=refresh_token&refresh_token=%1").arg(refreshToken).toUtf8();
+                if (!clientToken.isEmpty()) {
+                    requestBody += QString("&client_id=%1").arg(clientToken).toUtf8();
+                }
+
+                qDebug() << "OAuth refresh request to:" << url.toString();
+                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
+            } else if (m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken) {
+                // OAuth without refresh_token (like LittleSkin) - use standard authenticate endpoint with password
+                QString password = m_data->yggdrasilToken.extra["credentials"].toString();
+                if (password.isEmpty()) {
+                    qWarning() << "OAuth refresh failed: no refresh_token or credentials available";
+                    emit finished(AccountTaskState::STATE_FAILED_HARD, tr("OAuth token expired, please re-login"));
+                    return;
+                }
+
+                QString endpoint = m_data->yggdrasilConfig.authenticateEndpoint.isEmpty()
+                    ? "/authserver/authenticate"
+                    : m_data->yggdrasilConfig.authenticateEndpoint;
+                url = getAuthServerEndpoint(endpoint);
+
+                QString username = m_data->yggdrasilToken.extra["username"].toString();
+
+                QJsonObject reqObj;
+                QJsonObject agentObj;
+                agentObj["name"] = "Minecraft";
+                agentObj["version"] = 1;
+                reqObj["agent"] = agentObj;
+                reqObj["username"] = username;
+                reqObj["password"] = password;
+                if (!clientToken.isEmpty()) {
+                    reqObj["clientToken"] = clientToken;
+                }
+                reqObj["requestUser"] = true;
+
+                requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+                qDebug() << "OAuth re-authentication request to:" << url.toString();
+                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
+            } else {
+                // Standard Yggdrasil token refresh
+                QString endpoint = m_data->yggdrasilConfig.refreshEndpoint.isEmpty()
+                    ? "/sessionserver/refresh"
+                    : m_data->yggdrasilConfig.refreshEndpoint;
+                url = getSessionServerEndpoint(endpoint);
+
+                QJsonObject reqObj;
+                reqObj["accessToken"] = accessToken;
+                if (!clientToken.isEmpty()) {
+                    reqObj["clientToken"] = clientToken;
+                }
+                // Note: requestUser is NOT part of the standard Yggdrasil refresh endpoint
+                // It's only used in authenticate endpoint
+
+                requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+                qDebug() << "Yggdrasil refresh request to:" << url.toString();
+                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
+            }
             qDebug() << "accessToken length:" << accessToken.length();
             qDebug() << "clientToken length:" << clientToken.length();
             break;
@@ -159,7 +219,25 @@ void YggdrasilAuthStep::perform()
         }
     }
 
-    auto headers = QList<Net::HeaderPair>{ { "Content-Type", "application/json" }, { "Accept", "application/json" } };
+    // Determine Content-Type based on request type
+    QByteArray contentType;
+    if (m_requestType == RequestType::Refresh) {
+        // Check if this is OAuth with refresh_token (uses form-encoded)
+        QString refreshToken = m_data->yggdrasilToken.extra["refreshToken"].toString();
+        bool hasRefreshToken = !refreshToken.isEmpty();
+        bool isOAuthWithRefreshToken = m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && hasRefreshToken;
+
+        if (isOAuthWithRefreshToken) {
+            contentType = "application/x-www-form-urlencoded";
+        } else {
+            // Standard Yggdrasil or OAuth without refresh_token (uses authenticate endpoint with JSON)
+            contentType = "application/json";
+        }
+    } else {
+        contentType = "application/json";
+    }
+
+    auto headers = QList<Net::HeaderPair>{ { "Content-Type", contentType }, { "Accept", "application/json" } };
 
     m_response.reset(new QByteArray());
     m_request = Net::Upload::makeByteArray(url, m_response, requestBody);
@@ -224,6 +302,14 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
 
     auto obj = doc.object();
 
+    // Debug: log the authenticate response to see what fields are present
+    qDebug() << "Authenticate response keys:" << obj.keys();
+    if (obj.contains("refresh_token")) {
+        qDebug() << "Has refresh_token:" << obj.value("refresh_token").toString();
+    }
+    QJsonDocument debugDoc(obj);
+    qDebug() << "Full authenticate response:" << QString::fromUtf8(debugDoc.toJson(QJsonDocument::Compact));
+
     // Check for error
     if (obj.contains("error")) {
         QString errorMessage = obj.value("errorMessage").toString();
@@ -233,8 +319,22 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
     }
 
     // Save access token and client token
-    m_data->yggdrasilToken.token = obj.value("accessToken").toString();
+    QString accessToken = obj.value("accessToken").toString();
+    m_data->yggdrasilToken.token = accessToken;
     m_data->yggdrasilToken.extra["clientToken"] = obj.value("clientToken").toString();
+
+    // Detect if this is an OAuth JWT token and auto-configure
+    if (accessToken.startsWith("eyJ")) {
+        m_data->yggdrasilConfig.tokenType = YggdrasilTokenType::OAuth;
+        // Save refresh_token if present
+        if (obj.contains("refresh_token")) {
+            m_data->yggdrasilToken.extra["refreshToken"] = obj.value("refresh_token").toString();
+        }
+        qDebug() << "Detected OAuth token, configured tokenType as OAuth";
+    } else {
+        m_data->yggdrasilConfig.tokenType = YggdrasilTokenType::Standard;
+        qDebug() << "Detected Standard Yggdrasil token";
+    }
 
     // Get user info
     auto userObj = obj.value("user").toObject();
@@ -247,15 +347,25 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
     auto availableProfiles = obj.value("availableProfiles").toArray();
     auto selectedProfile = obj.value("selectedProfile");
 
+    // For OAuth accounts without refresh_token, keep the credentials for re-authentication
+    // For standard Yggdrasil or OAuth with refresh_token, clear the credentials
+    bool hasRefreshToken = m_data->yggdrasilToken.extra.contains("refreshToken") &&
+                           !m_data->yggdrasilToken.extra["refreshToken"].toString().isEmpty();
+    bool isOAuthWithoutRefreshToken = m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken;
+
+    if (!isOAuthWithoutRefreshToken) {
+        // Clear credentials from memory after successful auth (only if we have refresh_token or using standard flow)
+        m_data->yggdrasilToken.extra.remove("credentials");
+    } else {
+        qDebug() << "OAuth account without refresh_token - keeping credentials for re-authentication";
+    }
+
     if (!selectedProfile.isUndefined() && !selectedProfile.toObject().isEmpty()) {
         // Server selected a profile for us
         auto profileObj = selectedProfile.toObject();
         m_data->minecraftProfile.id = profileObj.value("id").toString();
         m_data->minecraftProfile.name = profileObj.value("name").toString();
         m_data->minecraftProfile.validity = Validity::Certain;
-
-        // Clear password from memory after successful auth
-        m_data->yggdrasilToken.extra.remove("password");
 
         emit finished(AccountTaskState::STATE_WORKING, tr("Authentication succeeded"));
     } else if (availableProfiles.size() > 0) {
@@ -287,24 +397,56 @@ void YggdrasilAuthStep::processRefreshResponse(QByteArray& data)
 
     auto obj = doc.object();
 
-    // Check for error
+    // Check for error (OAuth uses "error" field, Yggdrasil uses "error" and "errorMessage")
     if (obj.contains("error")) {
-        QString errorMessage = obj.value("errorMessage").toString();
+        QString errorMessage = obj.value("error_description").toString();
+        if (errorMessage.isEmpty()) {
+            errorMessage = obj.value("errorMessage").toString();
+        }
+        if (errorMessage.isEmpty()) {
+            errorMessage = obj.value("error").toString();
+        }
         qWarning() << "Yggdrasil refresh error:" << errorMessage;
         emit finished(AccountTaskState::STATE_FAILED_HARD, tr("Token refresh failed: %1").arg(errorMessage));
         return;
     }
 
-    // Save new access token
-    m_data->yggdrasilToken.token = obj.value("accessToken").toString();
+    // Check if this is an OAuth response (has access_token field instead of accessToken)
+    QString newAccessToken;
+    if (obj.contains("access_token")) {
+        // OAuth 2.0 response format
+        newAccessToken = obj.value("access_token").toString();
+        m_data->yggdrasilToken.token = newAccessToken;
+        // Update refresh token if provided
+        if (obj.contains("refresh_token")) {
+            m_data->yggdrasilToken.extra["refreshToken"] = obj.value("refresh_token").toString();
+        }
+        // OAuth responses don't include profile info, so we keep the existing one
+    } else {
+        // Standard Yggdrasil response format (or authenticate endpoint response)
+        newAccessToken = obj.value("accessToken").toString();
+        m_data->yggdrasilToken.token = newAccessToken;
 
-    // Get selected profile
-    auto selectedProfile = obj.value("selectedProfile");
-    if (!selectedProfile.isUndefined() && !selectedProfile.toObject().isEmpty()) {
-        auto profileObj = selectedProfile.toObject();
-        m_data->minecraftProfile.id = profileObj.value("id").toString();
-        m_data->minecraftProfile.name = profileObj.value("name").toString();
-        m_data->minecraftProfile.validity = Validity::Certain;
+        // Update clientToken if present (authenticate endpoint returns it)
+        if (obj.contains("clientToken")) {
+            m_data->yggdrasilToken.extra["clientToken"] = obj.value("clientToken").toString();
+        }
+
+        // Get selected profile
+        auto selectedProfile = obj.value("selectedProfile");
+        if (!selectedProfile.isUndefined() && !selectedProfile.toObject().isEmpty()) {
+            auto profileObj = selectedProfile.toObject();
+            m_data->minecraftProfile.id = profileObj.value("id").toString();
+            m_data->minecraftProfile.name = profileObj.value("name").toString();
+            m_data->minecraftProfile.validity = Validity::Certain;
+        }
+
+        // Update user info if present (authenticate endpoint returns it)
+        auto userObj = obj.value("user").toObject();
+        if (!userObj.isEmpty()) {
+            m_data->yggdrasilToken.extra["userId"] = userObj.value("id").toString();
+            m_data->yggdrasilToken.extra["userName"] = userObj.value("username").toString();
+        }
     }
 
     m_data->yggdrasilToken.validity = Validity::Certain;

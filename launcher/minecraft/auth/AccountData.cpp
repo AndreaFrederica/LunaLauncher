@@ -65,8 +65,36 @@ void tokenToJSONV3(QJsonObject& parent, const Token& t, const char* tokenName)
         save = true;
     }
     if (t.extra.size()) {
-        out["extra"] = QJsonObject::fromVariantMap(t.extra);
-        save = true;
+        // Encrypt sensitive fields before saving
+        QJsonObject extraObj;
+        for (auto it = t.extra.begin(); it != t.extra.end(); ++it) {
+            const QString& key = it.key();
+            const QVariant& value = it.value();
+
+            // Skip empty values
+            if (value.isNull() || !value.isValid()) {
+                continue;
+            }
+
+            // Use obfuscated name for credentials field
+            if (key == "credentials") {
+                // Simple XOR encryption with hardcoded salt for credentials
+                QString cred = value.toString();
+                QByteArray data = cred.toUtf8();
+                static const QByteArray salt = "PrismYggdrasilAuth2024";  // hardcoded salt
+                QByteArray encrypted;
+                for (int i = 0; i < data.size(); i++) {
+                    encrypted.append(data[i] ^ salt[i % salt.size()]);
+                }
+                extraObj["cred"] = QString::fromLatin1(encrypted.toBase64());
+            } else {
+                extraObj[key] = QJsonValue::fromVariant(value);
+            }
+        }
+        if (!extraObj.isEmpty()) {
+            out["extra"] = extraObj;
+            save = true;
+        }
     }
     if (save) {
         parent[tokenName] = out;
@@ -103,7 +131,44 @@ Token tokenFromJSONV3(const QJsonObject& parent, const char* tokenName)
 
     auto extra = tokenObject.value("extra");
     if (extra.isObject()) {
-        out.extra = extra.toObject().toVariantMap();
+        QJsonObject extraObj = extra.toObject();
+        QVariantMap extraMap;
+        for (auto it = extraObj.begin(); it != extraObj.end(); ++it) {
+            const QString& key = it.key();
+            const QJsonValue& value = it.value();
+
+            // Skip null values
+            if (value.isNull()) {
+                continue;
+            }
+
+            // Decrypt obfuscated credentials field
+            if (key == "cred") {
+                QString encryptedB64 = value.toString();
+                if (!encryptedB64.isEmpty()) {
+                    QByteArray encrypted = QByteArray::fromBase64(encryptedB64.toLatin1());
+                    static const QByteArray salt = "PrismYggdrasilAuth2024";  // hardcoded salt
+                    QByteArray decrypted;
+                    for (int i = 0; i < encrypted.size(); i++) {
+                        decrypted.append(encrypted[i] ^ salt[i % salt.size()]);
+                    }
+                    extraMap["credentials"] = QString::fromUtf8(decrypted);
+                }
+            } else if (key == "password") {
+                // Legacy: old accounts use "password" field, migrate to "credentials"
+                if (value.isString()) {
+                    extraMap["credentials"] = value.toString();
+                } else {
+                    extraMap["credentials"] = value.toVariant();
+                }
+            } else if (key == "credentials") {
+                // Legacy: if still using "credentials" key directly, keep as-is
+                extraMap[key] = value.toVariant();
+            } else {
+                extraMap[key] = value.toVariant();
+            }
+        }
+        out.extra = extraMap;
     }
     return out;
 }
@@ -318,6 +383,14 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
             yggdrasilConfig.refreshEndpoint = configObj.value("refreshEndpoint").toString();
             yggdrasilConfig.validateEndpoint = configObj.value("validateEndpoint").toString();
             yggdrasilConfig.profileEndpoint = configObj.value("profileEndpoint").toString();
+            yggdrasilConfig.oauthTokenEndpoint = configObj.value("oauthTokenEndpoint").toString();
+            // Parse token type
+            QString tokenTypeStr = configObj.value("tokenType").toString();
+            if (tokenTypeStr == "OAuth") {
+                yggdrasilConfig.tokenType = YggdrasilTokenType::OAuth;
+            } else {
+                yggdrasilConfig.tokenType = YggdrasilTokenType::Standard;
+            }
         }
     }
 
@@ -371,6 +444,15 @@ QJsonObject AccountData::saveState() const
         if (!yggdrasilConfig.profileEndpoint.isEmpty()) {
             configObj["profileEndpoint"] = yggdrasilConfig.profileEndpoint;
         }
+        if (!yggdrasilConfig.oauthTokenEndpoint.isEmpty()) {
+            configObj["oauthTokenEndpoint"] = yggdrasilConfig.oauthTokenEndpoint;
+        }
+        // Save token type as string
+        if (yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth) {
+            configObj["tokenType"] = "OAuth";
+        } else {
+            configObj["tokenType"] = "Standard";
+        }
         output["yggdrasilConfig"] = configObj;
     }
 
@@ -412,13 +494,28 @@ QString AccountData::accountDisplayString() const
             return "Xbox profile missing";
         }
         case AccountType::Yggdrasil: {
+            QString displayName;
             if (yggdrasilToken.extra.contains("userName")) {
-                return yggdrasilToken.extra["userName"].toString();
+                displayName = yggdrasilToken.extra["userName"].toString();
+            } else if (!minecraftProfile.name.isEmpty()) {
+                displayName = minecraftProfile.name;
+            } else {
+                displayName = QObject::tr("<Yggdrasil>");
             }
-            if (!minecraftProfile.name.isEmpty()) {
-                return minecraftProfile.name;
+
+            // Add token type indicator
+            QString typeSuffix;
+            if (yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth) {
+                typeSuffix = QObject::tr(" (OAuth)");
+            } else {
+                typeSuffix = QObject::tr(" (Standard)");
             }
-            return QObject::tr("<Yggdrasil>");
+
+            // Add source name if available and not empty
+            if (!yggdrasilConfig.sourceName.isEmpty()) {
+                return QString("%1 [%2]%3").arg(displayName, yggdrasilConfig.sourceName, typeSuffix);
+            }
+            return QString("%1%2").arg(displayName, typeSuffix);
         }
         default: {
             return "Invalid Account";

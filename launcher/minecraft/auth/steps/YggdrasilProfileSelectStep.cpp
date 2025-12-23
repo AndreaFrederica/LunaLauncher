@@ -88,8 +88,16 @@ void YggdrasilProfileSelectStep::setSelectedProfile(const QString& profileId, co
     m_data->minecraftProfile.name = profileName;
     m_data->minecraftProfile.validity = Validity::Certain;
 
-    // Clear password from memory after profile selection
-    m_data->yggdrasilToken.extra.remove("password");
+    // For OAuth accounts without refresh_token, keep the credentials for re-authentication
+    // For standard Yggdrasil or OAuth with refresh_token, clear the credentials
+    bool hasRefreshToken = m_data->yggdrasilToken.extra.contains("refreshToken") &&
+                           !m_data->yggdrasilToken.extra["refreshToken"].toString().isEmpty();
+    bool isOAuthWithoutRefreshToken = m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken;
+
+    if (!isOAuthWithoutRefreshToken) {
+        // Clear credentials from memory after profile selection
+        m_data->yggdrasilToken.extra.remove("credentials");
+    }
     m_data->yggdrasilToken.extra.remove("availableProfiles");
 
     emit finished(AccountTaskState::STATE_WORKING, tr("Profile selected: %1").arg(profileName));

@@ -89,6 +89,8 @@ struct MinecraftProfile {
 
 enum class AccountType { MSA, Offline, Yggdrasil };
 
+enum class YggdrasilTokenType { Standard, OAuth };
+
 enum class AccountState { Unchecked, Offline, Working, Online, Disabled, Errored, Expired, Gone };
 
 struct YggdrasilServerConfig {
@@ -100,6 +102,10 @@ struct YggdrasilServerConfig {
     QString refreshEndpoint;       // default: "/sessionserver/refresh"
     QString validateEndpoint;      // default: "/sessionserver/validate"
     QString profileEndpoint;       // default: "/sessionserver/session/minecraft/profile/{uuid}"
+    // OAuth 2.0 endpoints (for Yggdrasil Connect / OAuth-based authentication)
+    QString oauthTokenEndpoint;    // default: "/oauth2/token"
+    // The token type (Standard Yggdrasil or OAuth JWT)
+    YggdrasilTokenType tokenType = YggdrasilTokenType::Standard;
 };
 
 struct AccountData {

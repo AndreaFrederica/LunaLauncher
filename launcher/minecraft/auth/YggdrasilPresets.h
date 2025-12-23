@@ -20,6 +20,7 @@
 
 #include <QVector>
 #include <QString>
+#include "AccountData.h"
 
 struct YggdrasilPreset {
     QString name;
@@ -30,6 +31,10 @@ struct YggdrasilPreset {
     QString refreshEndpoint;       // default: "/sessionserver/refresh"
     QString validateEndpoint;      // default: "/sessionserver/validate"
     QString profileEndpoint;       // default: "/sessionserver/session/minecraft/profile/{uuid}"
+    // OAuth 2.0 endpoints
+    QString oauthTokenEndpoint;    // default: "/oauth2/token"
+    // The token type to use
+    YggdrasilTokenType tokenType = YggdrasilTokenType::Standard;
 };
 
 class YggdrasilPresets {

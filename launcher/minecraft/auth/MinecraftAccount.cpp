@@ -99,7 +99,9 @@ MinecraftAccountPtr MinecraftAccount::createYggdrasil(const QString& username,
                                                         const QString& refreshEndpoint,
                                                         const QString& validateEndpoint,
                                                         const QString& authenticateEndpoint,
-                                                        const QString& profileEndpoint)
+                                                        const QString& profileEndpoint,
+                                                        const QString& oauthTokenEndpoint,
+                                                        YggdrasilTokenType tokenType)
 {
     static const QRegularExpression s_removeChars("[{}-]");
     auto account = makeShared<MinecraftAccount>();
@@ -113,10 +115,12 @@ MinecraftAccountPtr MinecraftAccount::createYggdrasil(const QString& username,
     account->data.yggdrasilConfig.validateEndpoint = validateEndpoint;
     account->data.yggdrasilConfig.authenticateEndpoint = authenticateEndpoint;
     account->data.yggdrasilConfig.profileEndpoint = profileEndpoint;
+    account->data.yggdrasilConfig.oauthTokenEndpoint = oauthTokenEndpoint;
+    account->data.yggdrasilConfig.tokenType = tokenType;
 
-    // Store temporary credentials (password will be cleared after successful auth)
+    // Store temporary credentials (will be cleared after successful auth for standard Yggdrasil)
     account->data.yggdrasilToken.extra["username"] = username;
-    account->data.yggdrasilToken.extra["password"] = password;
+    account->data.yggdrasilToken.extra["credentials"] = password;
     account->data.yggdrasilToken.extra["clientToken"] = QUuid::createUuid().toString().remove(s_removeChars);
 
     // Yggdrasil accounts are assumed to own Minecraft

@@ -48,6 +48,7 @@ YggdrasilLoginDialog::YggdrasilLoginDialog(QWidget* parent) : QDialog(parent), u
             ui->validateEndpointEdit->setText(preset.validateEndpoint);
             ui->authenticateEndpointEdit->setText(preset.authenticateEndpoint);
             ui->profileEndpointEdit->setText(preset.profileEndpoint);
+            ui->oauthTokenEndpointEdit->setText(preset.oauthTokenEndpoint);
             // Store the current preset's endpoint configuration
             m_currentPreset = preset;
         } else {
@@ -56,6 +57,7 @@ YggdrasilLoginDialog::YggdrasilLoginDialog(QWidget* parent) : QDialog(parent), u
             ui->validateEndpointEdit->clear();
             ui->authenticateEndpointEdit->clear();
             ui->profileEndpointEdit->clear();
+            ui->oauthTokenEndpointEdit->clear();
             m_currentPreset = YggdrasilPreset();
         }
     });
@@ -114,10 +116,17 @@ void YggdrasilLoginDialog::startLogin()
     QString validateEndpoint = ui->validateEndpointEdit->text().trimmed();
     QString authenticateEndpoint = ui->authenticateEndpointEdit->text().trimmed();
     QString profileEndpoint = ui->profileEndpointEdit->text().trimmed();
+    QString oauthTokenEndpoint = ui->oauthTokenEndpointEdit->text().trimmed();
+
+    // Get token type from preset or use default (Standard)
+    YggdrasilTokenType tokenType = YggdrasilTokenType::Standard;
+    int presetIndex = ui->presetCombo->currentIndex();
+    if (presetIndex > 0 && presetIndex <= m_presets.size()) {
+        tokenType = m_currentPreset.tokenType;
+    }
 
     // Get source name from preset or use "Custom"
     QString sourceName;
-    int presetIndex = ui->presetCombo->currentIndex();
     if (presetIndex > 0 && presetIndex <= m_presets.size()) {
         sourceName = m_presets[presetIndex - 1].name;
     } else {
@@ -126,7 +135,8 @@ void YggdrasilLoginDialog::startLogin()
 
     // Create account
     m_account = MinecraftAccount::createYggdrasil(username, password, authUrl, sessionUrl, sourceName,
-                                                   refreshEndpoint, validateEndpoint, authenticateEndpoint, profileEndpoint);
+                                                   refreshEndpoint, validateEndpoint, authenticateEndpoint, profileEndpoint,
+                                                   oauthTokenEndpoint, tokenType);
 
     // Start auth flow
     m_authflow_task = m_account->login(false);

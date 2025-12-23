@@ -95,7 +95,9 @@ class MinecraftAccount : public QObject, public Usable {
                                                   const QString& refreshEndpoint = QString(),
                                                   const QString& validateEndpoint = QString(),
                                                   const QString& authenticateEndpoint = QString(),
-                                                  const QString& profileEndpoint = QString());
+                                                  const QString& profileEndpoint = QString(),
+                                                  const QString& oauthTokenEndpoint = QString(),
+                                                  YggdrasilTokenType tokenType = YggdrasilTokenType::Standard);
 
     static MinecraftAccountPtr loadFromJsonV3(const QJsonObject& json);
 

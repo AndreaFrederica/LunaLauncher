@@ -38,15 +38,24 @@
 
 [m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) 是专门用于管理 MSYS2 环境的 CLI 工具。下载最新版本并将其添加到 PATH。
 
+**前置要求：**
+
+- Java Development Kit 8 或更高版本
+  - 确保在 Adoptium 安装程序中启用"设置 JAVA_HOME 变量"
+  - 构建前需要设置 `JAVA_HOME` 环境变量
+
 ```powershell
-# 1. 引导安装 MSYS2（仅首次）
+# 1. 设置 JAVA_HOME（根据需要调整路径）
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
+
+# 2. 引导安装 MSYS2（仅首次）
 m2m bootstrap
 
-# 2. 配置和构建
+# 3. 配置和构建
 m2m run configure
 m2m run build
 
-# 3. 安装
+# 4. 安装
 m2m run install
 ```
 
@@ -68,15 +77,24 @@ m2m run install
 
 或者，使用提供的 PowerShell 脚本：
 
+**前置要求：**
+
+- Java Development Kit 8 或更高版本
+  - 确保在 Adoptium 安装程序中启用"设置 JAVA_HOME 变量"
+  - 构建前需要设置 `JAVA_HOME` 环境变量
+
 ```powershell
-# 1. 初始化 MSYS2 环境（仅首次）
+# 1. 设置 JAVA_HOME（根据需要调整路径）
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
+
+# 2. 初始化 MSYS2 环境（仅首次）
 .\tools\msys2\bootstrap.ps1
 
-# 2. 配置和构建
+# 3. 配置和构建
 .\tools\msys2\run.ps1 configure
 .\tools\msys2\run.ps1 build
 
-# 3. 安装
+# 4. 安装
 .\tools\msys2\run.ps1 install
 ```
 
@@ -167,11 +185,190 @@ pixi run install
 
 ### 其他平台
 
-对于 Linux、macOS 或手动构建，请参考上游构建说明：
+对于 Linux、macOS 或在没有自动化环境的 Windows 上手动构建，以下是详细的构建说明。
+
+---
+
+## 详细构建说明
+
+### 获取源代码
+
+使用 git 克隆源代码，并获取所有子模块：
+
+```bash
+git clone --recursive https://github.com/AndreaFrederica/LunaLauncher.git
+cd LunaLauncher
+```
+
+本文档的其余部分假设您已经克隆了仓库。
+
+### Windows 上使用 MSYS2 手动构建
+
+如果您不想使用自动化脚本，可以按照以下手动步骤操作。
+
+**依赖项：**
+
+- [MSYS2](https://www.msys2.org/) - Windows 软件分发和构建平台
+- Java Development Kit 8 或更高版本
+  - 确保在 Adoptium 安装程序中启用"设置 JAVA_HOME 变量"
+
+**准备 MSYS2：**
+
+1. 从开始菜单的 MSYS2 文件夹中打开快捷方式
+2. 我们建议使用 MSYS2 的 UCRT64 或 CLANG64 msystem 进行构建
+3. 安装辅助工具：
+   ```bash
+   pacman -Syu pactoys git mingw-w64-ucrt-x86_64-binutils
+   ```
+4. 使用 pacboy 安装所有构建依赖：
+   ```bash
+   pacboy -S toolchain:p cmake:p ninja:p qt6-base:p qt6-5compat:p qt6-svg:p qt6-imageformats:p quazip-qt6:p extra-cmake-modules:p ccache:p
+   ```
+
+   或者使用 Qt 5（适用于较旧的 Windows 版本）：
+   ```bash
+   pacboy -S toolchain:p cmake:p ninja:p qt5-base:p qt5-svg:p qt5-imageformats:p quazip-qt5:p extra-cmake-modules:p ccache:p
+   ```
+
+**从命令行编译：**
+
+```bash
+# 导航到源文件夹
+cd /path/to/PrismLauncher
+
+# 配置 CMake（Debug 构建）
+cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_BUILD_TYPE=Debug -G Ninja
+
+# 对于 Release 构建，将上面的 Debug 替换为 Release
+
+# 可选：添加 -DLauncher_QT_VERSION_MAJOR=5 以使用 Qt 5
+# 可选：添加 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache 以加快重新编译速度
+
+# 构建
+cmake --build build
+
+# 安装
+cmake --install build
+
+# 创建便携版（数据存储在应用程序目录中）
+cmake --install build --component portable
+```
+
+**Qt 5 构建注意事项：** 使用 Qt 5 构建时，OpenSSL DLL 不会自动复制。手动复制它们：
+```bash
+cp /ucrt64/bin/libcrypto-1_1-x64.dll /ucrt64/bin/libssl-1_1-x64.dll install
+```
+将 `ucrt64` 替换为您的 msystem（例如 `clang64`）。
+
+### Windows 上使用 MSVC 手动构建
+
+**依赖项：**
+
+- [Visual Studio](https://visualstudio.microsoft.com/) - Windows 软件分发和构建平台
+  - 如果不想安装 Visual Studio IDE，请下载"Visual Studio Build Tools"
+  - 选择"使用 C++ 的桌面开发"
+  - CMake 将在可选组件中被选中
+- Java Development Kit 8 或更高版本
+- [Qt](https://www.qt.io/)
+  - 对于 Qt 6（推荐 Qt 6.6.2），需要"Qt 5 兼容性模块"和"Qt 图像格式"
+  - 对于 Qt 5（推荐 Qt 5.15.2），需要 OpenSSL 工具包
+
+**从命令行编译：**
+
+您需要从 **x64 Native Tools Command Prompt for VS 2022**（或相应 VS 版本）运行命令。
+
+```cmd
+REM 导航到源文件夹
+cd C:\Path\To\PrismLauncher
+
+REM 配置 CMake（根据需要调整 Qt 路径）
+cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_PREFIX_PATH=C:\Qt\6.6.2\msvc2019_64\lib\cmake
+
+REM 构建（Debug）
+cmake --build build --config Debug -- /p:UseMultiToolTask=true /p:EnforceProcessCountAcrossBuilds=true
+
+REM 安装
+cmake --install build --config Debug
+
+REM 创建便携版
+cmake --install build --config Debug --component portable
+```
+
+**Qt 5 构建注意事项：** 手动复制 OpenSSL DLL：
+```cmd
+robocopy C:\Qt\Tools\OpenSSL\Win_x64\bin\ install libcrypto-1_1-x64.dll libssl-1_1-x64.dll
+```
+
+### Linux 和 macOS
+
+对于 Linux 和 macOS 构建，请参考上游 Prism Launcher 构建说明：
 
 - <https://prismlauncher.org/wiki/development/>
 
-构建过程和要求基本相同，除了项目名称和后端配置。
+构建过程和要求基本相同，除了项目名称。
+
+---
+
+## IDE 和工具
+
+### ccache
+
+ccache 是一个编译器缓存，通过缓存以前的编译来加速重新编译。
+
+- **MSYS2:** 使用 `pacboy -S ccache:p` 安装，并在 CMake 中添加 `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache`
+- **MSVC:** 需要 ccache 4.7.x 或更高版本。复制 `ccache.exe` 并重命名为 `cl.exe`，然后在构建参数中添加 `/p:CLToolExe=cl.exe /p:CLToolPath=<ccache cl 路径>`
+
+### VS Code
+
+1. 安装 [C/C++ 扩展](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
+2. 配置 C/C++：编辑配置 (UI)
+   - 将 Qt include 文件夹添加到 `includePath`
+   - 将 `-L/{Qt 路径}/lib` 添加到 `compilerArgs`
+   - 将 `compileCommands` 设置为 `${workspaceFolder}/build/compile_commands.json`
+   - 将 `cppStandard` 设置为 `c++17` 或更高
+3. 使用 `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` 重新配置 CMake
+
+示例 `.vscode/c_cpp_properties.json`：
+```json
+{
+    "configurations": [
+        {
+            "name": "Windows (MSYS2)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/msys64/ucrt64/include/**"
+            ],
+            "compilerPath": "C:/msys64/ucrt64/bin/gcc.exe",
+            "compilerArgs": [
+                "-LC:/msys64/ucrt64/lib"
+            ],
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}
+```
+
+### CLion
+
+1. 打开 CLion → File → Open → 选择源文件夹
+2. Settings → Build, Execution, Deployment → Toolchains
+   - 设置 CMake、Make、C 编译器、C++ 编译器、调试器
+3. Settings → Build, Execution, Deployment → CMake
+   - 将构建目录设置为 `build`
+4. 创建新配置，目标：所有目标
+5. 使用按钮构建和运行
+
+### Qt Creator
+
+1. 通过 MSYS2 安装 Qt Creator：`pacboy -S qt-creator:p`
+2. 从 MSYS2 shell 打开 Qt Creator：`qtcreator`
+3. File → Open File or Project → 选择 `CMakeLists.txt`
+4. 点击右下角的"Configure Project"
+5. 按"Run"按钮
 
 ---
 

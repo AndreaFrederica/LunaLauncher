@@ -38,15 +38,24 @@ Uses MSYS2's UCRT64 GCC toolchain, managed via `msys2.toml`.
 
 [m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) is a dedicated CLI tool for managing MSYS2 environments. Download the latest release and add it to your PATH.
 
+**Prerequisites:**
+
+- Java Development Kit 8 or later
+  - Make sure that "Set JAVA_HOME variable" is enabled in the Adoptium installer
+  - You'll need to set `JAVA_HOME` environment variable before building
+
 ```powershell
-# 1. Bootstrap MSYS2 (first time only)
+# 1. Set JAVA_HOME (adjust path as needed)
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
+
+# 2. Bootstrap MSYS2 (first time only)
 m2m bootstrap
 
-# 2. Configure & build
+# 3. Configure & build
 m2m run configure
 m2m run build
 
-# 3. Install
+# 4. Install
 m2m run install
 ```
 
@@ -68,15 +77,24 @@ m2m run install
 
 Alternatively, use the provided PowerShell scripts:
 
+**Prerequisites:**
+
+- Java Development Kit 8 or later
+  - Make sure that "Set JAVA_HOME variable" is enabled in the Adoptium installer
+  - You'll need to set `JAVA_HOME` environment variable before building
+
 ```powershell
-# 1. Bootstrap MSYS2 environment (first time only)
+# 1. Set JAVA_HOME (adjust path as needed)
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
+
+# 2. Bootstrap MSYS2 environment (first time only)
 .\tools\msys2\bootstrap.ps1
 
-# 2. Configure & build
+# 3. Configure & build
 .\tools\msys2\run.ps1 configure
 .\tools\msys2\run.ps1 build
 
-# 3. Install
+# 4. Install
 .\tools\msys2\run.ps1 install
 ```
 
@@ -164,11 +182,190 @@ pixi run install
 
 ### Other Platforms
 
-For Linux, macOS, or manual builds, please refer to the upstream build instructions:
+For Linux, macOS, or manual builds on Windows without the automated environments, detailed build instructions follow below.
+
+---
+
+## Detailed Build Instructions
+
+### Getting the Source
+
+Clone the source code using git, and grab all the submodules:
+
+```bash
+git clone --recursive https://github.com/AndreaFrederica/LunaLauncher.git
+cd LunaLauncher
+```
+
+The rest of the documentation assumes you have already cloned the repository.
+
+### Manual Build on Windows with MSYS2
+
+If you prefer not to use the automated scripts, you can follow these manual steps.
+
+**Dependencies:**
+
+- [MSYS2](https://www.msys2.org/) - Software Distribution and Building Platform for Windows
+- Java Development Kit 8 or later
+  - Make sure that "Set JAVA_HOME variable" is enabled in the Adoptium installer
+
+**Preparing MSYS2:**
+
+1. Open one of the shortcuts from the MSYS2 folder in the Start menu
+2. We recommend building using the UCRT64 or CLANG64 msystem of MSYS2
+3. Install helpers:
+   ```bash
+   pacman -Syu pactoys git mingw-w64-ucrt-x86_64-binutils
+   ```
+4. Install all build dependencies using pacboy:
+   ```bash
+   pacboy -S toolchain:p cmake:p ninja:p qt6-base:p qt6-5compat:p qt6-svg:p qt6-imageformats:p quazip-qt6:p extra-cmake-modules:p ccache:p
+   ```
+
+   Alternatively you can use Qt 5 (for older Windows versions):
+   ```bash
+   pacboy -S toolchain:p cmake:p ninja:p qt5-base:p qt5-svg:p qt5-imageformats:p quazip-qt5:p extra-cmake-modules:p ccache:p
+   ```
+
+**Compile from command line:**
+
+```bash
+# Navigate to the source folder
+cd /path/to/PrismLauncher
+
+# Configure CMake (Debug build)
+cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_BUILD_TYPE=Debug -G Ninja
+
+# For Release build, replace Debug with Release above
+
+# Optional: Add -DLauncher_QT_VERSION_MAJOR=5 for Qt 5
+# Optional: Add -DCMAKE_CXX_COMPILER_LAUNCHER=ccache for faster recompilations
+
+# Build
+cmake --build build
+
+# Install
+cmake --install build
+
+# For portable build (data stored in application directory)
+cmake --install build --component portable
+```
+
+**Note for Qt 5 builds:** When building with Qt 5, the OpenSSL DLLs aren't automatically copied. Copy them manually:
+```bash
+cp /ucrt64/bin/libcrypto-1_1-x64.dll /ucrt64/bin/libssl-1_1-x64.dll install
+```
+Replace `ucrt64` with your msystem (e.g., `clang64`).
+
+### Manual Build on Windows with MSVC
+
+**Dependencies:**
+
+- [Visual Studio](https://visualstudio.microsoft.com/) - Software Distribution and Building Platform for Windows
+  - If you don't want to install the Visual Studio IDE, download 'Build Tools for Visual Studio' instead
+  - Select 'Desktop development with C++'
+  - CMake will be selected in the optional components
+- Java Development Kit 8 or later
+- [Qt](https://www.qt.io/)
+  - For Qt 6 (Qt 6.6.2 is recommended), 'Qt 5 Compatibility Module' & 'Qt Image Formats' are required
+  - For Qt 5 (Qt 5.15.2 is recommended), OpenSSL Toolkit is required
+
+**Compile from command line:**
+
+You will need to run commands from **x64 Native Tools Command Prompt for VS 2022** (or corresponding VS version).
+
+```cmd
+REM Navigate to the source folder
+cd C:\Path\To\PrismLauncher
+
+REM Configure CMake (adjust Qt path as needed)
+cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_PREFIX_PATH=C:\Qt\6.6.2\msvc2019_64\lib\cmake
+
+REM Build (Debug)
+cmake --build build --config Debug -- /p:UseMultiToolTask=true /p:EnforceProcessCountAcrossBuilds=true
+
+REM Install
+cmake --install build --config Debug
+
+REM For portable build
+cmake --install build --config Debug --component portable
+```
+
+**Note for Qt 5 builds:** Copy OpenSSL DLLs manually:
+```cmd
+robocopy C:\Qt\Tools\OpenSSL\Win_x64\bin\ install libcrypto-1_1-x64.dll libssl-1_1-x64.dll
+```
+
+### Linux and macOS
+
+For Linux and macOS builds, please refer to the upstream Prism Launcher build instructions:
 
 - <https://prismlauncher.org/wiki/development/>
 
-The build process and requirements are largely identical, aside from project naming and backend configuration.
+The build process and requirements are largely identical, aside from project naming.
+
+---
+
+## IDEs and Tooling
+
+### ccache
+
+ccache is a compiler cache that speeds up recompilation by caching previous compilations.
+
+- **MSYS2:** Install with `pacboy -S ccache:p` and add `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` to CMake
+- **MSVC:** Requires ccache 4.7.x or newer. Copy `ccache.exe` and rename to `cl.exe`, then add `/p:CLToolExe=cl.exe /p:CLToolPath=<path to ccache cl>` to build arguments
+
+### VS Code
+
+1. Install the [C/C++ extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
+2. Configure C/C++: Edit Configurations (UI)
+   - Add Qt include folder to `includePath`
+   - Add `-L/{path to Qt}/lib` to `compilerArgs`
+   - Set `compileCommands` to `${workspaceFolder}/build/compile_commands.json`
+   - Set `cppStandard` to `c++17` or higher
+3. Reconfigure CMake with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`
+
+Example `.vscode/c_cpp_properties.json`:
+```json
+{
+    "configurations": [
+        {
+            "name": "Windows (MSYS2)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/msys64/ucrt64/include/**"
+            ],
+            "compilerPath": "C:/msys64/ucrt64/bin/gcc.exe",
+            "compilerArgs": [
+                "-LC:/msys64/ucrt64/lib"
+            ],
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}
+```
+
+### CLion
+
+1. Open CLion → File → Open → Select source folder
+2. Settings → Build, Execution, Deployment → Toolchains
+   - Set CMake, Make, C Compiler, C++ Compiler, Debugger
+3. Settings → Build, Execution, Deployment → CMake
+   - Set Build directory to `build`
+4. Create a new configuration with Target: All targets
+5. Build and Run with the buttons
+
+### Qt Creator
+
+1. Install Qt Creator via MSYS2: `pacboy -S qt-creator:p`
+2. Open Qt Creator from MSYS2 shell: `qtcreator`
+3. File → Open File or Project → Select `CMakeLists.txt`
+4. Click "Configure Project" at the bottom right
+5. Press the "Run" button
 
 ---
 

@@ -50,6 +50,7 @@ build = "cmake --build build --parallel"
 install = "cmake --install build --prefix install"
 portable = "cmake --install build --component portable"
 clean = "rm -rf build install"
+test = ".\\install\\lunalauncher.exe"
 
 # 组合命令
 rebuild = "cmake --build build --clean-first --parallel"

@@ -1,9 +1,5 @@
 <p align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="/program_info/org.interferencelauncher.InterferenceLauncher.logo-darkmode.svg">
-  <source media="(prefers-color-scheme: light)" srcset="/program_info/org.interferencelauncher.InterferenceLauncher.logo.svg">
-  <img alt="Luna Launcher" src="/program_info/org.interferencelauncher.InterferenceLauncher.logo.svg" width="40%">
-</picture>
+<img alt="Luna Launcher" src="/program_info/lunalauncher.png" width="40%">
 </p>
 
 <p align="center">

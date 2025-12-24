@@ -7,7 +7,7 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>A Minecraft mod wants to access your microphone.</string>
     <key>NSDownloadsFolderUsageDescription</key>
-    <string>Prism uses access to your Downloads folder to help you more quickly add mods that can't be automatically downloaded to your instance. You can change where Prism scans for downloaded mods in Settings or the prompt that appears.</string>
+    <string>Luna uses access to your Downloads folder to help you more quickly add mods that can't be automatically downloaded to your instance. You can change where Luna scans for downloaded mods in Settings or the prompt that appears.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Minecraft uses the local network to find and connect to LAN servers.</string>
     <key>NSPrincipalClass</key>
@@ -59,7 +59,7 @@
                 <string>mrpack</string>
             </array>
             <key>CFBundleTypeName</key>
-            <string>Prism Launcher instance</string>
+            <string>Luna Launcher instance</string>
             <key>CFBundleTypeOSTypes</key>
             <array>
                 <string>TEXT</string>
@@ -85,10 +85,10 @@
         </dict>
         <dict>
             <key>CFBundleURLName</key>
-            <string>Prismlauncher</string>
+            <string>Lunalauncher</string>
             <key>CFBundleURLSchemes</key>
             <array>
-            <string>prismlauncher</string>
+            <string>lunalauncher</string>
             </array>
         </dict>
     </array>

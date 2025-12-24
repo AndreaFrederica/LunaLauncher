@@ -11,8 +11,18 @@
   <br />
   本项目是 Prism Launcher 的独立 <b>分支</b>，<b>未被</b> Prism Launcher 项目认可或与其关联。
   <br />
-  通过支持社区维护的镜像 API（如 <b>BMCLAPI</b>），提升了访问便利性。
+  通过支持社区维护的镜像 API（如 <b>BMCLAPI</b>）以及自定义身份验证方式（如 <b>authlib-injector</b> 和 <b>统一通行证</b>），提升了访问便利性。
 </p>
+
+---
+
+## 特性
+
+- **多种身份验证方式**：支持微软账号登录，以及自定义身份验证：
+  - **authlib-injector**：允许服务器管理员设置自定义 Yggdrasil 验证服务器，以便更好地维护白名单
+  - **统一通行证 (UnifiedPass/Nide8)**：替代身份验证服务，便于服务器维护白名单
+- **镜像 API 支持**：内置支持 BMCLAPI 和其他社区镜像，在中国地区下载更快
+- **跨平台**：支持 Windows、Linux 和 macOS
 
 ---
 

@@ -80,19 +80,29 @@ Then use bash equivalents:
 
 #### Option B: Pixi + MSVC
 
-Uses Pixi with MSVC toolchain, managed via `pixi.toml`. Requires [Pixi](https://pixi.sh) to be installed.
+Uses Pixi with MSVC toolchain, managed via `pixi.toml`. Requires [Pixi](https://pixi.sh) and Visual Studio to be installed.
+
+**Prerequisites:**
+
+- Visual Studio 2022 (or Build Tools)
+- [Pixi](https://pixi.sh/latest/installation/)
+
+**Important:** You must run commands from the **x64 Native Tools Command Prompt for VS 2022** (or corresponding VS version). This can be found under:
+
+```
+Start Menu > Visual Studio 2022 > x64 Native Tools Command Prompt for VS 2022
+```
 
 ```powershell
-# 1. Install Pixi (if not already installed)
-# Visit https://pixi.sh/latest/installation/
+# From x64 Native Tools Command Prompt:
 
-# 2. Install dependencies and configure
+# 1. Install dependencies and configure
 pixi run configure
 
-# 3. Build
+# 2. Build
 pixi run build
 
-# 4. Install
+# 3. Install
 pixi run install
 ```
 

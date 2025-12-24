@@ -4,3 +4,6 @@
 [submodule "flatpak/shared-modules"]
 	path = flatpak/shared-modules
 	url = https://github.com/flathub/shared-modules.git
+[submodule "tools/Msys2Manager"]
+	path = tools/Msys2Manager
+	url = https://github.com/AndreaFrederica/Msys2Manager.git

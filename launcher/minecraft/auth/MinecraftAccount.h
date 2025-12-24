@@ -133,7 +133,13 @@ class MinecraftAccount : public QObject, public Usable {
 
     AccountType accountType() const noexcept { return data.type; }
 
+#ifndef LAUNCHER_DISABLE_OWNERSHIP_CHECK
     bool ownsMinecraft() const { return data.type != AccountType::Offline && data.minecraftEntitlement.ownsMinecraft; }
+#else
+    // TESTING ONLY: Always return true when ownership check is disabled
+    // This should ONLY be used for development/testing purposes
+    bool ownsMinecraft() const { return true; }
+#endif
 
     bool hasProfile() const { return data.profileId().size() != 0; }
 

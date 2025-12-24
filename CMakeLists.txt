@@ -91,6 +91,10 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DQT_WARN_DEPRECATED_UP_TO=0x060200")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DQT_DISABLE_DEPRECATED_UP_TO=0x060000")
 
+if(Launcher_DISABLE_OWNERSHIP_CHECK)
+    add_compile_definitions(LAUNCHER_DISABLE_OWNERSHIP_CHECK)
+endif()
+
 # set CXXFLAGS for build targets
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -D_FORTIFY_SOURCE=2 ${CMAKE_CXX_FLAGS_RELEASE}")
 
@@ -227,6 +231,13 @@ endif()
 
 # Java downloader
 option(Launcher_ENABLE_JAVA_DOWNLOADER "Build the java downloader feature" ${Launcher_ENABLE_JAVA_DOWNLOADER_DEFAULT})
+
+# Ownership check
+# WARNING: This option is for TESTING PURPOSES ONLY. Do NOT use this in normal builds.
+# It disables the Minecraft ownership verification, allowing the launcher to be used
+# without a legitimate game purchase. Only enable this when testing the launcher's
+# functionality in a controlled development environment.
+option(Launcher_DISABLE_OWNERSHIP_CHECK "Disable Minecraft ownership check. FOR TESTING ONLY - Do NOT use in production builds." OFF)
 
 # Native libraries
 if(UNIX AND APPLE)

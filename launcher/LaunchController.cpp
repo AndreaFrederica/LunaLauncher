@@ -233,6 +233,7 @@ void LaunchController::login()
         m_session->demo = m_demo;
         m_accountToUse->fillSession(m_session);
 
+#ifndef LAUNCHER_DISABLE_OWNERSHIP_CHECK
         MinecraftAccountPtr accountToCheck;
 
         if (m_accountToUse->ownsMinecraft())
@@ -259,6 +260,11 @@ void LaunchController::login()
 
             return;
         }
+#else
+        // TESTING ONLY: Ownership check disabled - use the selected account directly
+        // This should ONLY be enabled for development/testing purposes
+        MinecraftAccountPtr accountToCheck = m_accountToUse;
+#endif
 
         switch (accountToCheck->accountState()) {
             case AccountState::Offline: {

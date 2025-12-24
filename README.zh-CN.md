@@ -39,17 +39,14 @@
 [m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) 是专门用于管理 MSYS2 环境的 CLI 工具。下载最新版本并将其添加到 PATH。
 
 ```powershell
-# 1. 初始化 MSYS2 环境（仅首次）
-m2m init
-
-# 2. 引导安装 MSYS2
+# 1. 引导安装 MSYS2（仅首次）
 m2m bootstrap
 
-# 3. 配置和构建
+# 2. 配置和构建
 m2m run configure
 m2m run build
 
-# 4. 安装
+# 3. 安装
 m2m run install
 ```
 

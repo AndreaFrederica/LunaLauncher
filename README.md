@@ -39,17 +39,14 @@ Uses MSYS2's UCRT64 GCC toolchain, managed via `msys2.toml`.
 [m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) is a dedicated CLI tool for managing MSYS2 environments. Download the latest release and add it to your PATH.
 
 ```powershell
-# 1. Initialize MSYS2 environment (first time only)
-m2m init
-
-# 2. Bootstrap MSYS2
+# 1. Bootstrap MSYS2 (first time only)
 m2m bootstrap
 
-# 3. Configure & build
+# 2. Configure & build
 m2m run configure
 m2m run build
 
-# 4. Install
+# 3. Install
 m2m run install
 ```
 

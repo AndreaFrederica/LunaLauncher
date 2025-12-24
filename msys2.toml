@@ -1,0 +1,55 @@
+[msys2]
+# 使用的 MSYSTEM
+msystem = "UCRT64"
+
+# MSYS2 base archive（固定来源，保证可复现）
+base_url = "https://repo.msys2.org/distrib/x86_64/msys2-base-x86_64-20251213.tar.zst"
+
+# pacman 镜像（可换成公司/国内镜像）
+mirror = "https://mirror.msys2.org"
+
+auto_update = true
+
+[packages]
+# toolchain
+mingw-w64-ucrt-x86_64-toolchain = "*"
+mingw-w64-ucrt-x86_64-cmake = "*"
+mingw-w64-ucrt-x86_64-ninja = "*"
+mingw-w64-ucrt-x86_64-ccache = "*"
+mingw-w64-ucrt-x86_64-extra-cmake-modules = "*"
+
+# qt6
+mingw-w64-ucrt-x86_64-qt6-base = "6.6.*"
+mingw-w64-ucrt-x86_64-qt6-5compat = "*"
+mingw-w64-ucrt-x86_64-qt6-svg = "*"
+mingw-w64-ucrt-x86_64-qt6-imageformats = "*"
+mingw-w64-ucrt-x86_64-qt6-tools = "*"
+mingw-w64-ucrt-x86_64-qt6-translations = "*"
+mingw-w64-ucrt-x86_64-qt6-declarative = "*"
+mingw-w64-ucrt-x86_64-qt6-networkauth = "*"
+
+# app deps
+mingw-w64-ucrt-x86_64-quazip-qt6 = "*"
+mingw-w64-ucrt-x86_64-libarchive = "*"
+mingw-w64-ucrt-x86_64-zlib = "*"
+mingw-w64-ucrt-x86_64-qtkeychain-qt6 = "*"
+mingw-w64-ucrt-x86_64-cmark = "*"
+mingw-w64-ucrt-x86_64-qrencode = "*"
+mingw-w64-ucrt-x86_64-tomlplusplus = "*"
+
+# other
+mingw-w64-ucrt-x86_64-openssl = "*"
+mingw-w64-ucrt-x86_64-curl = "*"
+mingw-w64-ucrt-x86_64-qt6-speech = "*"
+
+[tasks]
+# 常用构建脚本
+configure = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON"
+configure_debug = "cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_OBJDUMP=/mingw64/bin/objdump.exe -DCMAKE_BUILD_TYPE=Debug -G Ninja"
+build = "cmake --build build --parallel"
+install = "cmake --install build --prefix install"
+portable = "cmake --install build --component portable"
+clean = "rm -rf build install"
+
+# 组合命令
+rebuild = "cmake --build build --clean-first --parallel"

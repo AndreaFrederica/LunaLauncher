@@ -65,3 +65,6 @@ flatbuild
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# MSYS2 tools
+.msys2/*

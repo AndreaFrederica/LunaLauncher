@@ -42,10 +42,26 @@ if (-not (Test-Path $bash)) {
     $baseUrl = Get-TomlValue "base_url"
     if (-not $baseUrl) { throw "base_url missing in msys2.toml" }
 
-    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-    $archive = Join-Path $tmp "msys2-base.tar.zst"
+    # 构建下载 URL
+    # 支持两种格式:
+    # 1. 完整文件 URL (旧格式): "https://repo.msys2.org/distrib/x86_64/msys2-base-x86_64-20251213.tar.xz"
+    # 2. 目录 URL (新格式): "https://repo.msys2.org/distrib/x86_64/"
+    if ($baseUrl -match '\.tar\.(zst|xz)$') {
+        $downloadUrl = $baseUrl
+    } else {
+        $version = Get-TomlValue "version"
+        if (-not $version) { throw "version missing in msys2.toml" }
+        # 将 YYYY-MM-DD 转换为 YYYYMMDD
+        $versionForUrl = $version -replace '-', ''
+        # 使用 .tar.xz (PowerShell 的 tar 命令支持 xz 解压)
+        $downloadUrl = "$baseUrl/msys2-base-x86_64-$versionForUrl.tar.xz"
+    }
 
-    Write-Host ">> Downloading MSYS2 base archive"
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $archiveName = Split-Path $downloadUrl -Leaf
+    $archive = Join-Path $tmp $archiveName
+
+    Write-Host ">> Downloading MSYS2 base archive from $downloadUrl"
 
     # 强制启用 TLS 1.2+（防止旧 PowerShell）
     [Net.ServicePointManager]::SecurityProtocol =
@@ -61,7 +77,7 @@ if (-not (Test-Path $bash)) {
 
     # 首选：BITS（最稳定，支持断点续传）
     try {
-        Start-BitsTransfer -Source $baseUrl -Destination $archive -ErrorAction Stop
+        Start-BitsTransfer -Source $downloadUrl -Destination $archive -ErrorAction Stop
         $downloaded = $true
     }
     catch {
@@ -70,7 +86,7 @@ if (-not (Test-Path $bash)) {
 
     # 兜底：Invoke-WebRequest（理论上这里不会再走到）
     if (-not $downloaded) {
-        Invoke-WebRequest -Uri $baseUrl -OutFile $archive -UseBasicParsing
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $archive -UseBasicParsing
     }
 
     tar -xf $archive -C $envRoot

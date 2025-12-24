@@ -2,11 +2,14 @@
 # 使用的 MSYSTEM
 msystem = "UCRT64"
 
-# MSYS2 base archive（固定来源，保证可复现）
-base_url = "https://repo.msys2.org/distrib/x86_64/msys2-base-x86_64-20251213.tar.zst"
+# MSYS2 版本 (YYYY-MM-DD 格式)
+version = "2025-12-13"
+
+# MSYS2 基础目录 URL（不包含具体文件名）
+base_url = "https://repo.msys2.org/distrib/x86_64/"
 
 # pacman 镜像（可换成公司/国内镜像）
-mirror = "https://mirror.msys2.org"
+mirror = ""
 
 auto_update = true
 
@@ -50,8 +53,8 @@ build = "cmake --build build --parallel"
 install = "cmake --install build --prefix install"
 portable = "cmake --install build --component portable"
 clean = "rm -rf build install"
-test = ".\\build\\launcher\\lunalauncher.exe"
-test_install = ".\\install\\lunalauncher.exe"
+test = "./build/launcher/lunalauncher.exe"
+test_install = "./install/lunalauncher.exe"
 
 # 组合命令
 rebuild = "cmake --build build --clean-first --parallel"

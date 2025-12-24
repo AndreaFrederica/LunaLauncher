@@ -45,12 +45,13 @@ mingw-w64-ucrt-x86_64-qt6-speech = "*"
 [tasks]
 # 常用构建脚本
 configure = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON"
-configure_debug = "cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_OBJDUMP=/mingw64/bin/objdump.exe -DCMAKE_BUILD_TYPE=Debug -G Ninja"
+configure_debug = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=OFF"
 build = "cmake --build build --parallel"
 install = "cmake --install build --prefix install"
 portable = "cmake --install build --component portable"
 clean = "rm -rf build install"
-test = ".\\install\\lunalauncher.exe"
+test = ".\\build\\launcher\\lunalauncher.exe"
+test_install = ".\\install\\lunalauncher.exe"
 
 # 组合命令
 rebuild = "cmake --build build --clean-first --parallel"

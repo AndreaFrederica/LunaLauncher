@@ -69,11 +69,11 @@ variables, besides other common Qt variables:
 
 # BUGS
 
-https://github.com/LunaLauncher/LunaLauncher/issues
+https://github.com/AndreaFrederica/LunaLauncher/issues
 
 # RESOURCES
 
-GitHub: https://github.com/LunaLauncher/LunaLauncher
+GitHub: https://github.com/AndreaFrederica/LunaLauncher
 
 Main website: https://lunalauncher.org
 

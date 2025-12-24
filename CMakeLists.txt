@@ -185,7 +185,7 @@ set(Launcher_VERSION_NAME4_COMMA "${Launcher_VERSION_MAJOR},${Launcher_VERSION_M
 set(Launcher_BUILD_PLATFORM "unknown" CACHE STRING "A short string identifying the platform that this build was built for. Only used to display in the about dialog.")
 
 # Github repo URL with releases for updater
-set(Launcher_UPDATER_GITHUB_REPO "https://github.com/LunaLauncher/LunaLauncher" CACHE STRING "Base github URL for the updater.")
+set(Launcher_UPDATER_GITHUB_REPO "https://github.com/AndreaFrederica/LunaLauncher" CACHE STRING "Base github URL for the updater.")
 
 # Name to help updater identify valid artifacts
 set(Launcher_BUILD_ARTIFACT "" CACHE STRING "Artifact name to help the updater identify valid artifacts.")
@@ -197,7 +197,7 @@ set(Launcher_META_URL "https://meta.prismlauncher.org/v1/" CACHE STRING "URL to 
 set(Launcher_IMGUR_CLIENT_ID "5b97b0713fba4a3" CACHE STRING "Client ID you can get from Imgur when you register an application")
 
 # Bug tracker URL
-set(Launcher_BUG_TRACKER_URL "https://github.com/LunaLauncher/LunaLauncher/issues" CACHE STRING "URL for the bug tracker.")
+set(Launcher_BUG_TRACKER_URL "https://github.com/AndreaFrederica/LunaLauncher/issues" CACHE STRING "URL for the bug tracker.")
 
 # Translations Platform URL
 set(Launcher_TRANSLATIONS_URL "https://hosted.weblate.org/projects/prismlauncher/launcher/" CACHE STRING "URL for the translations platform.")
@@ -389,14 +389,14 @@ if(UNIX AND APPLE)
             OUTPUT_VARIABLE XCODE_VERSION_OUTPUT
             OUTPUT_STRIP_TRAILING_WHITESPACE
         )
-        
+
         string(REGEX MATCH "Xcode ([0-9]+\.[0-9]+)" XCODE_VERSION_MATCH "${XCODE_VERSION_OUTPUT}")
         if(XCODE_VERSION_MATCH)
             set(XCODE_VERSION ${CMAKE_MATCH_1})
         else()
             set(XCODE_VERSION 0.0)
         endif()
-        
+
         if(XCODE_VERSION VERSION_GREATER_EQUAL 26.0)
             set(ASSETS_OUT_DIR "${CMAKE_BINARY_DIR}/program_info")
             set(GENERATED_ASSETS_CAR "${ASSETS_OUT_DIR}/Assets.car")
@@ -421,12 +421,12 @@ if(UNIX AND APPLE)
         else()
             message(WARNING "Xcode ${XCODE_VERSION} is too old. Minimum required version is 26.0. Not compiling liquid glass icons.")
         endif()
-        
+
     else()
         message(WARNING "actool not found. Cannot compile macOS app icons.\n"
 				"Install Xcode command line tools: 'xcode-select --install'")
     endif()
-    
+
 
 elseif(UNIX)
     include(KDEInstallDirs)

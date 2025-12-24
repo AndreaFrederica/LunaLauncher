@@ -1,0 +1,36 @@
+[workspace]
+authors = ["AndreaFrederica <andreafrederica@outlook.com>"]
+name = "PrismLauncher"
+platforms = ["win-64"]
+version = "0.1.0"
+channels = [
+  "conda-forge",
+  "https://conda.anaconda.org/conda-forge/label/m2w64-experimental"
+]
+
+[dependencies]
+qt6-main = ">=6.10.1,<7"
+cmake = ">=4.2.1,<5"
+ninja = ">=1.13.2,<2"
+openssl = ">=3.6.0,<4"
+libarchive = ">=3.8.2,<4"
+zlib = ">=1.3.1,<2"
+zstd = ">=1.5.7,<2"
+pkg-config = ">=0.29.2,<0.30"
+openjdk = "21.*"
+
+
+
+[tasks]
+configure = { cmd = [
+  "cmake", "-S", ".", "-B", "build", "-G", "Ninja",
+  "-DCMAKE_BUILD_TYPE=Release",
+  "-DCMAKE_INSTALL_PREFIX=install",
+  "-DENABLE_LTO=ON",
+  "-DCMAKE_PREFIX_PATH=%CONDA_PREFIX%\\Library",
+  "-DQt6_DIR=%CONDA_PREFIX%\\Library\\lib\\cmake\\Qt6"
+] }
+
+build = { cmd = ["cmake", "--build", "build", "-j"] }
+install = { cmd = ["cmake", "--install", "build"] }
+portable = { cmd = ["cmake", "--install", "build", "--component", "portable"] }

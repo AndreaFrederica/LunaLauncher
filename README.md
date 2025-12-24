@@ -34,6 +34,43 @@ This project provides two automated build environments for Windows:
 
 Uses MSYS2's UCRT64 GCC toolchain, managed via `msys2.toml`.
 
+**Method 1: Using Msys2Manager (m2m) - Recommended**
+
+[m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) is a dedicated CLI tool for managing MSYS2 environments. Download the latest release and add it to your PATH.
+
+```powershell
+# 1. Initialize MSYS2 environment (first time only)
+m2m init
+
+# 2. Bootstrap MSYS2
+m2m bootstrap
+
+# 3. Configure & build
+m2m run configure
+m2m run build
+
+# 4. Install
+m2m run install
+```
+
+**Available m2m Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `m2m init` | Initialize `msys2.toml` configuration |
+| `m2m bootstrap` | Download and install MSYS2 |
+| `m2m run <task>` | Run a task defined in `msys2.toml` |
+| `m2m run -l` | List available tasks |
+| `m2m sync` | Sync packages from configuration |
+| `m2m add <package>` | Add a package to configuration |
+| `m2m remove <package>` | Remove a package from configuration |
+| `m2m shell` | Open interactive MSYS2 shell |
+| `m2m update` | Update all MSYS2 packages |
+
+**Method 2: Using PowerShell Scripts**
+
+Alternatively, use the provided PowerShell scripts:
+
 ```powershell
 # 1. Bootstrap MSYS2 environment (first time only)
 .\tools\msys2\bootstrap.ps1
@@ -46,7 +83,7 @@ Uses MSYS2's UCRT64 GCC toolchain, managed via `msys2.toml`.
 .\tools\msys2\run.ps1 install
 ```
 
-**Available Commands:**
+**Available PowerShell Commands:**
 
 | Command | Description |
 |---------|-------------|
@@ -61,10 +98,15 @@ Uses MSYS2's UCRT64 GCC toolchain, managed via `msys2.toml`.
 
 **Managing Dependencies:**
 
-Edit `msys2.toml` to add/remove packages, then run `.\tools\msys2\sync.ps1`.
+Edit `msys2.toml` to add/remove packages, then run `m2m sync` or `.\tools\msys2\sync.ps1`.
 
-Or use the helper scripts:
+Or use the helper commands:
 ```powershell
+# Using m2m
+m2m add mingw-w64-ucrt-x86_64-qt6-tools
+m2m remove mingw-w64-ucrt-x86_64-qt6-tools
+
+# Using PowerShell
 .\tools\msys2\add.ps1 mingw-w64-ucrt-x86_64-qt6-tools
 .\tools\msys2\remove.ps1 mingw-w64-ucrt-x86_64-qt6-tools
 ```
@@ -72,6 +114,10 @@ Or use the helper scripts:
 **Inside MSYS2 Shell:**
 
 ```powershell
+# Using m2m
+m2m shell
+
+# Using PowerShell
 .\tools\msys2\shell.ps1
 ```
 

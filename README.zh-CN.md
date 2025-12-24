@@ -34,6 +34,43 @@
 
 使用 MSYS2 的 UCRT64 GCC 工具链，通过 `msys2.toml` 管理。
 
+**方法 1：使用 Msys2Manager (m2m) - 推荐**
+
+[m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) 是专门用于管理 MSYS2 环境的 CLI 工具。下载最新版本并将其添加到 PATH。
+
+```powershell
+# 1. 初始化 MSYS2 环境（仅首次）
+m2m init
+
+# 2. 引导安装 MSYS2
+m2m bootstrap
+
+# 3. 配置和构建
+m2m run configure
+m2m run build
+
+# 4. 安装
+m2m run install
+```
+
+**可用的 m2m 命令：**
+
+| 命令 | 说明 |
+|------|------|
+| `m2m init` | 初始化 `msys2.toml` 配置 |
+| `m2m bootstrap` | 下载并安装 MSYS2 |
+| `m2m run <task>` | 运行 `msys2.toml` 中定义的任务 |
+| `m2m run -l` | 列出可用任务 |
+| `m2m sync` | 同步配置中的包 |
+| `m2m add <package>` | 添加包到配置 |
+| `m2m remove <package>` | 从配置中删除包 |
+| `m2m shell` | 打开交互式 MSYS2 shell |
+| `m2m update` | 更新所有 MSYS2 包 |
+
+**方法 2：使用 PowerShell 脚本**
+
+或者，使用提供的 PowerShell 脚本：
+
 ```powershell
 # 1. 初始化 MSYS2 环境（仅首次）
 .\tools\msys2\bootstrap.ps1
@@ -46,7 +83,7 @@
 .\tools\msys2\run.ps1 install
 ```
 
-**可用命令：**
+**可用的 PowerShell 命令：**
 
 | 命令 | 说明 |
 |------|------|
@@ -64,10 +101,15 @@
 
 **管理依赖：**
 
-编辑 `msys2.toml` 添加/删除包，然后运行 `.\tools\msys2\sync.ps1`。
+编辑 `msys2.toml` 添加/删除包，然后运行 `m2m sync` 或 `.\tools\msys2\sync.ps1`。
 
-或使用辅助脚本：
+或使用辅助命令：
 ```powershell
+# 使用 m2m
+m2m add mingw-w64-ucrt-x86_64-qt6-tools
+m2m remove mingw-w64-ucrt-x86_64-qt6-tools
+
+# 使用 PowerShell
 .\tools\msys2\add.ps1 mingw-w64-ucrt-x86_64-qt6-tools
 .\tools\msys2\remove.ps1 mingw-w64-ucrt-x86_64-qt6-tools
 ```
@@ -75,6 +117,10 @@
 **在 MSYS2 Shell 中：**
 
 ```powershell
+# 使用 m2m
+m2m shell
+
+# 使用 PowerShell
 .\tools\msys2\shell.ps1
 ```
 

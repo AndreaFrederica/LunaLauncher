@@ -42,6 +42,8 @@
 #include "QObjectPtr.h"
 #include "minecraft/auth/AuthlibInjector.h"
 #include "minecraft/auth/AuthlibInjectorDownloadTask.h"
+#include "minecraft/auth/Nide8Auth.h"
+#include "minecraft/auth/Nide8AuthDownloadTask.h"
 #include "minecraft/launch/AutoInstallJava.h"
 #include "minecraft/launch/CreateGameFolders.h"
 #include "minecraft/launch/ExtractNatives.h"
@@ -587,6 +589,31 @@ QStringList MinecraftInstance::javaArguments(AuthSessionPtr session)
             qDebug() << "Added authlib-injector for Yggdrasil account:" << session->yggdrasilApiUrl;
         } else {
             qWarning() << "authlib-injector.jar not found at" << authlibInjectorPath << "- Yggdrasil authentication may not work";
+        }
+    }
+
+    // Add nide8auth javaagent for UnifiedPass accounts
+    // Note: Nide8AuthDownloadTask will handle downloading the jar file during launch
+    if (session && session->unifiedPass) {
+        QString nide8authPath = Nide8Auth::instance().getLocalPath();
+
+        // Check if nide8auth.jar exists (download task should have downloaded it)
+        if (QFile::exists(nide8authPath)) {
+            // Check if path contains '=' character (Java bug workaround)
+            if (nide8authPath.contains('=')) {
+                // Use relative path as workaround
+                QDir rootDir(APPLICATION->root());
+                QString relativePath = rootDir.relativeFilePath(nide8authPath);
+                args << QString("-javaagent:%1=%2").arg(relativePath, session->unifiedPassServerId);
+            } else {
+                args << QString("-javaagent:%1=%2").arg(nide8authPath, session->unifiedPassServerId);
+            }
+            // Add required JVM parameter for nide8auth client mode
+            args << "-Dnide8auth.client=true";
+
+            qDebug() << "Added nide8auth for UnifiedPass account:" << session->unifiedPassServerId;
+        } else {
+            qWarning() << "nide8auth.jar not found at" << nide8authPath << "- UnifiedPass authentication may not work";
         }
     }
 
@@ -1177,6 +1204,11 @@ shared_qobject_ptr<LaunchTask> MinecraftInstance::createLaunchTask(AuthSessionPt
     // download authlib-injector if using Yggdrasil account
     if (session->yggdrasil) {
         process->appendStep(makeShared<AuthlibInjectorDownloadTask>(pptr));
+    }
+
+    // download nide8auth if using UnifiedPass account
+    if (session->unifiedPass) {
+        process->appendStep(makeShared<Nide8AuthDownloadTask>(pptr));
     }
 
     // run pre-launch command if that's needed

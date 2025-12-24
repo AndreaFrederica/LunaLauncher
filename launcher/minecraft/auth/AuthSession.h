@@ -43,6 +43,10 @@ struct AuthSession {
     bool yggdrasil = false;                   // Whether this is a Yggdrasil account
     QString yggdrasilApiUrl;                  // Yggdrasil API URL
     QString yggdrasilPrefetched;              // Base64-encoded prefetched metadata
+
+    // UnifiedPass / Nide8Auth specific fields
+    bool unifiedPass = false;                 // Whether this is a UnifiedPass account
+    QString unifiedPassServerId;              // 32-character server ID
 };
 
 using AuthSessionPtr = std::shared_ptr<AuthSession>;

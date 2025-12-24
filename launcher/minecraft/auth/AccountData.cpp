@@ -358,6 +358,8 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
         type = AccountType::Offline;
     } else if (typeS == "Yggdrasil") {
         type = AccountType::Yggdrasil;
+    } else if (typeS == "UnifiedPass") {
+        type = AccountType::UnifiedPass;
     } else {
         qWarning() << "Failed to parse account data: type is not recognized.";
         return false;
@@ -392,12 +394,27 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
                 yggdrasilConfig.tokenType = YggdrasilTokenType::Standard;
             }
         }
+    } else if (type == AccountType::UnifiedPass) {
+        auto configV = data.value("unifiedPassConfig");
+        if (configV.isObject()) {
+            auto configObj = configV.toObject();
+            unifiedPassConfig.serverId = configObj.value("serverId").toString();
+            unifiedPassConfig.baseUrl = configObj.value("baseUrl").toString();
+            unifiedPassConfig.serverName = configObj.value("serverName").toString();
+            unifiedPassConfig.serverIP = configObj.value("serverIP").toString();
+            unifiedPassConfig.jarHash = configObj.value("jarHash").toString();
+        }
     }
 
-    yggdrasilToken = tokenFromJSONV3(data, "ygg");
-    // versions before 7.2 used "offline" as the offline token
-    if (yggdrasilToken.token == "offline")
-        yggdrasilToken.token = "0";
+    // Load the appropriate token based on account type
+    if (type == AccountType::UnifiedPass) {
+        unifiedPassToken = tokenFromJSONV3(data, "upass");
+    } else {
+        yggdrasilToken = tokenFromJSONV3(data, "ygg");
+        // versions before 7.2 used "offline" as the offline token
+        if (yggdrasilToken.token == "offline")
+            yggdrasilToken.token = "0";
+    }
 
     minecraftProfile = profileFromJSONV3(data, "profile");
     if (!entitlementFromJSONV3(data, minecraftEntitlement)) {
@@ -454,9 +471,31 @@ QJsonObject AccountData::saveState() const
             configObj["tokenType"] = "Standard";
         }
         output["yggdrasilConfig"] = configObj;
+    } else if (type == AccountType::UnifiedPass) {
+        output["type"] = "UnifiedPass";
+        QJsonObject configObj;
+        configObj["serverId"] = unifiedPassConfig.serverId;
+        if (!unifiedPassConfig.baseUrl.isEmpty()) {
+            configObj["baseUrl"] = unifiedPassConfig.baseUrl;
+        }
+        if (!unifiedPassConfig.serverName.isEmpty()) {
+            configObj["serverName"] = unifiedPassConfig.serverName;
+        }
+        if (!unifiedPassConfig.serverIP.isEmpty()) {
+            configObj["serverIP"] = unifiedPassConfig.serverIP;
+        }
+        if (!unifiedPassConfig.jarHash.isEmpty()) {
+            configObj["jarHash"] = unifiedPassConfig.jarHash;
+        }
+        output["unifiedPassConfig"] = configObj;
     }
 
-    tokenToJSONV3(output, yggdrasilToken, "ygg");
+    // Save the appropriate token based on account type
+    if (type == AccountType::UnifiedPass) {
+        tokenToJSONV3(output, unifiedPassToken, "upass");
+    } else {
+        tokenToJSONV3(output, yggdrasilToken, "ygg");
+    }
     profileToJSONV3(output, minecraftProfile, "profile");
     entitlementToJSONV3(output, minecraftEntitlement);
     return output;
@@ -464,6 +503,9 @@ QJsonObject AccountData::saveState() const
 
 QString AccountData::accessToken() const
 {
+    if (type == AccountType::UnifiedPass) {
+        return unifiedPassToken.token;
+    }
     return yggdrasilToken.token;
 }
 
@@ -516,6 +558,22 @@ QString AccountData::accountDisplayString() const
                 return QString("%1 [%2]%3").arg(displayName, yggdrasilConfig.sourceName, typeSuffix);
             }
             return QString("%1%2").arg(displayName, typeSuffix);
+        }
+        case AccountType::UnifiedPass: {
+            QString displayName;
+            if (unifiedPassToken.extra.contains("userName")) {
+                displayName = unifiedPassToken.extra["userName"].toString();
+            } else if (!minecraftProfile.name.isEmpty()) {
+                displayName = minecraftProfile.name;
+            } else {
+                displayName = QObject::tr("<UnifiedPass>");
+            }
+
+            // Add server name if available and not empty
+            if (!unifiedPassConfig.serverName.isEmpty()) {
+                return QString("%1 [%2]").arg(displayName, unifiedPassConfig.serverName);
+            }
+            return displayName;
         }
         default: {
             return "Invalid Account";

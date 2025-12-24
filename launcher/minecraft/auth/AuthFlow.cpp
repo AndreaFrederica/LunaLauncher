@@ -15,6 +15,8 @@
 #include "minecraft/auth/steps/YggdrasilAuthStep.h"
 #include "minecraft/auth/steps/YggdrasilProfileStep.h"
 #include "minecraft/auth/steps/YggdrasilProfileSelectStep.h"
+#include "minecraft/auth/steps/UnifiedPassAuthStep.h"
+#include "minecraft/auth/steps/UnifiedPassMetaStep.h"
 #include "tasks/Task.h"
 
 #include "AuthFlow.h"
@@ -51,6 +53,20 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
             m_steps.append(makeShared<YggdrasilAuthStep>(m_data, YggdrasilAuthStep::RequestType::Authenticate));
         }
         // Profile selection step - it will auto-select if only one profile, show dialog if multiple
+        m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
+        m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
+        m_steps.append(makeShared<GetSkinStep>(m_data));
+    } else if (data->type == AccountType::UnifiedPass) {
+        // UnifiedPass authentication flow
+        // First, fetch server metadata to get the latest API root
+        m_steps.append(makeShared<UnifiedPassMetaStep>(m_data));
+        // Authenticate or refresh token
+        if (action == Action::Refresh) {
+            m_steps.append(makeShared<UnifiedPassAuthStep>(m_data, UnifiedPassAuthStep::RequestType::Refresh));
+        } else {
+            m_steps.append(makeShared<UnifiedPassAuthStep>(m_data, UnifiedPassAuthStep::RequestType::Authenticate));
+        }
+        // Reuse Yggdrasil profile steps (API compatible)
         m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
         m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));

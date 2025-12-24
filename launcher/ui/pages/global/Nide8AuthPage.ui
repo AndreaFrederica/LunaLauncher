@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Nide8AuthPage</class>
+ <widget class="QWidget" name="Nide8AuthPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>700</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_main">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>700</width>
+        <height>600</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_content">
+       <item>
+        <widget class="QGroupBox" name="groupBox_info">
+         <property name="title">
+          <string>About nide8auth</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_info">
+          <item>
+           <widget class="QLabel" name="label_description">
+            <property name="text">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;nide8auth is a Java agent required for UnifiedPass authentication to work with Minecraft. It allows the game to authenticate against UnifiedPass servers.&lt;/p&gt;&lt;p&gt;It is automatically downloaded when you launch a game with a UnifiedPass account, but you can also manage it here.&lt;/p&gt;&lt;p&gt;For more information, visit &lt;a href=&quot;https://login.mc-user.com:233/&quot;&gt;login.mc-user.com:233&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_status">
+         <property name="title">
+          <string>Status</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_status">
+          <item>
+           <layout class="QGridLayout" name="gridLayout_status">
+            <item row="0" column="0">
+             <widget class="QLabel" name="label_installed">
+              <property name="text">
+               <string>Installed:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="label_installed_value">
+              <property name="text">
+               <string>Checking...</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_size">
+              <property name="text">
+               <string>File Size:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="label_size_value">
+              <property name="text">
+               <string>-</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_path">
+              <property name="text">
+               <string>Location:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="lineEdit_path">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_download">
+         <property name="title">
+          <string>Download</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_download">
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_buttons">
+            <item>
+             <widget class="QPushButton" name="pushButton_download">
+              <property name="text">
+               <string>Download / Update</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_delete">
+              <property name="text">
+               <string>Delete</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_usage">
+         <property name="title">
+          <string>Usage</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_usage">
+          <item>
+           <widget class="QLabel" name="label_usage_info">
+            <property name="text">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;nide8auth is automatically used when launching a game with a UnifiedPass account. The following JVM arguments will be added:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPlainTextEdit" name="plainTextEdit_args">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="plainText">
+             <string notr="true">-javaagent:{path}={server_id}
+-Dnide8auth.client=true</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

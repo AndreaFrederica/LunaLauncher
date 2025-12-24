@@ -18,35 +18,37 @@
 
 #pragma once
 
-#include <QDialog>
-#include <QJsonObject>
-#include <QVector>
-#include <QListWidgetItem>
+#include <QWidget>
+
+#include "ui/pages/BasePage.h"
 
 namespace Ui {
-class YggdrasilProfileSelectDialog;
+class Nide8AuthPage;
 }
 
-struct SelectedProfile {
-    QString id;
-    QString name;
-};
-
-class YggdrasilProfileSelectDialog : public QDialog {
+class Nide8AuthPage : public QWidget, public BasePage {
     Q_OBJECT
 
    public:
-    explicit YggdrasilProfileSelectDialog(const QVector<QJsonObject>& profiles, QWidget* parent = nullptr);
-    ~YggdrasilProfileSelectDialog();
+    explicit Nide8AuthPage(QWidget* parent = 0);
+    ~Nide8AuthPage();
 
-    SelectedProfile selectedProfile() const { return m_selectedProfile; }
+    QString displayName() const override { return tr("nide8auth"); }
+    QIcon icon() const override { return QIcon::fromTheme("nide8auth"); }
+    QString id() const override { return "nide8auth"; }
+    QString helpPage() const override { return "nide8auth"; }
+    virtual bool apply() override;
+    void retranslate() override;
 
    private slots:
-    void onProfileSelected();
-    void onProfileDoubleClicked(QListWidgetItem* item);
+    void onDownloadButtonClicked();
+    void onDeleteButtonClicked();
+    void refreshStatus();
 
    private:
-    Ui::YggdrasilProfileSelectDialog* ui;
-    SelectedProfile m_selectedProfile;
-    QVector<QJsonObject> m_profiles;
+    void updateStatus();
+    void updateJvmArgs();
+
+   private:
+    Ui::Nide8AuthPage* ui;
 };

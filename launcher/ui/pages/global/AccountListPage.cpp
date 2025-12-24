@@ -48,6 +48,7 @@
 #include "ui/dialogs/ChooseOfflineNameDialog.h"
 #include "ui/dialogs/MSALoginDialog.h"
 #include "ui/dialogs/YggdrasilLoginDialog.h"
+#include "ui/dialogs/UnifiedPassLoginDialog.h"
 
 #include "Application.h"
 
@@ -168,6 +169,17 @@ void AccountListPage::on_actionAddOffline_triggered()
 void AccountListPage::on_actionAddYggdrasil_triggered()
 {
     auto account = YggdrasilLoginDialog::newAccount(this);
+    if (account) {
+        m_accounts->addAccount(account);
+        if (m_accounts->count() == 1) {
+            m_accounts->setDefaultAccount(account);
+        }
+    }
+}
+
+void AccountListPage::on_actionAddUnifiedPass_triggered()
+{
+    auto account = UnifiedPassLoginDialog::newAccount(this);
     if (account) {
         m_accounts->addAccount(account);
         if (m_accounts->count() == 1) {

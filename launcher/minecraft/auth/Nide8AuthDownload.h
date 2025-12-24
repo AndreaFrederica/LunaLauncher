@@ -18,35 +18,30 @@
 
 #pragma once
 
-#include <QDialog>
-#include <QJsonObject>
-#include <QVector>
-#include <QListWidgetItem>
+#include "tasks/Task.h"
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QObjectPtr.h>
 
-namespace Ui {
-class YggdrasilProfileSelectDialog;
-}
-
-struct SelectedProfile {
-    QString id;
-    QString name;
-};
-
-class YggdrasilProfileSelectDialog : public QDialog {
+class Nide8AuthDownload : public Task {
     Q_OBJECT
 
    public:
-    explicit YggdrasilProfileSelectDialog(const QVector<QJsonObject>& profiles, QWidget* parent = nullptr);
-    ~YggdrasilProfileSelectDialog();
+    explicit Nide8AuthDownload(QObject* parent = nullptr);
+    ~Nide8AuthDownload() override = default;
 
-    SelectedProfile selectedProfile() const { return m_selectedProfile; }
+    bool canAbort() const override { return true; }
+    bool abort() override;
+
+   protected:
+    void executeTask() override;
 
    private slots:
-    void onProfileSelected();
-    void onProfileDoubleClicked(QListWidgetItem* item);
+    void downloadJarFinished();
 
    private:
-    Ui::YggdrasilProfileSelectDialog* ui;
-    SelectedProfile m_selectedProfile;
-    QVector<QJsonObject> m_profiles;
+    QNetworkAccessManager* m_network;
+    QNetworkReply* m_jarReply = nullptr;
+
+    QString m_jarPath;
 };

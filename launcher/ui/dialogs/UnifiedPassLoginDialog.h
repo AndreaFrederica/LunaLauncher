@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Luna Launcher - Minecraft Launcher
- *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ *  Copyright (C) 2024 The Luna Launcher Contributors
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,34 +19,35 @@
 #pragma once
 
 #include <QDialog>
-#include <QJsonObject>
-#include <QVector>
-#include <QListWidgetItem>
+
+#include "minecraft/auth/MinecraftAccount.h"
 
 namespace Ui {
-class YggdrasilProfileSelectDialog;
+class UnifiedPassLoginDialog;
 }
 
-struct SelectedProfile {
-    QString id;
-    QString name;
-};
-
-class YggdrasilProfileSelectDialog : public QDialog {
+class UnifiedPassLoginDialog : public QDialog {
     Q_OBJECT
 
    public:
-    explicit YggdrasilProfileSelectDialog(const QVector<QJsonObject>& profiles, QWidget* parent = nullptr);
-    ~YggdrasilProfileSelectDialog();
+    ~UnifiedPassLoginDialog();
 
-    SelectedProfile selectedProfile() const { return m_selectedProfile; }
+    static MinecraftAccountPtr newAccount(QWidget* parent = nullptr);
+    int exec() override;
 
-   private slots:
-    void onProfileSelected();
-    void onProfileDoubleClicked(QListWidgetItem* item);
+   protected slots:
+    void onTaskFailed(QString reason);
+    void onAuthFlowStatus(QString status);
+    void onAuthFlowSucceeded();
+    void onAuthFlowAborted();
+    void onRegisterButtonClicked();
 
    private:
-    Ui::YggdrasilProfileSelectDialog* ui;
-    SelectedProfile m_selectedProfile;
-    QVector<QJsonObject> m_profiles;
+    explicit UnifiedPassLoginDialog(QWidget* parent = nullptr);
+
+    void startLogin();
+
+    Ui::UnifiedPassLoginDialog* ui;
+    MinecraftAccountPtr m_account;
+    shared_qobject_ptr<AuthFlow> m_authflow_task;
 };

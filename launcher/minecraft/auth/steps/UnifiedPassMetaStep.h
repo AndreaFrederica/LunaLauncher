@@ -18,35 +18,33 @@
 
 #pragma once
 
-#include <QDialog>
-#include <QJsonObject>
-#include <QVector>
-#include <QListWidgetItem>
+#include <QNetworkReply>
+#include <QObject>
 
-namespace Ui {
-class YggdrasilProfileSelectDialog;
-}
+#include "minecraft/auth/AuthStep.h"
+#include "minecraft/auth/AccountData.h"
+#include "net/NetJob.h"
+#include "net/Download.h"
+#include "net/RawHeaderProxy.h"
 
-struct SelectedProfile {
-    QString id;
-    QString name;
-};
-
-class YggdrasilProfileSelectDialog : public QDialog {
+class UnifiedPassMetaStep : public AuthStep {
     Q_OBJECT
 
    public:
-    explicit YggdrasilProfileSelectDialog(const QVector<QJsonObject>& profiles, QWidget* parent = nullptr);
-    ~YggdrasilProfileSelectDialog();
+    explicit UnifiedPassMetaStep(AccountData* data);
+    virtual ~UnifiedPassMetaStep() noexcept = default;
 
-    SelectedProfile selectedProfile() const { return m_selectedProfile; }
+    void perform() override;
+    QString describe() override;
 
    private slots:
-    void onProfileSelected();
-    void onProfileDoubleClicked(QListWidgetItem* item);
+    void onRequestDone();
 
    private:
-    Ui::YggdrasilProfileSelectDialog* ui;
-    SelectedProfile m_selectedProfile;
-    QVector<QJsonObject> m_profiles;
+    QUrl getBaseUrl() const;
+    void processMetaResponse(QByteArray& data);
+
+    std::shared_ptr<QByteArray> m_response;
+    Net::Download::Ptr m_request;
+    NetJob::Ptr m_task;
 };

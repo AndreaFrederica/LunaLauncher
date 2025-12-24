@@ -131,6 +131,32 @@ MinecraftAccountPtr MinecraftAccount::createYggdrasil(const QString& username,
     return account;
 }
 
+MinecraftAccountPtr MinecraftAccount::createUnifiedPass(const QString& username,
+                                                         const QString& password,
+                                                         const QString& serverId,
+                                                         const QString& baseUrl)
+{
+    static const QRegularExpression s_removeChars("[{}-]");
+    auto account = makeShared<MinecraftAccount>();
+    account->data.type = AccountType::UnifiedPass;
+
+    // Store UnifiedPass service configuration
+    account->data.unifiedPassConfig.serverId = serverId;
+    account->data.unifiedPassConfig.baseUrl = baseUrl;
+
+    // Store temporary credentials (will be cleared after successful auth)
+    account->data.unifiedPassToken.extra["username"] = username;
+    account->data.unifiedPassToken.extra["credentials"] = password;
+    account->data.unifiedPassToken.extra["clientToken"] = QUuid::createUuid().toString().remove(s_removeChars);
+
+    // UnifiedPass accounts are assumed to own Minecraft
+    account->data.minecraftEntitlement.canPlayMinecraft = true;
+    account->data.minecraftEntitlement.ownsMinecraft = true;
+    account->data.minecraftEntitlement.validity = Validity::Assumed;
+
+    return account;
+}
+
 QJsonObject MinecraftAccount::saveToJson() const
 {
     return data.saveState();
@@ -310,6 +336,15 @@ void MinecraftAccount::fillSession(AuthSessionPtr session)
         session->yggdrasil = false;
         session->yggdrasilApiUrl.clear();
         session->yggdrasilPrefetched.clear();
+    }
+
+    // UnifiedPass / Nide8Auth specific fields
+    if (data.type == AccountType::UnifiedPass) {
+        session->unifiedPass = true;
+        session->unifiedPassServerId = data.unifiedPassConfig.serverId;
+    } else {
+        session->unifiedPass = false;
+        session->unifiedPassServerId.clear();
     }
 }
 

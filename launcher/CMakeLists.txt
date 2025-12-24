@@ -233,6 +233,12 @@ set(MINECRAFT_SOURCES
     minecraft/auth/AuthlibInjectorDownload.h
     minecraft/auth/AuthlibInjectorDownloadTask.cpp
     minecraft/auth/AuthlibInjectorDownloadTask.h
+    minecraft/auth/Nide8Auth.cpp
+    minecraft/auth/Nide8Auth.h
+    minecraft/auth/Nide8AuthDownload.cpp
+    minecraft/auth/Nide8AuthDownload.h
+    minecraft/auth/Nide8AuthDownloadTask.cpp
+    minecraft/auth/Nide8AuthDownloadTask.h
 
     minecraft/auth/AuthFlow.cpp
     minecraft/auth/AuthFlow.h
@@ -261,6 +267,10 @@ set(MINECRAFT_SOURCES
     minecraft/auth/steps/YggdrasilProfileStep.h
     minecraft/auth/steps/YggdrasilProfileSelectStep.cpp
     minecraft/auth/steps/YggdrasilProfileSelectStep.h
+    minecraft/auth/steps/UnifiedPassAuthStep.cpp
+    minecraft/auth/steps/UnifiedPassAuthStep.h
+    minecraft/auth/steps/UnifiedPassMetaStep.cpp
+    minecraft/auth/steps/UnifiedPassMetaStep.h
 
     minecraft/update/AssetUpdateTask.h
     minecraft/update/AssetUpdateTask.cpp
@@ -977,6 +987,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/APIPage.h
     ui/pages/global/AuthlibInjectorPage.cpp
     ui/pages/global/AuthlibInjectorPage.h
+    ui/pages/global/Nide8AuthPage.cpp
+    ui/pages/global/Nide8AuthPage.h
 
     # GUI - platform pages
     ui/pages/modplatform/CustomPage.cpp
@@ -1095,6 +1107,8 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/YggdrasilPresetEditDialog.h
     ui/dialogs/YggdrasilPresetsDialog.cpp
     ui/dialogs/YggdrasilPresetsDialog.h
+    ui/dialogs/UnifiedPassLoginDialog.cpp
+    ui/dialogs/UnifiedPassLoginDialog.h
     ui/pagedialog/PageDialog.cpp
     ui/pagedialog/PageDialog.h
     ui/dialogs/ProgressDialog.cpp
@@ -1236,6 +1250,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/global/LauncherPage.ui
     ui/pages/global/APIPage.ui
     ui/pages/global/AuthlibInjectorPage.ui
+    ui/pages/global/Nide8AuthPage.ui
     ui/pages/global/ProxyPage.ui
     ui/pages/global/ExternalToolsPage.ui
     ui/pages/instance/ExternalResourcesPage.ui
@@ -1271,6 +1286,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/dialogs/YggdrasilProfileSelectDialog.ui
     ui/dialogs/YggdrasilPresetEditDialog.ui
     ui/dialogs/YggdrasilPresetsDialog.ui
+    ui/dialogs/UnifiedPassLoginDialog.ui
     ui/dialogs/CreateShortcutDialog.ui
     ui/dialogs/ProfileSetupDialog.ui
     ui/dialogs/ProgressDialog.ui

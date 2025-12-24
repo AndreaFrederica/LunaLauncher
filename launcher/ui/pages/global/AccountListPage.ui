@@ -55,6 +55,7 @@
    <addaction name="actionAddMicrosoft"/>
    <addaction name="actionAddOffline"/>
    <addaction name="actionAddYggdrasil"/>
+   <addaction name="actionAddUnifiedPass"/>
    <addaction name="actionRefresh"/>
    <addaction name="actionRemove"/>
    <addaction name="actionSetDefault"/>
@@ -96,6 +97,11 @@
   <action name="actionAddYggdrasil">
    <property name="text">
     <string>Add &amp;Yggdrasil</string>
+   </property>
+  </action>
+  <action name="actionAddUnifiedPass">
+   <property name="text">
+    <string>Add &amp;UnifiedPass</string>
    </property>
   </action>
   <action name="actionRefresh">

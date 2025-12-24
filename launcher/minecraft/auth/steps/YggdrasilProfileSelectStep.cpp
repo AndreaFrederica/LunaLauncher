@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Prism Launcher - Minecraft Launcher
- *  Copyright (C) 2024 The Prism Launcher Contributors
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,8 +39,16 @@ void YggdrasilProfileSelectStep::perform()
         return;
     }
 
+    // Determine which token to use based on account type
+    QVariantMap* tokenExtra = nullptr;
+    if (m_data->type == AccountType::UnifiedPass) {
+        tokenExtra = &m_data->unifiedPassToken.extra;
+    } else {
+        tokenExtra = &m_data->yggdrasilToken.extra;
+    }
+
     // Extract available profiles from token extra data
-    auto availableProfilesVar = m_data->yggdrasilToken.extra.value("availableProfiles");
+    auto availableProfilesVar = tokenExtra->value("availableProfiles");
     if (availableProfilesVar.isNull() || !availableProfilesVar.canConvert<QJsonArray>()) {
         // No profiles to select from, profile should have been set by auth step
         if (!m_data->minecraftProfile.id.isEmpty()) {
@@ -88,17 +96,24 @@ void YggdrasilProfileSelectStep::setSelectedProfile(const QString& profileId, co
     m_data->minecraftProfile.name = profileName;
     m_data->minecraftProfile.validity = Validity::Certain;
 
-    // For OAuth accounts without refresh_token, keep the credentials for re-authentication
-    // For standard Yggdrasil or OAuth with refresh_token, clear the credentials
-    bool hasRefreshToken = m_data->yggdrasilToken.extra.contains("refreshToken") &&
-                           !m_data->yggdrasilToken.extra["refreshToken"].toString().isEmpty();
-    bool isOAuthWithoutRefreshToken = m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken;
+    // For UnifiedPass, clear credentials and available profiles
+    if (m_data->type == AccountType::UnifiedPass) {
+        m_data->unifiedPassToken.extra.remove("credentials");
+        m_data->unifiedPassToken.extra.remove("availableProfiles");
+    } else {
+        // For Yggdrasil
+        // For OAuth accounts without refresh_token, keep the credentials for re-authentication
+        // For standard Yggdrasil or OAuth with refresh_token, clear the credentials
+        bool hasRefreshToken = m_data->yggdrasilToken.extra.contains("refreshToken") &&
+                               !m_data->yggdrasilToken.extra["refreshToken"].toString().isEmpty();
+        bool isOAuthWithoutRefreshToken = m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken;
 
-    if (!isOAuthWithoutRefreshToken) {
-        // Clear credentials from memory after profile selection
-        m_data->yggdrasilToken.extra.remove("credentials");
+        if (!isOAuthWithoutRefreshToken) {
+            // Clear credentials from memory after profile selection
+            m_data->yggdrasilToken.extra.remove("credentials");
+        }
+        m_data->yggdrasilToken.extra.remove("availableProfiles");
     }
-    m_data->yggdrasilToken.extra.remove("availableProfiles");
 
     emit finished(AccountTaskState::STATE_WORKING, tr("Profile selected: %1").arg(profileName));
 }

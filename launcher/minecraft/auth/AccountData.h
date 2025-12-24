@@ -87,11 +87,19 @@ struct MinecraftProfile {
     Validity validity = Validity::None;
 };
 
-enum class AccountType { MSA, Offline, Yggdrasil };
+enum class AccountType { MSA, Offline, Yggdrasil, UnifiedPass };
 
 enum class YggdrasilTokenType { Standard, OAuth };
 
 enum class AccountState { Unchecked, Offline, Working, Online, Disabled, Errored, Expired, Gone };
+
+struct UnifiedPassServerConfig {
+    QString serverId;    // 32-character server ID
+    QString baseUrl;     // API base URL (updated from meta)
+    QString serverName;  // Server name (from meta)
+    QString serverIP;    // Server IP (from meta, optional)
+    QString jarHash;     // Client component SHA1 (from meta, optional)
+};
 
 struct YggdrasilServerConfig {
     QString authServerUrl;
@@ -128,6 +136,9 @@ struct AccountData {
     // Yggdrasil service configuration
     YggdrasilServerConfig yggdrasilConfig;
 
+    // UnifiedPass service configuration
+    UnifiedPassServerConfig unifiedPassConfig;
+
     QString msaClientID;
     Token msaToken;
     Token userToken;
@@ -135,6 +146,10 @@ struct AccountData {
     Token mojangservicesToken;
 
     Token yggdrasilToken;
+
+    // UnifiedPass token
+    Token unifiedPassToken;
+
     MinecraftProfile minecraftProfile;
     MinecraftEntitlement minecraftEntitlement;
     Validity validity_ = Validity::None;

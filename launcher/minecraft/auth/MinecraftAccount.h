@@ -99,6 +99,11 @@ class MinecraftAccount : public QObject, public Usable {
                                                   const QString& oauthTokenEndpoint = QString(),
                                                   YggdrasilTokenType tokenType = YggdrasilTokenType::Standard);
 
+    static MinecraftAccountPtr createUnifiedPass(const QString& username,
+                                                   const QString& password,
+                                                   const QString& serverId,
+                                                   const QString& baseUrl = QString());
+
     static MinecraftAccountPtr loadFromJsonV3(const QJsonObject& json);
 
     static QUuid uuidFromUsername(QString username);

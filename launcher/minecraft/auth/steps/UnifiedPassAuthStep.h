@@ -27,14 +27,14 @@
 #include "net/Upload.h"
 #include "net/RawHeaderProxy.h"
 
-class YggdrasilAuthStep : public AuthStep {
+class UnifiedPassAuthStep : public AuthStep {
     Q_OBJECT
 
    public:
     enum class RequestType { Authenticate, Refresh, Validate };
 
-    explicit YggdrasilAuthStep(AccountData* data, RequestType type = RequestType::Authenticate);
-    virtual ~YggdrasilAuthStep() noexcept = default;
+    explicit UnifiedPassAuthStep(AccountData* data, RequestType type = RequestType::Authenticate);
+    virtual ~UnifiedPassAuthStep() noexcept = default;
 
     void perform() override;
     QString describe() override;
@@ -43,8 +43,7 @@ class YggdrasilAuthStep : public AuthStep {
     void onRequestDone();
 
    private:
-    QUrl getAuthServerEndpoint(const QString& endpoint) const;
-    QUrl getSessionServerEndpoint(const QString& endpoint) const;
+    QUrl getEndpoint(const QString& endpoint) const;
     void processAuthenticateResponse(QByteArray& data);
     void processRefreshResponse(QByteArray& data);
 

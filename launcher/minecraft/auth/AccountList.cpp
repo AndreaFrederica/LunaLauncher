@@ -312,6 +312,9 @@ QVariant AccountList::data(const QModelIndex& index, int role) const
                         case AccountType::Yggdrasil: {
                             return tr("Yggdrasil", "Account type");
                         }
+                        case AccountType::UnifiedPass: {
+                            return tr("UnifiedPass", "Account type");
+                        }
                     }
                     return tr("Unknown", "Account type");
                 }
@@ -325,6 +328,9 @@ QVariant AccountList::data(const QModelIndex& index, int role) const
                         }
                         case AccountType::Yggdrasil: {
                             return account->accountData()->yggdrasilConfig.sourceName;
+                        }
+                        case AccountType::UnifiedPass: {
+                            return account->accountData()->unifiedPassConfig.serverName;
                         }
                     }
                     return QString();

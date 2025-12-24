@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-only AND Apache-2.0
 
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2022 Lenny McLennington <lenny@sneed.church>
@@ -66,6 +68,7 @@
 #include "ui/pages/global/LanguagePage.h"
 #include "ui/pages/global/LauncherPage.h"
 #include "ui/pages/global/MinecraftPage.h"
+#include "ui/pages/global/Nide8AuthPage.h"
 #include "ui/pages/global/ProxyPage.h"
 
 #include "ui/setupwizard/AutoJavaWizardPage.h"
@@ -949,6 +952,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<AccountListPage>();
             m_globalSettingsProvider->addPage<APIPage>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
+            m_globalSettingsProvider->addPage<Nide8AuthPage>();
             m_globalSettingsProvider->addPage<ExternalToolsPage>();
             m_globalSettingsProvider->addPage<ProxyPage>();
         }

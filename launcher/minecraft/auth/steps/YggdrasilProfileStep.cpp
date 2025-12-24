@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Prism Launcher - Minecraft Launcher
- *  Copyright (C) 2024 The Prism Launcher Contributors
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -34,7 +34,15 @@ QString YggdrasilProfileStep::describe()
 
 QUrl YggdrasilProfileStep::getSessionServerEndpoint(const QString& endpoint) const
 {
-    QString baseUrl = m_data->yggdrasilConfig.sessionServerUrl;
+    QString baseUrl;
+
+    // For UnifiedPass, use the UnifiedPass baseUrl
+    if (m_data->type == AccountType::UnifiedPass) {
+        baseUrl = m_data->unifiedPassConfig.baseUrl;
+    } else {
+        baseUrl = m_data->yggdrasilConfig.sessionServerUrl;
+    }
+
     if (baseUrl.endsWith('/')) {
         baseUrl.chop(1);
     }

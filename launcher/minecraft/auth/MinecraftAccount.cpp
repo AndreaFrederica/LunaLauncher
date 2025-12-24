@@ -287,8 +287,17 @@ bool MinecraftAccount::shouldRefresh() const
         }
     }
     auto now = QDateTime::currentDateTimeUtc();
-    auto issuedTimestamp = data.yggdrasilToken.issueInstant;
-    auto expiresTimestamp = data.yggdrasilToken.notAfter;
+    QDateTime issuedTimestamp;
+    QDateTime expiresTimestamp;
+
+    // Use the appropriate token based on account type
+    if (data.type == AccountType::UnifiedPass) {
+        issuedTimestamp = data.unifiedPassToken.issueInstant;
+        expiresTimestamp = data.unifiedPassToken.notAfter;
+    } else {
+        issuedTimestamp = data.yggdrasilToken.issueInstant;
+        expiresTimestamp = data.yggdrasilToken.notAfter;
+    }
 
     if (!expiresTimestamp.isValid()) {
         expiresTimestamp = issuedTimestamp.addSecs(24 * 3600);

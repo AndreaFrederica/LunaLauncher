@@ -1,6 +1,11 @@
 <p align="center">
-<img alt="Luna Launcher" src="/program_info/lunalauncher.png" width="40%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./program_info/cc.sirrus.LunaLauncher.logo-darkmode.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./program_info/cc.sirrus.LunaLauncher.logo.source.svg">
+  <img alt="Luna Launcher" src="./program_info/cc.sirrus.LunaLauncher.logo.svg" width="40%">
+</picture>
 </p>
+
 
 <p align="center">
   <a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a>
@@ -71,17 +76,17 @@ m2m run install
 
 **Available m2m Commands:**
 
-| Command | Description |
-|---------|-------------|
-| `m2m init` | Initialize `msys2.toml` configuration |
-| `m2m bootstrap` | Download and install MSYS2 |
-| `m2m run <task>` | Run a task defined in `msys2.toml` |
-| `m2m run -l` | List available tasks |
-| `m2m sync` | Sync packages from configuration |
-| `m2m add <package>` | Add a package to configuration |
-| `m2m remove <package>` | Remove a package from configuration |
-| `m2m shell` | Open interactive MSYS2 shell |
-| `m2m update` | Update all MSYS2 packages |
+| Command                  | Description                             |
+| ------------------------ | --------------------------------------- |
+| `m2m init`             | Initialize `msys2.toml` configuration |
+| `m2m bootstrap`        | Download and install MSYS2              |
+| `m2m run <task>`       | Run a task defined in `msys2.toml`    |
+| `m2m run -l`           | List available tasks                    |
+| `m2m sync`             | Sync packages from configuration        |
+| `m2m add <package>`    | Add a package to configuration          |
+| `m2m remove <package>` | Remove a package from configuration     |
+| `m2m shell`            | Open interactive MSYS2 shell            |
+| `m2m update`           | Update all MSYS2 packages               |
 
 **Method 2: Using PowerShell Scripts**
 
@@ -110,22 +115,23 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
 
 **Available PowerShell Commands:**
 
-| Command | Description |
-|---------|-------------|
-| `.\tools\msys2\run.ps1 configure` | Configure CMake |
-| `.\tools\msys2\run.ps1 build` | Build the project |
-| `.\tools\msys2\run.ps1 install` | Install to `install/` |
-| `.\tools\msys2\run.ps1 portable` | Create portable build |
-| `.\tools\msys2\run.ps1 clean` | Clean build directories |
-| `.\tools\msys2\sync.ps1` | Sync packages from `msys2.toml` |
-| `.\tools\msys2\add.ps1 <package>` | Add a package |
-| `.\tools\msys2\remove.ps1 <package>` | Remove a package |
+| Command                                | Description                       |
+| -------------------------------------- | --------------------------------- |
+| `.\tools\msys2\run.ps1 configure`    | Configure CMake                   |
+| `.\tools\msys2\run.ps1 build`        | Build the project                 |
+| `.\tools\msys2\run.ps1 install`      | Install to `install/`           |
+| `.\tools\msys2\run.ps1 portable`     | Create portable build             |
+| `.\tools\msys2\run.ps1 clean`        | Clean build directories           |
+| `.\tools\msys2\sync.ps1`             | Sync packages from `msys2.toml` |
+| `.\tools\msys2\add.ps1 <package>`    | Add a package                     |
+| `.\tools\msys2\remove.ps1 <package>` | Remove a package                  |
 
 **Managing Dependencies:**
 
 Edit `msys2.toml` to add/remove packages, then run `m2m sync` or `.\tools\msys2\sync.ps1`.
 
 Or use the helper commands:
+
 ```powershell
 # Using m2m
 m2m add mingw-w64-ucrt-x86_64-qt6-tools
@@ -147,6 +153,7 @@ m2m shell
 ```
 
 Then use bash equivalents:
+
 ```bash
 ./tools/msys2/sync.sh
 ./tools/msys2/run.sh configure
@@ -183,12 +190,12 @@ pixi run install
 
 **Available Tasks:**
 
-| Command | Description |
-|---------|-------------|
-| `pixi run configure` | Configure CMake |
-| `pixi run build` | Build the project |
-| `pixi run install` | Install to `install/` |
-| `pixi run portable` | Create portable build |
+| Command                | Description             |
+| ---------------------- | ----------------------- |
+| `pixi run configure` | Configure CMake         |
+| `pixi run build`     | Build the project       |
+| `pixi run install`   | Install to `install/` |
+| `pixi run portable`  | Create portable build   |
 
 ### Other Platforms
 
@@ -224,15 +231,18 @@ If you prefer not to use the automated scripts, you can follow these manual step
 1. Open one of the shortcuts from the MSYS2 folder in the Start menu
 2. We recommend building using the UCRT64 or CLANG64 msystem of MSYS2
 3. Install helpers:
+
    ```bash
    pacman -Syu pactoys git mingw-w64-ucrt-x86_64-binutils
    ```
 4. Install all build dependencies using pacboy:
+
    ```bash
    pacboy -S toolchain:p cmake:p ninja:p qt6-base:p qt6-5compat:p qt6-svg:p qt6-imageformats:p quazip-qt6:p extra-cmake-modules:p ccache:p
    ```
 
    Alternatively you can use Qt 5 (for older Windows versions):
+
    ```bash
    pacboy -S toolchain:p cmake:p ninja:p qt5-base:p qt5-svg:p qt5-imageformats:p quazip-qt5:p extra-cmake-modules:p ccache:p
    ```
@@ -262,9 +272,11 @@ cmake --install build --component portable
 ```
 
 **Note for Qt 5 builds:** When building with Qt 5, the OpenSSL DLLs aren't automatically copied. Copy them manually:
+
 ```bash
 cp /ucrt64/bin/libcrypto-1_1-x64.dll /ucrt64/bin/libssl-1_1-x64.dll install
 ```
+
 Replace `ucrt64` with your msystem (e.g., `clang64`).
 
 ### Manual Build on Windows with MSVC
@@ -302,6 +314,7 @@ cmake --install build --config Debug --component portable
 ```
 
 **Note for Qt 5 builds:** Copy OpenSSL DLLs manually:
+
 ```cmd
 robocopy C:\Qt\Tools\OpenSSL\Win_x64\bin\ install libcrypto-1_1-x64.dll libssl-1_1-x64.dll
 ```
@@ -310,7 +323,7 @@ robocopy C:\Qt\Tools\OpenSSL\Win_x64\bin\ install libcrypto-1_1-x64.dll libssl-1
 
 For Linux and macOS builds, please refer to the upstream Prism Launcher build instructions:
 
-- <https://prismlauncher.org/wiki/development/>
+- [https://prismlauncher.org/wiki/development/](https://prismlauncher.org/wiki/development/)
 
 The build process and requirements are largely identical, aside from project naming.
 
@@ -336,6 +349,7 @@ ccache is a compiler cache that speeds up recompilation by caching previous comp
 3. Reconfigure CMake with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`
 
 Example `.vscode/c_cpp_properties.json`:
+
 ```json
 {
     "configurations": [

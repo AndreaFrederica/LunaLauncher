@@ -16,16 +16,12 @@
   <br />
   This project is an independent <b>fork</b> of Prism Launcher and is <b>not</b> endorsed by or affiliated with the Prism Launcher project.
   <br />
-  It improves accessibility by supporting community-maintained mirror APIs such as <b>BMCLAPI</b>, and custom authentication methods like <b>authlib-injector</b> and <b>UnifiedPass</b>.
+  It improves accessibility by supporting community-maintained mirror APIs such as <b>BMCLAPI</b>.
 </p>
 
 ---
 
 ## Features
-
-- **Multiple Authentication Methods**: Supports Microsoft account, as well as custom authentication through:
-  - **authlib-injector**: Allows server administrators to set up custom Yggdrasil authentication servers for better whitelist management
-  - **UnifiedPass (Nide8)**: Alternative authentication service that facilitates server whitelist management
 - **Mirror API Support**: Built-in support for BMCLAPI and other community mirrors for faster downloads in China
 - **Cross-platform**: Available for Windows, Linux, and macOS
 

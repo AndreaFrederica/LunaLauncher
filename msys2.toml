@@ -47,14 +47,22 @@ mingw-w64-ucrt-x86_64-qt6-speech = "*"
 
 [tasks]
 # 常用构建脚本
-configure = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON"
-configure_debug = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=OFF"
-build = "cmake --build build --parallel"
-install = "cmake --install build --prefix install"
-portable = "cmake --install build --component portable"
-clean = "rm -rf build install"
-test = "./build/launcher/lunalauncher.exe"
-test_install = "./install/lunalauncher.exe"
+configure = "cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install-release -DENABLE_LTO=ON"
+configure_debug = "cmake -S . -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install-debug -DENABLE_LTO=OFF"
 
-# 组合命令
-rebuild = "cmake --build build --clean-first --parallel"
+build = "cmake --build build-release --parallel"
+build_debug = "cmake --build build-debug --parallel"
+
+install = "cmake --install build-release"
+install_debug = "cmake --install build-debug"
+
+portable = "cmake --install build-release --component portable"
+portable_debug = "cmake --install build-debug --component portable"
+
+clean = "rm -rf build-release build-debug install-release install-debug"
+test = "./build-debug/launcher/lunalauncher.exe"
+test_install = "./install-debug/lunalauncher.exe"
+
+
+rebuild_debug = "cmake --build build-debug --target clean && cmake --build build-debug --parallel"
+rebuild = "cmake --build build-release --target clean && cmake --build build-release --parallel"

@@ -53,6 +53,7 @@
    <addaction name="separator"/>
    <addaction name="actionFoldersButton"/>
    <addaction name="actionSettings"/>
+   <addaction name="actionTerracottaOnline"/>
    <addaction name="actionHelpButton"/>
    <addaction name="actionCheckUpdate"/>
    <addaction name="separator"/>

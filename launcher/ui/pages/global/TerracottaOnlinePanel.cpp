@@ -27,26 +27,68 @@
 #include <QMessageBox>
 #include <QThread>
 
+#include "Application.h"
 #include "minecraft/online/Terracotta.h"
+
+// Initialize static members
+int TerracottaOnlinePanel::s_globalPollingInterval = 1000;
+int TerracottaOnlinePanel::s_globalMaxLogLines = 1000;
 
 TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(parent), ui(new Ui::TerracottaOnlinePanel)
 {
     ui->setupUi(this);
 
+    // Set window flags to ensure this behaves as a normal independent window
+    // that can be placed behind other windows (not always-on-top)
+    setWindowFlags(Qt::Window);
+
+    // Load saved player name
+    loadPlayerName();
+
+    // Use global settings
+    m_pollingInterval = s_globalPollingInterval;
+    m_maxLogLines = s_globalMaxLogLines;
+
     // Create state polling timer
     m_statePollTimer = new QTimer(this);
-    m_statePollTimer->setInterval(1000);  // Poll every 1 second
+    m_statePollTimer->setInterval(m_pollingInterval);
     connect(m_statePollTimer, &QTimer::timeout, this, [this]() {
         auto state = Terracotta::instance().fetchState();
         if (state) {
+            // Track if this is a state transition
+            bool stateChanged = (m_lastState != state->state);
+            m_lastState = state->state;
+
+            // Handle Exception state with friendly message
+            if (state->state == TerracottaTypes::State::Exception && stateChanged) {
+                handleExceptionState(*state);
+            }
+
+            // Always update state display and port
             updateStateDisplay(*state);
             updatePortDisplay();
 
-            // Stop polling if we reached host-ok or guest-ok state
-            if (state->state == TerracottaTypes::State::HostOk ||
-                state->state == TerracottaTypes::State::GuestOk ||
+            // For HostOk/GuestOk states, continue polling to monitor player changes
+            // Stop polling only when returning to Waiting or in Exception state
+            if (state->state == TerracottaTypes::State::Waiting ||
                 state->state == TerracottaTypes::State::Exception) {
+                // Returned to idle or error state, stop polling
                 stopPollingState();
+                m_lastProfileIndex = -1;
+            } else if (state->state == TerracottaTypes::State::HostOk ||
+                       state->state == TerracottaTypes::State::GuestOk) {
+                // In HostOk or GuestOk state, monitor player list changes
+                if (stateChanged) {
+                    // Just reached this state, log it
+                    appendLog(tr("Now monitoring for player changes..."));
+                }
+                // Check if player list changed (detected by profile_index change)
+                if (state->profile_index != m_lastProfileIndex) {
+                    if (!stateChanged) {  // Only log if not the initial state change
+                        appendLog(tr("Player list updated (index: %1)").arg(state->profile_index));
+                    }
+                    m_lastProfileIndex = state->profile_index;
+                }
             }
         }
     });
@@ -56,19 +98,26 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
     connect(ui->pushButton_host, &QPushButton::clicked, this, &TerracottaOnlinePanel::onHostClicked);
     connect(ui->pushButton_join, &QPushButton::clicked, this, &TerracottaOnlinePanel::onJoinClicked);
     connect(ui->pushButton_direct, &QPushButton::clicked, this, &TerracottaOnlinePanel::onDirectConnectClicked);
-    connect(ui->pushButton_cancel, &QPushButton::clicked, this, &TerracottaOnlinePanel::onCancelClicked);
+    connect(ui->pushButton_close_room, &QPushButton::clicked, this, &TerracottaOnlinePanel::onCloseRoomClicked);
+    connect(ui->pushButton_stop_server, &QPushButton::clicked, this, &TerracottaOnlinePanel::onToggleServerClicked);
     connect(ui->pushButton_restart, &QPushButton::clicked, this, &TerracottaOnlinePanel::onRestartClicked);
     connect(ui->pushButton_panic, &QPushButton::clicked, this, &TerracottaOnlinePanel::onPanicClicked);
     connect(ui->pushButton_copy_code, &QPushButton::clicked, this, &TerracottaOnlinePanel::onCopyCodeClicked);
     connect(ui->pushButton_fetch_log, &QPushButton::clicked, this, &TerracottaOnlinePanel::onFetchLogClicked);
     connect(ui->pushButton_clear_log, &QPushButton::clicked, this, &TerracottaOnlinePanel::onClearLogClicked);
 
+    // Save player name when it changes
+    connect(ui->lineEdit_player_name, &QLineEdit::textChanged, this, [this]() {
+        savePlayerName();
+    });
+
     // Connect to Terracotta signals
     connect(&Terracotta::instance(), &Terracotta::stateChanged, this, &TerracottaOnlinePanel::onStateChanged);
     connect(&Terracotta::instance(), &Terracotta::availabilityChanged, this, &TerracottaOnlinePanel::onAvailabilityChanged);
 
-    // Show current connection port
+    // Show current connection port and server button state
     updatePortDisplay();
+    updateServerButtonState();
 
     // Auto-start Terracotta process if not running (delayed to avoid blocking UI)
     QTimer::singleShot(100, this, [this]() {
@@ -87,6 +136,8 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
         } else {
             ui->label_state_value->setText(tr("Connected"));
         }
+        // Update button state after initial check
+        updateServerButtonState();
         // Initial refresh after process starts
         onRefreshClicked();
     });
@@ -95,6 +146,16 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
 TerracottaOnlinePanel::~TerracottaOnlinePanel()
 {
     delete ui;
+}
+
+void TerracottaOnlinePanel::setPollingInterval(int intervalMs)
+{
+    s_globalPollingInterval = intervalMs;
+}
+
+void TerracottaOnlinePanel::setMaxLogLines(int maxLines)
+{
+    s_globalMaxLogLines = maxLines;
 }
 
 void TerracottaOnlinePanel::retranslate()
@@ -206,18 +267,68 @@ void TerracottaOnlinePanel::onDirectConnectClicked()
     }
 }
 
-void TerracottaOnlinePanel::onCancelClicked()
+void TerracottaOnlinePanel::onCloseRoomClicked()
 {
-    appendLog(tr("Canceling current state and returning to idle..."));
+    appendLog(tr("Closing room and returning to idle..."));
 
     // Stop any ongoing polling
     stopPollingState();
 
     if (Terracotta::instance().cancelState()) {
-        appendLog(tr("Successfully returned to idle state."));
+        appendLog(tr("Room closed successfully. Back to idle state."));
         onRefreshClicked();
     } else {
-        appendLog(tr("Failed to cancel state."));
+        appendLog(tr("Failed to close room."));
+    }
+}
+
+void TerracottaOnlinePanel::onToggleServerClicked()
+{
+    if (Terracotta::instance().isProcessRunning()) {
+        // Server is running - stop it
+        auto reply = QMessageBox::question(this, tr("Stop Server"),
+                                            tr("Are you sure you want to stop the Terracotta server?\n\nThis will gracefully shut down the server and close all connections."),
+                                            QMessageBox::Yes | QMessageBox::No);
+
+        if (reply == QMessageBox::Yes) {
+            appendLog(tr("Stopping Terracotta server..."));
+
+            // Stop any ongoing polling
+            stopPollingState();
+
+            // Cancel any active state first
+            Terracotta::instance().cancelState();
+
+            // Gracefully stop the server using panic(peaceful=true)
+            if (Terracotta::instance().panic(true)) {
+                appendLog(tr("Terracotta server stopped gracefully."));
+                ui->label_state_value->setText(tr("Stopped"));
+                // Update button state
+                updateServerButtonState();
+                // Keep UI enabled so user can start server again
+                ui->groupBox_actions->setEnabled(true);
+            } else {
+                appendLog(tr("Failed to stop Terracotta server."));
+            }
+        }
+    } else {
+        // Server is not running - start it
+        appendLog(tr("Starting Terracotta server..."));
+
+        if (Terracotta::instance().startProcess()) {
+            appendLog(tr("Terracotta server started successfully."));
+            ui->label_state_value->setText(tr("Connected"));
+            updatePortDisplay();
+            // Update button state
+            updateServerButtonState();
+            // Refresh state after a short delay to let server initialize
+            QTimer::singleShot(500, this, [this]() {
+                onRefreshClicked();
+            });
+        } else {
+            appendLog(tr("Failed to start Terracotta server. Please check if it is installed."));
+            ui->label_state_value->setText(tr("Failed"));
+        }
     }
 }
 
@@ -245,6 +356,7 @@ void TerracottaOnlinePanel::onRestartClicked()
                 appendLog(tr("Terracotta server restarted successfully."));
                 ui->label_state_value->setText(tr("Connected"));
                 updatePortDisplay();
+                updateServerButtonState();
                 // Refresh state after restart
                 QTimer::singleShot(500, this, [this]() {
                     onRefreshClicked();
@@ -252,6 +364,7 @@ void TerracottaOnlinePanel::onRestartClicked()
             } else {
                 appendLog(tr("Failed to restart Terracotta server."));
                 ui->label_state_value->setText(tr("Failed"));
+                updateServerButtonState();
             }
         });
     }
@@ -314,6 +427,7 @@ void TerracottaOnlinePanel::onStateChanged(const TerracottaTypes::StateResponse&
 void TerracottaOnlinePanel::onAvailabilityChanged(bool available)
 {
     updatePortDisplay();  // Update port display when availability changes
+    updateServerButtonState();  // Update button state when availability changes
     if (available) {
         appendLog(tr("Terracotta server is now available."));
         setUIEnabled(true);
@@ -325,39 +439,76 @@ void TerracottaOnlinePanel::onAvailabilityChanged(bool available)
 
 void TerracottaOnlinePanel::updateStateDisplay(const TerracottaTypes::StateResponse& state)
 {
-    // Update state label
+    // Update state label (always update as it's cheap)
     ui->label_state_value->setText(getStateString(state.state));
 
-    // Update room info
-    if (!state.room.isEmpty()) {
-        ui->lineEdit_room_code->setText(state.room);
-    } else {
-        ui->lineEdit_room_code->setText(tr("-"));
+    // Update server button state based on process running status
+    updateServerButtonState();
+
+    // Update room info only if changed (diff check to avoid flicker)
+    QString newRoomCode = !state.room.isEmpty() ? state.room : tr("-");
+    if (m_lastRoomCode != newRoomCode) {
+        ui->lineEdit_room_code->setText(newRoomCode);
+        m_lastRoomCode = newRoomCode;
     }
 
-    if (!state.url.isEmpty()) {
-        ui->lineEdit_url->setText(state.url);
-    } else {
-        ui->lineEdit_url->setText(tr("-"));
+    QString newUrl = !state.url.isEmpty() ? state.url : tr("-");
+    if (m_lastUrl != newUrl) {
+        ui->lineEdit_url->setText(newUrl);
+        m_lastUrl = newUrl;
     }
 
-    // Update player list
-    updatePlayerList(state.profiles);
+    // Update player list only if profiles changed (check count and contents)
+    bool profilesChanged = (m_lastProfiles.size() != state.profiles.size());
+    if (!profilesChanged) {
+        // Check if any profile is different
+        const auto profileCount = static_cast<int>(state.profiles.size());
+        for (int i = 0; i < profileCount; ++i) {
+            const auto& p1 = m_lastProfiles[i];
+            const auto& p2 = state.profiles[i];
+            if (p1.name != p2.name || p1.machine_id != p2.machine_id ||
+                p1.vendor != p2.vendor || p1.kind != p2.kind) {
+                profilesChanged = true;
+                break;
+            }
+        }
+    }
+
+    if (profilesChanged) {
+        updatePlayerList(state.profiles);
+        m_lastProfiles = state.profiles;
+    }
 
     // Update UI based on state
     switch (state.state) {
         case TerracottaTypes::State::Waiting:
         case TerracottaTypes::State::HostScanning:
+            // In idle or scanning mode - can start hosting or joining
             ui->pushButton_host->setEnabled(true);
             ui->pushButton_join->setEnabled(true);
             ui->pushButton_direct->setEnabled(true);
-            ui->pushButton_cancel->setEnabled(false);
+            ui->pushButton_close_room->setEnabled(false);
             break;
-        default:
+        case TerracottaTypes::State::HostOk:
+            // Hosting a room - can close room
             ui->pushButton_host->setEnabled(false);
             ui->pushButton_join->setEnabled(false);
             ui->pushButton_direct->setEnabled(false);
-            ui->pushButton_cancel->setEnabled(true);
+            ui->pushButton_close_room->setEnabled(true);
+            break;
+        case TerracottaTypes::State::GuestOk:
+            // Joined as guest - can leave room
+            ui->pushButton_host->setEnabled(false);
+            ui->pushButton_join->setEnabled(false);
+            ui->pushButton_direct->setEnabled(false);
+            ui->pushButton_close_room->setEnabled(true);
+            break;
+        default:
+            // In transition states
+            ui->pushButton_host->setEnabled(false);
+            ui->pushButton_join->setEnabled(false);
+            ui->pushButton_direct->setEnabled(false);
+            ui->pushButton_close_room->setEnabled(true);
             break;
     }
 
@@ -395,6 +546,22 @@ void TerracottaOnlinePanel::appendLog(const QString& message)
 {
     QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
     ui->plainTextEdit_logs->appendPlainText(QString("[%1] %2").arg(timestamp, message));
+
+    // Trim log to max lines if set (0 means unlimited)
+    if (m_maxLogLines > 0) {
+        QTextDocument* doc = ui->plainTextEdit_logs->document();
+        int lineCount = doc->blockCount();
+        if (lineCount > m_maxLogLines) {
+            // Remove excess lines from the beginning
+            QTextCursor cursor(doc);
+            cursor.movePosition(QTextCursor::Start);
+            while (doc->blockCount() > m_maxLogLines) {
+                cursor.select(QTextCursor::LineUnderCursor);
+                cursor.removeSelectedText();
+                cursor.deleteChar();  // Remove the newline
+            }
+        }
+    }
 }
 
 QString TerracottaOnlinePanel::getStateString(TerracottaTypes::State state) const
@@ -435,6 +602,57 @@ void TerracottaOnlinePanel::startPollingState()
     }
 }
 
+QString TerracottaOnlinePanel::getExceptionString(TerracottaTypes::ExceptionType type) const
+{
+    switch (type) {
+        case TerracottaTypes::ExceptionType::PingHostFail:
+            return tr("Cannot connect to host");
+        case TerracottaTypes::ExceptionType::PingHostRst:
+            return tr("Connection to host lost");
+        case TerracottaTypes::ExceptionType::GuestEasytierCrash:
+            return tr("EasyTier crashed (guest)");
+        case TerracottaTypes::ExceptionType::HostEasytierCrash:
+            return tr("EasyTier crashed (host)");
+        case TerracottaTypes::ExceptionType::PingServerRst:
+            return tr("Minecraft server closed");
+        case TerracottaTypes::ExceptionType::ScaffoldingInvalidResponse:
+            return tr("Invalid server response");
+        default:
+            return tr("Unknown error");
+    }
+}
+
+void TerracottaOnlinePanel::handleExceptionState(const TerracottaTypes::StateResponse& state)
+{
+    QString exceptionMsg = getExceptionString(state.exception_type);
+
+    // Provide friendly messages for common exception types
+    switch (state.exception_type) {
+        case TerracottaTypes::ExceptionType::PingServerRst:
+            // Minecraft game exited - this is normal behavior
+            appendLog(tr("Room closed: Minecraft game has exited."));
+            appendLog(tr("You can start a new room whenever you're ready to play again."));
+            break;
+        case TerracottaTypes::ExceptionType::PingHostRst:
+            appendLog(tr("Connection lost: The host closed the room or disconnected."));
+            break;
+        case TerracottaTypes::ExceptionType::PingHostFail:
+            appendLog(tr("Connection failed: Unable to reach the host room."));
+            break;
+        case TerracottaTypes::ExceptionType::GuestEasytierCrash:
+        case TerracottaTypes::ExceptionType::HostEasytierCrash:
+            appendLog(tr("Error: EasyTier process crashed. Reason: %1").arg(exceptionMsg));
+            appendLog(tr("Try restarting the Terracotta server."));
+            break;
+        case TerracottaTypes::ExceptionType::ScaffoldingInvalidResponse:
+            appendLog(tr("Protocol error: Received invalid response from server."));
+            break;
+        default:
+            appendLog(tr("Exception occurred: %1").arg(exceptionMsg));
+            break;
+    }
+}
+
 void TerracottaOnlinePanel::stopPollingState()
 {
     if (m_statePollTimer && m_statePollTimer->isActive()) {
@@ -456,4 +674,33 @@ void TerracottaOnlinePanel::updatePortDisplay()
     } else {
         statusBar()->showMessage(tr("Not connected to Terracotta server"));
     }
+}
+
+void TerracottaOnlinePanel::updateServerButtonState()
+{
+    bool isRunning = Terracotta::instance().isProcessRunning();
+
+    if (isRunning) {
+        ui->pushButton_stop_server->setText(tr("Stop Server"));
+        ui->pushButton_stop_server->setToolTip(tr("Gracefully stop the Terracotta server"));
+    } else {
+        ui->pushButton_stop_server->setText(tr("Start Server"));
+        ui->pushButton_stop_server->setToolTip(tr("Start the Terracotta server"));
+    }
+}
+
+void TerracottaOnlinePanel::loadPlayerName()
+{
+    auto s = APPLICATION->settings();
+    QString savedName = s->get("TerracottaPlayerName").toString();
+    if (!savedName.isEmpty()) {
+        ui->lineEdit_player_name->setText(savedName);
+    }
+}
+
+void TerracottaOnlinePanel::savePlayerName()
+{
+    auto s = APPLICATION->settings();
+    QString playerName = ui->lineEdit_player_name->text().trimmed();
+    s->set("TerracottaPlayerName", playerName);
 }

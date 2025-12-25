@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
+  <g transform="translate(1,1)">
+    <!-- P2P network icon -->
+    <circle cx="11" cy="11" r="3" fill="#e67e22"/>
+    <circle cx="5" cy="5" r="2.5" fill="#e67e22" fill-opacity="0.7"/>
+    <circle cx="17" cy="5" r="2.5" fill="#e67e22" fill-opacity="0.7"/>
+    <circle cx="5" cy="17" r="2.5" fill="#e67e22" fill-opacity="0.7"/>
+    <circle cx="17" cy="17" r="2.5" fill="#e67e22" fill-opacity="0.7"/>
+    <!-- Connection lines -->
+    <path d="M 7 6.5 L 9 9.5" stroke="#e67e22" stroke-width="1.5" stroke-opacity="0.5" fill="none"/>
+    <path d="M 15 6.5 L 13 9.5" stroke="#e67e22" stroke-width="1.5" stroke-opacity="0.5" fill="none"/>
+    <path d="M 7 15.5 L 9 12.5" stroke="#e67e22" stroke-width="1.5" stroke-opacity="0.5" fill="none"/>
+    <path d="M 15 15.5 L 13 12.5" stroke="#e67e22" stroke-width="1.5" stroke-opacity="0.5" fill="none"/>
+  </g>
+</svg>

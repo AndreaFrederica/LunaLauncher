@@ -401,7 +401,7 @@ bool Terracotta::isAvailable()
 
 std::shared_ptr<TerracottaTypes::MetaInfo> Terracotta::fetchMeta()
 {
-    const QByteArray data = sendGetRequest("/meta");
+    const QByteArray data = sendGetRequest("/meta", {});
     if (data.isEmpty()) {
         return nullptr;
     }
@@ -418,7 +418,7 @@ std::shared_ptr<TerracottaTypes::MetaInfo> Terracotta::fetchMeta()
 
 std::shared_ptr<TerracottaTypes::StateResponse> Terracotta::fetchState()
 {
-    const QByteArray data = sendGetRequest("/state");
+    const QByteArray data = sendGetRequest("/state", {});
     if (data.isEmpty()) {
         return nullptr;
     }
@@ -451,7 +451,7 @@ bool Terracotta::startScanning(const QString& player)
 
 bool Terracotta::cancelState()
 {
-    return sendGetRequestWithStatus("/state/ide");
+    return sendGetRequestWithStatus("/state/ide", {});
 }
 
 bool Terracotta::joinRoom(const QString& room, const QString& player)
@@ -862,4 +862,14 @@ bool Terracotta::isProcessRunning() const
         return true;
     }
     return m_process && m_process->state() == QProcess::Running;
+}
+
+void Terracotta::setStopOnClose(bool stopOnClose)
+{
+    m_stopOnClose = stopOnClose;
+}
+
+bool Terracotta::getStopOnClose() const
+{
+    return m_stopOnClose;
 }

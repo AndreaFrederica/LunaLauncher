@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2023 TheKodeToad <TheKodeToad@proton.me>
@@ -43,6 +45,7 @@
 #include "FileSystem.h"
 
 #include "MainWindow.h"
+#include "minecraft/online/Terracotta.h"
 #include "ui_MainWindow.h"
 
 #include <QDir>
@@ -1501,6 +1504,12 @@ void MainWindow::closeEvent(QCloseEvent* event)
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));
     APPLICATION->settings()->set("MainWindowGeometry", QString::fromUtf8(saveGeometry().toBase64()));
     instanceToolbarSetting->set(QString::fromUtf8(ui->instanceToolBar->getVisibilityState().toBase64()));
+
+    // Stop Terracotta server if setting is enabled
+    if (Terracotta::instance().getStopOnClose()) {
+        Terracotta::instance().stopProcess();
+    }
+
     event->accept();
     emit isClosing();
 }

@@ -241,6 +241,18 @@ class Terracotta : public QObject {
      */
     [[nodiscard]] bool isProcessRunning() const;
 
+    /**
+     * @brief Set whether to stop Terracotta process when launcher closes
+     * @param stopOnClose true to stop on launcher close
+     */
+    void setStopOnClose(bool stopOnClose);
+
+    /**
+     * @brief Check if Terracotta should be stopped when launcher closes
+     * @return true if Terracotta will be stopped on close
+     */
+    [[nodiscard]] bool getStopOnClose() const;
+
    signals:
     /**
      * @brief Emitted when the state changes
@@ -268,5 +280,6 @@ class Terracotta : public QObject {
     QProcess* m_process = nullptr;
     mutable QString m_portFilePath;
     bool m_wasStartedSuccessfully = false;  // Track if HMCL mode started successfully
+    bool m_stopOnClose = true;  // Whether to stop Terracotta when launcher closes (default: true)
     static Terracotta* s_instance;
 };

@@ -245,11 +245,24 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_cancel">
+        <layout class="QHBoxLayout" name="horizontalLayout_close_room">
          <item>
-          <widget class="QPushButton" name="pushButton_cancel">
+          <widget class="QPushButton" name="pushButton_close_room">
            <property name="text">
-            <string>Cancel / Return to Idle</string>
+            <string>Close Room</string>
+           </property>
+           <property name="toolTip">
+            <string>Stop hosting and return to idle (keeps server running)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_stop_server">
+           <property name="text">
+            <string>Stop Server</string>
+           </property>
+           <property name="toolTip">
+            <string>Gracefully stop the Terracotta server</string>
            </property>
           </widget>
          </item>
@@ -263,7 +276,10 @@
          <item>
           <widget class="QPushButton" name="pushButton_panic">
            <property name="text">
-            <string>Emergency Stop (Panic)</string>
+            <string>Emergency Stop</string>
+           </property>
+           <property name="toolTip">
+            <string>Forcefully stop all connections (use only if needed)</string>
            </property>
           </widget>
          </item>

@@ -36,8 +36,36 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     ui->comboBox_download_source->addItem(tr("GitHub (Official)"), static_cast<int>(TerracottaDownloadSource::GitHub));
     ui->comboBox_download_source->addItem(tr("Gitee (Mirror for China)"), static_cast<int>(TerracottaDownloadSource::Mirror));
 
-    // Set default URL
-    ui->lineEdit_url->setText(Terracotta::instance().getBaseUrl());
+    // Load settings
+    auto s = APPLICATION->settings();
+    QString url = s->get("TerracottaServerURL").toString();
+    int pollInterval = s->get("TerracottaPollInterval").toInt();
+    int maxLogLines = s->get("TerracottaMaxLogLines").toInt();
+    // Default to true if setting doesn't exist (stop Terracotta when launcher closes)
+    bool stopOnClose = s->contains("TerracottaStopOnClose") ? s->get("TerracottaStopOnClose").toBool() : true;
+
+    // Set values from settings
+    if (!url.isEmpty()) {
+        ui->lineEdit_url->setText(url);
+    } else {
+        ui->lineEdit_url->setText(Terracotta::instance().getBaseUrl());
+    }
+
+    // Set polling interval (default 1000ms if not set)
+    if (pollInterval < 100 || pollInterval > 10000) {
+        pollInterval = 1000;
+    }
+    ui->spinBox_poll_interval->setValue(pollInterval);
+
+    // Set max log lines (default 1000 if not set)
+    if (maxLogLines < 0 || maxLogLines > 10000) {
+        maxLogLines = 1000;
+    }
+    ui->spinBox_max_logs->setValue(maxLogLines);
+
+    // Set stop on close checkbox (default true if not set)
+    ui->checkBox_stop_on_close->setChecked(stopOnClose);
+    Terracotta::instance().setStopOnClose(stopOnClose);
 
     // Connect buttons
     connect(ui->pushButton_download, &QPushButton::clicked, this, &TerracottaPage::onDownloadButtonClicked);
@@ -46,6 +74,18 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     connect(ui->lineEdit_url, &QLineEdit::editingFinished, this, [this]() {
         Terracotta::instance().setBaseUrl(ui->lineEdit_url->text());
         updateStatus();
+    });
+
+    // Connect polling interval change
+    connect(ui->spinBox_poll_interval, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        // Update the Online Panel's polling interval
+        TerracottaOnlinePanel::setPollingInterval(value);
+    });
+
+    // Connect max log lines change
+    connect(ui->spinBox_max_logs, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        // Update the Online Panel's max log lines
+        TerracottaOnlinePanel::setMaxLogLines(value);
     });
 
     // Connect to Terracotta signals
@@ -61,10 +101,24 @@ TerracottaPage::~TerracottaPage()
 
 bool TerracottaPage::apply()
 {
+    // Save settings
+    auto s = APPLICATION->settings();
+
     // Save URL setting
     QString url = ui->lineEdit_url->text();
+    s->set("TerracottaServerURL", url);
     Terracotta::instance().setBaseUrl(url);
-    // TODO: Save to settings
+
+    // Save polling interval
+    s->set("TerracottaPollInterval", ui->spinBox_poll_interval->value());
+
+    // Save max log lines
+    s->set("TerracottaMaxLogLines", ui->spinBox_max_logs->value());
+
+    // Save stop on close setting
+    s->set("TerracottaStopOnClose", ui->checkBox_stop_on_close->isChecked());
+    Terracotta::instance().setStopOnClose(ui->checkBox_stop_on_close->isChecked());
+
     return true;
 }
 

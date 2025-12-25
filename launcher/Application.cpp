@@ -942,6 +942,13 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // Custom Technic Client ID
         m_settings->registerSetting("TechnicClientID", "");
 
+        // Terracotta P2P settings
+        m_settings->registerSetting("TerracottaServerURL", "");
+        m_settings->registerSetting("TerracottaPollInterval", 1000);
+        m_settings->registerSetting("TerracottaMaxLogLines", 1000);
+        m_settings->registerSetting("TerracottaStopOnClose", true);
+        m_settings->registerSetting("TerracottaPlayerName", "");
+
         // Init page provider
         {
             m_globalSettingsProvider = std::make_shared<GenericPageProvider>(tr("Settings"));

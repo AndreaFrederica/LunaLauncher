@@ -23,9 +23,9 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QDateTime>
+#include <QThread>
 #include <QGuiApplication>
 #include <QMessageBox>
-#include <QThread>
 
 #include "Application.h"
 #include "minecraft/online/Terracotta.h"
@@ -48,6 +48,14 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
     // Use global settings
     m_pollingInterval = s_globalPollingInterval;
     m_maxLogLines = s_globalMaxLogLines;
+
+    // Create delayed save timer for player name (saves 1 second after user stops typing)
+    m_playerNameSaveTimer = new QTimer(this);
+    m_playerNameSaveTimer->setSingleShot(true);
+    m_playerNameSaveTimer->setInterval(1000);  // 1 second delay
+    connect(m_playerNameSaveTimer, &QTimer::timeout, this, [this]() {
+        savePlayerName();
+    });
 
     // Create state polling timer
     m_statePollTimer = new QTimer(this);
@@ -106,9 +114,10 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
     connect(ui->pushButton_fetch_log, &QPushButton::clicked, this, &TerracottaOnlinePanel::onFetchLogClicked);
     connect(ui->pushButton_clear_log, &QPushButton::clicked, this, &TerracottaOnlinePanel::onClearLogClicked);
 
-    // Save player name when it changes
+    // Connect player name text changed to restart save timer
     connect(ui->lineEdit_player_name, &QLineEdit::textChanged, this, [this]() {
-        savePlayerName();
+        // Restart the timer whenever user types
+        m_playerNameSaveTimer->start();
     });
 
     // Connect to Terracotta signals
@@ -210,6 +219,9 @@ void TerracottaOnlinePanel::onHostClicked()
         return;
     }
 
+    // Save player name when hosting
+    savePlayerName();
+
     appendLog(tr("Starting scanning mode for player: %1").arg(playerName));
 
     if (Terracotta::instance().startScanning(playerName)) {
@@ -234,6 +246,9 @@ void TerracottaOnlinePanel::onJoinClicked()
         QMessageBox::warning(this, tr("Missing Player Name"), tr("Please enter a player name."));
         return;
     }
+
+    // Save player name when joining
+    savePlayerName();
 
     appendLog(tr("Joining room: %1 as player: %2").arg(roomCode, playerName));
 
@@ -301,14 +316,43 @@ void TerracottaOnlinePanel::onToggleServerClicked()
 
             // Gracefully stop the server using panic(peaceful=true)
             if (Terracotta::instance().panic(true)) {
-                appendLog(tr("Terracotta server stopped gracefully."));
-                ui->label_state_value->setText(tr("Stopped"));
-                // Update button state
-                updateServerButtonState();
-                // Keep UI enabled so user can start server again
-                ui->groupBox_actions->setEnabled(true);
+                appendLog(tr("Shutdown signal sent, waiting for server to stop..."));
+
+                // Wait up to 8 seconds for graceful shutdown
+                bool stopped = false;
+                for (int i = 0; i < 16; i++) {
+                    QThread::msleep(500);
+                    QCoreApplication::processEvents();
+                    if (!Terracotta::instance().isProcessRunning()) {
+                        stopped = true;
+                        break;
+                    }
+                }
+
+                if (stopped) {
+                    appendLog(tr("Terracotta server stopped gracefully."));
+                    ui->label_state_value->setText(tr("Stopped"));
+                    updateServerButtonState();
+                    ui->groupBox_actions->setEnabled(true);
+                } else {
+                    // Still running after grace period, ask user to force kill
+                    auto forceReply = QMessageBox::question(this, tr("Force Stop"),
+                        tr("The server did not stop gracefully.\n\nDo you want to force terminate it?"),
+                        QMessageBox::Yes | QMessageBox::No);
+
+                    if (forceReply == QMessageBox::Yes) {
+                        appendLog(tr("Force terminating Terracotta server..."));
+                        Terracotta::instance().forceKillProcess();
+                        appendLog(tr("Terracotta server terminated."));
+                        ui->label_state_value->setText(tr("Stopped"));
+                        updateServerButtonState();
+                        ui->groupBox_actions->setEnabled(true);
+                    } else {
+                        appendLog(tr("Server is still running. You can try stopping again later."));
+                    }
+                }
             } else {
-                appendLog(tr("Failed to stop Terracotta server."));
+                appendLog(tr("Failed to send shutdown signal. The server may not be responding."));
             }
         }
     } else {

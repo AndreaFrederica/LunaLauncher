@@ -231,9 +231,14 @@ class Terracotta : public QObject {
     bool startProcess();
 
     /**
-     * @brief Stop the Terracotta process
+     * @brief Stop the Terracotta process (graceful shutdown only)
      */
     void stopProcess();
+
+    /**
+     * @brief Force kill the Terracotta process immediately
+     */
+    void forceKillProcess();
 
     /**
      * @brief Check if Terracotta process is running

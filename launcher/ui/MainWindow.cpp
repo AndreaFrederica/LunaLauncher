@@ -1323,7 +1323,8 @@ void MainWindow::on_actionTerracottaOnline_triggered()
 {
     static TerracottaOnlinePanel* panel = nullptr;
     if (!panel) {
-        panel = new TerracottaOnlinePanel(this);
+        // Don't set parent to make it a truly independent window that won't stay on top
+        panel = new TerracottaOnlinePanel(nullptr);
     }
     panel->show();
     panel->raise();

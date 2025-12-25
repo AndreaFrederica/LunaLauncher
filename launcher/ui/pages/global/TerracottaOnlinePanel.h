@@ -81,6 +81,7 @@ class TerracottaOnlinePanel : public QMainWindow, public BasePage {
     Ui::TerracottaOnlinePanel* ui;
     bool m_isRefreshing = false;
     QTimer* m_statePollTimer = nullptr;
+    QTimer* m_playerNameSaveTimer = nullptr;  // Timer for delayed player name saving
     qint64 m_lastProfileIndex = -1;  // Track profile_index for detecting changes
     TerracottaTypes::State m_lastState = TerracottaTypes::State::Waiting;
     int m_pollingInterval = 1000;  // Polling interval in milliseconds

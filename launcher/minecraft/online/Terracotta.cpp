@@ -821,20 +821,25 @@ bool Terracotta::startProcess()
 
 void Terracotta::stopProcess()
 {
-    if (m_process) {
-        qDebug() << "Stopping Terracotta process...";
-        if (m_process->state() == QProcess::Running) {
-            // Try peaceful shutdown first via API
-            panic(true);
+    // Only attempt graceful shutdown via API
+    // Don't force kill - let the user decide if they want to force terminate
+    if (m_process && m_process->state() == QProcess::Running) {
+        qDebug() << "Attempting graceful shutdown via panic API...";
+        panic(true);
+        // Note: We don't wait or force kill here - just send the shutdown signal
+    }
+}
 
-            // Give it time to shut down gracefully
+void Terracotta::forceKillProcess()
+{
+    if (m_process) {
+        qDebug() << "Force killing Terracotta process...";
+        if (m_process->state() == QProcess::Running) {
+            m_process->terminate();
             if (!m_process->waitForFinished(2000)) {
-                qWarning() << "Terracotta did not shut down gracefully, terminating...";
-                m_process->terminate();
-                if (!m_process->waitForFinished(2000)) {
-                    m_process->kill();
-                    m_process->waitForFinished(1000);
-                }
+                qWarning() << "Terminate failed, killing process...";
+                m_process->kill();
+                m_process->waitForFinished(1000);
             }
         }
         m_process->deleteLater();

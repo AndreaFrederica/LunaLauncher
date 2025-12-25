@@ -70,6 +70,7 @@
 #include "ui/pages/global/MinecraftPage.h"
 #include "ui/pages/global/Nide8AuthPage.h"
 #include "ui/pages/global/ProxyPage.h"
+#include "ui/pages/global/TerracottaPage.h"
 
 #include "ui/setupwizard/AutoJavaWizardPage.h"
 #include "ui/setupwizard/JavaWizardPage.h"
@@ -953,6 +954,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<APIPage>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<Nide8AuthPage>();
+            m_globalSettingsProvider->addPage<TerracottaPage>();
             m_globalSettingsProvider->addPage<ExternalToolsPage>();
             m_globalSettingsProvider->addPage<ProxyPage>();
         }

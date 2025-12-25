@@ -206,6 +206,15 @@
      <string>&amp;Accounts</string>
     </property>
    </widget>
+   <widget class="QMenu" name="terracottaMenu">
+    <property name="title">
+     <string>&amp;Terracotta</string>
+    </property>
+    <property name="toolTipsVisible">
+     <bool>true</bool>
+    </property>
+    <addaction name="actionTerracottaOnline"/>
+   </widget>
    <widget class="QMenu" name="helpMenu">
     <property name="title">
      <string>&amp;Help</string>
@@ -232,6 +241,7 @@
    <addaction name="viewMenu"/>
    <addaction name="foldersMenu"/>
    <addaction name="accountsMenu"/>
+   <addaction name="terracottaMenu"/>
    <addaction name="helpMenu"/>
   </widget>
   <action name="actionMoreNews">
@@ -328,6 +338,17 @@
    </property>
    <property name="text">
     <string>&amp;Manage Accounts...</string>
+   </property>
+  </action>
+  <action name="actionTerracottaOnline">
+   <property name="icon">
+    <iconset theme="terracotta-online"/>
+   </property>
+   <property name="text">
+    <string>&amp;Terracotta Online...</string>
+   </property>
+   <property name="toolTip">
+    <string>Open Terracotta online panel for P2P multiplayer.</string>
    </property>
   </action>
   <action name="actionLaunchInstance">

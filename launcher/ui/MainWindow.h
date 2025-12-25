@@ -132,6 +132,8 @@ class MainWindow : public QMainWindow {
 
     void on_actionManageAccounts_triggered();
 
+    void on_actionTerracottaOnline_triggered();
+
     void on_actionReportBug_triggered();
 
     void on_actionClearMetadata_triggered();

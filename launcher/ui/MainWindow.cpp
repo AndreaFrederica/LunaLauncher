@@ -93,6 +93,7 @@
 
 #include "ui/GuiUtil.h"
 #include "ui/ViewLogWindow.h"
+#include "ui/pages/global/TerracottaOnlinePanel.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/CopyInstanceDialog.h"
 #include "ui/dialogs/CreateShortcutDialog.h"
@@ -1313,6 +1314,17 @@ void MainWindow::on_actionEditInstance_triggered()
 void MainWindow::on_actionManageAccounts_triggered()
 {
     APPLICATION->ShowGlobalSettings(this, "accounts");
+}
+
+void MainWindow::on_actionTerracottaOnline_triggered()
+{
+    static TerracottaOnlinePanel* panel = nullptr;
+    if (!panel) {
+        panel = new TerracottaOnlinePanel(this);
+    }
+    panel->show();
+    panel->raise();
+    panel->activateWindow();
 }
 
 void MainWindow::on_actionReportBug_triggered()

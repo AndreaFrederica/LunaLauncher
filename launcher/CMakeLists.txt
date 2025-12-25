@@ -236,6 +236,10 @@ set(MINECRAFT_SOURCES
     minecraft/auth/Nide8Auth.cpp
     minecraft/auth/Nide8Auth.h
     minecraft/auth/Nide8AuthDownload.cpp
+    minecraft/online/Terracotta.cpp
+    minecraft/online/Terracotta.h
+    minecraft/online/TerracottaDownload.cpp
+    minecraft/online/TerracottaDownload.h
     minecraft/auth/Nide8AuthDownload.h
     minecraft/auth/Nide8AuthDownloadTask.cpp
     minecraft/auth/Nide8AuthDownloadTask.h
@@ -991,6 +995,10 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/AuthlibInjectorPage.h
     ui/pages/global/Nide8AuthPage.cpp
     ui/pages/global/Nide8AuthPage.h
+    ui/pages/global/TerracottaPage.cpp
+    ui/pages/global/TerracottaPage.h
+    ui/pages/global/TerracottaOnlinePanel.cpp
+    ui/pages/global/TerracottaOnlinePanel.h
 
     # GUI - platform pages
     ui/pages/modplatform/CustomPage.cpp
@@ -1253,6 +1261,8 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/global/APIPage.ui
     ui/pages/global/AuthlibInjectorPage.ui
     ui/pages/global/Nide8AuthPage.ui
+    ui/pages/global/TerracottaPage.ui
+    ui/pages/global/TerracottaOnlinePanel.ui
     ui/pages/global/ProxyPage.ui
     ui/pages/global/ExternalToolsPage.ui
     ui/pages/instance/ExternalResourcesPage.ui

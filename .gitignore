@@ -68,3 +68,4 @@ flatbuild
 
 # MSYS2 tools
 .msys2/*
+.clangd

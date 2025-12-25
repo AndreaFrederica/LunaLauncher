@@ -66,3 +66,43 @@ test_install = "./install-debug/lunalauncher.exe"
 
 rebuild_debug = "cmake --build build-debug --target clean && cmake --build build-debug --parallel"
 rebuild = "cmake --build build-release --target clean && cmake --build build-release --parallel"
+
+# 一键 build + install + test
+[tasks.cib]
+command = "cmake --build build-release --parallel"
+depends_on = []
+description = "Build release"
+
+[tasks.cii]
+command = "cmake --install build-release"
+depends_on = ["cib"]
+description = "Install release"
+
+[tasks.cit]
+command = "./install-release/lunalauncher.exe"
+depends_on = ["cii"]
+description = "Test installed launcher"
+
+[tasks.ci]
+depends_on = ["cit"]
+description = "Full CI: build + install + test"
+
+# Debug 版本的 CI
+[tasks.cibd]
+command = "cmake --build build-debug --parallel"
+depends_on = []
+description = "Build debug"
+
+[tasks.ciid]
+command = "cmake --install build-debug"
+depends_on = ["cibd"]
+description = "Install debug"
+
+[tasks.citd]
+command = "./install-debug/lunalauncher.exe"
+depends_on = ["ciid"]
+description = "Test installed debug launcher"
+
+[tasks.cid]
+depends_on = ["citd"]
+description = "Full CI (debug): build + install + test"

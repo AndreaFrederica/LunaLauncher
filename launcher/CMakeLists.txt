@@ -892,6 +892,8 @@ SET(LAUNCHER_SOURCES
     ui/setupwizard/LoginWizardPage.h
 
     # GUI - themes
+    ui/themes/ModernDarkTheme.cpp
+    ui/themes/ModernDarkTheme.h
     ui/themes/FusionTheme.cpp
     ui/themes/FusionTheme.h
     ui/themes/BrightTheme.cpp

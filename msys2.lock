@@ -2,6 +2,7 @@ base=2022.06-1
 filesystem=2025.05.08-2
 mingw-w64-ucrt-x86_64-binutils=2.45.1-1
 mingw-w64-ucrt-x86_64-ccache=4.12.2-1
+mingw-w64-ucrt-x86_64-clang-tools-extra=21.1.7-1
 mingw-w64-ucrt-x86_64-cmake=4.2.1-1
 mingw-w64-ucrt-x86_64-cmark=0.31.1-1
 mingw-w64-ucrt-x86_64-crt=13.0.0.r388.gbb8673e5f-1

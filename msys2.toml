@@ -45,6 +45,9 @@ mingw-w64-ucrt-x86_64-openssl = "*"
 mingw-w64-ucrt-x86_64-curl = "*"
 mingw-w64-ucrt-x86_64-qt6-speech = "*"
 
+#clangd
+mingw-w64-ucrt-x86_64-clang-tools-extra = "*"
+
 [tasks]
 # 常用构建脚本
 configure = "cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install-release -DENABLE_LTO=ON"

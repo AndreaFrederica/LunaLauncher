@@ -28,6 +28,7 @@
 #include <QMessageBox>
 
 #include "Application.h"
+#include "DesktopServices.h"
 #include "minecraft/online/Terracotta.h"
 
 // Initialize static members
@@ -77,13 +78,8 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
             updatePortDisplay();
 
             // For HostOk/GuestOk states, continue polling to monitor player changes
-            // Stop polling only when returning to Waiting or in Exception state
-            if (state->state == TerracottaTypes::State::Waiting ||
-                state->state == TerracottaTypes::State::Exception) {
-                // Returned to idle or error state, stop polling
-                stopPollingState();
-                m_lastProfileIndex = -1;
-            } else if (state->state == TerracottaTypes::State::HostOk ||
+            // Note: We keep polling as long as server is running, regardless of state
+            if (state->state == TerracottaTypes::State::HostOk ||
                        state->state == TerracottaTypes::State::GuestOk) {
                 // In HostOk or GuestOk state, monitor player list changes
                 if (stateChanged) {
@@ -98,11 +94,19 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
                     m_lastProfileIndex = state->profile_index;
                 }
             }
+        } else {
+            // API not responding - server likely stopped
+            // Stop polling and update server state
+            stopPollingState();
+            m_serverRunning = false;
+            updateServerButtonState();
+            m_lastProfileIndex = -1;
         }
     });
 
     // Connect buttons
     connect(ui->pushButton_refresh, &QPushButton::clicked, this, &TerracottaOnlinePanel::onRefreshClicked);
+    connect(ui->pushButton_open_webui, &QPushButton::clicked, this, &TerracottaOnlinePanel::onOpenWebUIClicked);
     connect(ui->pushButton_host, &QPushButton::clicked, this, &TerracottaOnlinePanel::onHostClicked);
     connect(ui->pushButton_join, &QPushButton::clicked, this, &TerracottaOnlinePanel::onJoinClicked);
     connect(ui->pushButton_close_room, &QPushButton::clicked, this, &TerracottaOnlinePanel::onCloseRoomClicked);
@@ -129,20 +133,30 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
 
     // Auto-start Terracotta process if not running (delayed to avoid blocking UI)
     QTimer::singleShot(100, this, [this]() {
-        if (!Terracotta::instance().isProcessRunning()) {
+        // Check if API is responding to determine actual server state
+        bool apiResponding = (Terracotta::instance().fetchMeta(500) != nullptr);
+        m_serverRunning = apiResponding;
+
+        if (!apiResponding && !Terracotta::instance().isProcessRunning()) {
             ui->label_state_value->setText(tr("Starting..."));
             appendLog(tr("Starting Terracotta process..."));
 
             if (Terracotta::instance().startProcess()) {
                 appendLog(tr("Terracotta process started successfully."));
                 ui->label_state_value->setText(tr("Connected"));
+                m_serverRunning = true;
                 updatePortDisplay();
+                // Start polling when server starts
+                startPollingState();
             } else {
                 appendLog(tr("Failed to start Terracotta process. Please check if it is installed."));
                 ui->label_state_value->setText(tr("Failed"));
+                m_serverRunning = false;
             }
-        } else {
+        } else if (apiResponding) {
+            // Server is already running, start polling
             ui->label_state_value->setText(tr("Connected"));
+            startPollingState();
         }
         // Update button state after initial check
         updateServerButtonState();
@@ -215,6 +229,17 @@ void TerracottaOnlinePanel::onRefreshClicked()
     m_isRefreshing = false;
 }
 
+void TerracottaOnlinePanel::onOpenWebUIClicked()
+{
+    QString url = Terracotta::instance().getBaseUrl();
+    if (url.isEmpty()) {
+        appendLog(tr("Terracotta server URL not available. Please start the server first."));
+        return;
+    }
+    appendLog(tr("Opening Terracotta Web UI in browser: %1").arg(url));
+    DesktopServices::openUrl(QUrl(url));
+}
+
 void TerracottaOnlinePanel::onHostClicked()
 {
     QString playerName = ui->lineEdit_player_name->text().trimmed();
@@ -230,8 +255,8 @@ void TerracottaOnlinePanel::onHostClicked()
 
     if (Terracotta::instance().startScanning(playerName)) {
         appendLog(tr("Successfully entered scanning mode. Waiting for room creation..."));
-        // Start polling to wait for room code
-        startPollingState();
+        // Immediately refresh state to update UI
+        onRefreshClicked();
     } else {
         appendLog(tr("Failed to enter scanning mode."));
     }
@@ -258,8 +283,8 @@ void TerracottaOnlinePanel::onJoinClicked()
 
     if (Terracotta::instance().joinRoom(roomCode, playerName)) {
         appendLog(tr("Successfully joined room. Waiting for connection..."));
-        // Start polling to wait for connection
-        startPollingState();
+        // Immediately refresh state to update UI
+        onRefreshClicked();
     } else {
         appendLog(tr("Failed to join room. Check the room code and try again."));
         QMessageBox::warning(this, tr("Join Failed"), tr("Failed to join the room. The room code may be invalid or the room is full."));
@@ -270,11 +295,9 @@ void TerracottaOnlinePanel::onCloseRoomClicked()
 {
     appendLog(tr("Closing room and returning to idle..."));
 
-    // Stop any ongoing polling
-    stopPollingState();
-
     if (Terracotta::instance().cancelState()) {
         appendLog(tr("Room closed successfully. Back to idle state."));
+        // Immediately refresh state to update UI
         onRefreshClicked();
     } else {
         appendLog(tr("Failed to close room."));
@@ -295,52 +318,23 @@ void TerracottaOnlinePanel::onToggleServerClicked()
         if (reply == QMessageBox::Yes) {
             appendLog(tr("Stopping Terracotta server..."));
 
-            // Stop any ongoing polling
+            // Stop polling before shutdown
             stopPollingState();
 
-            // Cancel any active state first
-            Terracotta::instance().cancelState();
+            // Use the new shutdown method that handles everything
+            bool stopped = Terracotta::instance().shutdownAndWait();
 
-            // Gracefully stop the server using panic(peaceful=true)
-            if (Terracotta::instance().panic(true)) {
-                appendLog(tr("Shutdown signal sent, waiting for server to stop..."));
-
-                // Wait up to 8 seconds for graceful shutdown
-                bool stopped = false;
-                for (int i = 0; i < 16; i++) {
-                    QThread::msleep(500);
-                    QCoreApplication::processEvents();
-                    if (!Terracotta::instance().isProcessRunning()) {
-                        stopped = true;
-                        break;
-                    }
-                }
-
-                if (stopped) {
-                    appendLog(tr("Terracotta server stopped gracefully."));
-                    ui->label_state_value->setText(tr("Stopped"));
-                    updateServerButtonState();
-                    ui->groupBox_actions->setEnabled(true);
-                } else {
-                    // Still running after grace period, ask user to force kill
-                    auto forceReply = QMessageBox::question(this, tr("Force Stop"),
-                        tr("The server did not stop gracefully.\n\nDo you want to force terminate it?"),
-                        QMessageBox::Yes | QMessageBox::No);
-
-                    if (forceReply == QMessageBox::Yes) {
-                        appendLog(tr("Force terminating Terracotta server..."));
-                        Terracotta::instance().forceKillProcess();
-                        appendLog(tr("Terracotta server terminated."));
-                        ui->label_state_value->setText(tr("Stopped"));
-                        updateServerButtonState();
-                        ui->groupBox_actions->setEnabled(true);
-                    } else {
-                        appendLog(tr("Server is still running. You can try stopping again later."));
-                    }
-                }
+            if (stopped) {
+                appendLog(tr("Terracotta server stopped gracefully."));
             } else {
-                appendLog(tr("Failed to send shutdown signal. The server may not be responding."));
+                appendLog(tr("Terracotta server shutdown timeout, assuming stopped."));
             }
+
+            // Update state
+            m_serverRunning = false;
+            ui->label_state_value->setText(tr("Stopped"));
+            updateServerButtonState();
+            ui->groupBox_actions->setEnabled(true);
         }
     } else {
         // Server is not running or not available - start it
@@ -355,17 +349,22 @@ void TerracottaOnlinePanel::onToggleServerClicked()
 
         if (Terracotta::instance().startProcess()) {
             appendLog(tr("Terracotta server started successfully."));
+            // Update state
+            m_serverRunning = true;
             ui->label_state_value->setText(tr("Connected"));
             updatePortDisplay();
-            // Update button state
             updateServerButtonState();
+            // Start polling for state changes
+            startPollingState();
             // Refresh state after a short delay to let server initialize
             QTimer::singleShot(500, this, [this]() {
                 onRefreshClicked();
             });
         } else {
             appendLog(tr("Failed to start Terracotta server. Please check if it is installed."));
+            m_serverRunning = false;
             ui->label_state_value->setText(tr("Failed"));
+            updateServerButtonState();
         }
     }
 }
@@ -379,7 +378,7 @@ void TerracottaOnlinePanel::onRestartClicked()
     if (reply == QMessageBox::Yes) {
         appendLog(tr("Restarting Terracotta server..."));
 
-        // Stop any ongoing polling
+        // Stop polling before restart
         stopPollingState();
 
         // Cancel any active state first
@@ -392,15 +391,19 @@ void TerracottaOnlinePanel::onRestartClicked()
         QTimer::singleShot(500, this, [this]() {
             if (Terracotta::instance().startProcess()) {
                 appendLog(tr("Terracotta server restarted successfully."));
+                m_serverRunning = true;
                 ui->label_state_value->setText(tr("Connected"));
                 updatePortDisplay();
                 updateServerButtonState();
+                // Start polling after restart
+                startPollingState();
                 // Refresh state after restart
                 QTimer::singleShot(500, this, [this]() {
                     onRefreshClicked();
                 });
             } else {
                 appendLog(tr("Failed to restart Terracotta server."));
+                m_serverRunning = false;
                 ui->label_state_value->setText(tr("Failed"));
                 updateServerButtonState();
             }
@@ -419,7 +422,13 @@ void TerracottaOnlinePanel::onPanicClicked()
 
         if (Terracotta::instance().panic(false)) {
             appendLog(tr("Emergency stop successful."));
-            onRefreshClicked();
+            // Update button to show Start Server
+            ui->pushButton_stop_server->setText(tr("Start Server"));
+            ui->pushButton_stop_server->setToolTip(tr("Start the Terracotta server"));
+            // Refresh state after a short delay
+            QTimer::singleShot(500, this, [this]() {
+                onRefreshClicked();
+            });
         } else {
             appendLog(tr("Emergency stop failed."));
         }
@@ -476,6 +485,9 @@ void TerracottaOnlinePanel::onAvailabilityChanged(bool available)
         }
     }
 
+    // Update server running state based on availability
+    m_serverRunning = available;
+
     if (available) {
         setUIEnabled(true);
         updateServerButtonState();  // Update button based on actual process state
@@ -488,16 +500,46 @@ void TerracottaOnlinePanel::onAvailabilityChanged(bool available)
         ui->pushButton_stop_server->setEnabled(true);  // Keep Start/Stop Server enabled
 
         // When server is not available, show "Start Server" button
-        // Even if process is running, the API is not responding
-        ui->pushButton_stop_server->setText(tr("Start Server"));
-        ui->pushButton_stop_server->setToolTip(tr("Start the Terracotta server"));
+        updateServerButtonState();
     }
 }
 
 void TerracottaOnlinePanel::updateStateDisplay(const TerracottaTypes::StateResponse& state)
 {
-    // Update state label (always update as it's cheap)
+    // Update state label with color
     ui->label_state_value->setText(getStateString(state.state));
+
+    // Set color based on state (same scheme as main window status bar)
+    QString color;
+    switch (state.state) {
+        case TerracottaTypes::State::Waiting:
+        case TerracottaTypes::State::HostScanning:
+            color = "gray";
+            break;
+        case TerracottaTypes::State::HostStarting:
+            color = "orange";
+            break;
+        case TerracottaTypes::State::HostOk:
+            color = "green";
+            break;
+        case TerracottaTypes::State::GuestConnecting:
+        case TerracottaTypes::State::GuestStarting:
+            color = "orange";
+            break;
+        case TerracottaTypes::State::GuestOk:
+            color = "green";
+            break;
+        case TerracottaTypes::State::Exception:
+            color = "red";
+            break;
+        default:
+            color = "green";
+            break;
+    }
+    ui->label_state_value->setStyleSheet(QString("color: %1; font-weight: bold;").arg(color));
+
+    // Update hint text based on state
+    updateStateHint(state.state);
 
     // Update server button state based on process running status
     updateServerButtonState();
@@ -514,6 +556,10 @@ void TerracottaOnlinePanel::updateStateDisplay(const TerracottaTypes::StateRespo
         ui->lineEdit_url->setText(newUrl);
         m_lastUrl = newUrl;
     }
+
+    // Update connection difficulty
+    QString difficultyText = getDifficultyString(state.difficulty);
+    ui->lineEdit_difficulty->setText(difficultyText);
 
     // Update player list only if profiles changed (check count and contents)
     bool profilesChanged = (m_lastProfiles.size() != state.profiles.size());
@@ -647,6 +693,41 @@ QString TerracottaOnlinePanel::getStateString(TerracottaTypes::State state) cons
     }
 }
 
+void TerracottaOnlinePanel::updateStateHint(TerracottaTypes::State state)
+{
+    QString hint;
+    switch (state) {
+        case TerracottaTypes::State::Waiting:
+            hint = tr("Enter your player name and click Create Room to host, or enter a room code to join.");
+            break;
+        case TerracottaTypes::State::HostScanning:
+            hint = tr("Open your Minecraft world, press Esc, and click 'Open to LAN' to start the LAN server.");
+            break;
+        case TerracottaTypes::State::HostStarting:
+            hint = tr("Starting your room... The server will be ready shortly.");
+            break;
+        case TerracottaTypes::State::HostOk:
+            hint = tr("Your room is ready! Share the room code with friends so they can join.");
+            break;
+        case TerracottaTypes::State::GuestConnecting:
+            hint = tr("Connecting to the host room... This may take a moment.");
+            break;
+        case TerracottaTypes::State::GuestStarting:
+            hint = tr("Setting up connection to the Minecraft server...");
+            break;
+        case TerracottaTypes::State::GuestOk:
+            hint = tr("Connected! You can now join the game using the connection URL above.");
+            break;
+        case TerracottaTypes::State::Exception:
+            hint = tr("An error occurred. Check the logs for details and try creating or joining a room again.");
+            break;
+        default:
+            hint = tr("Please wait...");
+            break;
+    }
+    ui->label_state_hint->setText(hint);
+}
+
 void TerracottaOnlinePanel::setUIEnabled(bool enabled)
 {
     ui->groupBox_actions->setEnabled(enabled);
@@ -678,6 +759,23 @@ QString TerracottaOnlinePanel::getExceptionString(TerracottaTypes::ExceptionType
             return tr("Invalid server response");
         default:
             return tr("Unknown error");
+    }
+}
+
+QString TerracottaOnlinePanel::getDifficultyString(TerracottaTypes::Difficulty difficulty) const
+{
+    switch (difficulty) {
+        case TerracottaTypes::Difficulty::EASIEST:
+            return tr("Easiest");
+        case TerracottaTypes::Difficulty::SIMPLE:
+            return tr("Simple");
+        case TerracottaTypes::Difficulty::MEDIUM:
+            return tr("Medium");
+        case TerracottaTypes::Difficulty::TOUGH:
+            return tr("Tough");
+        case TerracottaTypes::Difficulty::UNKNOWN:
+        default:
+            return tr("Unknown");
     }
 }
 
@@ -749,9 +847,8 @@ void TerracottaOnlinePanel::updatePortDisplay()
 
 void TerracottaOnlinePanel::updateServerButtonState()
 {
-    bool isRunning = Terracotta::instance().isProcessRunning();
-
-    if (isRunning) {
+    // Use tracked server state instead of checking API
+    if (m_serverRunning) {
         ui->pushButton_stop_server->setText(tr("Stop Server"));
         ui->pushButton_stop_server->setToolTip(tr("Gracefully stop the Terracotta server"));
     } else {

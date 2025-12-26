@@ -382,8 +382,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     m_statusLeft = new QLabel(tr("No instance selected"), this);
     m_statusCenter = new QLabel(tr("Total playtime: 0s"), this);
+    m_statusTerracotta = new QLabel(this);
     statusBar()->addPermanentWidget(m_statusLeft, 1);
     statusBar()->addPermanentWidget(m_statusCenter, 0);
+    statusBar()->addPermanentWidget(m_statusTerracotta, 0);
+
+    // Connect to Terracotta state changes to update status bar
+    connect(&Terracotta::instance(), &Terracotta::stateChanged, this, [this](const TerracottaTypes::StateResponse& state) {
+        updateTerracottaStatus(state);
+    });
+    connect(&Terracotta::instance(), &Terracotta::availabilityChanged, this, [this](bool available) {
+        if (!available) {
+            m_statusTerracotta->setText(tr("Terracotta: Not available"));
+            m_statusTerracotta->setStyleSheet("color: red;");
+        }
+    });
+    // Initialize Terracotta status
+    updateTerracottaStatus(TerracottaTypes::StateResponse{});
 
     // Add "manage accounts" button, right align
     QWidget* spacer = new QWidget();
@@ -1508,7 +1523,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
     // Stop Terracotta server if setting is enabled
     if (Terracotta::instance().getStopOnClose()) {
-        Terracotta::instance().stopProcess();
+        Terracotta::instance().shutdownAndWait();
     }
 
     event->accept();
@@ -1694,6 +1709,53 @@ void MainWindow::updateStatusCenter()
                 .arg(Time::prettifyDuration(timePlayed, APPLICATION->settings()->get("ShowGameTimeWithoutDays").toBool())));
     }
 }
+
+void MainWindow::updateTerracottaStatus(const TerracottaTypes::StateResponse& state)
+{
+    if (!Terracotta::instance().isProcessRunning()) {
+        m_statusTerracotta->setText(tr("Terracotta: Stopped"));
+        m_statusTerracotta->setStyleSheet("color: gray;");
+    } else {
+        // Show state and room code if available
+        QString stateText;
+        QString color;
+        switch (state.state) {
+            case TerracottaTypes::State::Waiting:
+            case TerracottaTypes::State::HostScanning:
+                stateText = tr("Idle");
+                color = "gray";  // Idle state
+                break;
+            case TerracottaTypes::State::HostStarting:
+                stateText = tr("Starting...");
+                color = "orange";  // In progress
+                break;
+            case TerracottaTypes::State::HostOk:
+                stateText = tr("Hosting") + (state.room.isEmpty() ? "" : " (" + state.room + ")");
+                color = "green";  // Success
+                break;
+            case TerracottaTypes::State::GuestConnecting:
+            case TerracottaTypes::State::GuestStarting:
+                stateText = tr("Connecting...");
+                color = "orange";  // In progress
+                break;
+            case TerracottaTypes::State::GuestOk:
+                stateText = tr("Connected");
+                color = "green";  // Success
+                break;
+            case TerracottaTypes::State::Exception:
+                stateText = tr("Error");
+                color = "red";  // Error
+                break;
+            default:
+                stateText = tr("Running");
+                color = "green";  // Default running
+                break;
+        }
+        m_statusTerracotta->setText(tr("Terracotta: %1").arg(stateText));
+        m_statusTerracotta->setStyleSheet(QString("color: %1;").arg(color));
+    }
+}
+
 // "Instance actions" are actions that require an instance to be selected (i.e. "new instance" is not here)
 // Actions that also require other conditions (e.g. a running instance) won't be changed.
 void MainWindow::setInstanceActionsEnabled(bool enabled)

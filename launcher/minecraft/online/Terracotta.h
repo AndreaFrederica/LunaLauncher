@@ -176,6 +176,13 @@ class Terracotta : public QObject {
     std::shared_ptr<TerracottaTypes::MetaInfo> fetchMeta();
 
     /**
+     * @brief Fetch meta information from the server with custom timeout
+     * @param timeoutMs Timeout in milliseconds
+     * @return MetaInfo object, or null on failure
+     */
+    std::shared_ptr<TerracottaTypes::MetaInfo> fetchMeta(int timeoutMs);
+
+    /**
      * @brief Fetch current state from the server
      * @return StateResponse object, or null on failure
      */
@@ -189,6 +196,12 @@ class Terracotta : public QObject {
     bool panic(bool peaceful = true);
 
     /**
+     * @brief Panic - stop Terracotta online mode (fire and forget, does not wait for response)
+     * @param peaceful Whether to exit peacefully (graceful shutdown)
+     */
+    void panicAsync(bool peaceful = true);
+
+    /**
      * @brief Switch to scanning mode (host)
      * @param player Player name
      * @return true if request was successful
@@ -200,6 +213,11 @@ class Terracotta : public QObject {
      * @return true if request was successful
      */
     bool cancelState();
+
+    /**
+     * @brief Cancel current state and return to idle (fire and forget, does not wait for response)
+     */
+    void cancelStateAsync();
 
     /**
      * @brief Join a room as guest
@@ -231,6 +249,13 @@ class Terracotta : public QObject {
      * @brief Force kill the Terracotta process immediately
      */
     void forceKillProcess();
+
+    /**
+     * @brief Shutdown Terracotta gracefully and wait for it to stop
+     * @param timeoutMs Maximum time to wait for shutdown (default 8000ms)
+     * @return true if Terracotta stopped, false if timeout (but we assume it stopped)
+     */
+    bool shutdownAndWait(int timeoutMs = 8000);
 
     /**
      * @brief Check if Terracotta process is running
@@ -265,9 +290,11 @@ class Terracotta : public QObject {
     Terracotta(QObject* parent = nullptr);
     ~Terracotta() = default;
 
-    QByteArray sendGetRequest(const QString& endpoint, const QMap<QString, QString>& params = {});
+    QByteArray sendGetRequest(const QString& endpoint, const QMap<QString, QString>& params = {}, int timeoutMs = 5000);
     // Returns true if HTTP request succeeded (status 200), regardless of response body
-    bool sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params = {});
+    bool sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params = {}, int timeoutMs = 5000);
+    // Send request without waiting for response (fire and forget)
+    void sendGetRequestAsync(const QString& endpoint, const QMap<QString, QString>& params = {});
     QString getPortFilePath() const;
     bool waitForPortFile(quint32 timeoutMs = 15000);
     bool readPortFromFile(quint16& port) const;

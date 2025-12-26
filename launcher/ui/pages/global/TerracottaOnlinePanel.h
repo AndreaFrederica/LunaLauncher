@@ -49,6 +49,7 @@ class TerracottaOnlinePanel : public QMainWindow, public BasePage {
 
    private slots:
     void onRefreshClicked();
+    void onOpenWebUIClicked();
     void onHostClicked();
     void onJoinClicked();
     void onCloseRoomClicked();
@@ -66,9 +67,11 @@ class TerracottaOnlinePanel : public QMainWindow, public BasePage {
     void updatePlayerList(const QList<TerracottaTypes::Profile>& profiles);
     void updatePortDisplay();
     void updateServerButtonState();  // Update Start/Stop Server button based on process state
+    void updateStateHint(TerracottaTypes::State state);  // Update hint text based on state
     void appendLog(const QString& message);
     QString getStateString(TerracottaTypes::State state) const;
     QString getExceptionString(TerracottaTypes::ExceptionType type) const;
+    [[nodiscard]] QString getDifficultyString(TerracottaTypes::Difficulty difficulty) const;
     void handleExceptionState(const TerracottaTypes::StateResponse& state);
     void setUIEnabled(bool enabled);
     void startPollingState();
@@ -91,6 +94,7 @@ class TerracottaOnlinePanel : public QMainWindow, public BasePage {
     QString m_lastUrl;
     QList<TerracottaTypes::Profile> m_lastProfiles;
     bool m_lastAvailable = false;  // Track last availability state to avoid duplicate logs
+    bool m_serverRunning = false;  // Track if server is running (for Start/Stop button)
 
     static int s_globalPollingInterval;  // Global polling interval shared across all instances
     static int s_globalMaxLogLines;  // Global max log lines shared across all instances

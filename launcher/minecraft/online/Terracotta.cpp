@@ -401,7 +401,12 @@ bool Terracotta::isAvailable()
 
 std::shared_ptr<TerracottaTypes::MetaInfo> Terracotta::fetchMeta()
 {
-    const QByteArray data = sendGetRequest("/meta", {});
+    return fetchMeta(5000);  // Default 5 second timeout
+}
+
+std::shared_ptr<TerracottaTypes::MetaInfo> Terracotta::fetchMeta(int timeoutMs)
+{
+    const QByteArray data = sendGetRequest("/meta", {}, timeoutMs);
     if (data.isEmpty()) {
         return nullptr;
     }
@@ -439,7 +444,24 @@ bool Terracotta::panic(bool peaceful)
 {
     QMap<QString, QString> params;
     params["peaceful"] = peaceful ? "true" : "false";
-    return sendGetRequestWithStatus("/panic", params);
+    bool result = sendGetRequestWithStatus("/panic", params);
+    // Emergency stop (peaceful=false) terminates the server immediately
+    // Reset the success flag so isProcessRunning() returns false
+    if (!peaceful && result) {
+        m_wasStartedSuccessfully = false;
+    }
+    return result;
+}
+
+void Terracotta::panicAsync(bool peaceful)
+{
+    QMap<QString, QString> params;
+    params["peaceful"] = peaceful ? "true" : "false";
+    sendGetRequestAsync("/panic", params);
+    // Reset the flag immediately since we're shutting down
+    if (!peaceful) {
+        m_wasStartedSuccessfully = false;
+    }
 }
 
 bool Terracotta::startScanning(const QString& player)
@@ -452,6 +474,11 @@ bool Terracotta::startScanning(const QString& player)
 bool Terracotta::cancelState()
 {
     return sendGetRequestWithStatus("/state/ide", {});
+}
+
+void Terracotta::cancelStateAsync()
+{
+    sendGetRequestAsync("/state/ide", {});
 }
 
 bool Terracotta::joinRoom(const QString& room, const QString& player)
@@ -469,7 +496,7 @@ QByteArray Terracotta::fetchLog(bool fetch)
     return sendGetRequest("/log", params);
 }
 
-QByteArray Terracotta::sendGetRequest(const QString& endpoint, const QMap<QString, QString>& params)
+QByteArray Terracotta::sendGetRequest(const QString& endpoint, const QMap<QString, QString>& params, int timeoutMs)
 {
     QNetworkAccessManager manager;
 
@@ -489,7 +516,24 @@ QByteArray Terracotta::sendGetRequest(const QString& endpoint, const QMap<QStrin
     QNetworkReply* reply = manager.get(request);
     QEventLoop loop;
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    // Set timeout
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(timeoutMs);
+
     loop.exec();
+
+    // Check if timeout occurred
+    if (!timeoutTimer.isActive()) {
+        qWarning() << "Terracotta request timeout:" << urlStr;
+        reply->abort();
+        reply->deleteLater();
+        emit availabilityChanged(false);
+        return QByteArray();
+    }
+    timeoutTimer.stop();
 
     if (reply->error() != QNetworkReply::NoError) {
         qWarning() << "Terracotta request failed:" << reply->errorString() << "URL:" << urlStr;
@@ -504,7 +548,7 @@ QByteArray Terracotta::sendGetRequest(const QString& endpoint, const QMap<QStrin
     return data;
 }
 
-bool Terracotta::sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params)
+bool Terracotta::sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params, int timeoutMs)
 {
     QNetworkAccessManager manager;
 
@@ -524,7 +568,24 @@ bool Terracotta::sendGetRequestWithStatus(const QString& endpoint, const QMap<QS
     QNetworkReply* reply = manager.get(request);
     QEventLoop loop;
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    // Set timeout
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(timeoutMs);
+
     loop.exec();
+
+    // Check if timeout occurred
+    if (!timeoutTimer.isActive()) {
+        qWarning() << "Terracotta request timeout:" << urlStr;
+        reply->abort();
+        reply->deleteLater();
+        emit availabilityChanged(false);
+        return false;
+    }
+    timeoutTimer.stop();
 
     // Check for network errors
     if (reply->error() != QNetworkReply::NoError) {
@@ -547,6 +608,38 @@ bool Terracotta::sendGetRequestWithStatus(const QString& endpoint, const QMap<QS
         reply->deleteLater();
         return false;
     }
+}
+
+void Terracotta::sendGetRequestAsync(const QString& endpoint, const QMap<QString, QString>& params)
+{
+    // Build URL with parameters
+    QString urlStr = m_baseUrl + endpoint;
+    if (!params.isEmpty()) {
+        QStringList paramList;
+        for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
+            paramList.append(it.key() + "=" + it.value());
+        }
+        urlStr += "?" + paramList.join("&");
+    }
+
+    QNetworkRequest request{ QUrl(urlStr) };
+    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
+
+    // Create a manager that will be deleted when the reply is finished
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QNetworkReply* reply = manager->get(request);
+
+    // Connect to finished signal to clean up
+    connect(reply, &QNetworkReply::finished, this, [manager, reply]() {
+        reply->deleteLater();
+        manager->deleteLater();
+    });
+
+    // Also clean up on error (in case finished never fires)
+    connect(reply, &QNetworkReply::errorOccurred, this, [manager, reply]() {
+        reply->deleteLater();
+        manager->deleteLater();
+    });
 }
 
 QString Terracotta::getPortFilePath() const
@@ -850,6 +943,33 @@ void Terracotta::forceKillProcess()
     m_wasStartedSuccessfully = false;
 
     emit availabilityChanged(false);
+}
+
+bool Terracotta::shutdownAndWait(int timeoutMs)
+{
+    // Check if Terracotta API is responding (with very short timeout)
+    if (fetchMeta(100) == nullptr) {
+        // Already not running
+        return true;
+    }
+
+    // Send shutdown commands asynchronously (don't wait for response)
+    cancelStateAsync();
+    panicAsync(true);
+
+    // Wait for API to stop responding
+    const int sleepMs = 100;
+    const int maxIterations = timeoutMs / sleepMs;
+    for (int i = 0; i < maxIterations; i++) {
+        QThread::msleep(sleepMs);
+        if (fetchMeta(100) == nullptr) {
+            // Stopped successfully
+            return true;
+        }
+    }
+
+    // Timeout - but we assume it has stopped
+    return false;
 }
 
 bool Terracotta::isProcessRunning() const

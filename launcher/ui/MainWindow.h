@@ -62,6 +62,10 @@ class KonamiCode;
 class InstanceTask;
 class LabeledToolButton;
 
+namespace TerracottaTypes {
+struct StateResponse;
+}
+
 namespace Ui {
 class MainWindow;
 }
@@ -228,6 +232,7 @@ class MainWindow : public QMainWindow {
     void setSelectedInstanceById(const QString& id);
     void updateStatusCenter();
     void setInstanceActionsEnabled(bool enabled);
+    void updateTerracottaStatus(const TerracottaTypes::StateResponse& state);
 
     void runModalTask(Task* task);
     void instanceFromInstanceTask(InstanceTask* task);
@@ -240,6 +245,7 @@ class MainWindow : public QMainWindow {
     QToolButton* newsLabel = nullptr;
     QLabel* m_statusLeft = nullptr;
     QLabel* m_statusCenter = nullptr;
+    QLabel* m_statusTerracotta = nullptr;
     LabeledToolButton* changeIconButton = nullptr;
     LabeledToolButton* renameButton = nullptr;
     QToolButton* helpMenuButton = nullptr;

@@ -51,7 +51,6 @@ class TerracottaOnlinePanel : public QMainWindow, public BasePage {
     void onRefreshClicked();
     void onHostClicked();
     void onJoinClicked();
-    void onDirectConnectClicked();
     void onCloseRoomClicked();
     void onToggleServerClicked();  // Handles both Start and Stop Server
     void onRestartClicked();

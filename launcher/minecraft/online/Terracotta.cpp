@@ -462,14 +462,6 @@ bool Terracotta::joinRoom(const QString& room, const QString& player)
     return sendGetRequestWithStatus("/state/guesting", params);
 }
 
-bool Terracotta::startWithPort(uint16_t port, const QString& player)
-{
-    QMap<QString, QString> params;
-    params["port"] = QString::number(port);
-    params["player"] = player;
-    return sendGetRequestWithStatus("/start", params);
-}
-
 QByteArray Terracotta::fetchLog(bool fetch)
 {
     QMap<QString, QString> params;
@@ -826,7 +818,9 @@ void Terracotta::stopProcess()
     if (m_process && m_process->state() == QProcess::Running) {
         qDebug() << "Attempting graceful shutdown via panic API...";
         panic(true);
-        // Note: We don't wait or force kill here - just send the shutdown signal
+        // After sending shutdown signal, reset the success flag
+        // The server may have exited before we could get a response
+        m_wasStartedSuccessfully = false;
     }
 }
 

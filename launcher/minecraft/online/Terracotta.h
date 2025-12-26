@@ -210,14 +210,6 @@ class Terracotta : public QObject {
     bool joinRoom(const QString& room, const QString& player);
 
     /**
-     * @brief Start with direct port connection
-     * @param port Port number
-     * @param player Player name
-     * @return true if request was successful
-     */
-    bool startWithPort(uint16_t port, const QString& player);
-
-    /**
      * @brief Fetch logs from the server
      * @param fetch Whether this is a fetch request
      * @return Log data as byte array, or empty on failure

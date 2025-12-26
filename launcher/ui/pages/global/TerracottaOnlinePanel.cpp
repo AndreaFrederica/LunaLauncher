@@ -105,7 +105,6 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
     connect(ui->pushButton_refresh, &QPushButton::clicked, this, &TerracottaOnlinePanel::onRefreshClicked);
     connect(ui->pushButton_host, &QPushButton::clicked, this, &TerracottaOnlinePanel::onHostClicked);
     connect(ui->pushButton_join, &QPushButton::clicked, this, &TerracottaOnlinePanel::onJoinClicked);
-    connect(ui->pushButton_direct, &QPushButton::clicked, this, &TerracottaOnlinePanel::onDirectConnectClicked);
     connect(ui->pushButton_close_room, &QPushButton::clicked, this, &TerracottaOnlinePanel::onCloseRoomClicked);
     connect(ui->pushButton_stop_server, &QPushButton::clicked, this, &TerracottaOnlinePanel::onToggleServerClicked);
     connect(ui->pushButton_restart, &QPushButton::clicked, this, &TerracottaOnlinePanel::onRestartClicked);
@@ -204,7 +203,12 @@ void TerracottaOnlinePanel::onRefreshClicked()
     } else {
         appendLog(tr("Failed to fetch state. Is Terracotta server running?"));
         ui->label_state_value->setText(tr("Error"));
-        setUIEnabled(false);
+        // Disable most UI, but keep Start/Stop Server button enabled
+        ui->groupBox_actions->setEnabled(false);
+        ui->pushButton_stop_server->setEnabled(true);
+        // Show "Start Server" since fetch failed
+        ui->pushButton_stop_server->setText(tr("Start Server"));
+        ui->pushButton_stop_server->setToolTip(tr("Start the Terracotta server"));
     }
 
     ui->pushButton_refresh->setEnabled(true);
@@ -262,26 +266,6 @@ void TerracottaOnlinePanel::onJoinClicked()
     }
 }
 
-void TerracottaOnlinePanel::onDirectConnectClicked()
-{
-    uint16_t port = static_cast<uint16_t>(ui->spinBox_port->value());
-    QString playerName = ui->lineEdit_player_name->text().trimmed();
-    if (playerName.isEmpty()) {
-        QMessageBox::warning(this, tr("Missing Player Name"), tr("Please enter a player name."));
-        return;
-    }
-
-    appendLog(tr("Starting direct connection to port: %1 as player: %2").arg(port).arg(playerName));
-
-    if (Terracotta::instance().startWithPort(port, playerName)) {
-        appendLog(tr("Direct connection started successfully. Waiting for connection..."));
-        // Start polling to wait for connection
-        startPollingState();
-    } else {
-        appendLog(tr("Failed to start direct connection."));
-    }
-}
-
 void TerracottaOnlinePanel::onCloseRoomClicked()
 {
     appendLog(tr("Closing room and returning to idle..."));
@@ -299,7 +283,10 @@ void TerracottaOnlinePanel::onCloseRoomClicked()
 
 void TerracottaOnlinePanel::onToggleServerClicked()
 {
-    if (Terracotta::instance().isProcessRunning()) {
+    // Check button text to determine action (more reliable than process state)
+    bool isStopAction = ui->pushButton_stop_server->text() == tr("Stop Server");
+
+    if (isStopAction) {
         // Server is running - stop it
         auto reply = QMessageBox::question(this, tr("Stop Server"),
                                             tr("Are you sure you want to stop the Terracotta server?\n\nThis will gracefully shut down the server and close all connections."),
@@ -356,8 +343,15 @@ void TerracottaOnlinePanel::onToggleServerClicked()
             }
         }
     } else {
-        // Server is not running - start it
+        // Server is not running or not available - start it
         appendLog(tr("Starting Terracotta server..."));
+
+        // First force kill any existing process to ensure clean state
+        if (Terracotta::instance().isProcessRunning()) {
+            appendLog(tr("Cleaning up existing process..."));
+            Terracotta::instance().forceKillProcess();
+            QThread::msleep(500);  // Brief pause to let cleanup complete
+        }
 
         if (Terracotta::instance().startProcess()) {
             appendLog(tr("Terracotta server started successfully."));
@@ -471,13 +465,23 @@ void TerracottaOnlinePanel::onStateChanged(const TerracottaTypes::StateResponse&
 void TerracottaOnlinePanel::onAvailabilityChanged(bool available)
 {
     updatePortDisplay();  // Update port display when availability changes
-    updateServerButtonState();  // Update button state when availability changes
     if (available) {
         appendLog(tr("Terracotta server is now available."));
         setUIEnabled(true);
+        updateServerButtonState();  // Update button based on actual process state
     } else {
         appendLog(tr("Terracotta server is not available."));
-        setUIEnabled(false);
+        // Disable most UI, but keep the Start/Stop Server button enabled
+        // so users can restart the server
+        ui->pushButton_host->setEnabled(false);
+        ui->pushButton_join->setEnabled(false);
+        ui->pushButton_close_room->setEnabled(false);
+        ui->pushButton_stop_server->setEnabled(true);  // Keep Start/Stop Server enabled
+
+        // When server is not available, show "Start Server" button
+        // Even if process is running, the API is not responding
+        ui->pushButton_stop_server->setText(tr("Start Server"));
+        ui->pushButton_stop_server->setToolTip(tr("Start the Terracotta server"));
     }
 }
 
@@ -530,28 +534,24 @@ void TerracottaOnlinePanel::updateStateDisplay(const TerracottaTypes::StateRespo
             // In idle or scanning mode - can start hosting or joining
             ui->pushButton_host->setEnabled(true);
             ui->pushButton_join->setEnabled(true);
-            ui->pushButton_direct->setEnabled(true);
             ui->pushButton_close_room->setEnabled(false);
             break;
         case TerracottaTypes::State::HostOk:
             // Hosting a room - can close room
             ui->pushButton_host->setEnabled(false);
             ui->pushButton_join->setEnabled(false);
-            ui->pushButton_direct->setEnabled(false);
             ui->pushButton_close_room->setEnabled(true);
             break;
         case TerracottaTypes::State::GuestOk:
             // Joined as guest - can leave room
             ui->pushButton_host->setEnabled(false);
             ui->pushButton_join->setEnabled(false);
-            ui->pushButton_direct->setEnabled(false);
             ui->pushButton_close_room->setEnabled(true);
             break;
         default:
             // In transition states
             ui->pushButton_host->setEnabled(false);
             ui->pushButton_join->setEnabled(false);
-            ui->pushButton_direct->setEnabled(false);
             ui->pushButton_close_room->setEnabled(true);
             break;
     }

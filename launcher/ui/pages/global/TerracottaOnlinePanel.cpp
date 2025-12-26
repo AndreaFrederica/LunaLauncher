@@ -14,6 +14,29 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *  ----------------------------------------------------------------------
+ *
+ *  Terracotta Integration Notice
+ *
+ *  This file contains integration code with Terracotta, a P2P multiplayer
+ *  solution for Minecraft. Terracotta is developed by burningtnt and licensed
+ *  under AGPL-3.0 with the following exception:
+ *
+ *  "Your程序通过本作品提供的进程间通信接口（如 HTTP API）与未经修改的
+ *   本作品应用程序进行交互，不构成衍生作品。"
+ *
+ *  Translation: "Your program's interaction with an unmodified copy of this
+ *  work through the inter-process communication interfaces provided by this
+ *  work (such as HTTP APIs) does not constitute a derivative work."
+ *
+ *  Project URL: https://github.com/burningtnt/Terracotta
+ *
+ *  This integration is implemented as a temporary solution. The launcher
+ *  communicates with the standalone Terracotta binary via its HTTP API only,
+ *  which is explicitly permitted under Terracotta's license exception.
+ *
+ *  A future version will replace this with a custom implementation.
  */
 
 #include "TerracottaOnlinePanel.h"
@@ -116,6 +139,7 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
     connect(ui->pushButton_copy_code, &QPushButton::clicked, this, &TerracottaOnlinePanel::onCopyCodeClicked);
     connect(ui->pushButton_fetch_log, &QPushButton::clicked, this, &TerracottaOnlinePanel::onFetchLogClicked);
     connect(ui->pushButton_clear_log, &QPushButton::clicked, this, &TerracottaOnlinePanel::onClearLogClicked);
+    connect(ui->pushButton_about, &QPushButton::clicked, this, &TerracottaOnlinePanel::onAboutClicked);
 
     // Connect player name text changed to restart save timer
     connect(ui->lineEdit_player_name, &QLineEdit::textChanged, this, [this]() {
@@ -464,6 +488,31 @@ void TerracottaOnlinePanel::onFetchLogClicked()
 void TerracottaOnlinePanel::onClearLogClicked()
 {
     ui->plainTextEdit_logs->clear();
+}
+
+void TerracottaOnlinePanel::onAboutClicked()
+{
+    QString aboutText = tr(
+        "<h3>Terracotta P2P Multiplayer</h3>"
+        "<p><b>P2P Multiplayer Integration for Luna Launcher</b></p>"
+        "<p>This feature integrates with Terracotta, a P2P multiplayer solution for Minecraft.</p>"
+        "<h4>Terracotta Project</h4>"
+        "<p><b>Developer:</b> burningtnt<br>"
+        "<b>Project URL:</b> <a href=\"https://github.com/burningtnt/Terracotta\">https://github.com/burningtnt/Terracotta</a></p>"
+        "<h4>License</h4>"
+        "<p>Terracotta is licensed under <b>AGPL-3.0</b> with the following exception:</p>"
+        "<p><i>\"Your program通过本作品提供的进程间通信接口（如 HTTP API）与未经修改的"
+        "本作品应用程序进行交互，不构成衍生作品。\"</i></p>"
+        "<p><i>Translation: \"Your program's interaction with an unmodified copy of this work"
+        "through the inter-process communication interfaces provided by this work (such as HTTP APIs)"
+        "does not constitute a derivative work.\"</i></p>"
+        "<h4>Integration Notice</h4>"
+        "<p>This integration communicates with the standalone Terracotta binary via its HTTP API only,"
+        "which is explicitly permitted under Terracotta's license exception.</p>"
+        "<p><b>Note:</b> This is a temporary solution. A future version will replace this with a custom implementation.</p>"
+    );
+
+    QMessageBox::about(this, tr("About Terracotta"), aboutText);
 }
 
 void TerracottaOnlinePanel::onStateChanged(const TerracottaTypes::StateResponse& state)

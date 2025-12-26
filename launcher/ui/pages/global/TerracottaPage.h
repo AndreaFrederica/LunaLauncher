@@ -50,6 +50,7 @@ class TerracottaPage : public QWidget, public BasePage {
     void onDownloadButtonClicked();
     void onDeleteButtonClicked();
     void onOpenOnlineButtonClicked();
+    void onLicenseInfoButtonClicked();
     void onAvailabilityChanged(bool available);
 
    private:

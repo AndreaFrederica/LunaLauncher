@@ -325,6 +325,16 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="pushButton_about">
+           <property name="text">
+            <string>About Terracotta</string>
+           </property>
+           <property name="toolTip">
+            <string>Show licensing and attribution information</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <spacer name="horizontalSpacer_log">
            <property name="orientation">
             <enum>Qt::Horizontal</enum>

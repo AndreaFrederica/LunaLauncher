@@ -71,6 +71,7 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     connect(ui->pushButton_download, &QPushButton::clicked, this, &TerracottaPage::onDownloadButtonClicked);
     connect(ui->pushButton_delete, &QPushButton::clicked, this, &TerracottaPage::onDeleteButtonClicked);
     connect(ui->pushButton_open_online, &QPushButton::clicked, this, &TerracottaPage::onOpenOnlineButtonClicked);
+    connect(ui->pushButton_license_info, &QPushButton::clicked, this, &TerracottaPage::onLicenseInfoButtonClicked);
     connect(ui->lineEdit_url, &QLineEdit::editingFinished, this, [this]() {
         Terracotta::instance().setBaseUrl(ui->lineEdit_url->text());
         updateStatus();
@@ -192,6 +193,31 @@ void TerracottaPage::onOpenOnlineButtonClicked()
     panel->show();
     panel->raise();
     panel->activateWindow();
+}
+
+void TerracottaPage::onLicenseInfoButtonClicked()
+{
+    QString aboutText = tr(
+        "<h3>Terracotta P2P Multiplayer</h3>"
+        "<p><b>P2P Multiplayer Integration for Luna Launcher</b></p>"
+        "<p>This feature integrates with Terracotta, a P2P multiplayer solution for Minecraft.</p>"
+        "<h4>Terracotta Project</h4>"
+        "<p><b>Developer:</b> burningtnt<br>"
+        "<b>Project URL:</b> <a href=\"https://github.com/burningtnt/Terracotta\">https://github.com/burningtnt/Terracotta</a></p>"
+        "<h4>License</h4>"
+        "<p>Terracotta is licensed under <b>AGPL-3.0</b> with the following exception:</p>"
+        "<p><i>\"Your program通过本作品提供的进程间通信接口（如 HTTP API）与未经修改的"
+        "本作品应用程序进行交互，不构成衍生作品。\"</i></p>"
+        "<p><i>Translation: \"Your program's interaction with an unmodified copy of this work"
+        "through the inter-process communication interfaces provided by this work (such as HTTP APIs)"
+        "does not constitute a derivative work.\"</i></p>"
+        "<h4>Integration Notice</h4>"
+        "<p>This integration communicates with the standalone Terracotta binary via its HTTP API only,"
+        "which is explicitly permitted under Terracotta's license exception.</p>"
+        "<p><b>Note:</b> This is a temporary solution. A future version will replace this with a custom implementation.</p>"
+    );
+
+    QMessageBox::about(this, tr("About Terracotta"), aboutText);
 }
 
 void TerracottaPage::onAvailabilityChanged(bool available)

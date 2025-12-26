@@ -57,6 +57,16 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_license_info">
+            <property name="text">
+             <string>View License &amp; Attribution</string>
+            </property>
+            <property name="toolTip">
+             <string>Show licensing and attribution information for Terracotta</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

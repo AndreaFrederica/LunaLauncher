@@ -22,6 +22,7 @@
 ---
 
 ## Features
+- **P2P Multiplayer**: Built-in support for [Terracotta](https://github.com/burningtnt/Terracotta) P2P multiplayer - play with friends without port forwarding or complex network setup
 - **Mirror API Support**: Built-in support for BMCLAPI and other community mirrors for faster downloads in China
 - **Cross-platform**: Available for Windows, Linux, and macOS
 

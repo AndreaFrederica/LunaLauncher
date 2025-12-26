@@ -23,6 +23,7 @@
 
 ## 特性
 
+- **P2P 联机**：内置 [Terracotta](https://github.com/burningtnt/Terracotta) P2P 联机功能 - 与朋友一起游戏，无需端口映射或复杂的网络配置
 - **镜像 API 支持**：内置支持 BMCLAPI 和其他社区镜像，在中国地区下载更快
 - **跨平台**：支持 Windows、Linux 和 macOS
 

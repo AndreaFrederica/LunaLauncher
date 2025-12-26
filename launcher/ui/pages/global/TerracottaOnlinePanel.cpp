@@ -465,12 +465,21 @@ void TerracottaOnlinePanel::onStateChanged(const TerracottaTypes::StateResponse&
 void TerracottaOnlinePanel::onAvailabilityChanged(bool available)
 {
     updatePortDisplay();  // Update port display when availability changes
+
+    // Only log when availability actually changes
+    if (available != m_lastAvailable) {
+        m_lastAvailable = available;
+        if (available) {
+            appendLog(tr("Terracotta server is now available."));
+        } else {
+            appendLog(tr("Terracotta server is not available."));
+        }
+    }
+
     if (available) {
-        appendLog(tr("Terracotta server is now available."));
         setUIEnabled(true);
         updateServerButtonState();  // Update button based on actual process state
     } else {
-        appendLog(tr("Terracotta server is not available."));
         // Disable most UI, but keep the Start/Stop Server button enabled
         // so users can restart the server
         ui->pushButton_host->setEnabled(false);
@@ -548,8 +557,14 @@ void TerracottaOnlinePanel::updateStateDisplay(const TerracottaTypes::StateRespo
             ui->pushButton_join->setEnabled(false);
             ui->pushButton_close_room->setEnabled(true);
             break;
+        case TerracottaTypes::State::Exception:
+            // Exception state - room is closed, can start a new room
+            ui->pushButton_host->setEnabled(true);
+            ui->pushButton_join->setEnabled(true);
+            ui->pushButton_close_room->setEnabled(false);
+            break;
         default:
-            // In transition states
+            // In transition states (connecting, starting, etc.)
             ui->pushButton_host->setEnabled(false);
             ui->pushButton_join->setEnabled(false);
             ui->pushButton_close_room->setEnabled(true);
@@ -694,6 +709,18 @@ void TerracottaOnlinePanel::handleExceptionState(const TerracottaTypes::StateRes
         default:
             appendLog(tr("Exception occurred: %1").arg(exceptionMsg));
             break;
+    }
+
+    // Automatically reset to Waiting state after exception
+    appendLog(tr("Resetting to idle state..."));
+    if (Terracotta::instance().cancelState()) {
+        appendLog(tr("Successfully reset to idle state."));
+        // Refresh state after a short delay to confirm the reset
+        QTimer::singleShot(200, this, [this]() {
+            onRefreshClicked();
+        });
+    } else {
+        appendLog(tr("Failed to reset to idle state. You may need to restart the server."));
     }
 }
 

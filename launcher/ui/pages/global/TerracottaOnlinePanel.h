@@ -90,6 +90,7 @@ class TerracottaOnlinePanel : public QMainWindow, public BasePage {
     QString m_lastRoomCode;
     QString m_lastUrl;
     QList<TerracottaTypes::Profile> m_lastProfiles;
+    bool m_lastAvailable = false;  // Track last availability state to avoid duplicate logs
 
     static int s_globalPollingInterval;  // Global polling interval shared across all instances
     static int s_globalMaxLogLines;  // Global max log lines shared across all instances

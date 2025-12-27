@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.22)  # minimum version required by Qt
 
-project(Launcher)
+project(Launcher LANGUAGES C CXX)
+if(APPLE)
+    enable_language(OBJC OBJCXX)
+endif()
 
 string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_BUILD_DIR}" IS_IN_SOURCE_BUILD)
 if(IS_IN_SOURCE_BUILD)
@@ -109,24 +112,22 @@ option(DEBUG_ADDRESS_SANITIZER "Enable Address Sanitizer in Debug builds" OFF)
 # If this is a Debug build turn on address sanitiser
 if (DEBUG_ADDRESS_SANITIZER)
     message(STATUS "Address Sanitizer enabled for Debug builds, Turn it off with -DDEBUG_ADDRESS_SANITIZER=off")
-    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-        if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-            # using clang with clang-cl front end
-            message(STATUS "Address Sanitizer available on Clang MSVC frontend")
-            add_compile_options($<$<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:/fsanitize=address /Oy->)
-        else()
-            # AppleClang and Clang
-            message(STATUS "Address Sanitizer available on Clang")
-            add_compile_options($<$<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:-fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=null>)
-        endif()
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        # GCC
-        message(STATUS "Address Sanitizer available on GCC")
-        add_compile_options($<$<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:-fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=null>)
-        link_libraries("asan")
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-        message(STATUS "Address Sanitizer available on MSVC")
-        add_compile_options($<$<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:/fsanitize=address /Oy->)
+
+    set(USE_ASAN_COMPILE_OPTIONS $<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>)
+    if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        message(STATUS "Using Address Sanitizer compile options for MSVC frontend")
+        add_compile_options(
+                $<${USE_ASAN_COMPILE_OPTIONS}:/fsanitize=address>
+                $<${USE_ASAN_COMPILE_OPTIONS}:/Oy->
+        )
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+        message(STATUS "Using Address Sanitizer compile options for GCC/Clang")
+        add_compile_options(
+                $<${USE_ASAN_COMPILE_OPTIONS}:-fsanitize=address,undefined>
+                $<${USE_ASAN_COMPILE_OPTIONS}:-fno-omit-frame-pointer>
+                $<${USE_ASAN_COMPILE_OPTIONS}:-fno-sanitize-recover=null>
+        )
+        link_libraries("asan" "ubsan")
     else()
         message(STATUS "Address Sanitizer not available on compiler ${CMAKE_CXX_COMPILER_ID}")
     endif()

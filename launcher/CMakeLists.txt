@@ -26,13 +26,13 @@ set(CORE_SOURCES
     NullInstance.h
     MMCZip.h
     MMCZip.cpp
-    archive/ArchiveReader.cpp  
-    archive/ArchiveReader.h  
-    archive/ArchiveWriter.cpp  
-    archive/ArchiveWriter.h  
-    archive/ExportToZipTask.cpp  
+    archive/ArchiveReader.cpp
+    archive/ArchiveReader.h
+    archive/ArchiveWriter.cpp
+    archive/ArchiveWriter.h
+    archive/ExportToZipTask.cpp
     archive/ExportToZipTask.h
-    archive/ExtractZipTask.cpp  
+    archive/ExtractZipTask.cpp
     archive/ExtractZipTask.h
     StringUtils.h
     StringUtils.cpp
@@ -651,10 +651,10 @@ set(PRISMUPDATER_SOURCES
     # Zip
     MMCZip.h
     MMCZip.cpp
-    archive/ArchiveReader.cpp  
-    archive/ArchiveReader.h  
-    archive/ArchiveWriter.cpp  
-    archive/ArchiveWriter.h  
+    archive/ArchiveReader.cpp
+    archive/ArchiveReader.h
+    archive/ArchiveWriter.cpp
+    archive/ArchiveWriter.h
 
     # Time
     MMCTime.h
@@ -1359,6 +1359,16 @@ endif()
 
 include(CompilerWarnings)
 
+######## Precompiled Headers ###########
+
+set(PRECOMPILED_HEADERS
+    include/base.pch.hpp
+    include/qtcore.pch.hpp
+    include/qtgui.pch.hpp
+)
+
+####### Targets ########
+
 # Add executable
 add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_UI} ${LAUNCHER_RESOURCES})
 set_project_warnings(Launcher_logic
@@ -1367,6 +1377,7 @@ set_project_warnings(Launcher_logic
     "${Launcher_GCC_WARNINGS}")
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
+target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
 target_link_libraries(Launcher_logic
     systeminfo
     Launcher_murmur2
@@ -1448,6 +1459,7 @@ endif()
 target_link_libraries(Launcher_logic)
 
 add_executable(${Launcher_Name} MACOSX_BUNDLE WIN32 main.cpp ${LAUNCHER_RCS})
+target_precompile_headers(${Launcher_Name} REUSE_FROM Launcher_logic)
 target_link_libraries(${Launcher_Name} Launcher_logic)
 
 if(DEFINED Launcher_APP_BINARY_NAME)
@@ -1479,6 +1491,7 @@ if(Launcher_BUILD_UPDATER)
     # Updater
     add_library(prism_updater_logic STATIC ${PRISMUPDATER_SOURCES} ${TASKS_SOURCES} ${PRISMUPDATER_UI})
     target_include_directories(prism_updater_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    target_precompile_headers(prism_updater_logic PRIVATE ${PRECOMPILED_HEADERS})
     target_link_libraries(prism_updater_logic
         ${ZLIB_LIBRARIES}
         systeminfo
@@ -1498,6 +1511,7 @@ if(Launcher_BUILD_UPDATER)
     add_executable("${Launcher_Name}_updater" WIN32 updater/prismupdater/updater_main.cpp)
     target_sources("${Launcher_Name}_updater" PRIVATE updater/prismupdater/updater.exe.manifest)
     target_link_libraries("${Launcher_Name}_updater" prism_updater_logic)
+    target_precompile_headers("${Launcher_Name}_updater" REUSE_FROM prism_updater_logic)
 
     if(DEFINED Launcher_APP_BINARY_NAME)
         set_target_properties("${Launcher_Name}_updater" PROPERTIES OUTPUT_NAME "${Launcher_APP_BINARY_NAME}_updater")
@@ -1528,6 +1542,8 @@ if(WIN32 OR (DEFINED Launcher_BUILD_FILELINKER AND Launcher_BUILD_FILELINKER))
     "${Launcher_GCC_WARNINGS}")
 
     target_include_directories(filelink_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    target_precompile_headers(filelink_logic PRIVATE ${PRECOMPILED_HEADERS})
+
     target_link_libraries(filelink_logic
         systeminfo
         BuildConfig
@@ -1541,6 +1557,8 @@ if(WIN32 OR (DEFINED Launcher_BUILD_FILELINKER AND Launcher_BUILD_FILELINKER))
     add_executable("${Launcher_Name}_filelink" WIN32 filelink/filelink_main.cpp)
 
     target_sources("${Launcher_Name}_filelink" PRIVATE filelink/filelink.exe.manifest)
+    target_precompile_headers("${Launcher_Name}_filelink" REUSE_FROM filelink_logic)
+
     # HACK: Fix manifest issues with Ninja in release mode (and only release mode) and MSVC
     # I have no idea why this works or why it's needed. UPDATE THIS IF YOU EDIT THE MANIFEST!!! -@getchoo
     # Thank you 2018 CMake mailing list thread https://cmake.cmake.narkive.com/LnotZXus/conflicting-msvc-manifests

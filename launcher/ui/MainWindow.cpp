@@ -1844,12 +1844,27 @@ void MainWindow::updateMultiplayerFeatureVisibility()
 {
     auto s = APPLICATION->settings();
 
-    // Toolbar visibility
+    // Toolbar visibility - control via widget action removal/addition
     bool showTerracottaToolBar = s->get("ShowTerracottaToolBar").toBool();
     bool showYukariConnectToolBar = s->get("ShowYukariConnectToolBar").toBool();
 
-    ui->actionTerracottaOnline->setVisible(showTerracottaToolBar);
-    ui->actionYukariConnectOnline->setVisible(showYukariConnectToolBar);
+    // Update toolbar visibility by removing/adding actions
+    // This keeps the menu items visible while hiding toolbar buttons
+    if (showTerracottaToolBar) {
+        if (!ui->mainToolBar->actions().contains(ui->actionTerracottaOnline)) {
+            ui->mainToolBar->insertAction(ui->actionHelpButton, ui->actionTerracottaOnline);
+        }
+    } else {
+        ui->mainToolBar->removeAction(ui->actionTerracottaOnline);
+    }
+
+    if (showYukariConnectToolBar) {
+        if (!ui->mainToolBar->actions().contains(ui->actionYukariConnectOnline)) {
+            ui->mainToolBar->insertAction(ui->actionHelpButton, ui->actionYukariConnectOnline);
+        }
+    } else {
+        ui->mainToolBar->removeAction(ui->actionYukariConnectOnline);
+    }
 
     // Status bar visibility
     bool showTerracottaStatusBar = s->get("ShowTerracottaStatusBar").toBool();

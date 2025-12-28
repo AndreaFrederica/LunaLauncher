@@ -1,0 +1,1696 @@
+# Luna Launcher Chinese (Simplified) Translation
+# Luna Launcher 简体中文翻译
+# Copyright (C) 2025 Luna Launcher Contributors
+# This file is distributed under the same license as the Luna Launcher.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Luna Launcher\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-12-28 12:00+0800\n"
+"PO-Revision-Date: 2025-12-28 12:00+0800\n"
+"Last-Translator: \n"
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Manual\n"
+
+# ========================================================================
+# YukariConnectPage
+# ========================================================================
+
+#: YukariConnectPage.cpp:40
+msgid "GitHub (Official)"
+msgstr "GitHub (官方)"
+
+#: YukariConnectPage.cpp:41
+msgid "Gitee (Mirror for China)"
+msgstr "Gitee (国内镜像)"
+
+#: YukariConnectPage.cpp:162
+msgid "Download Complete"
+msgstr "下载完成"
+
+#: YukariConnectPage.cpp:163
+msgid "YukariConnect has been successfully downloaded."
+msgstr "YukariConnect 已成功下载。"
+
+#: YukariConnectPage.cpp:165
+msgid "Download Failed"
+msgstr "下载失败"
+
+#: YukariConnectPage.cpp:166
+msgid "Failed to download YukariConnect. Please check your internet connection and try again."
+msgstr "下载 YukariConnect 失败。请检查网络连接后重试。"
+
+#: YukariConnectPage.cpp:175
+msgid "Executable Files (*.exe);;All Files (*)"
+msgstr "可执行文件 (*.exe);;所有文件 (*)"
+
+#: YukariConnectPage.cpp:177
+#: YukariConnectPage.cpp:178
+msgid "All Files (*)"
+msgstr "所有文件 (*)"
+
+#: YukariConnectPage.cpp:182
+msgid "Select YukariConnect Executable"
+msgstr "选择 YukariConnect 可执行文件"
+
+#: YukariConnectPage.cpp:194
+msgid "Invalid File"
+msgstr "无效文件"
+
+#: YukariConnectPage.cpp:195
+msgid "The selected file is not valid."
+msgstr "所选文件无效。"
+
+#: YukariConnectPage.cpp:203
+msgid "File Too Small"
+msgstr "文件过小"
+
+#: YukariConnectPage.cpp:204
+#, qt-format
+msgid "The selected file seems too small to be a valid YukariConnect executable (%1 MB).\n\nAre you sure you want to continue?"
+msgstr "所选文件似乎太小，不像是有效的 YukariConnect 可执行文件（%1 MB）。\n\n确定要继续吗？"
+
+#: YukariConnectPage.cpp:233
+msgid "Installation Complete"
+msgstr "安装完成"
+
+#: YukariConnectPage.cpp:234
+#, qt-format
+msgid "YukariConnect has been successfully installed from:\n%1"
+msgstr "YukariConnect 已成功从以下位置安装：\n%1"
+
+#: YukariConnectPage.cpp:236
+msgid "Installation Failed"
+msgstr "安装失败"
+
+#: YukariConnectPage.cpp:237
+#, qt-format
+msgid "Failed to copy YukariConnect to the target location.\n\nTarget: %1"
+msgstr "无法将 YukariConnect 复制到目标位置。\n\n目标位置：%1"
+
+#: YukariConnectPage.cpp:248
+msgid "File Not Found"
+msgstr "文件未找到"
+
+#: YukariConnectPage.cpp:248
+msgid "YukariConnect is not installed."
+msgstr "YukariConnect 未安装。"
+
+#: YukariConnectPage.cpp:252
+msgid "Delete YukariConnect"
+msgstr "删除 YukariConnect"
+
+#: YukariConnectPage.cpp:253
+msgid "Are you sure you want to delete YukariConnect?\n\nThis will prevent P2P multiplayer from working until you download it again."
+msgstr "确定要删除 YukariConnect 吗？\n\n删除后将无法使用 P2P 多人游戏功能，直到重新下载。"
+
+#: YukariConnectPage.cpp:262
+msgid "Deleted"
+msgstr "已删除"
+
+#: YukariConnectPage.cpp:262
+msgid "YukariConnect has been deleted."
+msgstr "YukariConnect 已删除。"
+
+#: YukariConnectPage.cpp:264
+msgid "Delete Failed"
+msgstr "删除失败"
+
+#: YukariConnectPage.cpp:264
+#, qt-format
+msgid "Failed to delete YukariConnect.\n\nYou may need to manually delete the file at:\n%1"
+msgstr "删除 YukariConnect 失败。\n\n您可能需要手动删除以下位置的文件：\n%1"
+
+#: YukariConnectPage.cpp:284-293
+msgid "<h3>YukariConnect P2P Multiplayer</h3>"
+msgstr "<h3>YukariConnect P2P 多人联机</h3>"
+
+#: YukariConnectPage.cpp:286
+msgid "<p><b>P2P Multiplayer Solution</b></p>"
+msgstr "<p><b>P2P 多人联机解决方案</b></p>"
+
+#: YukariConnectPage.cpp:287
+msgid "<p>YukariConnect is a P2P multiplayer solution for Minecraft that allows players to connect without port forwarding or central servers.</p>"
+msgstr "<p>YukariConnect 是一款面向 Minecraft 的 P2P 多人联机解决方案，允许玩家无需端口映射或中心服务器即可连接。</p>"
+
+#: YukariConnectPage.cpp:289
+msgid "<h4>YukariConnect Project</h4>"
+msgstr "<h4>YukariConnect 项目</h4>"
+
+#: YukariConnectPage.cpp:290
+#, qt-format
+msgid "<p><b>Developer:</b> %1<br>"
+msgstr "<p><b>开发者：</b> %1<br>"
+
+#: YukariConnectPage.cpp:291
+msgid "<b>Project URL:</b> <a href=\"%1\">%2</a></p>"
+msgstr "<b>项目地址：</b> <a href=\"%1\">%2</a></p>"
+
+#: YukariConnectPage.cpp:292
+msgid "<h4>License</h4>"
+msgstr "<h4>许可证</h4>"
+
+#: YukariConnectPage.cpp:293
+msgid "<p>YukariConnect is licensed under the <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
+msgstr "<p>YukariConnect 采用 <b>Mozilla Public License 2.0 (MPL-2.0)</b> 许可证。</p>"
+
+#: YukariConnectPage.cpp:295
+msgid "About YukariConnect"
+msgstr "关于 YukariConnect"
+
+#: YukariConnectPage.cpp:316
+msgid "Yes"
+msgstr "是"
+
+#: YukariConnectPage.cpp:320
+#: YukariConnectPage.cpp:334
+#: YukariConnectPage.cpp:335
+#: YukariConnectPage.cpp:336
+msgid "Unknown"
+msgstr "未知"
+
+#: YukariConnectPage.cpp:326
+#, qt-format
+msgid "%1 MB (%2 bytes)"
+msgstr "%1 MB (%2 字节)"
+
+#: YukariConnectPage.cpp:328
+#, qt-format
+msgid "%1 KB (%2 bytes)"
+msgstr "%1 KB (%2 字节)"
+
+#: YukariConnectPage.cpp:333
+msgid "No"
+msgstr "否"
+
+#: YukariConnectPage.cpp:334
+msgid "-"
+msgstr "-"
+
+#: YukariConnectPage.cpp:354
+msgid "Config File Not Found"
+msgstr "配置文件未找到"
+
+#: YukariConnectPage.cpp:355
+msgid "The configuration file (yukari.json) does not exist yet.\n\nWould you like to create a default configuration file?"
+msgstr "配置文件 (yukari.json) 尚不存在。\n\n是否要创建默认配置文件？"
+
+#: YukariConnectPage.cpp:375
+msgid "Config Created"
+msgstr "配置已创建"
+
+#: YukariConnectPage.cpp:376
+#, qt-format
+msgid "Default configuration file created at:\n%1"
+msgstr "默认配置文件已创建于：\n%1"
+
+#: YukariConnectPage.cpp:378
+msgid "Failed to Create Config"
+msgstr "创建配置失败"
+
+#: YukariConnectPage.cpp:379
+#, qt-format
+msgid "Could not create configuration file at:\n%1"
+msgstr "无法在以下位置创建配置文件：\n%1"
+
+#: YukariConnectPage.cpp:389
+msgid "Failed to Open Config"
+msgstr "打开配置失败"
+
+#: YukariConnectPage.cpp:390
+#, qt-format
+msgid "Could not open configuration file.\n\nLocation: %1\n\nYou can open it manually in a text editor."
+msgstr "无法打开配置文件。\n\n位置：%1\n\n您可以手动使用文本编辑器打开。"
+
+# ========================================================================
+# YukariConnectPage.ui
+# ========================================================================
+
+msgctxt "YukariConnectPage"
+msgid "About YukariConnect"
+msgstr "关于 YukariConnect"
+
+msgctxt "YukariConnectPage"
+msgid "<html><head/><body><p>YukariConnect is a P2P networking solution (MPL-2.0 licensed) developed specifically for Luna Launcher that allows Minecraft players to connect without port forwarding or central servers.</p><p>The YukariConnect program needs to be downloaded and running to use P2P multiplayer features.</p></body></html>"
+msgstr "<html><head/><body><p>YukariConnect 是专为 Luna Launcher 开发的 P2P 联机解决方案（采用 MPL-2.0 许可证），允许 Minecraft 玩家无需端口映射或中心服务器即可连接。</p><p>需要下载并运行 YukariConnect 程序才能使用 P2P 多人游戏功能。</p></body></html>"
+
+msgctxt "YukariConnectPage"
+msgid "View License & Attribution"
+msgstr "查看许可与归属"
+
+msgctxt "YukariConnectPage"
+msgid "Show licensing and attribution information for YukariConnect"
+msgstr "显示 YukariConnect 的许可和归属信息"
+
+msgctxt "YukariConnectPage"
+msgid "Status"
+msgstr "状态"
+
+msgctxt "YukariConnectPage"
+msgid "Installed:"
+msgstr "已安装："
+
+msgctxt "YukariConnectPage"
+msgid "Checking..."
+msgstr "检查中..."
+
+msgctxt "YukariConnectPage"
+msgid "Version:"
+msgstr "版本："
+
+msgctxt "YukariConnectPage"
+msgid "File Size:"
+msgstr "文件大小："
+
+msgctxt "YukariConnectPage"
+msgid "Location:"
+msgstr "位置："
+
+msgctxt "YukariConnectPage"
+msgid "Download"
+msgstr "下载"
+
+msgctxt "YukariConnectPage"
+msgid "Select the download source for YukariConnect:"
+msgstr "选择 YukariConnect 的下载源："
+
+msgctxt "YukariConnectPage"
+msgid "Download / Update"
+msgstr "下载 / 更新"
+
+msgctxt "YukariConnectPage"
+msgid "Install from File..."
+msgstr "从文件安装..."
+
+msgctxt "YukariConnectPage"
+msgid "Select a YukariConnect executable file to install manually"
+msgstr "选择一个 YukariConnect 可执行文件进行手动安装"
+
+msgctxt "YukariConnectPage"
+msgid "Delete"
+msgstr "删除"
+
+msgctxt "YukariConnectPage"
+msgid "Settings"
+msgstr "设置"
+
+msgctxt "YukariConnectPage"
+msgid "Server URL:"
+msgstr "服务器 URL："
+
+msgctxt "YukariConnectPage"
+msgid "http://localhost:12580"
+msgstr "http://localhost:12580"
+
+msgctxt "YukariConnectPage"
+msgid "Polling Interval:"
+msgstr "轮询间隔："
+
+msgctxt "YukariConnectPage"
+msgid "How often to refresh player list and status"
+msgstr "刷新玩家列表和状态的频率"
+
+msgctxt "YukariConnectPage"
+msgid "Max Log Lines:"
+msgstr "最大日志行数："
+
+msgctxt "YukariConnectPage"
+msgid "Maximum log lines (0 = unlimited)"
+msgstr "最大日志行数（0 = 无限制）"
+
+msgctxt "YukariConnectPage"
+msgid "Stop YukariConnect when launcher closes"
+msgstr "启动器关闭时停止 YukariConnect"
+
+msgctxt "YukariConnectPage"
+msgid "If enabled, the YukariConnect server will be stopped when you close the launcher. If disabled, it will continue running in the background."
+msgstr "启用后，关闭启动器时会停止 YukariConnect 服务器。禁用后，它将继续在后台运行。"
+
+msgctxt "YukariConnectPage"
+msgid "Edit Configuration File"
+msgstr "编辑配置文件"
+
+msgctxt "YukariConnectPage"
+msgid "Open yukari.json configuration file in text editor"
+msgstr "在文本编辑器中打开 yukari.json 配置文件"
+
+msgctxt "YukariConnectPage"
+msgid "Quick Actions"
+msgstr "快捷操作"
+
+msgctxt "YukariConnectPage"
+msgid "Use the Online menu in the main window to manage rooms and connections."
+msgstr "使用主窗口中的「联机」菜单管理房间和连接。"
+
+msgctxt "YukariConnectPage"
+msgid "Open Online Panel"
+msgstr "打开联机面板"
+
+# ========================================================================
+# YukariConnectOnlinePanel
+# ========================================================================
+
+#: YukariConnectOnlinePanel.cpp:105
+msgid "Now monitoring for player changes..."
+msgstr "开始监控玩家变化..."
+
+#: YukariConnectOnlinePanel.cpp:110
+#, qt-format
+msgid "Player list updated (index: %1)"
+msgstr "玩家列表已更新（索引：%1）"
+
+#: YukariConnectOnlinePanel.cpp:161
+msgid "Starting..."
+msgstr "启动中..."
+
+#: YukariConnectOnlinePanel.cpp:162
+msgid "Starting YukariConnect process..."
+msgstr "正在启动 YukariConnect 进程..."
+
+#: YukariConnectOnlinePanel.cpp:165
+msgid "YukariConnect process started successfully."
+msgstr "YukariConnect 进程启动成功。"
+
+#: YukariConnectOnlinePanel.cpp:166
+#: YukariConnectOnlinePanel.cpp:378
+#: YukariConnectOnlinePanel.cpp:415
+#: YukariConnectOnlinePanel.cpp:517
+msgid "Connected"
+msgstr "已连接"
+
+#: YukariConnectOnlinePanel.cpp:172
+msgid "Failed to start YukariConnect process. Please check if it is installed."
+msgstr "无法启动 YukariConnect 进程。请检查是否已安装。"
+
+#: YukariConnectOnlinePanel.cpp:173
+#: YukariConnectOnlinePanel.cpp:226
+#: YukariConnectOnlinePanel.cpp:386
+#: YukariConnectOnlinePanel.cpp:427
+msgid "Failed"
+msgstr "失败"
+
+#: YukariConnectOnlinePanel.cpp:218
+msgid "YukariConnect not running, starting..."
+msgstr "YukariConnect 未运行，正在启动..."
+
+#: YukariConnectOnlinePanel.cpp:220
+msgid "Failed to start YukariConnect process."
+msgstr "无法启动 YukariConnect 进程。"
+
+#: YukariConnectOnlinePanel.cpp:221
+msgid "Not Running"
+msgstr "未运行"
+
+#: YukariConnectOnlinePanel.cpp:231
+msgid "Refreshing state..."
+msgstr "刷新状态..."
+
+#: YukariConnectOnlinePanel.cpp:238
+msgid "Failed to fetch state. Is YukariConnect server running?"
+msgstr "无法获取状态。YukariConnect 服务器是否正在运行？"
+
+#: YukariConnectOnlinePanel.cpp:239
+msgid "Error"
+msgstr "错误"
+
+#: YukariConnectOnlinePanel.cpp:244
+msgid "Start Server"
+msgstr "启动服务器"
+
+#: YukariConnectOnlinePanel.cpp:245
+msgid "Start the YukariConnect server"
+msgstr "启动 YukariConnect 服务器"
+
+#: YukariConnectOnlinePanel.cpp:256
+msgid "YukariConnect server URL not available. Please start the server first."
+msgstr "YukariConnect 服务器 URL 不可用。请先启动服务器。"
+
+#: YukariConnectOnlinePanel.cpp:259
+#, qt-format
+msgid "Opening YukariConnect Web UI in browser: %1"
+msgstr "在浏览器中打开 YukariConnect Web UI：%1"
+
+#: YukariConnectOnlinePanel.cpp:267
+msgid "Missing Player Name"
+msgstr "缺少玩家名称"
+
+#: YukariConnectOnlinePanel.cpp:267
+msgid "Please enter a player name."
+msgstr "请输入玩家名称。"
+
+#: YukariConnectOnlinePanel.cpp:274
+#, qt-format
+msgid "Starting scanning mode for player: %1"
+msgstr "为玩家启动扫描模式：%1"
+
+#: YukariConnectOnlinePanel.cpp:277
+msgid "Successfully entered scanning mode. Waiting for room creation..."
+msgstr "已成功进入扫描模式。等待创建房间..."
+
+#: YukariConnectOnlinePanel.cpp:281
+msgid "Failed to enter scanning mode."
+msgstr "进入扫描模式失败。"
+
+#: YukariConnectOnlinePanel.cpp:289
+msgid "Missing Room Code"
+msgstr "缺少房间代码"
+
+#: YukariConnectOnlinePanel.cpp:289
+msgid "Please enter a room code."
+msgstr "请输入房间代码。"
+
+#: YukariConnectOnlinePanel.cpp:302
+#, qt-format
+msgid "Joining room: %1 as player: %2"
+msgstr "加入房间：%1，玩家：%2"
+
+#: YukariConnectOnlinePanel.cpp:305
+msgid "Successfully joined room. Waiting for connection..."
+msgstr "已成功加入房间。等待连接..."
+
+#: YukariConnectOnlinePanel.cpp:309
+msgid "Failed to join room. Check the room code and try again."
+msgstr "加入房间失败。请检查房间代码后重试。"
+
+#: YukariConnectOnlinePanel.cpp:310
+msgid "Join Failed"
+msgstr "加入失败"
+
+#: YukariConnectOnlinePanel.cpp:310
+msgid "Failed to join the room. The room code may be invalid or the room is full."
+msgstr "无法加入房间。房间代码可能无效或房间已满。"
+
+#: YukariConnectOnlinePanel.cpp:316
+msgid "Closing room and returning to idle..."
+msgstr "关闭房间并返回空闲状态..."
+
+#: YukariConnectOnlinePanel.cpp:319
+msgid "Room closed successfully. Back to idle state."
+msgstr "房间关闭成功。返回空闲状态。"
+
+#: YukariConnectOnlinePanel.cpp:323
+msgid "Failed to close room."
+msgstr "关闭房间失败。"
+
+#: YukariConnectOnlinePanel.cpp:334
+msgid "Stop Server"
+msgstr "停止服务器"
+
+#: YukariConnectOnlinePanel.cpp:335
+msgid "Are you sure you want to stop the YukariConnect server?\n\nThis will gracefully shut down the server and close all connections."
+msgstr "确定要停止 YukariConnect 服务器吗？\n\n这将优雅地关闭服务器并断开所有连接。"
+
+#: YukariConnectOnlinePanel.cpp:339
+msgid "Stopping YukariConnect server..."
+msgstr "正在停止 YukariConnect 服务器..."
+
+#: YukariConnectOnlinePanel.cpp:348
+msgid "YukariConnect server stopped gracefully."
+msgstr "YukariConnect 服务器已优雅关闭。"
+
+#: YukariConnectOnlinePanel.cpp:350
+msgid "YukariConnect server shutdown timeout, assuming stopped."
+msgstr "YukariConnect 服务器关闭超时，假定已停止。"
+
+#: YukariConnectOnlinePanel.cpp:355
+msgid "Stopped"
+msgstr "已停止"
+
+#: YukariConnectOnlinePanel.cpp:361
+msgid "Starting YukariConnect server..."
+msgstr "正在启动 YukariConnect 服务器..."
+
+#: YukariConnectOnlinePanel.cpp:365
+msgid "Cleaning up existing process..."
+msgstr "正在清理现有进程..."
+
+#: YukariConnectOnlinePanel.cpp:371
+msgid "YukariConnect server started successfully."
+msgstr "YukariConnect 服务器启动成功。"
+
+#: YukariConnectOnlinePanel.cpp:384
+msgid "Failed to start YukariConnect server. Please check if it is installed."
+msgstr "无法启动 YukariConnect 服务器。请检查是否已安装。"
+
+#: YukariConnectOnlinePanel.cpp:394
+msgid "Restart Server"
+msgstr "重启服务器"
+
+#: YukariConnectOnlinePanel.cpp:395
+msgid "Are you sure you want to restart the YukariConnect server?\n\nThis will disconnect all active connections."
+msgstr "确定要重启 YukariConnect 服务器吗？\n\n这将断开所有活动连接。"
+
+#: YukariConnectOnlinePanel.cpp:399
+msgid "Restarting YukariConnect server..."
+msgstr "正在重启 YukariConnect 服务器..."
+
+#: YukariConnectOnlinePanel.cpp:413
+msgid "YukariConnect server restarted successfully."
+msgstr "YukariConnect 服务器重启成功。"
+
+#: YukariConnectOnlinePanel.cpp:425
+msgid "Failed to restart YukariConnect server."
+msgstr "重启 YukariConnect 服务器失败。"
+
+#: YukariConnectOnlinePanel.cpp:436
+msgid "Emergency Stop"
+msgstr "紧急停止"
+
+#: YukariConnectOnlinePanel.cpp:437
+msgid "Are you sure you want to emergency stop YukariConnect?\n\nThis will forcefully stop all P2P connections."
+msgstr "确定要紧急停止 YukariConnect 吗？\n\n这将强制停止所有 P2P 连接。"
+
+#: YukariConnectOnlinePanel.cpp:441
+msgid "Emergency stop initiated..."
+msgstr "正在执行紧急停止..."
+
+#: YukariConnectOnlinePanel.cpp:444
+msgid "Emergency stop successful."
+msgstr "紧急停止成功。"
+
+#: YukariConnectOnlinePanel.cpp:446
+#: YukariConnectOnlinePanel.cpp:891
+msgid "Start the YukariConnect server"
+msgstr "启动 YukariConnect 服务器"
+
+#: YukariConnectOnlinePanel.cpp:453
+msgid "Emergency stop failed."
+msgstr "紧急停止失败。"
+
+#: YukariConnectOnlinePanel.cpp:462
+msgid "No Room Code"
+msgstr "无房间代码"
+
+#: YukariConnectOnlinePanel.cpp:462
+msgid "No room code to copy. Create or join a room first."
+msgstr "没有可复制的房间代码。请先创建或加入房间。"
+
+#: YukariConnectOnlinePanel.cpp:468
+#, qt-format
+msgid "Room code copied to clipboard: %1"
+msgstr "房间代码已复制到剪贴板：%1"
+
+#: YukariConnectOnlinePanel.cpp:473
+msgid "Fetching logs from YukariConnect server..."
+msgstr "正在从 YukariConnect 服务器获取日志..."
+
+#: YukariConnectOnlinePanel.cpp:478
+msgid "Logs fetched successfully."
+msgstr "日志获取成功。"
+
+#: YukariConnectOnlinePanel.cpp:480
+msgid "Failed to fetch logs."
+msgstr "获取日志失败。"
+
+#: YukariConnectOnlinePanel.cpp:491-500
+msgid "<h3>YukariConnect P2P Multiplayer</h3>"
+msgstr "<h3>YukariConnect P2P 多人联机</h3>"
+
+#: YukariConnectOnlinePanel.cpp:493
+msgid "<p><b>P2P Multiplayer Solution</b></p>"
+msgstr "<p><b>P2P 多人联机解决方案</b></p>"
+
+#: YukariConnectOnlinePanel.cpp:494
+msgid "<p>YukariConnect is a P2P multiplayer solution for Minecraft that allows players to connect without port forwarding or central servers.</p>"
+msgstr "<p>YukariConnect 是一款面向 Minecraft 的 P2P 多人联机解决方案，允许玩家无需端口映射或中心服务器即可连接。</p>"
+
+#: YukariConnectOnlinePanel.cpp:496
+msgid "<h4>YukariConnect Project</h4>"
+msgstr "<h4>YukariConnect 项目</h4>"
+
+#: YukariConnectOnlinePanel.cpp:497
+#, qt-format
+msgid "<p><b>Developer:</b> %1<br>"
+msgstr "<p><b>开发者：</b> %1<br>"
+
+#: YukariConnectOnlinePanel.cpp:498
+msgid "<b>Project URL:</b> <a href=\"%1\">%2</a></p>"
+msgstr "<b>项目地址：</b> <a href=\"%1\">%2</a></p>"
+
+#: YukariConnectOnlinePanel.cpp:499
+msgid "<h4>License</h4>"
+msgstr "<h4>许可证</h4>"
+
+#: YukariConnectOnlinePanel.cpp:500
+msgid "<p>YukariConnect is licensed under the <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
+msgstr "<p>YukariConnect 采用 <b>Mozilla Public License 2.0 (MPL-2.0)</b> 许可证。</p>"
+
+#: YukariConnectOnlinePanel.cpp:502
+msgid "About YukariConnect"
+msgstr "关于 YukariConnect"
+
+#: YukariConnectOnlinePanel.cpp:518
+msgid "YukariConnect server is now available."
+msgstr "YukariConnect 服务器现在可用。"
+
+#: YukariConnectOnlinePanel.cpp:520
+msgid "YukariConnect server is not available."
+msgstr "YukariConnect 服务器不可用。"
+
+#: YukariConnectOnlinePanel.cpp:584
+#: YukariConnectOnlinePanel.cpp:590
+msgid "-"
+msgstr "-"
+
+#: YukariConnectOnlinePanel.cpp:673
+msgid "Host"
+msgstr "主机"
+
+#: YukariConnectOnlinePanel.cpp:676
+msgid "Guest"
+msgstr "访客"
+
+#: YukariConnectOnlinePanel.cpp:679
+msgid "Local"
+msgstr "本地"
+
+#: YukariConnectOnlinePanel.cpp:712
+msgid "Waiting"
+msgstr "等待中"
+
+#: YukariConnectOnlinePanel.cpp:714
+msgid "Host Scanning"
+msgstr "主机扫描中"
+
+#: YukariConnectOnlinePanel.cpp:716
+msgid "Host Starting"
+msgstr "主机启动中"
+
+#: YukariConnectOnlinePanel.cpp:718
+msgid "Host Ready"
+msgstr "主机就绪"
+
+#: YukariConnectOnlinePanel.cpp:720
+msgid "Guest Connecting"
+msgstr "访客连接中"
+
+#: YukariConnectOnlinePanel.cpp:722
+msgid "Guest Starting"
+msgstr "访客启动中"
+
+#: YukariConnectOnlinePanel.cpp:724
+msgid "Guest Connected"
+msgstr "访客已连接"
+
+#: YukariConnectOnlinePanel.cpp:726
+msgid "Exception"
+msgstr "异常"
+
+#: YukariConnectOnlinePanel.cpp:728
+msgid "Unknown"
+msgstr "未知"
+
+#: YukariConnectOnlinePanel.cpp:737
+msgid "Enter your player name and click Create Room to host, or enter a room code to join."
+msgstr "输入您的玩家名称并点击「创建房间」以主机身份开始，或输入房间代码加入。"
+
+#: YukariConnectOnlinePanel.cpp:740
+msgid "Open your Minecraft world, press Esc, and click 'Open to LAN' to start the LAN server."
+msgstr "打开您的 Minecraft 世界，按 Esc 键，然后点击「对局域网开放」以启动 LAN 服务器。"
+
+#: YukariConnectOnlinePanel.cpp:743
+msgid "Starting your room... The server will be ready shortly."
+msgstr "正在启动您的房间...服务器即将就绪。"
+
+#: YukariConnectOnlinePanel.cpp:746
+msgid "Your room is ready! Share the room code with friends so they can join."
+msgstr "您的房间已就绪！将房间代码分享给朋友让他们加入。"
+
+#: YukariConnectOnlinePanel.cpp:749
+msgid "Connecting to the host room... This may take a moment."
+msgstr "正在连接主机房间...这可能需要一点时间。"
+
+#: YukariConnectOnlinePanel.cpp:752
+msgid "Setting up connection to the Minecraft server..."
+msgstr "正在设置与 Minecraft 服务器的连接..."
+
+#: YukariConnectOnlinePanel.cpp:755
+msgid "Connected! You can now join the game using the connection URL above."
+msgstr "已连接！您现在可以使用上面的连接 URL 加入游戏。"
+
+#: YukariConnectOnlinePanel.cpp:758
+msgid "An error occurred. Check the logs for details and try creating or joining a room again."
+msgstr "发生错误。请检查日志以获取详细信息，然后尝试重新创建或加入房间。"
+
+#: YukariConnectOnlinePanel.cpp:761
+msgid "Please wait..."
+msgstr "请稍候..."
+
+#: YukariConnectOnlinePanel.cpp:777
+msgid "Started polling for state changes..."
+msgstr "开始轮询状态变化..."
+
+#: YukariConnectOnlinePanel.cpp:785
+msgid "Cannot connect to host"
+msgstr "无法连接到主机"
+
+#: YukariConnectOnlinePanel.cpp:787
+msgid "Connection to host lost"
+msgstr "与主机的连接丢失"
+
+#: YukariConnectOnlinePanel.cpp:789
+msgid "Process crashed (guest)"
+msgstr "进程崩溃（访客）"
+
+#: YukariConnectOnlinePanel.cpp:791
+msgid "Process crashed (host)"
+msgstr "进程崩溃（主机）"
+
+#: YukariConnectOnlinePanel.cpp:793
+msgid "Minecraft server closed"
+msgstr "Minecraft 服务器已关闭"
+
+#: YukariConnectOnlinePanel.cpp:795
+msgid "Invalid server response"
+msgstr "无效的服务器响应"
+
+#: YukariConnectOnlinePanel.cpp:797
+msgid "Unknown error"
+msgstr "未知错误"
+
+#: YukariConnectOnlinePanel.cpp:805
+msgid "Easiest"
+msgstr "最简单"
+
+#: YukariConnectOnlinePanel.cpp:807
+msgid "Simple"
+msgstr "简单"
+
+#: YukariConnectOnlinePanel.cpp:809
+msgid "Medium"
+msgstr "中等"
+
+#: YukariConnectOnlinePanel.cpp:811
+msgid "Tough"
+msgstr "困难"
+
+#: YukariConnectOnlinePanel.cpp:826
+msgid "Room closed: Minecraft game has exited."
+msgstr "房间关闭：Minecraft 游戏已退出。"
+
+#: YukariConnectOnlinePanel.cpp:827
+msgid "You can start a new room whenever you're ready to play again."
+msgstr "您可以随时准备再玩时启动新房间。"
+
+#: YukariConnectOnlinePanel.cpp:830
+msgid "Connection lost: The host closed the room or disconnected."
+msgstr "连接丢失：主机已关闭房间或断开连接。"
+
+#: YukariConnectOnlinePanel.cpp:833
+msgid "Connection failed: Unable to reach the host room."
+msgstr "连接失败：无法到达主机房间。"
+
+#: YukariConnectOnlinePanel.cpp:837
+#, qt-format
+msgid "Error: Process crashed. Reason: %1"
+msgstr "错误：进程崩溃。原因：%1"
+
+#: YukariConnectOnlinePanel.cpp:838
+msgid "Try restarting the YukariConnect server."
+msgstr "尝试重启 YukariConnect 服务器。"
+
+#: YukariConnectOnlinePanel.cpp:841
+msgid "Protocol error: Received invalid response from server."
+msgstr "协议错误：收到来自服务器的无效响应。"
+
+#: YukariConnectOnlinePanel.cpp:844
+#, qt-format
+msgid "Exception occurred: %1"
+msgstr "发生异常：%1"
+
+#: YukariConnectOnlinePanel.cpp:849
+msgid "Auto-recovering from exception state..."
+msgstr "正在从异常状态自动恢复..."
+
+#: YukariConnectOnlinePanel.cpp:851
+msgid "Successfully recovered to idle state."
+msgstr "已成功恢复到空闲状态。"
+
+#: YukariConnectOnlinePanel.cpp:857
+msgid "Failed to recover from exception state. You may need to restart the server."
+msgstr "无法从异常状态恢复。您可能需要重启服务器。"
+
+#: YukariConnectOnlinePanel.cpp:865
+msgid "Stopped polling state."
+msgstr "已停止轮询状态。"
+
+#: YukariConnectOnlinePanel.cpp:878
+#, qt-format
+msgid "Connected to YukariConnect server at: %1 (Port: %2)"
+msgstr "已连接到 YukariConnect 服务器，地址：%1（端口：%2）"
+
+#: YukariConnectOnlinePanel.cpp:880
+msgid "Not connected to YukariConnect server"
+msgstr "未连接到 YukariConnect 服务器"
+
+#: YukariConnectOnlinePanel.cpp:888
+msgid "Gracefully stop the YukariConnect server"
+msgstr "优雅地停止 YukariConnect 服务器"
+
+# ========================================================================
+# YukariConnectOnlinePanel.ui
+# ========================================================================
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "YukariConnect Online Panel"
+msgstr "YukariConnect 联机面板"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Current Status"
+msgstr "当前状态"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "State:"
+msgstr "状态："
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Waiting"
+msgstr "等待中"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Refresh"
+msgstr "刷新"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Open Web UI"
+msgstr "打开 Web 界面"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Open YukariConnect Web UI in browser"
+msgstr "在浏览器中打开 YukariConnect Web UI"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Enter your player name and click Create Room to host, or enter a room code to join."
+msgstr "输入您的玩家名称并点击「创建房间」以主机身份开始，或输入房间代码加入。"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Room Information"
+msgstr "房间信息"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Room Code:"
+msgstr "房间代码："
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Copy"
+msgstr "复制"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Connection URL:"
+msgstr "连接 URL："
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Connection Difficulty:"
+msgstr "连接难度："
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Connected Players"
+msgstr "已连接玩家"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Name"
+msgstr "名称"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Machine ID"
+msgstr "机器 ID"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Version"
+msgstr "版本"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Type"
+msgstr "类型"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Actions"
+msgstr "操作"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Player Name:"
+msgstr "玩家名称："
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Enter your player name"
+msgstr "输入您的玩家名称"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Create Room (Host)"
+msgstr "创建房间（主机）"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Join Room"
+msgstr "加入房间"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Enter room code to join"
+msgstr "输入要加入的房间代码"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Close Room"
+msgstr "关闭房间"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Stop hosting and return to idle (keeps server running)"
+msgstr "停止托管并返回空闲状态（保持服务器运行）"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Stop Server"
+msgstr "停止服务器"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Gracefully stop the YukariConnect server"
+msgstr "优雅地停止 YukariConnect 服务器"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Restart Server"
+msgstr "重启服务器"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Emergency Stop"
+msgstr "紧急停止"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Forcefully stop all connections (use only if needed)"
+msgstr "强制停止所有连接（仅在必要时使用）"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Logs"
+msgstr "日志"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Fetch Log"
+msgstr "获取日志"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Clear"
+msgstr "清空"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "About YukariConnect"
+msgstr "关于 YukariConnect"
+
+msgctxt "YukariConnectOnlinePanel"
+msgid "Show licensing and attribution information"
+msgstr "显示许可和归属信息"
+
+# ========================================================================
+# TerracottaPage
+# ========================================================================
+
+#: TerracottaPage.cpp:36
+msgid "GitHub (Official)"
+msgstr "GitHub (官方)"
+
+#: TerracottaPage.cpp:37
+msgid "Gitee (Mirror for China)"
+msgstr "Gitee (国内镜像)"
+
+#: TerracottaPage.cpp:149
+msgid "Download Complete"
+msgstr "下载完成"
+
+#: TerracottaPage.cpp:150
+msgid "Terracotta has been successfully downloaded."
+msgstr "Terracotta 已成功下载。"
+
+#: TerracottaPage.cpp:152
+msgid "Download Failed"
+msgstr "下载失败"
+
+#: TerracottaPage.cpp:153
+msgid "Failed to download Terracotta. Please check your internet connection and try again."
+msgstr "下载 Terracotta 失败。请检查网络连接后重试。"
+
+#: TerracottaPage.cpp:164
+msgid "File Not Found"
+msgstr "文件未找到"
+
+#: TerracottaPage.cpp:164
+msgid "Terracotta is not installed."
+msgstr "Terracotta 未安装。"
+
+#: TerracottaPage.cpp:168
+msgid "Delete Terracotta"
+msgstr "删除 Terracotta"
+
+#: TerracottaPage.cpp:169
+msgid "Are you sure you want to delete Terracotta?\n\nThis will prevent P2P multiplayer from working until you download it again."
+msgstr "确定要删除 Terracotta 吗？\n\n删除后将无法使用 P2P 多人游戏功能，直到重新下载。"
+
+#: TerracottaPage.cpp:178
+msgid "Deleted"
+msgstr "已删除"
+
+#: TerracottaPage.cpp:178
+msgid "Terracotta has been deleted."
+msgstr "Terracotta 已删除。"
+
+#: TerracottaPage.cpp:180
+msgid "Delete Failed"
+msgstr "删除失败"
+
+#: TerracottaPage.cpp:180
+#, qt-format
+msgid "Failed to delete Terracotta.\n\nYou may need to manually delete the file at:\n%1"
+msgstr "删除 Terracotta 失败。\n\n您可能需要手动删除以下位置的文件：\n%1"
+
+#: TerracottaPage.cpp:200-217
+msgid "<h3>Terracotta P2P Multiplayer</h3>"
+msgstr "<h3>Terracotta P2P 多人联机</h3>"
+
+#: TerracottaPage.cpp:202
+msgid "<p><b>P2P Multiplayer Integration for Luna Launcher</b></p>"
+msgstr "<p><b>Luna Launcher 的 P2P 多人联机集成</b></p>"
+
+#: TerracottaPage.cpp:203
+msgid "<p>This feature integrates with Terracotta, a P2P multiplayer solution for Minecraft.</p>"
+msgstr "<p>此功能集成了 Terracotta，一款面向 Minecraft 的 P2P 多人联机解决方案。</p>"
+
+#: TerracottaPage.cpp:205
+msgid "<h4>Terracotta Project</h4>"
+msgstr "<h4>Terracotta 项目</h4>"
+
+#: TerracottaPage.cpp:206
+msgid "<p><b>Developer:</b> burningtnt<br>"
+msgstr "<p><b>开发者：</b> burningtnt<br>"
+
+#: TerracottaPage.cpp:207
+msgid "<b>Project URL:</b> <a href=\"https://github.com/burningtnt/Terracotta\">https://github.com/burningtnt/Terracotta</a></p>"
+msgstr "<b>项目地址：</b> <a href=\"https://github.com/burningtnt/Terracotta\">https://github.com/burningtnt/Terracotta</a></p>"
+
+#: TerracottaPage.cpp:209
+msgid "<h4>License</h4>"
+msgstr "<h4>许可证</h4>"
+
+#: TerracottaPage.cpp:210
+msgid "<p>Terracotta is licensed under <b>AGPL-3.0</b> with the following exception:</p>"
+msgstr "<p>Terracotta 采用 <b>AGPL-3.0</b> 许可证，包含以下例外条款：</p>"
+
+#: TerracottaPage.cpp:220
+msgid "About Terracotta"
+msgstr "关于 Terracotta"
+
+# ========================================================================
+# TerracottaPage.ui
+# ========================================================================
+
+msgctxt "TerracottaPage"
+msgid "About Terracotta"
+msgstr "关于 Terracotta"
+
+msgctxt "TerracottaPage"
+msgid "<html><head/><body><p>Terracotta is a P2P networking solution that allows Minecraft players to connect without port forwarding or central servers. It uses EasyTier to create direct connections between players.</p><p>The Terracotta program needs to be downloaded and running to use P2P multiplayer features.</p></body></html>"
+msgstr "<html><head/><body><p>Terracotta 是一款 P2P 联机解决方案，允许 Minecraft 玩家无需端口映射或中心服务器即可连接。它使用 EasyTier 在玩家之间建立直接连接。</p><p>需要下载并运行 Terracotta 程序才能使用 P2P 多人游戏功能。</p></body></html>"
+
+msgctxt "TerracottaPage"
+msgid "View License & Attribution"
+msgstr "查看许可与归属"
+
+msgctxt "TerracottaPage"
+msgid "Show licensing and attribution information for Terracotta"
+msgstr "显示 Terracotta 的许可和归属信息"
+
+msgctxt "TerracottaPage"
+msgid "Select the download source for Terracotta:"
+msgstr "选择 Terracotta 的下载源："
+
+msgctxt "TerracottaPage"
+msgid "Stop Terracotta when launcher closes"
+msgstr "启动器关闭时停止 Terracotta"
+
+msgctxt "TerracottaPage"
+msgid "If enabled, the Terracotta server will be stopped when you close the launcher. If disabled, it will continue running in the background."
+msgstr "启用后，关闭启动器时会停止 Terracotta 服务器。禁用后，它将继续在后台运行。"
+
+msgctxt "TerracottaPage"
+msgid "Use the Online menu in the main window to manage rooms and connections."
+msgstr "使用主窗口中的「联机」菜单管理房间和连接。"
+
+# ========================================================================
+# TerracottaOnlinePanel
+# ========================================================================
+
+#: TerracottaOnlinePanel.cpp:110
+msgid "Player list updated (index: %1)"
+msgstr "玩家列表已更新（索引：%1）"
+
+#: TerracottaOnlinePanel.cpp:165
+msgid "Starting Terracotta process..."
+msgstr "正在启动 Terracotta 进程..."
+
+#: TerracottaOnlinePanel.cpp:169
+msgid "Terracotta process started successfully."
+msgstr "Terracotta 进程启动成功。"
+
+#: TerracottaOnlinePanel.cpp:176
+msgid "Failed to start Terracotta process. Please check if it is installed."
+msgstr "无法启动 Terracotta 进程。请检查是否已安装。"
+
+#: TerracottaOnlinePanel.cpp:222
+msgid "Terracotta not running, starting..."
+msgstr "Terracotta 未运行，正在启动..."
+
+#: TerracottaOnlinePanel.cpp:224
+msgid "Failed to start Terracotta process."
+msgstr "无法启动 Terracotta 进程。"
+
+#: TerracottaOnlinePanel.cpp:242
+msgid "Failed to fetch state. Is Terracotta server running?"
+msgstr "无法获取状态。Terracotta 服务器是否正在运行？"
+
+#: TerracottaOnlinePanel.cpp:249
+msgid "Start the Terracotta server"
+msgstr "启动 Terracotta 服务器"
+
+#: TerracottaOnlinePanel.cpp:260
+msgid "Terracotta server URL not available. Please start the server first."
+msgstr "Terracotta 服务器 URL 不可用。请先启动服务器。"
+
+#: TerracottaOnlinePanel.cpp:263
+#, qt-format
+msgid "Opening Terracotta Web UI in browser: %1"
+msgstr "在浏览器中打开 Terracotta Web UI：%1"
+
+#: TerracottaOnlinePanel.cpp:278
+#, qt-format
+msgid "Starting scanning mode for player: %1"
+msgstr "为玩家启动扫描模式：%1"
+
+#: TerracottaOnlinePanel.cpp:281
+msgid "Successfully entered scanning mode. Waiting for room creation..."
+msgstr "已成功进入扫描模式。等待创建房间..."
+
+#: TerracottaOnlinePanel.cpp:285
+msgid "Failed to enter scanning mode."
+msgstr "进入扫描模式失败。"
+
+#: TerracottaOnlinePanel.cpp:306
+#, qt-format
+msgid "Joining room: %1 as player: %2"
+msgstr "加入房间：%1，玩家：%2"
+
+#: TerracottaOnlinePanel.cpp:309
+msgid "Successfully joined room. Waiting for connection..."
+msgstr "已成功加入房间。等待连接..."
+
+#: TerracottaOnlinePanel.cpp:313
+msgid "Failed to join room. Check the room code and try again."
+msgstr "加入房间失败。请检查房间代码后重试。"
+
+#: TerracottaOnlinePanel.cpp:320
+msgid "Closing room and returning to idle..."
+msgstr "关闭房间并返回空闲状态..."
+
+#: TerracottaOnlinePanel.cpp:323
+msgid "Room closed successfully. Back to idle state."
+msgstr "房间关闭成功。返回空闲状态。"
+
+#: TerracottaOnlinePanel.cpp:327
+msgid "Failed to close room."
+msgstr "关闭房间失败。"
+
+#: TerracottaOnlinePanel.cpp:339
+msgid "Are you sure you want to stop the Terracotta server?\n\nThis will gracefully shut down the server and close all connections."
+msgstr "确定要停止 Terracotta 服务器吗？\n\n这将优雅地关闭服务器并断开所有连接。"
+
+#: TerracottaOnlinePanel.cpp:343
+msgid "Stopping Terracotta server..."
+msgstr "正在停止 Terracotta 服务器..."
+
+#: TerracottaOnlinePanel.cpp:352
+msgid "Terracotta server stopped gracefully."
+msgstr "Terracotta 服务器已优雅关闭。"
+
+#: TerracottaOnlinePanel.cpp:354
+msgid "Terracotta server shutdown timeout, assuming stopped."
+msgstr "Terracotta 服务器关闭超时，假定已停止。"
+
+#: TerracottaOnlinePanel.cpp:365
+msgid "Starting Terracotta server..."
+msgstr "正在启动 Terracotta 服务器..."
+
+#: TerracottaOnlinePanel.cpp:369
+msgid "Cleaning up existing process..."
+msgstr "正在清理现有进程..."
+
+#: TerracottaOnlinePanel.cpp:371
+msgid "Terracotta server started successfully."
+msgstr "Terracotta 服务器启动成功。"
+
+#: TerracottaOnlinePanel.cpp:384
+msgid "Failed to start Terracotta server. Please check if it is installed."
+msgstr "无法启动 Terracotta 服务器。请检查是否已安装。"
+
+#: TerracottaOnlinePanel.cpp:395
+msgid "Are you sure you want to restart the Terracotta server?\n\nThis will disconnect all active connections."
+msgstr "确定要重启 Terracotta 服务器吗？\n\n这将断开所有活动连接。"
+
+#: TerracottaOnlinePanel.cpp:403
+msgid "Restarting Terracotta server..."
+msgstr "正在重启 Terracotta 服务器..."
+
+#: TerracottaOnlinePanel.cpp:417
+msgid "Terracotta server restarted successfully."
+msgstr "Terracotta 服务器重启成功。"
+
+#: TerracottaOnlinePanel.cpp:429
+msgid "Failed to restart Terracotta server."
+msgstr "重启 Terracotta 服务器失败。"
+
+#: TerracottaOnlinePanel.cpp:441
+msgid "Are you sure you want to emergency stop Terracotta?\n\nThis will forcefully stop all P2P connections."
+msgstr "确定要紧急停止 Terracotta 吗？\n\n这将强制停止所有 P2P 连接。"
+
+#: TerracottaOnlinePanel.cpp:445
+msgid "Emergency stop initiated..."
+msgstr "正在执行紧急停止..."
+
+#: TerracottaOnlinePanel.cpp:448
+msgid "Emergency stop successful."
+msgstr "紧急停止成功。"
+
+#: TerracottaOnlinePanel.cpp:451
+msgid "Start the Terracotta server"
+msgstr "启动 Terracotta 服务器"
+
+#: TerracottaOnlinePanel.cpp:457
+msgid "Emergency stop failed."
+msgstr "紧急停止失败。"
+
+#: TerracottaOnlinePanel.cpp:477
+msgid "Fetching logs from Terracotta server..."
+msgstr "正在从 Terracotta 服务器获取日志..."
+
+#: TerracottaOnlinePanel.cpp:495-512
+msgid "<h3>Terracotta P2P Multiplayer</h3>"
+msgstr "<h3>Terracotta P2P 多人联机</h3>"
+
+#: TerracottaOnlinePanel.cpp:497
+msgid "<p><b>P2P Multiplayer Integration for Luna Launcher</b></p>"
+msgstr "<p><b>Luna Launcher 的 P2P 多人联机集成</b></p>"
+
+#: TerracottaOnlinePanel.cpp:498
+msgid "<p>This feature integrates with Terracotta, a P2P multiplayer solution for Minecraft.</p>"
+msgstr "<p>此功能集成了 Terracotta，一款面向 Minecraft 的 P2P 多人联机解决方案。</p>"
+
+#: TerracottaOnlinePanel.cpp:500
+msgid "<h4>Terracotta Project</h4>"
+msgstr "<h4>Terracotta 项目</h4>"
+
+#: TerracottaOnlinePanel.cpp:501
+msgid "<p><b>Developer:</b> burningtnt<br>"
+msgstr "<p><b>开发者：</b> burningtnt<br>"
+
+#: TerracottaOnlinePanel.cpp:502
+msgid "<b>Project URL:</b> <a href=\"https://github.com/burningtnt/Terracotta\">https://github.com/burningtnt/Terracotta</a></p>"
+msgstr "<b>项目地址：</b> <a href=\"https://github.com/burningtnt/Terracotta\">https://github.com/burningtnt/Terracotta</a></p>"
+
+#: TerracottaOnlinePanel.cpp:504
+msgid "<h4>License</h4>"
+msgstr "<h4>许可证</h4>"
+
+#: TerracottaOnlinePanel.cpp:505
+msgid "<p>Terracotta is licensed under <b>AGPL-3.0</b> with the following exception:</p>"
+msgstr "<p>Terracotta 采用 <b>AGPL-3.0</b> 许可证，包含以下例外条款：</p>"
+
+#: TerracottaOnlinePanel.cpp:515
+msgid "About Terracotta"
+msgstr "关于 Terracotta"
+
+#: TerracottaOnlinePanel.cpp:531
+msgid "Terracotta server is now available."
+msgstr "Terracotta 服务器现在可用。"
+
+#: TerracottaOnlinePanel.cpp:533
+msgid "Terracotta server is not available."
+msgstr "Terracotta 服务器不可用。"
+
+# ========================================================================
+# AuthlibInjectorPage
+# ========================================================================
+
+#: AuthlibInjectorPage.cpp:40
+msgid "BMCLAPI (Recommended for China)"
+msgstr "BMCLAPI (推荐国内用户)"
+
+#: AuthlibInjectorPage.cpp:41
+msgid "Official (authlib-injector.yushi.moe)"
+msgstr "官方源 (authlib-injector.yushi.moe)"
+
+#: AuthlibInjectorPage.cpp:121
+msgid "Download Complete"
+msgstr "下载完成"
+
+#: AuthlibInjectorPage.cpp:122
+msgid "authlib-injector has been successfully downloaded."
+msgstr "authlib-injector 已成功下载。"
+
+#: AuthlibInjectorPage.cpp:124
+msgid "Download Failed"
+msgstr "下载失败"
+
+#: AuthlibInjectorPage.cpp:125
+msgid "Failed to download authlib-injector. Please check your internet connection and try again."
+msgstr "下载 authlib-injector 失败。请检查网络连接后重试。"
+
+#: AuthlibInjectorPage.cpp:136
+msgid "File Not Found"
+msgstr "文件未找到"
+
+#: AuthlibInjectorPage.cpp:136
+msgid "authlib-injector is not installed."
+msgstr "authlib-injector 未安装。"
+
+#: AuthlibInjectorPage.cpp:140
+msgid "Delete authlib-injector"
+msgstr "删除 authlib-injector"
+
+#: AuthlibInjectorPage.cpp:141
+msgid "Are you sure you want to delete authlib-injector?\n\nThis will prevent Yggdrasil authentication from working until you download it again."
+msgstr "确定要删除 authlib-injector 吗？\n\n删除后将无法使用 Yggdrasil 认证功能，直到重新下载。"
+
+#: AuthlibInjectorPage.cpp:150
+msgid "Deleted"
+msgstr "已删除"
+
+#: AuthlibInjectorPage.cpp:150
+msgid "authlib-injector has been deleted."
+msgstr "authlib-injector 已删除。"
+
+#: AuthlibInjectorPage.cpp:152
+msgid "Delete Failed"
+msgstr "删除失败"
+
+#: AuthlibInjectorPage.cpp:152
+#, qt-format
+msgid "Failed to delete authlib-injector.\n\nYou may need to manually delete the file at:\n%1"
+msgstr "删除 authlib-injector 失败。\n\n您可能需要手动删除以下位置的文件：\n%1"
+
+# ========================================================================
+# AuthlibInjectorPage.ui
+# ========================================================================
+
+msgctxt "AuthlibInjectorPage"
+msgid "About authlib-injector"
+msgstr "关于 authlib-injector"
+
+msgctxt "AuthlibInjectorPage"
+msgid "<html><head/><body><p>authlib-injector is a Java agent that allows Minecraft to use custom Yggdrasil authentication servers (such as LittleSkin or custom skin servers).</p><p>It is automatically downloaded when you launch a game with a Yggdrasil account, but you can also manage it here.</p><p>For more information, visit <a href=\"https://authlib-injector.yushi.moe/\">authlib-injector.yushi.moe</a></p></body></html>"
+msgstr "<html><head/><body><p>authlib-injector 是一款 Java 代理，允许 Minecraft 使用自定义 Yggdrasil 认证服务器（如 LittleSkin 或自定义皮肤服务器）。</p><p>使用 Yggdrasil 账号启动游戏时会自动下载，但您也可以在此处管理它。</p><p>更多信息请访问 <a href=\"https://authlib-injector.yushi.moe/\">authlib-injector.yushi.moe</a></p></body></html>"
+
+msgctxt "AuthlibInjectorPage"
+msgid "Download Source:"
+msgstr "下载源："
+
+msgctxt "AuthlibInjectorPage"
+msgid "The BMCLAPI mirror is recommended for users in China. The official source is provided for users in other regions."
+msgstr "BMCLAPI 镜像推荐国内用户使用。官方源供其他地区用户使用。"
+
+msgctxt "AuthlibInjectorPage"
+msgid "Usage"
+msgstr "使用方法"
+
+msgctxt "AuthlibInjectorPage"
+msgid "<html><head/><body><p>authlib-injector is automatically used when launching a game with a Yggdrasil account. The following JVM arguments will be added:</p></body></html>"
+msgstr "<html><head/><body><p>使用 Yggdrasil 账号启动游戏时会自动使用 authlib-injector。将添加以下 JVM 参数：</p></body></html>"
+
+# ========================================================================
+# Nide8AuthPage
+# ========================================================================
+
+#: Nide8AuthPage.cpp:106
+msgid "Download Complete"
+msgstr "下载完成"
+
+#: Nide8AuthPage.cpp:107
+msgid "nide8auth has been successfully downloaded."
+msgstr "nide8auth 已成功下载。"
+
+#: Nide8AuthPage.cpp:109
+msgid "Download Failed"
+msgstr "下载失败"
+
+#: Nide8AuthPage.cpp:110
+msgid "Failed to download nide8auth. Please check your internet connection and try again."
+msgstr "下载 nide8auth 失败。请检查网络连接后重试。"
+
+#: Nide8AuthPage.cpp:120
+msgid "File Not Found"
+msgstr "文件未找到"
+
+#: Nide8AuthPage.cpp:120
+msgid "nide8auth is not installed."
+msgstr "nide8auth 未安装。"
+
+#: Nide8AuthPage.cpp:124
+msgid "Delete nide8auth"
+msgstr "删除 nide8auth"
+
+#: Nide8AuthPage.cpp:125
+msgid "Are you sure you want to delete nide8auth?\n\nThis will prevent UnifiedPass authentication from working until you download it again."
+msgstr "确定要删除 nide8auth 吗？\n\n删除后将无法使用 UnifiedPass 认证功能，直到重新下载。"
+
+#: Nide8AuthPage.cpp:133
+msgid "Deleted"
+msgstr "已删除"
+
+#: Nide8AuthPage.cpp:133
+msgid "nide8auth has been deleted."
+msgstr "nide8auth 已删除。"
+
+#: Nide8AuthPage.cpp:135
+msgid "Delete Failed"
+msgstr "删除失败"
+
+#: Nide8AuthPage.cpp:135
+#, qt-format
+msgid "Failed to delete nide8auth.\n\nYou may need to manually delete the file at:\n%1"
+msgstr "删除 nide8auth 失败。\n\n您可能需要手动删除以下位置的文件：\n%1"
+
+# ========================================================================
+# Nide8AuthPage.ui
+# ========================================================================
+
+msgctxt "Nide8AuthPage"
+msgid "About nide8auth"
+msgstr "关于 nide8auth"
+
+msgctxt "Nide8AuthPage"
+msgid "<html><head/><body><p>nide8auth is a Java agent required for UnifiedPass authentication to work with Minecraft. It allows the game to authenticate against UnifiedPass servers.</p><p>It is automatically downloaded when you launch a game with a UnifiedPass account, but you can also manage it here.</p><p>For more information, visit <a href=\"https://login.mc-user.com:233/\">login.mc-user.com:233</a></p></body></html>"
+msgstr "<html><head/><body><p>nide8auth 是 Minecraft 使用 UnifiedPass 认证所需的 Java 代理。它允许游戏向 UnifiedPass 服务器进行认证。</p><p>使用 UnifiedPass 账号启动游戏时会自动下载，但您也可以在此处管理它。</p><p>更多信息请访问 <a href=\"https://login.mc-user.com:233/\">login.mc-user.com:233</a></p></body></html>"
+
+msgctxt "Nide8AuthPage"
+msgid "Usage"
+msgstr "使用方法"
+
+msgctxt "Nide8AuthPage"
+msgid "<html><head/><body><p>nide8auth is automatically used when launching a game with a UnifiedPass account. The following JVM arguments will be added:</p></body></html>"
+msgstr "<html><head/><body><p>使用 UnifiedPass 账号启动游戏时会自动使用 nide8auth。将添加以下 JVM 参数：</p></body></html>"
+
+# ========================================================================
+# TerracottaPage.h / TerracottaOnlinePanel.h / YukariConnectPage.h / YukariConnectOnlinePanel.h
+# ========================================================================
+
+#: TerracottaPage.h:41
+msgid "Terracotta"
+msgstr "Terracotta"
+
+#: TerracottaOnlinePanel.h:67
+msgid "Terracotta Online"
+msgstr "Terracotta 联机"
+
+#: YukariConnectPage.h:41
+msgid "YukariConnect"
+msgstr "YukariConnect"
+
+#: YukariConnectOnlinePanel.h:59
+msgid "YukariConnect Online"
+msgstr "YukariConnect 联机"
+
+# ========================================================================
+# TerracottaOnlinePanel.ui
+# ========================================================================
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Terracotta Online Panel"
+msgstr "Terracotta 联机面板"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Current Status"
+msgstr "当前状态"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "State:"
+msgstr "状态："
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Waiting"
+msgstr "等待中"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Refresh"
+msgstr "刷新"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Open Web UI"
+msgstr "打开 Web 界面"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Open Terracotta Web UI in browser"
+msgstr "在浏览器中打开 Terracotta Web UI"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Enter your player name and click Create Room to host, or enter a room code to join."
+msgstr "输入您的玩家名称并点击「创建房间」以主机身份开始，或输入房间代码加入。"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Room Information"
+msgstr "房间信息"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Room Code:"
+msgstr "房间代码："
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Copy"
+msgstr "复制"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Connection URL:"
+msgstr "连接 URL："
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Connection Difficulty:"
+msgstr "连接难度："
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Connected Players"
+msgstr "已连接玩家"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Name"
+msgstr "名称"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Machine ID"
+msgstr "机器 ID"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Version"
+msgstr "版本"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Type"
+msgstr "类型"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Actions"
+msgstr "操作"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Player Name:"
+msgstr "玩家名称："
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Enter your player name"
+msgstr "输入您的玩家名称"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Create Room (Host)"
+msgstr "创建房间（主机）"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Room Code:"
+msgstr "房间代码："
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Enter room code to join"
+msgstr "输入要加入的房间代码"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Join Room"
+msgstr "加入房间"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Close Room"
+msgstr "关闭房间"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Stop hosting and return to idle (keeps server running)"
+msgstr "停止托管并返回空闲状态（保持服务器运行）"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Stop Server"
+msgstr "停止服务器"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Gracefully stop the Terracotta server"
+msgstr "优雅地停止 Terracotta 服务器"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Restart Server"
+msgstr "重启服务器"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Emergency Stop"
+msgstr "紧急停止"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Forcefully stop all connections (use only if needed)"
+msgstr "强制停止所有连接（仅在必要时使用）"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Logs"
+msgstr "日志"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Fetch Log"
+msgstr "获取日志"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Clear"
+msgstr "清空"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "About Terracotta"
+msgstr "关于 Terracotta"
+
+msgctxt "TerracottaOnlinePanel"
+msgid "Show licensing and attribution information"
+msgstr "显示许可和归属信息"
+
+# ========================================================================
+# TerracottaOnlinePanel.cpp (补充遗漏的翻译)
+# ========================================================================
+
+#: TerracottaOnlinePanel.cpp:110
+msgid "Now monitoring for player changes..."
+msgstr "开始监控玩家变化..."
+
+#: TerracottaOnlinePanel.cpp:165
+msgid "Starting..."
+msgstr "启动中..."
+
+#: TerracottaOnlinePanel.cpp:166
+msgid "Starting Terracotta process..."
+msgstr "正在启动 Terracotta 进程..."
+
+#: TerracottaOnlinePanel.cpp:248
+msgid "Start Server"
+msgstr "启动服务器"
+
+#: TerracottaOnlinePanel.cpp:249
+msgid "Start the Terracotta server"
+msgstr "启动 Terracotta 服务器"
+
+#: TerracottaOnlinePanel.cpp:359
+msgid "Stopped"
+msgstr "已停止"

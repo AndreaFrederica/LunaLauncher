@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Luna Launcher - Minecraft Launcher
- *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 flowln <flowlnlnln@gmail.com>
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
@@ -41,7 +39,6 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
-#include <QFile>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QTranslator>
@@ -495,17 +492,27 @@ bool TranslationsModel::selectLanguage(QString key)
         d->m_qt_translator.reset();
     }
 
-    // Check if we have PO and/or QM files
-    bool hasPO = QFile::exists(FS::PathCombine(d->m_dir.path(), langCode + ".po"));
-    bool hasQM = QFile::exists(FS::PathCombine(d->m_dir.path(), "mmc_" + langCode + ".qm"));
-
-    // Load QM first as fallback (lower priority)
-    if (hasQM) {
+    if (langPtr->localFileType == FileType::PO) {
+        qDebug() << "Loading Application Language File for" << langCode.toLocal8Bit().constData() << "...";
+        auto poTranslator = new POTranslator(FS::PathCombine(d->m_dir.path(), langCode + ".po"));
+        if (!poTranslator->isEmpty()) {
+            if (!QCoreApplication::installTranslator(poTranslator)) {
+                delete poTranslator;
+                qCritical() << "Installing Application Language File failed.";
+            } else {
+                d->m_app_translator.reset(poTranslator);
+                successful = true;
+            }
+        } else {
+            qCritical() << "Loading Application Language File failed.";
+            d->m_app_translator.reset();
+        }
+    } else if (langPtr->localFileType == FileType::QM) {
         d->m_app_translator.reset(new QTranslator());
         if (d->m_app_translator->load("mmc_" + langCode, d->m_dir.path())) {
-            qDebug() << "Loading Application Language File (QM) for" << langCode.toLocal8Bit().constData() << "...";
+            qDebug() << "Loading Application Language File for" << langCode.toLocal8Bit().constData() << "...";
             if (!QCoreApplication::installTranslator(d->m_app_translator.get())) {
-                qCritical() << "Installing Application Language File (QM) failed.";
+                qCritical() << "Installing Application Language File failed.";
                 d->m_app_translator.reset();
             } else {
                 successful = true;
@@ -513,28 +520,7 @@ bool TranslationsModel::selectLanguage(QString key)
         } else {
             d->m_app_translator.reset();
         }
-    }
-
-    // Load PO as override (higher priority - installed last takes precedence)
-    if (hasPO) {
-        qDebug() << "Loading Application Language File (PO) for" << langCode.toLocal8Bit().constData() << "...";
-        auto poTranslator = new POTranslator(FS::PathCombine(d->m_dir.path(), langCode + ".po"));
-        if (!poTranslator->isEmpty()) {
-            if (!QCoreApplication::installTranslator(poTranslator)) {
-                delete poTranslator;
-                qCritical() << "Installing Application Language File (PO) failed.";
-            } else {
-                d->m_po_translator.reset(poTranslator);
-                successful = true;
-            }
-        } else {
-            qCritical() << "Loading Application Language File (PO) failed.";
-            d->m_po_translator.reset();
-        }
-    }
-
-    // If neither PO nor QM exists, clear translator
-    if (!hasPO && !hasQM) {
+    } else {
         d->m_app_translator.reset();
     }
     d->m_selectedLanguage = langCode;

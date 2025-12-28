@@ -1667,3 +1667,13 @@ if(WIN32 OR (UNIX AND APPLE))
         COMPONENT bundle
     )
 endif()
+
+# Install Luna Launcher PO translation files
+# These are additional translations for Luna-specific features
+# Note: Using 'zh' as the language code to match Prism's zh_CN (simplified Chinese)
+install(
+    FILES
+        translations/zh.po
+    DESTINATION ${RESOURCES_DEST_DIR}/translations
+    COMPONENT Runtime
+)

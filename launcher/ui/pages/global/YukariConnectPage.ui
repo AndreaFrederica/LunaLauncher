@@ -47,7 +47,7 @@
           <item>
            <widget class="QLabel" name="label_description">
             <property name="text">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;YukariConnect is a P2P networking solution that allows Minecraft players to connect without port forwarding or central servers.&lt;/p&gt;&lt;p&gt;The YukariConnect program needs to be downloaded and running to use P2P multiplayer features.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;YukariConnect is a P2P networking solution (MPL-2.0 licensed) developed specifically for Luna Launcher that allows Minecraft players to connect without port forwarding or central servers.&lt;/p&gt;&lt;p&gt;The YukariConnect program needs to be downloaded and running to use P2P multiplayer features.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
             <property name="wordWrap">
              <bool>true</bool>
@@ -168,6 +168,16 @@
              <widget class="QPushButton" name="pushButton_download">
               <property name="text">
                <string>Download / Update</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_install_file">
+              <property name="text">
+               <string>Install from File...</string>
+              </property>
+              <property name="toolTip">
+               <string>Select a YukariConnect executable file to install manually</string>
               </property>
              </widget>
             </item>
@@ -336,6 +346,16 @@
             </property>
             <property name="checked">
              <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_edit_config">
+            <property name="text">
+             <string>Edit Configuration File</string>
+            </property>
+            <property name="toolTip">
+             <string>Open yukari.json configuration file in text editor</string>
             </property>
            </widget>
           </item>

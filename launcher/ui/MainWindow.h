@@ -66,6 +66,10 @@ namespace TerracottaTypes {
 struct StateResponse;
 }
 
+namespace YukariConnectTypes {
+struct StateResponse;
+}
+
 namespace Ui {
 class MainWindow;
 }
@@ -137,6 +141,8 @@ class MainWindow : public QMainWindow {
     void on_actionManageAccounts_triggered();
 
     void on_actionTerracottaOnline_triggered();
+
+    void on_actionYukariConnectOnline_triggered();
 
     void on_actionReportBug_triggered();
 
@@ -233,6 +239,8 @@ class MainWindow : public QMainWindow {
     void updateStatusCenter();
     void setInstanceActionsEnabled(bool enabled);
     void updateTerracottaStatus(const TerracottaTypes::StateResponse& state);
+    void updateYukariConnectStatus(const YukariConnectTypes::StateResponse& state);
+    void updateMultiplayerFeatureVisibility();
 
     void runModalTask(Task* task);
     void instanceFromInstanceTask(InstanceTask* task);
@@ -246,6 +254,7 @@ class MainWindow : public QMainWindow {
     QLabel* m_statusLeft = nullptr;
     QLabel* m_statusCenter = nullptr;
     QLabel* m_statusTerracotta = nullptr;
+    QLabel* m_statusYukariConnect = nullptr;
     LabeledToolButton* changeIconButton = nullptr;
     LabeledToolButton* renameButton = nullptr;
     QToolButton* helpMenuButton = nullptr;

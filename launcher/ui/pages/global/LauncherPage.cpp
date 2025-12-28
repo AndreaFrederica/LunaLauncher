@@ -245,6 +245,12 @@ void LauncherPage::applySettings()
     s->set("ModMetadataDisabled", !ui->metadataEnableBtn->isChecked());
     s->set("ModDependenciesDisabled", !ui->dependenciesEnableBtn->isChecked());
     s->set("SkipModpackUpdatePrompt", !ui->modpackUpdatePromptBtn->isChecked());
+
+    // Multiplayer features visibility
+    s->set("ShowTerracottaToolBar", ui->showTerracottaToolBarCheckBox->isChecked());
+    s->set("ShowYukariConnectToolBar", ui->showYukariConnectToolBarCheckBox->isChecked());
+    s->set("ShowTerracottaStatusBar", ui->showTerracottaStatusBarCheckBox->isChecked());
+    s->set("ShowYukariConnectStatusBar", ui->showYukariConnectStatusBarCheckBox->isChecked());
 }
 void LauncherPage::loadSettings()
 {
@@ -256,6 +262,12 @@ void LauncherPage::loadSettings()
     }
 
     ui->preferMenuBarCheckBox->setChecked(s->get("MenuBarInsteadOfToolBar").toBool());
+
+    // Multiplayer features visibility
+    ui->showTerracottaToolBarCheckBox->setChecked(s->get("ShowTerracottaToolBar").toBool());
+    ui->showYukariConnectToolBarCheckBox->setChecked(s->get("ShowYukariConnectToolBar").toBool());
+    ui->showTerracottaStatusBarCheckBox->setChecked(s->get("ShowTerracottaStatusBar").toBool());
+    ui->showYukariConnectStatusBarCheckBox->setChecked(s->get("ShowYukariConnectStatusBar").toBool());
 
     ui->numberOfConcurrentTasksSpinBox->setValue(s->get("NumberOfConcurrentTasks").toInt());
     ui->numberOfConcurrentDownloadsSpinBox->setValue(s->get("NumberOfConcurrentDownloads").toInt());

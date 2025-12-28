@@ -145,6 +145,12 @@ class YukariConnect : public QObject {
     QString getMetadataPath() const;
 
     /**
+     * @brief Get the path to YukariConnect config file (yukari.json)
+     * @return Absolute path to the config file
+     */
+    QString getConfigPath() const;
+
+    /**
      * @brief Get the currently installed version
      * @return Version string, or empty string if not installed/version unknown
      */
@@ -287,6 +293,26 @@ class YukariConnect : public QObject {
      */
     [[nodiscard]] bool getStopOnClose() const;
 
+    // YukariConnect Extension APIs
+    /**
+     * @brief Set launcher custom string for vendor identification
+     * @param customString Custom string (e.g., "Luna/1.0.0")
+     * @return true if successful
+     */
+    bool setLauncherCustomString(const QString& customString);
+
+    /**
+     * @brief Get room status (Yukari extension endpoint)
+     * @return JSON object with room status, or empty object on failure
+     */
+    QJsonObject getRoomStatus();
+
+    /**
+     * @brief Retry from Exception state - reset to Idle
+     * @return true if successful
+     */
+    bool retryRoom();
+
    signals:
     /**
      * @brief Emitted when the state changes
@@ -298,6 +324,11 @@ class YukariConnect : public QObject {
      */
     void availabilityChanged(bool available);
 
+    /**
+     * @brief Emitted when process outputs log data
+     */
+    void logOutput(const QString& message);
+
    private:
     YukariConnect(QObject* parent = nullptr);
     ~YukariConnect() = default;
@@ -307,6 +338,8 @@ class YukariConnect : public QObject {
     bool sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params = {}, int timeoutMs = 5000);
     // Send request without waiting for response (fire and forget)
     void sendGetRequestAsync(const QString& endpoint, const QMap<QString, QString>& params = {});
+    // Send POST request with JSON body
+    QByteArray sendPostRequest(const QString& endpoint, const QJsonObject& body, int timeoutMs = 5000);
     QString getPortFilePath() const;
     bool waitForPortFile(quint32 timeoutMs = 15000);
     bool readPortFromFile(quint16& port) const;

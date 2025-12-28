@@ -240,6 +240,10 @@ set(MINECRAFT_SOURCES
     minecraft/online/Terracotta.h
     minecraft/online/TerracottaDownload.cpp
     minecraft/online/TerracottaDownload.h
+    minecraft/online/YukariConnect.cpp
+    minecraft/online/YukariConnect.h
+    minecraft/online/YukariConnectDownload.cpp
+    minecraft/online/YukariConnectDownload.h
     minecraft/auth/Nide8AuthDownload.h
     minecraft/auth/Nide8AuthDownloadTask.cpp
     minecraft/auth/Nide8AuthDownloadTask.h
@@ -999,6 +1003,10 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/TerracottaPage.h
     ui/pages/global/TerracottaOnlinePanel.cpp
     ui/pages/global/TerracottaOnlinePanel.h
+    ui/pages/global/YukariConnectPage.cpp
+    ui/pages/global/YukariConnectPage.h
+    ui/pages/global/YukariConnectOnlinePanel.cpp
+    ui/pages/global/YukariConnectOnlinePanel.h
 
     # GUI - platform pages
     ui/pages/modplatform/CustomPage.cpp
@@ -1263,6 +1271,8 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/global/Nide8AuthPage.ui
     ui/pages/global/TerracottaPage.ui
     ui/pages/global/TerracottaOnlinePanel.ui
+    ui/pages/global/YukariConnectPage.ui
+    ui/pages/global/YukariConnectOnlinePanel.ui
     ui/pages/global/ProxyPage.ui
     ui/pages/global/ExternalToolsPage.ui
     ui/pages/instance/ExternalResourcesPage.ui

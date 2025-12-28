@@ -54,6 +54,7 @@
    <addaction name="actionFoldersButton"/>
    <addaction name="actionSettings"/>
    <addaction name="actionTerracottaOnline"/>
+   <addaction name="actionYukariConnectOnline"/>
    <addaction name="actionHelpButton"/>
    <addaction name="actionCheckUpdate"/>
    <addaction name="separator"/>
@@ -209,12 +210,13 @@
    </widget>
    <widget class="QMenu" name="terracottaMenu">
     <property name="title">
-     <string>&amp;Terracotta</string>
+     <string>&amp;Multiplayer</string>
     </property>
     <property name="toolTipsVisible">
      <bool>true</bool>
     </property>
     <addaction name="actionTerracottaOnline"/>
+    <addaction name="actionYukariConnectOnline"/>
    </widget>
    <widget class="QMenu" name="helpMenu">
     <property name="title">
@@ -350,6 +352,17 @@
    </property>
    <property name="toolTip">
     <string>Open Terracotta online panel for P2P multiplayer.</string>
+   </property>
+  </action>
+  <action name="actionYukariConnectOnline">
+   <property name="icon">
+    <iconset theme="yukari-connect-online"/>
+   </property>
+   <property name="text">
+    <string>&amp;YukariConnect Online...</string>
+   </property>
+   <property name="toolTip">
+    <string>Open YukariConnect online panel for P2P multiplayer.</string>
    </property>
   </action>
   <action name="actionLaunchInstance">

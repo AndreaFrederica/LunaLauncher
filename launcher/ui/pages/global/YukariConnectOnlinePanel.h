@@ -21,20 +21,12 @@
  *
  *  This file contains integration code with YukariConnect, a P2P multiplayer
  *  solution for Minecraft. YukariConnect is developed by burningtnt and licensed
- *  under AGPL-3.0 with the following exception:
- *
- *  "Your program通过本作品提供的进程间通信接口（如 HTTP API）与未经修改的
- *   本作品应用程序进行交互，不构成衍生作品。"
- *
- *  Translation: "Your program's interaction with an unmodified copy of this
- *  work through the inter-process communication interfaces provided by this
- *  work (such as HTTP APIs) does not constitute a derivative work."
+ *  under MPL-2.0.
  *
  *  Project URL: https://github.com/burningtnt/YukariConnect
  *
  *  This integration is implemented as a temporary solution. The launcher
- *  communicates with the standalone YukariConnect binary via its HTTP API only,
- *  which is explicitly permitted under YukariConnect's license exception.
+ *  communicates with the standalone YukariConnect binary via its HTTP API only.
  *
  *  A future version will replace this with a custom implementation.
  */
@@ -85,6 +77,7 @@ class YukariConnectOnlinePanel : public QMainWindow, public BasePage {
     void onAboutClicked();
     void onStateChanged(const YukariConnectTypes::StateResponse& state);
     void onAvailabilityChanged(bool available);
+    void onLogOutput(const QString& message);  // Handle process log output
 
    private:
     void updateStateDisplay(const YukariConnectTypes::StateResponse& state);

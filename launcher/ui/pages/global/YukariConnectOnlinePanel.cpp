@@ -21,20 +21,12 @@
  *
  *  This file contains integration code with YukariConnect, a P2P multiplayer
  *  solution for Minecraft. YukariConnect is developed by burningtnt and licensed
- *  under AGPL-3.0 with the following exception:
+ *  under MPL-2.0.
  *
- *  "Your程序通过本作品提供的进程间通信接口（如 HTTP API）与未经修改的
- *   本作品应用程序进行交互，不构成衍生作品。"
- *
- *  Translation: "Your program's interaction with an unmodified copy of this
- *  work through the inter-process communication interfaces provided by this
- *  work (such as HTTP APIs) does not constitute a derivative work."
- *
- *  Project URL: https://github.com/burningtnt/YukariConnect
+ *  Project URL: https://github.com/ElicaseTech/YukariConnect
  *
  *  This integration is implemented as a temporary solution. The launcher
- *  communicates with the standalone YukariConnect binary via its HTTP API only,
- *  which is explicitly permitted under YukariConnect's license exception.
+ *  communicates with the standalone YukariConnect binary via its HTTP API only.
  *
  *  A future version will replace this with a custom implementation.
  */
@@ -91,13 +83,16 @@ YukariConnectOnlinePanel::YukariConnectOnlinePanel(QWidget* parent) : QMainWindo
             bool stateChanged = (m_lastState != state->state);
             m_lastState = state->state;
 
-            // Handle Exception state with friendly message
+            // Handle Exception state with friendly message (only on transition)
             if (state->state == YukariConnectTypes::State::Exception && stateChanged) {
                 handleExceptionState(*state);
             }
 
-            // Always update state display and port
-            updateStateDisplay(*state);
+            // Note: fetchState() already emits stateChanged signal which triggers
+            // onStateChanged() -> updateStateDisplay(), so we don't need to call it again here.
+            // But we do need to update port display and track player changes.
+
+            // Update port display
             updatePortDisplay();
 
             // For HostOk/GuestOk states, continue polling to monitor player changes
@@ -150,6 +145,7 @@ YukariConnectOnlinePanel::YukariConnectOnlinePanel(QWidget* parent) : QMainWindo
     // Connect to YukariConnect signals
     connect(&YukariConnect::instance(), &YukariConnect::stateChanged, this, &YukariConnectOnlinePanel::onStateChanged);
     connect(&YukariConnect::instance(), &YukariConnect::availabilityChanged, this, &YukariConnectOnlinePanel::onAvailabilityChanged);
+    connect(&YukariConnect::instance(), &YukariConnect::logOutput, this, &YukariConnectOnlinePanel::onLogOutput);
 
     // Show current connection port and server button state
     updatePortDisplay();
@@ -494,21 +490,15 @@ void YukariConnectOnlinePanel::onAboutClicked()
 {
     QString aboutText = tr(
         "<h3>YukariConnect P2P Multiplayer</h3>"
-        "<p><b>P2P Multiplayer Integration for Luna Launcher</b></p>"
-        "<p>This feature integrates with YukariConnect, a P2P multiplayer solution for Minecraft.</p>"
+        "<p><b>P2P Multiplayer Solution</b></p>"
+        "<p>YukariConnect is a P2P multiplayer solution for Minecraft that allows players to connect without port forwarding or central servers.</p>"
         "<h4>YukariConnect Project</h4>"
-        "<p><b>Developer:</b> burningtnt<br>"
-        "<b>Project URL:</b> <a href=\"https://github.com/burningtnt/YukariConnect\">https://github.com/burningtnt/YukariConnect</a></p>"
+        "<p><b>Developer:</b> AndreaFrederica  AuraElicase<br>"
+        "<b>Project URL:</b> <a href=\"https://github.com/ElicaseTech/YukariConnect\">https://github.com/ElicaseTech/YukariConnect</a></p>"
         "<h4>License</h4>"
-        "<p>YukariConnect is licensed under <b>AGPL-3.0</b> with the following exception:</p>"
-        "<p><i>\"Your program通过本作品提供的进程间通信接口（如 HTTP API）与未经修改的"
-        "本作品应用程序进行交互，不构成衍生作品。\"</i></p>"
-        "<p><i>Translation: \"Your program's interaction with an unmodified copy of this work"
-        "through the inter-process communication interfaces provided by this work (such as HTTP APIs)"
-        "does not constitute a derivative work.\"</i></p>"
+        "<p>YukariConnect is licensed under the <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
         "<h4>Integration Notice</h4>"
-        "<p>This integration communicates with the standalone YukariConnect binary via its HTTP API only,"
-        "which is explicitly permitted under YukariConnect's license exception.</p>"
+        "<p>This integration communicates with the standalone YukariConnect binary via its HTTP API.</p>"
         "<p><b>Note:</b> This is a temporary solution. A future version will replace this with a custom implementation.</p>"
     );
 
@@ -798,10 +788,10 @@ QString YukariConnectOnlinePanel::getExceptionString(YukariConnectTypes::Excepti
             return tr("Cannot connect to host");
         case YukariConnectTypes::ExceptionType::PingHostRst:
             return tr("Connection to host lost");
-        case YukariConnectTypes::ExceptionType::GuestEasytierCrash:
-            return tr("EasyTier crashed (guest)");
-        case YukariConnectTypes::ExceptionType::HostEasytierCrash:
-            return tr("EasyTier crashed (host)");
+        case YukariConnectTypes::ExceptionType::GuestProcessCrash:
+            return tr("Process crashed (guest)");
+        case YukariConnectTypes::ExceptionType::HostProcessCrash:
+            return tr("Process crashed (host)");
         case YukariConnectTypes::ExceptionType::PingServerRst:
             return tr("Minecraft server closed");
         case YukariConnectTypes::ExceptionType::ScaffoldingInvalidResponse:
@@ -845,9 +835,9 @@ void YukariConnectOnlinePanel::handleExceptionState(const YukariConnectTypes::St
         case YukariConnectTypes::ExceptionType::PingHostFail:
             appendLog(tr("Connection failed: Unable to reach the host room."));
             break;
-        case YukariConnectTypes::ExceptionType::GuestEasytierCrash:
-        case YukariConnectTypes::ExceptionType::HostEasytierCrash:
-            appendLog(tr("Error: EasyTier process crashed. Reason: %1").arg(exceptionMsg));
+        case YukariConnectTypes::ExceptionType::GuestProcessCrash:
+        case YukariConnectTypes::ExceptionType::HostProcessCrash:
+            appendLog(tr("Error: Process crashed. Reason: %1").arg(exceptionMsg));
             appendLog(tr("Try restarting the YukariConnect server."));
             break;
         case YukariConnectTypes::ExceptionType::ScaffoldingInvalidResponse:
@@ -858,16 +848,16 @@ void YukariConnectOnlinePanel::handleExceptionState(const YukariConnectTypes::St
             break;
     }
 
-    // Automatically reset to Waiting state after exception
-    appendLog(tr("Resetting to idle state..."));
-    if (YukariConnect::instance().cancelState()) {
-        appendLog(tr("Successfully reset to idle state."));
-        // Refresh state after a short delay to confirm the reset
+    // Automatically retry from Exception state to return to Idle
+    appendLog(tr("Auto-recovering from exception state..."));
+    if (YukariConnect::instance().retryRoom()) {
+        appendLog(tr("Successfully recovered to idle state."));
+        // Refresh state after a short delay to confirm the recovery
         QTimer::singleShot(200, this, [this]() {
             onRefreshClicked();
         });
     } else {
-        appendLog(tr("Failed to reset to idle state. You may need to restart the server."));
+        appendLog(tr("Failed to recover from exception state. You may need to restart the server."));
     }
 }
 
@@ -920,4 +910,36 @@ void YukariConnectOnlinePanel::savePlayerName()
     auto s = APPLICATION->settings();
     QString playerName = ui->lineEdit_player_name->text().trimmed();
     s->set("YukariConnectPlayerName", playerName);
+}
+
+void YukariConnectOnlinePanel::onLogOutput(const QString& message)
+{
+    // Remove trailing newlines to avoid extra blank lines in log view
+    QString logMessage = message;
+    while (logMessage.endsWith('\n') || logMessage.endsWith('\r')) {
+        logMessage.chop(1);
+    }
+
+    if (!logMessage.isEmpty()) {
+        // Append raw process output directly to log view without timestamp
+        // The process logs already have their own formatting
+        ui->plainTextEdit_logs->appendPlainText(logMessage);
+
+        // Trim log to max lines if set (0 means unlimited)
+        if (m_maxLogLines > 0) {
+            QTextDocument* doc = ui->plainTextEdit_logs->document();
+            int lineCount = doc->blockCount();
+            if (lineCount > m_maxLogLines) {
+                // Remove excess lines from the beginning
+                QTextCursor cursor(doc);
+                cursor.movePosition(QTextCursor::Start);
+                int linesToRemove = lineCount - m_maxLogLines;
+                for (int i = 0; i < linesToRemove; i++) {
+                    cursor.select(QTextCursor::BlockUnderCursor);
+                    cursor.removeSelectedText();
+                    cursor.deleteChar();  // Remove newline
+                }
+            }
+        }
+    }
 }

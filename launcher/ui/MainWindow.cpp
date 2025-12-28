@@ -46,6 +46,7 @@
 
 #include "MainWindow.h"
 #include "minecraft/online/Terracotta.h"
+#include "minecraft/online/YukariConnect.h"
 #include "ui_MainWindow.h"
 
 #include <QDir>
@@ -97,6 +98,7 @@
 #include "ui/GuiUtil.h"
 #include "ui/ViewLogWindow.h"
 #include "ui/pages/global/TerracottaOnlinePanel.h"
+#include "ui/pages/global/YukariConnectOnlinePanel.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/CopyInstanceDialog.h"
 #include "ui/dialogs/CreateShortcutDialog.h"
@@ -383,9 +385,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_statusLeft = new QLabel(tr("No instance selected"), this);
     m_statusCenter = new QLabel(tr("Total playtime: 0s"), this);
     m_statusTerracotta = new QLabel(this);
+    m_statusYukariConnect = new QLabel(this);
     statusBar()->addPermanentWidget(m_statusLeft, 1);
     statusBar()->addPermanentWidget(m_statusCenter, 0);
     statusBar()->addPermanentWidget(m_statusTerracotta, 0);
+    statusBar()->addPermanentWidget(m_statusYukariConnect, 0);
 
     // Connect to Terracotta state changes to update status bar
     connect(&Terracotta::instance(), &Terracotta::stateChanged, this, [this](const TerracottaTypes::StateResponse& state) {
@@ -399,6 +403,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     });
     // Initialize Terracotta status
     updateTerracottaStatus(TerracottaTypes::StateResponse{});
+
+    // Connect to YukariConnect state changes to update status bar
+    connect(&YukariConnect::instance(), &YukariConnect::stateChanged, this, [this](const YukariConnectTypes::StateResponse& state) {
+        updateYukariConnectStatus(state);
+    });
+    connect(&YukariConnect::instance(), &YukariConnect::availabilityChanged, this, [this](bool available) {
+        if (!available) {
+            m_statusYukariConnect->setText(tr("Yukari: Not available"));
+            m_statusYukariConnect->setStyleSheet("color: red;");
+        }
+    });
+    // Initialize YukariConnect status
+    updateYukariConnectStatus(YukariConnectTypes::StateResponse{});
+
+    // Initialize multiplayer feature visibility based on settings
+    updateMultiplayerFeatureVisibility();
 
     // Add "manage accounts" button, right align
     QWidget* spacer = new QWidget();
@@ -1308,6 +1328,7 @@ void MainWindow::globalSettingsClosed()
     updateLaunchButton();
     updateThemeMenu();
     updateStatusCenter();
+    updateMultiplayerFeatureVisibility();
     // This needs to be done to prevent UI elements disappearing in the event the config is changed
     // but Prism Launcher exits abnormally, causing the window state to never be saved:
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));
@@ -1340,6 +1361,18 @@ void MainWindow::on_actionTerracottaOnline_triggered()
     if (!panel) {
         // Don't set parent to make it a truly independent window that won't stay on top
         panel = new TerracottaOnlinePanel(nullptr);
+    }
+    panel->show();
+    panel->raise();
+    panel->activateWindow();
+}
+
+void MainWindow::on_actionYukariConnectOnline_triggered()
+{
+    static YukariConnectOnlinePanel* panel = nullptr;
+    if (!panel) {
+        // Don't set parent to make it a truly independent window that won't stay on top
+        panel = new YukariConnectOnlinePanel(nullptr);
     }
     panel->show();
     panel->raise();
@@ -1520,6 +1553,11 @@ void MainWindow::closeEvent(QCloseEvent* event)
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));
     APPLICATION->settings()->set("MainWindowGeometry", QString::fromUtf8(saveGeometry().toBase64()));
     instanceToolbarSetting->set(QString::fromUtf8(ui->instanceToolBar->getVisibilityState().toBase64()));
+
+    // Stop YukariConnect server if setting is enabled
+    if (YukariConnect::instance().getStopOnClose()) {
+        YukariConnect::instance().shutdownAndWait();
+    }
 
     // Stop Terracotta server if setting is enabled
     if (Terracotta::instance().getStopOnClose()) {
@@ -1754,6 +1792,71 @@ void MainWindow::updateTerracottaStatus(const TerracottaTypes::StateResponse& st
         m_statusTerracotta->setText(tr("Terracotta: %1").arg(stateText));
         m_statusTerracotta->setStyleSheet(QString("color: %1;").arg(color));
     }
+}
+
+void MainWindow::updateYukariConnectStatus(const YukariConnectTypes::StateResponse& state)
+{
+    if (!YukariConnect::instance().isProcessRunning()) {
+        m_statusYukariConnect->setText(tr("Yukari: Stopped"));
+        m_statusYukariConnect->setStyleSheet("color: gray;");
+    } else {
+        // Show state and room code if available
+        QString stateText;
+        QString color;
+        switch (state.state) {
+            case YukariConnectTypes::State::Waiting:
+            case YukariConnectTypes::State::HostScanning:
+                stateText = tr("Idle");
+                color = "gray";  // Idle state
+                break;
+            case YukariConnectTypes::State::HostStarting:
+                stateText = tr("Starting...");
+                color = "orange";  // In progress
+                break;
+            case YukariConnectTypes::State::HostOk:
+                stateText = tr("Hosting") + (state.room.isEmpty() ? "" : " (" + state.room + ")");
+                color = "green";  // Success
+                break;
+            case YukariConnectTypes::State::GuestConnecting:
+            case YukariConnectTypes::State::GuestStarting:
+                stateText = tr("Connecting...");
+                color = "orange";  // In progress
+                break;
+            case YukariConnectTypes::State::GuestOk:
+                stateText = tr("Connected");
+                color = "green";  // Success
+                break;
+            case YukariConnectTypes::State::Exception:
+                stateText = tr("Error");
+                color = "red";  // Error
+                break;
+            default:
+                stateText = tr("Running");
+                color = "green";  // Default running
+                break;
+        }
+        m_statusYukariConnect->setText(tr("Yukari: %1").arg(stateText));
+        m_statusYukariConnect->setStyleSheet(QString("color: %1;").arg(color));
+    }
+}
+
+void MainWindow::updateMultiplayerFeatureVisibility()
+{
+    auto s = APPLICATION->settings();
+
+    // Toolbar visibility
+    bool showTerracottaToolBar = s->get("ShowTerracottaToolBar").toBool();
+    bool showYukariConnectToolBar = s->get("ShowYukariConnectToolBar").toBool();
+
+    ui->actionTerracottaOnline->setVisible(showTerracottaToolBar);
+    ui->actionYukariConnectOnline->setVisible(showYukariConnectToolBar);
+
+    // Status bar visibility
+    bool showTerracottaStatusBar = s->get("ShowTerracottaStatusBar").toBool();
+    bool showYukariConnectStatusBar = s->get("ShowYukariConnectStatusBar").toBool();
+
+    m_statusTerracotta->setVisible(showTerracottaStatusBar);
+    m_statusYukariConnect->setVisible(showYukariConnectStatusBar);
 }
 
 // "Instance actions" are actions that require an instance to be selected (i.e. "new instance" is not here)

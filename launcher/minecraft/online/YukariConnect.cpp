@@ -32,6 +32,7 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include <BuildConfig.h>
 
 #include <QDateTime>
 #include <QDir>
@@ -187,7 +188,7 @@ YukariConnect& YukariConnect::instance()
     return *s_instance;
 }
 
-YukariConnect::YukariConnect(QObject* parent) : QObject(parent), m_baseUrl("http://localhost:12580")
+YukariConnect::YukariConnect(QObject* parent) : QObject(parent), m_baseUrl("http://localhost:5062")
 {}
 
 QString YukariConnect::getLocalPath() const
@@ -202,6 +203,14 @@ QString YukariConnect::getLocalPath() const
 QString YukariConnect::getMetadataPath() const
 {
     return FS::PathCombine(APPLICATION->root(), "yukari-connect.json");
+}
+
+QString YukariConnect::getConfigPath() const
+{
+    // YukariConnect config file (yukari.json) is in the same directory as the executable
+    QFileInfo fileInfo(getLocalPath());
+    QString configDir = fileInfo.absolutePath();
+    return FS::PathCombine(configDir, "yukari.json");
 }
 
 QString YukariConnect::getVersion() const
@@ -723,7 +732,7 @@ bool YukariConnect::readPortFromFile(quint16& port) const
 
 bool YukariConnect::startProcess()
 {
-    // Check if already started successfully via HMCL mode
+    // Check if already running
     if (m_wasStartedSuccessfully) {
         // Verify the server is actually responding
         if (isAvailable()) {
@@ -747,21 +756,16 @@ bool YukariConnect::startProcess()
         return false;
     }
 
-    // Clean up old port file if exists
-    const QString portFile = getPortFilePath();
-    if (QFile::exists(portFile)) {
-        QFile::remove(portFile);
-    }
-
     // Create process
     m_process = new QProcess(this);
+
+    // Set working directory to APPLICATION->root() so YukariConnect can find yukari.json
+    m_process->setWorkingDirectory(APPLICATION->root());
 
     // Setup process to run in background
     m_process->setProcessChannelMode(QProcess::MergedChannels);
 
-    // In HMCL mode, the process exits after writing the port file - this is NORMAL
-    // The web server continues running in the background
-    bool portFileRead = false;
+    // Track port detection from output
     quint16 detectedPort = 0;
     QByteArray capturedOutput;
     QEventLoop loop;
@@ -771,15 +775,15 @@ bool YukariConnect::startProcess()
     auto detectPortFromOutput = [&capturedOutput, &detectedPort, &portDetected, &loop]() -> bool {
         const QString output = QString::fromUtf8(capturedOutput);
 
-        // Pattern 1: Secondary mode - "port = 62664"
-        QRegularExpression portRegex(R"(port\s*=\s*(\d+))");
-        QRegularExpressionMatch match = portRegex.match(output);
+        // Pattern 1: YukariConnect port info output - "YUKARI_PORT_INFO:port=5062"
+        QRegularExpression yukariPortRegex(R"(YUKARI_PORT_INFO:port=(\d+))");
+        QRegularExpressionMatch match = yukariPortRegex.match(output);
         if (match.hasMatch()) {
             bool ok = false;
             int port = match.captured(1).toInt(&ok);
             if (ok && port > 0 && port <= 65535) {
                 detectedPort = static_cast<quint16>(port);
-                qDebug() << "YukariConnect detected existing instance (secondary mode) on port:" << detectedPort;
+                qDebug() << "YukariConnect detected on port:" << detectedPort;
                 portDetected = true;
                 loop.quit();
                 return true;
@@ -836,14 +840,15 @@ bool YukariConnect::startProcess()
         detectPortFromOutput();  // Try to detect port immediately when output arrives
     });
     connect(m_process, &QProcess::readyReadStandardError, this, [this]() {
-        qWarning() << "YukariConnect:" << m_process->readAllStandardError();
+        const QByteArray data = m_process->readAllStandardError();
+        qWarning() << "YukariConnect:" << data;
     });
 
-    // Start with --hmcl parameter to get port via file
-    const QStringList args = { "--hmcl", portFile };
-    qDebug() << "Starting YukariConnect:" << exePath << args;
+    // Start YukariConnect without any parameters
+    // YukariConnect will keep running and output logs to stdout/stderr
+    qDebug() << "Starting YukariConnect:" << exePath;
 
-    m_process->start(exePath, args);
+    m_process->start(exePath);
 
     if (!m_process->waitForStarted(5000)) {
         qWarning() << "Failed to start YukariConnect process:" << m_process->errorString();
@@ -875,45 +880,49 @@ bool YukariConnect::startProcess()
         emit availabilityChanged(true);
         qDebug() << "YukariConnect started on port:" << detectedPort;
 
-        // Clean up the process if it exited
-        if (m_process->state() != QProcess::Running) {
-            m_process->deleteLater();
-            m_process = nullptr;
-        }
+        // Set launcher vendor identification automatically on startup
+        QString launcherString = QString("Luna/%1").arg(BuildConfig.versionString());
+        setLauncherCustomString(launcherString);
+
+        // Connect process output for continuous log streaming
+        // YukariConnect keeps running and outputs logs continuously
+        connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
+            const QByteArray data = m_process->readAllStandardOutput();
+            QString output = QString::fromUtf8(data);
+            emit logOutput(output);
+        });
+        connect(m_process, &QProcess::readyReadStandardError, this, [this]() {
+            const QByteArray data = m_process->readAllStandardError();
+            QString output = QString::fromUtf8(data);
+            emit logOutput(output);
+        });
+
+        // Process stays running, don't delete it
         return true;
     }
 
-    // Process is still running - wait for port file (primary mode)
-    if (!waitForPortFile(8000)) {
-        qWarning() << "YukariConnect port file did not appear within timeout";
-        // Check if process is still running - if so, it might be doing something else
-        if (m_process && m_process->state() == QProcess::Running) {
-            qWarning() << "Process still running but no port file - terminating";
-            stopProcess();
-        }
+    // Port not detected - check if process is still running
+    if (m_process && m_process->state() == QProcess::Running) {
+        qWarning() << "YukariConnect process started but port not detected";
+        // Still keep the log streaming connection
+        connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
+            const QByteArray data = m_process->readAllStandardOutput();
+            QString output = QString::fromUtf8(data);
+            emit logOutput(output);
+        });
+        connect(m_process, &QProcess::readyReadStandardError, this, [this]() {
+            const QByteArray data = m_process->readAllStandardError();
+            QString output = QString::fromUtf8(data);
+            emit logOutput(output);
+        });
         return false;
     }
 
-    // Read the actual port from file
-    if (!readPortFromFile(detectedPort)) {
-        qWarning() << "Failed to read port from file";
-        stopProcess();
-        return false;
-    }
-
-    portFileRead = true;
-
-    // Update base URL with actual port
-    m_baseUrl = QString("http://127.0.0.1:%1").arg(detectedPort);
-    qDebug() << "YukariConnect started on port (primary mode):" << detectedPort;
-
-    // Mark as successfully started - the process may exit but the web server continues
-    m_wasStartedSuccessfully = true;
-    emit availabilityChanged(true);
-
-    // Note: In HMCL mode, the process may exit here but the web server continues
-    // Don't stop the process - let it exit naturally
-    return true;
+    // Process exited or failed
+    qWarning() << "YukariConnect failed to start or exited immediately";
+    delete m_process;
+    m_process = nullptr;
+    return false;
 }
 
 void YukariConnect::stopProcess()
@@ -1003,4 +1012,115 @@ void YukariConnect::setStopOnClose(bool stopOnClose)
 bool YukariConnect::getStopOnClose() const
 {
     return m_stopOnClose;
+}
+
+// ==================== YukariConnect Extension APIs ====================
+
+QByteArray YukariConnect::sendPostRequest(const QString& endpoint, const QJsonObject& body, int timeoutMs)
+{
+    QNetworkAccessManager manager;
+
+    // Build URL
+    QString urlStr = m_baseUrl + endpoint;
+    QNetworkRequest request{ QUrl(urlStr) };
+    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
+    request.setRawHeader("Content-Type", "application/json");
+
+    // Convert JSON body to bytes
+    const QJsonDocument doc(body);
+    const QByteArray data = doc.toJson(QJsonDocument::Compact);
+
+    QNetworkReply* reply = manager.post(request, data);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    // Set timeout
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(timeoutMs);
+
+    loop.exec();
+
+    // Check if timeout occurred
+    if (!timeoutTimer.isActive()) {
+        qWarning() << "YukariConnect POST request timeout:" << urlStr;
+        reply->abort();
+        reply->deleteLater();
+        emit availabilityChanged(false);
+        return QByteArray();
+    }
+    timeoutTimer.stop();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "YukariConnect POST request failed:" << reply->errorString() << "URL:" << urlStr;
+        emit availabilityChanged(false);
+        reply->deleteLater();
+        return QByteArray();
+    }
+
+    emit availabilityChanged(true);
+    const QByteArray responseData = reply->readAll();
+    reply->deleteLater();
+    return responseData;
+}
+
+bool YukariConnect::setLauncherCustomString(const QString& customString)
+{
+    QJsonObject request;
+    request["launcherCustomString"] = customString;
+
+    const QByteArray data = sendPostRequest("/config/launcher", request);
+    if (data.isEmpty()) {
+        qWarning() << "Failed to set launcher custom string";
+        return false;
+    }
+
+    // Parse response to verify success
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "Failed to parse launcher config response:" << parseError.errorString();
+        return false;
+    }
+
+    qDebug() << "YukariConnect: Launcher custom string set to:" << customString;
+    return true;
+}
+
+QJsonObject YukariConnect::getRoomStatus()
+{
+    const QByteArray data = sendGetRequest("/room/status", {});
+    if (data.isEmpty()) {
+        return QJsonObject();
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "Failed to parse room status JSON:" << parseError.errorString();
+        return QJsonObject();
+    }
+
+    return doc.object();
+}
+
+bool YukariConnect::retryRoom()
+{
+    // POST /room/retry - clears Exception state and returns to Idle
+    const QByteArray data = sendPostRequest("/room/retry", QJsonObject());
+    if (data.isEmpty()) {
+        qWarning() << "Failed to retry from Exception state";
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "Failed to parse retry response:" << parseError.errorString();
+        return false;
+    }
+
+    qDebug() << "YukariConnect: Retried from Exception state, returning to Idle";
+    return true;
 }

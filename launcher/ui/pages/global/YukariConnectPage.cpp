@@ -19,10 +19,14 @@
 #include "YukariConnectPage.h"
 #include "ui_YukariConnectPage.h"
 
+#include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
 
 #include "Application.h"
+#include <BuildConfig.h>
+#include "DesktopServices.h"
 #include "minecraft/online/YukariConnect.h"
 #include "minecraft/online/YukariConnectDownload.h"
 #include "ui/dialogs/ProgressDialog.h"
@@ -69,9 +73,11 @@ YukariConnectPage::YukariConnectPage(QWidget* parent) : QWidget(parent), ui(new 
 
     // Connect buttons
     connect(ui->pushButton_download, &QPushButton::clicked, this, &YukariConnectPage::onDownloadButtonClicked);
+    connect(ui->pushButton_install_file, &QPushButton::clicked, this, &YukariConnectPage::onInstallFromFileButtonClicked);
     connect(ui->pushButton_delete, &QPushButton::clicked, this, &YukariConnectPage::onDeleteButtonClicked);
     connect(ui->pushButton_open_online, &QPushButton::clicked, this, &YukariConnectPage::onOpenOnlineButtonClicked);
     connect(ui->pushButton_license_info, &QPushButton::clicked, this, &YukariConnectPage::onLicenseInfoButtonClicked);
+    connect(ui->pushButton_edit_config, &QPushButton::clicked, this, &YukariConnectPage::onEditConfigButtonClicked);
     connect(ui->lineEdit_url, &QLineEdit::editingFinished, this, [this]() {
         YukariConnect::instance().setBaseUrl(ui->lineEdit_url->text());
         updateStatus();
@@ -132,6 +138,13 @@ void YukariConnectPage::openedImpl()
 {
     // Refresh status when page is opened
     refreshStatus();
+
+    // Set YukariConnect launcher custom string for vendor identification
+    // This identifies the launcher in player lists
+    if (YukariConnect::instance().isAvailable()) {
+        QString launcherString = QString("Luna/%1").arg(BuildConfig.versionString());
+        YukariConnect::instance().setLauncherCustomString(launcherString);
+    }
 }
 
 void YukariConnectPage::onDownloadButtonClicked()
@@ -151,6 +164,77 @@ void YukariConnectPage::onDownloadButtonClicked()
     } else {
         QMessageBox::warning(this, tr("Download Failed"),
                              tr("Failed to download YukariConnect. Please check your internet connection and try again."));
+    }
+}
+
+void YukariConnectPage::onInstallFromFileButtonClicked()
+{
+    // Let user select a YukariConnect executable file
+    QString filter;
+#ifdef Q_OS_WIN32
+    filter = tr("Executable Files (*.exe);;All Files (*)");
+#else
+    filter = tr("All Files (*)");
+#endif
+
+    QString sourceFile = QFileDialog::getOpenFileName(
+        this,
+        tr("Select YukariConnect Executable"),
+        QString(),
+        filter
+    );
+
+    if (sourceFile.isEmpty()) {
+        return;  // User cancelled
+    }
+
+    // Verify the file exists and is valid
+    QFileInfo sourceInfo(sourceFile);
+    if (!sourceInfo.exists() || !sourceInfo.isFile()) {
+        QMessageBox::warning(this, tr("Invalid File"),
+                             tr("The selected file is not valid."));
+        return;
+    }
+
+    // Check file size - YukariConnect executable should be at least 1MB
+    if (sourceInfo.size() < 1024 * 1024) {
+        auto reply = QMessageBox::warning(
+            this,
+            tr("File Too Small"),
+            tr("The selected file seems too small to be a valid YukariConnect executable (%1 MB).\n\nAre you sure you want to continue?")
+                .arg(sourceInfo.size() / 1024.0 / 1024.0, 0, 'f', 2),
+            QMessageBox::Yes | QMessageBox::No
+        );
+        if (reply != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+    // Get target path
+    QString targetPath = YukariConnect::instance().getLocalPath();
+    QString targetDir = QFileInfo(targetPath).absolutePath();
+
+    // Ensure target directory exists
+    QDir().mkpath(targetDir);
+
+    // Remove existing file if it exists
+    if (QFile::exists(targetPath)) {
+        QFile::remove(targetPath);
+    }
+
+    // Copy the file
+    if (QFile::copy(sourceFile, targetPath)) {
+        // Make executable on Unix-like systems
+#ifndef Q_OS_WIN32
+        QFile::setPermissions(targetPath, QFile::permissions(targetPath) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);
+#endif
+
+        updateStatus();
+        QMessageBox::information(this, tr("Installation Complete"),
+                                 tr("YukariConnect has been successfully installed from:\n%1").arg(sourceFile));
+    } else {
+        QMessageBox::warning(this, tr("Installation Failed"),
+                             tr("Failed to copy YukariConnect to the target location.\n\nTarget: %1").arg(targetPath));
     }
 }
 
@@ -199,8 +283,10 @@ void YukariConnectPage::onLicenseInfoButtonClicked()
 {
     QString aboutText = tr(
         "<h3>YukariConnect P2P Multiplayer</h3>"
-        "<p><b>P2P Multiplayer Integration for Luna Launcher</b></p>"
-        "<p>This feature integrates with YukariConnect, a P2P multiplayer solution for Minecraft.</p>"
+        "<p><b>P2P Multiplayer Solution</b></p>"
+        "<p>YukariConnect is a P2P multiplayer solution for Minecraft that allows players to connect without port forwarding or central servers.</p>"
+        "<h4>License</h4>"
+        "<p>YukariConnect is licensed under the Mozilla Public License 2.0 (MPL-2.0).</p>"
         "<h4>Integration Notice</h4>"
         "<p>This integration communicates with the standalone YukariConnect binary via its HTTP API.</p>"
     );
@@ -253,4 +339,53 @@ void YukariConnectPage::updateStatus()
 
     // Don't fetch server status here to avoid unnecessary connection attempts on startup
     // Server status is shown in the Online Panel when user opens it
+}
+
+void YukariConnectPage::onEditConfigButtonClicked()
+{
+    QString configPath = YukariConnect::instance().getConfigPath();
+    QFileInfo fileInfo(configPath);
+
+    // Check if config file exists
+    if (!fileInfo.exists()) {
+        auto reply = QMessageBox::question(
+            this,
+            tr("Config File Not Found"),
+            tr("The configuration file (yukari.json) does not exist yet.\n\nWould you like to create a default configuration file?"),
+            QMessageBox::Yes | QMessageBox::No
+        );
+
+        if (reply == QMessageBox::Yes) {
+            // Create default config
+            QString defaultConfig = QString("{\n"
+                "  \"HttpPort\": 5062,\n"
+                "  \"DefaultScaffoldingPort\": 13448,\n"
+                "  \"LauncherCustomString\": null,\n"
+                "  \"TerracottaCompatibilityMode\": true,\n"
+                "  \"McServerOfflineThreshold\": 6,\n"
+                "  \"EasyTierStartupTimeoutSeconds\": 12,\n"
+                "  \"CenterDiscoveryTimeoutSeconds\": 25\n"
+                "}\n");
+
+            QFile configFile(configPath);
+            if (configFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                configFile.write(defaultConfig.toUtf8());
+                configFile.close();
+                QMessageBox::information(this, tr("Config Created"),
+                    tr("Default configuration file created at:\n%1").arg(configPath));
+            } else {
+                QMessageBox::warning(this, tr("Failed to Create Config"),
+                    tr("Could not create configuration file at:\n%1").arg(configPath));
+                return;
+            }
+        } else {
+            return;
+        }
+    }
+
+    // Open config file in system text editor
+    if (!DesktopServices::openPath(configPath)) {
+        QMessageBox::warning(this, tr("Failed to Open Config"),
+            tr("Could not open configuration file.\n\nLocation: %1\n\nYou can open it manually in a text editor.").arg(configPath));
+    }
 }

@@ -71,6 +71,7 @@
 #include "ui/pages/global/Nide8AuthPage.h"
 #include "ui/pages/global/ProxyPage.h"
 #include "ui/pages/global/TerracottaPage.h"
+#include "ui/pages/global/YukariConnectPage.h"
 
 #include "ui/setupwizard/AutoJavaWizardPage.h"
 #include "ui/setupwizard/JavaWizardPage.h"
@@ -666,6 +667,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("MenuBarInsteadOfToolBar", false);
 
+        // Multiplayer features visibility
+        m_settings->registerSetting("ShowTerracottaToolBar", true);
+        m_settings->registerSetting("ShowYukariConnectToolBar", true);
+        m_settings->registerSetting("ShowTerracottaStatusBar", true);
+        m_settings->registerSetting("ShowYukariConnectStatusBar", true);
+
         m_settings->registerSetting("NumberOfConcurrentTasks", 10);
         m_settings->registerSetting("NumberOfConcurrentDownloads", 6);
         m_settings->registerSetting("NumberOfManualRetries", 1);
@@ -962,6 +969,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<Nide8AuthPage>();
             m_globalSettingsProvider->addPage<TerracottaPage>();
+            m_globalSettingsProvider->addPage<YukariConnectPage>();
             m_globalSettingsProvider->addPage<ExternalToolsPage>();
             m_globalSettingsProvider->addPage<ProxyPage>();
         }

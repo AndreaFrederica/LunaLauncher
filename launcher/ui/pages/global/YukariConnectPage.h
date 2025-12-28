@@ -48,10 +48,12 @@ class YukariConnectPage : public QWidget, public BasePage {
 
    private slots:
     void onDownloadButtonClicked();
+    void onInstallFromFileButtonClicked();
     void onDeleteButtonClicked();
     void onOpenOnlineButtonClicked();
     void onLicenseInfoButtonClicked();
     void onAvailabilityChanged(bool available);
+    void onEditConfigButtonClicked();
 
    private:
     void refreshStatus();

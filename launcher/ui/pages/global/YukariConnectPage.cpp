@@ -285,10 +285,11 @@ void YukariConnectPage::onLicenseInfoButtonClicked()
         "<h3>YukariConnect P2P Multiplayer</h3>"
         "<p><b>P2P Multiplayer Solution</b></p>"
         "<p>YukariConnect is a P2P multiplayer solution for Minecraft that allows players to connect without port forwarding or central servers.</p>"
+        "<h4>YukariConnect Project</h4>"
+        "<p><b>Developer:</b> AndreaFrederica  AuraElicase<br>"
+        "<b>Project URL:</b> <a href=\"https://github.com/ElicaseTech/YukariConnect\">https://github.com/ElicaseTech/YukariConnect</a></p>"
         "<h4>License</h4>"
-        "<p>YukariConnect is licensed under the Mozilla Public License 2.0 (MPL-2.0).</p>"
-        "<h4>Integration Notice</h4>"
-        "<p>This integration communicates with the standalone YukariConnect binary via its HTTP API.</p>"
+        "<p>YukariConnect is licensed under the <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
     );
 
     QMessageBox::about(this, tr("About YukariConnect"), aboutText);

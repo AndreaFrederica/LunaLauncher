@@ -497,9 +497,6 @@ void YukariConnectOnlinePanel::onAboutClicked()
         "<b>Project URL:</b> <a href=\"https://github.com/ElicaseTech/YukariConnect\">https://github.com/ElicaseTech/YukariConnect</a></p>"
         "<h4>License</h4>"
         "<p>YukariConnect is licensed under the <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
-        "<h4>Integration Notice</h4>"
-        "<p>This integration communicates with the standalone YukariConnect binary via its HTTP API.</p>"
-        "<p><b>Note:</b> This is a temporary solution. A future version will replace this with a custom implementation.</p>"
     );
 
     QMessageBox::about(this, tr("About YukariConnect"), aboutText);

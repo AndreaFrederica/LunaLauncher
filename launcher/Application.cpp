@@ -956,6 +956,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("TerracottaStopOnClose", true);
         m_settings->registerSetting("TerracottaPlayerName", "");
 
+        // YukariConnect P2P settings
+        m_settings->registerSetting("YukariConnectServerURL", "");
+        m_settings->registerSetting("YukariConnectPollInterval", 1000);
+        m_settings->registerSetting("YukariConnectMaxLogLines", 1000);
+        m_settings->registerSetting("YukariConnectStopOnClose", true);
+
         // Init page provider
         {
             m_globalSettingsProvider = std::make_shared<GenericPageProvider>(tr("Settings"));

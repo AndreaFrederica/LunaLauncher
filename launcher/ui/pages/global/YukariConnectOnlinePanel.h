@@ -62,7 +62,7 @@ class YukariConnectOnlinePanel : public QMainWindow, public BasePage {
     QString helpPage() const override { return "terracotta-online"; }
     void retranslate() override;
 
-   private slots:
+   public slots:
     void onRefreshClicked();
     void onOpenWebUIClicked();
     void onHostClicked();
@@ -73,9 +73,11 @@ class YukariConnectOnlinePanel : public QMainWindow, public BasePage {
     void onPanicClicked();
     void onCopyCodeClicked();
     void onFetchLogClicked();
+    void onExportLogClicked();
     void onClearLogClicked();
     void onAboutClicked();
     void onStateChanged(const YukariConnectTypes::StateResponse& state);
+    void onMetaChanged(const YukariConnectTypes::MetaInfo& meta);
     void onAvailabilityChanged(bool available);
     void onLogOutput(const QString& message);  // Handle process log output
 

@@ -311,19 +311,26 @@
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_log_buttons">
          <item>
-          <widget class="QPushButton" name="pushButton_fetch_log">
-           <property name="text">
-            <string>Fetch Log</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="pushButton_clear_log">
-           <property name="text">
-            <string>Clear</string>
-           </property>
-          </widget>
-         </item>
+           <widget class="QPushButton" name="pushButton_fetch_log">
+             <property name="text">
+              <string>Fetch Log</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_export_log">
+             <property name="text">
+              <string>Export Log</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_clear_log">
+             <property name="text">
+              <string>Clear</string>
+             </property>
+            </widget>
+           </item>
          <item>
           <widget class="QPushButton" name="pushButton_about">
            <property name="text">

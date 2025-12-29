@@ -26,6 +26,11 @@ namespace Ui {
 class YukariConnectPage;
 }
 
+// Forward declarations
+namespace YukariConnectTypes {
+struct MetaInfo;
+}
+
 enum class YukariConnectDownloadSource {
     GitHub,
     Mirror
@@ -53,6 +58,7 @@ class YukariConnectPage : public QWidget, public BasePage {
     void onOpenOnlineButtonClicked();
     void onLicenseInfoButtonClicked();
     void onAvailabilityChanged(bool available);
+    void onMetaChanged(const YukariConnectTypes::MetaInfo& meta);
     void onEditConfigButtonClicked();
 
    private:

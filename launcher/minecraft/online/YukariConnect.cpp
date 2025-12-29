@@ -23,7 +23,8 @@
  *  solution for Minecraft.
  *
  *  This integration communicates with the standalone YukariConnect binary via
- *  its HTTP API.
+ *  its WebSocket API for real-time operations, and HTTP API for
+ *  control operations (such as shutdown/stop room).
  *
  *  A future version may replace this with a custom implementation.
  */
@@ -36,10 +37,13 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QRegularExpression>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QAbstractSocket>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
@@ -47,8 +51,11 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QUrl>
+#include <QWebSocket>
 #include <QThread>
 #include <QTimer>
+#include <QtConcurrent>
 
 #ifdef Q_OS_WIN32
 #include <windows.h>
@@ -63,6 +70,9 @@ Profile Profile::fromJson(const QJsonObject& obj)
 {
     Profile profile;
     profile.machine_id = obj["machine_id"].toString();
+    if (profile.machine_id.isEmpty()) {
+        profile.machine_id = obj["machineId"].toString();
+    }
     profile.name = obj["name"].toString();
     profile.vendor = obj["vendor"].toString();
 
@@ -130,7 +140,11 @@ StateResponse StateResponse::fromJson(const QJsonObject& obj)
 
     response.room = obj["room"].toString();
     response.url = obj["url"].toString();
-    response.profile_index = obj["profile_index"].toVariant().toLongLong();
+    if (obj.contains("profile_index")) {
+        response.profile_index = obj["profile_index"].toVariant().toLongLong();
+    } else {
+        response.profile_index = obj["profileIndex"].toVariant().toLongLong();
+    }
 
     const QJsonArray profilesArray = obj["profiles"].toArray();
     for (const QJsonValue& val : profilesArray) {
@@ -152,7 +166,12 @@ StateResponse StateResponse::fromJson(const QJsonObject& obj)
     }
 
     // Parse exception_type field (for exception state)
-    const int exceptionTypeValue = obj["type"].toVariant().toInt();
+    int exceptionTypeValue = -1;
+    if (obj.contains("type")) {
+        exceptionTypeValue = obj["type"].toVariant().toInt();
+    } else if (obj.contains("exception_type")) {
+        exceptionTypeValue = obj["exception_type"].toVariant().toInt();
+    }
     if (exceptionTypeValue >= 0 && exceptionTypeValue <= 5) {
         response.exception_type = static_cast<ExceptionType>(exceptionTypeValue);
     } else {
@@ -166,15 +185,39 @@ StateResponse StateResponse::fromJson(const QJsonObject& obj)
 MetaInfo MetaInfo::fromJson(const QJsonObject& obj)
 {
     MetaInfo info;
-    info.compile_timestamp = obj["compile_timestamp"].toString();
-    info.core_version = obj["core_version"].toString();
-    info.target_arch = obj["target_arch"].toString();
-    info.target_env = obj["target_env"].toString();
-    info.target_os = obj["target_os"].toString();
-    info.target_tuple = obj["target_tuple"].toString();
-    info.target_vendor = obj["target_vendor"].toString();
+    info.compile_timestamp = obj["compileTimestamp"].toString();
+    if (info.compile_timestamp.isEmpty()) {
+        info.compile_timestamp = obj["compile_timestamp"].toString();
+    }
+    info.core_version = obj["easyTierVersion"].toString();
+    if (info.core_version.isEmpty()) {
+        info.core_version = obj["core_version"].toString();
+    }
+    info.target_arch = obj["targetArch"].toString();
+    if (info.target_arch.isEmpty()) {
+        info.target_arch = obj["target_arch"].toString();
+    }
+    info.target_env = obj["targetEnv"].toString();
+    if (info.target_env.isEmpty()) {
+        info.target_env = obj["target_env"].toString();
+    }
+    info.target_os = obj["targetOS"].toString();
+    if (info.target_os.isEmpty()) {
+        info.target_os = obj["target_os"].toString();
+    }
+    info.target_tuple = obj["targetTuple"].toString();
+    if (info.target_tuple.isEmpty()) {
+        info.target_tuple = obj["target_tuple"].toString();
+    }
+    info.target_vendor = obj["targetVendor"].toString();
+    if (info.target_vendor.isEmpty()) {
+        info.target_vendor = obj["target_vendor"].toString();
+    }
     info.version = obj["version"].toString();
-    info.yggdrasil_port = obj["yggdrasil_port"].toInt();
+    const QString yggPortStr = obj["yggdrasilPort"].toString();
+    bool ok = false;
+    int yggPort = yggPortStr.toInt(&ok);
+    info.yggdrasil_port = ok ? yggPort : obj["yggdrasil_port"].toInt();
     return info;
 }
 
@@ -190,6 +233,12 @@ YukariConnect& YukariConnect::instance()
 
 YukariConnect::YukariConnect(QObject* parent) : QObject(parent), m_baseUrl("http://localhost:5062")
 {}
+
+YukariConnect::~YukariConnect()
+{
+    // Clean up WebSocket connection on destruction
+    resetWebSocket();
+}
 
 QString YukariConnect::getLocalPath() const
 {
@@ -414,61 +463,311 @@ void YukariConnect::setBaseUrl(const QString& url)
     m_baseUrl = url;
 }
 
+// ==================== WebSocket Helper Methods ====================
+
+QString YukariConnect::getWebSocketUrl() const
+{
+    // Convert HTTP URL to WebSocket URL
+    QString wsUrl = m_baseUrl;
+    if (wsUrl.startsWith("http://")) {
+        wsUrl.replace(0, 7, "ws://");
+    } else if (wsUrl.startsWith("https://")) {
+        wsUrl.replace(0, 8, "wss://");
+    }
+    return wsUrl + "/ws";
+}
+
+void YukariConnect::ensureWebSocket()
+{
+    if (!m_webSocket) {
+        m_webSocket = new QWebSocket();
+        connect(m_webSocket, &QWebSocket::textMessageReceived, this, &YukariConnect::handleWebSocketMessage);
+        connect(m_webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::errorOccurred), this, [this](QAbstractSocket::SocketError error) {
+            qWarning() << "WebSocket error:" << error << m_webSocket->errorString();
+            emit availabilityChanged(false);
+            // Reset the start flag when server becomes unavailable
+            m_wasStartedSuccessfully = false;
+        });
+        connect(m_webSocket, &QWebSocket::disconnected, this, [this]() {
+            qDebug() << "WebSocket disconnected";
+            emit availabilityChanged(false);
+            // Reset the start flag when server becomes unavailable
+            m_wasStartedSuccessfully = false;
+        });
+    }
+}
+
+bool YukariConnect::ensureWebSocketConnected(int timeoutMs)
+{
+    ensureWebSocket();
+
+    if (m_webSocket->state() == QAbstractSocket::ConnectedState) {
+        return true;
+    }
+
+    if (m_webSocket->state() == QAbstractSocket::ConnectingState) {
+        // Already connecting, wait for connection
+        QEventLoop loop;
+        QTimer timeoutTimer;
+        timeoutTimer.setSingleShot(true);
+        connect(m_webSocket, &QWebSocket::connected, &loop, &QEventLoop::quit);
+        connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timeoutTimer.start(timeoutMs);
+        loop.exec();
+
+        return m_webSocket->state() == QAbstractSocket::ConnectedState;
+    }
+
+    // Need to connect
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    connect(m_webSocket, &QWebSocket::connected, &loop, &QEventLoop::quit);
+    connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(timeoutMs);
+
+    QString wsUrl = getWebSocketUrl();
+    qDebug() << "Connecting to WebSocket:" << wsUrl;
+    m_webSocket->open(QUrl(wsUrl));
+    loop.exec();
+
+    if (!timeoutTimer.isActive()) {
+        qWarning() << "WebSocket connection timeout";
+        return false;
+    }
+
+    if (m_webSocket->state() != QAbstractSocket::ConnectedState) {
+        qWarning() << "Failed to connect to WebSocket";
+        return false;
+    }
+
+    qDebug() << "WebSocket connected";
+    emit availabilityChanged(true);
+    return true;
+}
+
+void YukariConnect::resetWebSocket()
+{
+    if (m_webSocket) {
+        if (m_webSocket->state() == QAbstractSocket::ConnectedState) {
+            m_webSocket->close();
+        }
+        m_webSocket->deleteLater();
+        m_webSocket = nullptr;
+    }
+    // Clear all pending responses
+    for (auto& list : m_pendingResponses) {
+        for (const auto& pending : list) {
+            if (pending && pending->loop) {
+                pending->loop->quit();
+            }
+        }
+    }
+    m_pendingResponses.clear();
+}
+
+void YukariConnect::handleWebSocketMessage(const QString& message)
+{
+    qDebug() << "WebSocket received:" << message;
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(message.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "Failed to parse WebSocket message:" << parseError.errorString();
+        return;
+    }
+
+    const QJsonObject obj = doc.object();
+    const QString command = obj["command"].toString();
+
+    // Handle server-pushed metadata immediately.
+    // Only emit signal if there are receivers connected to prevent crashes
+    if (command == "get_metadata_response") {
+        const auto meta = YukariConnectTypes::MetaInfo::fromJson(obj["data"].toObject());
+        qDebug() << "Received metadata from server push:" << meta.version;
+        // Get the metaChanged signal method to check if it has receivers
+        QMetaMethod metaChangedSignal = QMetaMethod::fromSignal(&YukariConnect::metaChanged);
+        if (isSignalConnected(metaChangedSignal)) {
+            emit metaChanged(meta);
+        }
+    }
+
+    // First check if there are pending requests waiting for this command
+    if (m_pendingResponses.contains(command)) {
+        auto& pendingList = m_pendingResponses[command];
+        if (!pendingList.isEmpty()) {
+            auto pending = pendingList.takeFirst();
+            if (pending) {
+                pending->response = obj["data"].toObject();
+                pending->completed = true;
+                if (pending->loop) {
+                    pending->loop->quit();
+                }
+            }
+            // Clean up empty lists
+            if (pendingList.isEmpty()) {
+                m_pendingResponses.remove(command);
+            }
+        }
+    }
+
+    // Then handle auto-pushed messages (emit signals for UI updates)
+    if (command == "get_status_response") {
+        auto state = std::make_shared<YukariConnectTypes::StateResponse>(
+            YukariConnectTypes::StateResponse::fromJson(obj["data"].toObject())
+        );
+        emit stateChanged(*state);
+        return;
+    }
+
+    if (command == "get_log_response") {
+        // Handle log messages - emit as log output
+        const QJsonObject data = obj["data"].toObject();
+        QString logMsg = data["logMessage"].toString();
+        if (!logMsg.isEmpty()) {
+            emit logOutput(logMsg + "\n");
+        }
+        return;
+    }
+}
+
+bool YukariConnect::sendWsRequest(const QString& command, const QJsonObject& data)
+{
+    if (!ensureWebSocketConnected(5000)) {
+        return false;
+    }
+
+    QJsonObject request;
+    request["command"] = command;
+    request["timestamp"] = QDateTime::currentMSecsSinceEpoch();
+    // Always include data field, even if empty (server expects it)
+    request["data"] = data.isEmpty() ? QJsonObject() : data;
+
+    const QJsonDocument doc(request);
+    const QString message = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+
+    qDebug() << "WebSocket sending:" << message;
+    m_webSocket->sendTextMessage(message);
+    return true;
+}
+
+QJsonObject YukariConnect::sendWsRequestAndWait(const QString& command, const QString& responseCommand, const QJsonObject& data, int timeoutMs)
+{
+    if (!ensureWebSocketConnected(5000)) {
+        return QJsonObject();
+    }
+
+    // Create pending response tracker
+    QEventLoop loop;
+    auto pending = QSharedPointer<PendingWsResponse>::create();
+    pending->loop = &loop;
+    pending->completed = false;
+
+    if (!m_pendingResponses.contains(responseCommand)) {
+        m_pendingResponses[responseCommand] = QList<QSharedPointer<PendingWsResponse>>();
+    }
+    m_pendingResponses[responseCommand].append(pending);
+
+    // Send request
+    QJsonObject request;
+    request["command"] = command;
+    request["timestamp"] = QDateTime::currentMSecsSinceEpoch();
+    // Always include data field, even if empty (server expects it)
+    request["data"] = data.isEmpty() ? QJsonObject() : data;
+
+    const QJsonDocument doc(request);
+    const QString message = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+
+    qDebug() << "WebSocket sending:" << message;
+    m_webSocket->sendTextMessage(message);
+
+    // Wait for response
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start(timeoutMs);
+    loop.exec();
+
+    // Remove from pending list if still there (timeout case)
+    if (m_pendingResponses.contains(responseCommand)) {
+        auto& list = m_pendingResponses[responseCommand];
+        list.removeAll(pending);
+        if (list.isEmpty()) {
+            m_pendingResponses.remove(responseCommand);
+        }
+    }
+
+    if (!pending->completed) {
+        qWarning() << "WebSocket request timeout for command:" << command;
+        return QJsonObject();
+    }
+
+    return pending->response;
+}
+
+void YukariConnect::sendWsRequestAsync(const QString& command, const QJsonObject& data)
+{
+    if (!ensureWebSocketConnected(5000)) {
+        return;
+    }
+
+    QJsonObject request;
+    request["command"] = command;
+    request["timestamp"] = QDateTime::currentMSecsSinceEpoch();
+    // Always include data field, even if empty (server expects it)
+    request["data"] = data.isEmpty() ? QJsonObject() : data;
+
+    const QJsonDocument doc(request);
+    const QString message = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+
+    qDebug() << "WebSocket sending (async):" << message;
+    m_webSocket->sendTextMessage(message);
+}
+
+// ==================== Public API Methods (WebSocket) ====================
+
 bool YukariConnect::isAvailable()
 {
-    auto meta = fetchMeta();
-    return meta != nullptr;
+    // In WebSocket mode, just check if WebSocket is connected
+    // Don't wait for metadata response since server will push it automatically
+    return m_webSocket && m_webSocket->state() == QAbstractSocket::ConnectedState;
 }
 
 std::shared_ptr<YukariConnectTypes::MetaInfo> YukariConnect::fetchMeta()
 {
-    return fetchMeta(5000);  // Default 5 second timeout
+    // In WebSocket mode, metadata is pushed by server automatically
+    // This method is kept for compatibility but does nothing
+    // The actual metadata comes via metaChanged signal
+    return nullptr;
 }
 
 std::shared_ptr<YukariConnectTypes::MetaInfo> YukariConnect::fetchMeta(int timeoutMs)
 {
-    const QByteArray data = sendGetRequest("/meta", {}, timeoutMs);
-    if (data.isEmpty()) {
-        return nullptr;
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qWarning() << "Failed to parse YukariConnect meta JSON:" << parseError.errorString();
-        return nullptr;
-    }
-
-    return std::make_shared<YukariConnectTypes::MetaInfo>(YukariConnectTypes::MetaInfo::fromJson(doc.object()));
+    // In WebSocket mode, metadata is pushed by server automatically
+    // This method is kept for compatibility but does nothing
+    // The actual metadata comes via metaChanged signal
+    (void)timeoutMs;
+    return nullptr;
 }
 
 std::shared_ptr<YukariConnectTypes::StateResponse> YukariConnect::fetchState()
 {
-    const QByteArray data = sendGetRequest("/state", {});
-    if (data.isEmpty()) {
-        return nullptr;
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qWarning() << "Failed to parse YukariConnect state JSON:" << parseError.errorString();
-        return nullptr;
-    }
-
-    auto state = std::make_shared<YukariConnectTypes::StateResponse>(YukariConnectTypes::StateResponse::fromJson(doc.object()));
-    emit stateChanged(*state);
-    return state;
+    // In WebSocket mode, state is pushed by server automatically
+    // This method is kept for compatibility but does nothing
+    // The actual state comes via stateChanged signal
+    return nullptr;
 }
 
 bool YukariConnect::panic(bool peaceful)
 {
-    QMap<QString, QString> params;
-    params["peaceful"] = peaceful ? "true" : "false";
-    bool result = sendGetRequestWithStatus("/panic", params);
-    // Emergency stop (peaceful=false) terminates the server immediately
+    // Use HTTP API for shutdown - more reliable for stopping the server
+    // /panic is a GET request with 'peaceful' query parameter (from source code)
+    QString endpoint = QString("/panic?peaceful=%1").arg(peaceful ? "true" : "false");
+    const QJsonObject response = sendHttpRequest(endpoint, {}, "GET");
+    bool result = !response.isEmpty();
+
     // Reset the success flag so isProcessRunning() returns false
-    if (!peaceful && result) {
+    if (result) {
         m_wasStartedSuccessfully = false;
     }
     return result;
@@ -476,191 +775,140 @@ bool YukariConnect::panic(bool peaceful)
 
 void YukariConnect::panicAsync(bool peaceful)
 {
-    QMap<QString, QString> params;
-    params["peaceful"] = peaceful ? "true" : "false";
-    sendGetRequestAsync("/panic", params);
+    // Use HTTP API for shutdown - more reliable for stopping the server
+    // /panic is a GET request with 'peaceful' query parameter (from source code)
+    QString endpoint = QString("/panic?peaceful=%1").arg(peaceful ? "true" : "false");
+    // Send HTTP request in a separate thread to avoid blocking
+    (void)QtConcurrent::run([this, endpoint]() {
+        sendHttpRequest(endpoint, {}, "GET");
+    });
     // Reset the flag immediately since we're shutting down
-    if (!peaceful) {
-        m_wasStartedSuccessfully = false;
-    }
+    m_wasStartedSuccessfully = false;
 }
 
 bool YukariConnect::startScanning(const QString& player)
 {
-    QMap<QString, QString> params;
-    params["player"] = player;
-    return sendGetRequestWithStatus("/state/scanning", params);
+    QJsonObject data;
+    data["player"] = player;
+    const QJsonObject response = sendWsRequestAndWait("start_host", "start_host_response", data);
+    return !response.isEmpty() && response["status"].toString() == "ok";
 }
 
 bool YukariConnect::cancelState()
 {
-    return sendGetRequestWithStatus("/state/ide", {});
+    // Use HTTP API for stopping room - more reliable
+    const QJsonObject response = sendHttpRequest("/room/stop", {}, "POST");
+    return !response.isEmpty();
 }
 
 void YukariConnect::cancelStateAsync()
 {
-    sendGetRequestAsync("/state/ide", {});
+    // Use HTTP API for stopping room - more reliable
+    // Send HTTP request in a separate thread to avoid blocking
+    (void)QtConcurrent::run([this]() {
+        sendHttpRequest("/room/stop", {}, "POST");
+    });
 }
 
 bool YukariConnect::joinRoom(const QString& room, const QString& player)
 {
-    QMap<QString, QString> params;
-    params["room"] = room;
-    params["player"] = player;
-    return sendGetRequestWithStatus("/state/guesting", params);
+    QJsonObject data;
+    data["room"] = room;
+    data["player"] = player;
+    const QJsonObject response = sendWsRequestAndWait("join_room", "join_room_response", data);
+    return !response.isEmpty() && response["status"].toString() == "ok";
+}
+
+// ==================== HTTP API Methods ====================
+
+QJsonObject YukariConnect::sendHttpRequest(const QString& endpoint, const QJsonObject& data, const QString& method)
+{
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl(m_baseUrl + endpoint));
+    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
+
+    QNetworkReply* reply = nullptr;
+
+    if (method == "GET") {
+        reply = manager.get(request);
+    } else if (method == "POST") {
+        request.setRawHeader("Content-Type", "application/json");
+        const QJsonDocument doc(data);
+        const QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        reply = manager.post(request, jsonData);
+    }
+
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    QJsonObject result;
+    if (reply->error() == QNetworkReply::NoError) {
+        const QByteArray responseData = reply->readAll();
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
+        if (parseError.error == QJsonParseError::NoError) {
+            result = doc.object();
+        }
+    }
+    reply->deleteLater();
+
+    return result;
+}
+
+bool YukariConnect::httpStopRoom()
+{
+    const QJsonObject response = sendHttpRequest("/room/stop", {}, "POST");
+    return !response.isEmpty();
+}
+
+bool YukariConnect::httpRetryRoom()
+{
+    const QJsonObject response = sendHttpRequest("/room/retry", {}, "POST");
+    return !response.isEmpty();
+}
+
+bool YukariConnect::httpStartHost(const QString& player, int scaffoldingPort)
+{
+    QJsonObject data;
+    if (!player.isEmpty()) {
+        data["playerName"] = "Host";
+    } else {
+        data["playerName"] = player;
+    }
+    if (scaffoldingPort > 0) {
+        data["scaffoldingPort"] = scaffoldingPort;
+    }
+    // Add launcher custom string if set
+    QString launcherString = QString("Luna/%1").arg(BuildConfig.versionString());
+    data["launcherCustomString"] = launcherString;
+
+    const QJsonObject response = sendHttpRequest("/room/host/start", data, "POST");
+    return !response.isEmpty();
+}
+
+bool YukariConnect::httpStartGuest(const QString& room, const QString& player)
+{
+    QJsonObject data;
+    data["roomCode"] = room;
+    if (!player.isEmpty()) {
+        data["playerName"] = "Guest";
+    } else {
+        data["playerName"] = player;
+    }
+    // Add launcher custom string if set
+    QString launcherString = QString("Luna/%1").arg(BuildConfig.versionString());
+    data["launcherCustomString"] = launcherString;
+
+    const QJsonObject response = sendHttpRequest("/room/guest/start", data, "POST");
+    return !response.isEmpty();
 }
 
 QByteArray YukariConnect::fetchLog(bool fetch)
 {
-    QMap<QString, QString> params;
-    params["fetch"] = fetch ? "true" : "false";
-    return sendGetRequest("/log", params);
-}
-
-QByteArray YukariConnect::sendGetRequest(const QString& endpoint, const QMap<QString, QString>& params, int timeoutMs)
-{
-    QNetworkAccessManager manager;
-
-    // Build URL with parameters
-    QString urlStr = m_baseUrl + endpoint;
-    if (!params.isEmpty()) {
-        QStringList paramList;
-        for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
-            paramList.append(it.key() + "=" + it.value());
-        }
-        urlStr += "?" + paramList.join("&");
-    }
-
-    QNetworkRequest request{ QUrl(urlStr) };
-    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
-
-    QNetworkReply* reply = manager.get(request);
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    // Set timeout
-    QTimer timeoutTimer;
-    timeoutTimer.setSingleShot(true);
-    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timeoutTimer.start(timeoutMs);
-
-    loop.exec();
-
-    // Check if timeout occurred
-    if (!timeoutTimer.isActive()) {
-        qWarning() << "YukariConnect request timeout:" << urlStr;
-        reply->abort();
-        reply->deleteLater();
-        emit availabilityChanged(false);
-        return QByteArray();
-    }
-    timeoutTimer.stop();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "YukariConnect request failed:" << reply->errorString() << "URL:" << urlStr;
-        emit availabilityChanged(false);
-        reply->deleteLater();
-        return QByteArray();
-    }
-
-    emit availabilityChanged(true);
-    const QByteArray data = reply->readAll();
-    reply->deleteLater();
-    return data;
-}
-
-bool YukariConnect::sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params, int timeoutMs)
-{
-    QNetworkAccessManager manager;
-
-    // Build URL with parameters
-    QString urlStr = m_baseUrl + endpoint;
-    if (!params.isEmpty()) {
-        QStringList paramList;
-        for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
-            paramList.append(it.key() + "=" + it.value());
-        }
-        urlStr += "?" + paramList.join("&");
-    }
-
-    QNetworkRequest request{ QUrl(urlStr) };
-    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
-
-    QNetworkReply* reply = manager.get(request);
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    // Set timeout
-    QTimer timeoutTimer;
-    timeoutTimer.setSingleShot(true);
-    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timeoutTimer.start(timeoutMs);
-
-    loop.exec();
-
-    // Check if timeout occurred
-    if (!timeoutTimer.isActive()) {
-        qWarning() << "YukariConnect request timeout:" << urlStr;
-        reply->abort();
-        reply->deleteLater();
-        emit availabilityChanged(false);
-        return false;
-    }
-    timeoutTimer.stop();
-
-    // Check for network errors
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "YukariConnect request failed:" << reply->errorString() << "URL:" << urlStr
-                   << "HTTP status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        emit availabilityChanged(false);
-        reply->deleteLater();
-        return false;
-    }
-
-    // Check HTTP status code (some endpoints return 200 OK with empty body, others return 400 on error)
-    int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    if (httpStatus >= 200 && httpStatus < 300) {
-        emit availabilityChanged(true);
-        reply->deleteLater();
-        return true;
-    } else {
-        qWarning() << "YukariConnect request returned HTTP status:" << httpStatus << "URL:" << urlStr;
-        emit availabilityChanged(false);
-        reply->deleteLater();
-        return false;
-    }
-}
-
-void YukariConnect::sendGetRequestAsync(const QString& endpoint, const QMap<QString, QString>& params)
-{
-    // Build URL with parameters
-    QString urlStr = m_baseUrl + endpoint;
-    if (!params.isEmpty()) {
-        QStringList paramList;
-        for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
-            paramList.append(it.key() + "=" + it.value());
-        }
-        urlStr += "?" + paramList.join("&");
-    }
-
-    QNetworkRequest request{ QUrl(urlStr) };
-    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
-
-    // Create a manager that will be deleted when the reply is finished
-    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
-    QNetworkReply* reply = manager->get(request);
-
-    // Connect to finished signal to clean up
-    connect(reply, &QNetworkReply::finished, this, [manager, reply]() {
-        reply->deleteLater();
-        manager->deleteLater();
-    });
-
-    // Also clean up on error (in case finished never fires)
-    connect(reply, &QNetworkReply::errorOccurred, this, [manager, reply]() {
-        reply->deleteLater();
-        manager->deleteLater();
-    });
+    // Logs are pushed automatically via WebSocket, so we just return accumulated log lines
+    QMutexLocker locker(&const_cast<QMutex&>(m_logMutex));
+    return m_logLines.join("\n").toUtf8();
 }
 
 QString YukariConnect::getPortFilePath() const
@@ -877,12 +1125,30 @@ bool YukariConnect::startProcess()
     if (portDetected && detectedPort > 0) {
         m_baseUrl = QString("http://127.0.0.1:%1").arg(detectedPort);
         m_wasStartedSuccessfully = true;
+
+        // Reset any existing WebSocket connection
+        resetWebSocket();
+
         emit availabilityChanged(true);
         qDebug() << "YukariConnect started on port:" << detectedPort;
 
-        // Set launcher vendor identification automatically on startup
+        // Prepare launcher string before connecting
         QString launcherString = QString("Luna/%1").arg(BuildConfig.versionString());
-        setLauncherCustomString(launcherString);
+
+        // Connect to WebSocket
+        if (ensureWebSocketConnected(5000)) {
+            qDebug() << "WebSocket connected to YukariConnect";
+
+            // Wait a bit for the server to send initial messages
+            // The server sends: get_status_response, get_room_status_response,
+            // list_servers_response, list_public_servers_response, get_metadata_response
+            QTimer::singleShot(500, this, [this, launcherString]() {
+                // Set launcher vendor identification automatically on startup
+                setLauncherCustomString(launcherString);
+            });
+        } else {
+            qWarning() << "Failed to connect WebSocket to YukariConnect";
+        }
 
         // Connect process output for continuous log streaming
         // YukariConnect keeps running and outputs logs continuously
@@ -940,6 +1206,9 @@ void YukariConnect::stopProcess()
 
 void YukariConnect::forceKillProcess()
 {
+    // Clean up WebSocket connection first
+    resetWebSocket();
+
     if (m_process) {
         qDebug() << "Force killing YukariConnect process...";
         if (m_process->state() == QProcess::Running) {
@@ -968,9 +1237,18 @@ void YukariConnect::forceKillProcess()
 
 bool YukariConnect::shutdownAndWait(int timeoutMs)
 {
-    // Check if YukariConnect API is responding (with very short timeout)
-    if (fetchMeta(100) == nullptr) {
-        // Already not running
+    // First check if process was ever started successfully
+    // If we never started it or it was already marked as stopped, don't try to shut down
+    if (!m_wasStartedSuccessfully) {
+        qDebug() << "YukariConnect was not started, skipping shutdown";
+        return true;
+    }
+
+    // Check if YukariConnect WebSocket is connected
+    if (!isAvailable()) {
+        // Already not connected
+        qDebug() << "YukariConnect not available, assuming already stopped";
+        m_wasStartedSuccessfully = false;
         return true;
     }
 
@@ -978,18 +1256,23 @@ bool YukariConnect::shutdownAndWait(int timeoutMs)
     cancelStateAsync();
     panicAsync(true);
 
-    // Wait for API to stop responding
+    // Wait for WebSocket to disconnect
     const int sleepMs = 100;
     const int maxIterations = timeoutMs / sleepMs;
     for (int i = 0; i < maxIterations; i++) {
         QThread::msleep(sleepMs);
-        if (fetchMeta(100) == nullptr) {
+        if (!isAvailable()) {
             // Stopped successfully
+            qDebug() << "YukariConnect stopped successfully";
+            m_wasStartedSuccessfully = false;
             return true;
         }
     }
 
-    // Timeout - but we assume it has stopped
+    // Timeout - force kill the process
+    qDebug() << "YukariConnect shutdown timeout, force killing process...";
+    forceKillProcess();
+    m_wasStartedSuccessfully = false;
     return false;
 }
 
@@ -1014,73 +1297,16 @@ bool YukariConnect::getStopOnClose() const
     return m_stopOnClose;
 }
 
-// ==================== YukariConnect Extension APIs ====================
-
-QByteArray YukariConnect::sendPostRequest(const QString& endpoint, const QJsonObject& body, int timeoutMs)
-{
-    QNetworkAccessManager manager;
-
-    // Build URL
-    QString urlStr = m_baseUrl + endpoint;
-    QNetworkRequest request{ QUrl(urlStr) };
-    request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
-    request.setRawHeader("Content-Type", "application/json");
-
-    // Convert JSON body to bytes
-    const QJsonDocument doc(body);
-    const QByteArray data = doc.toJson(QJsonDocument::Compact);
-
-    QNetworkReply* reply = manager.post(request, data);
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    // Set timeout
-    QTimer timeoutTimer;
-    timeoutTimer.setSingleShot(true);
-    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timeoutTimer.start(timeoutMs);
-
-    loop.exec();
-
-    // Check if timeout occurred
-    if (!timeoutTimer.isActive()) {
-        qWarning() << "YukariConnect POST request timeout:" << urlStr;
-        reply->abort();
-        reply->deleteLater();
-        emit availabilityChanged(false);
-        return QByteArray();
-    }
-    timeoutTimer.stop();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "YukariConnect POST request failed:" << reply->errorString() << "URL:" << urlStr;
-        emit availabilityChanged(false);
-        reply->deleteLater();
-        return QByteArray();
-    }
-
-    emit availabilityChanged(true);
-    const QByteArray responseData = reply->readAll();
-    reply->deleteLater();
-    return responseData;
-}
+// ==================== YukariConnect Extension APIs (WebSocket) ====================
 
 bool YukariConnect::setLauncherCustomString(const QString& customString)
 {
-    QJsonObject request;
-    request["launcherCustomString"] = customString;
+    QJsonObject data;
+    data["launcherCustomString"] = customString;
 
-    const QByteArray data = sendPostRequest("/config/launcher", request);
-    if (data.isEmpty()) {
+    const QJsonObject response = sendWsRequestAndWait("set_launcher_custom_string", "set_launcher_custom_string_response", data);
+    if (response.isEmpty()) {
         qWarning() << "Failed to set launcher custom string";
-        return false;
-    }
-
-    // Parse response to verify success
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qWarning() << "Failed to parse launcher config response:" << parseError.errorString();
         return false;
     }
 
@@ -1090,34 +1316,16 @@ bool YukariConnect::setLauncherCustomString(const QString& customString)
 
 QJsonObject YukariConnect::getRoomStatus()
 {
-    const QByteArray data = sendGetRequest("/room/status", {});
-    if (data.isEmpty()) {
-        return QJsonObject();
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qWarning() << "Failed to parse room status JSON:" << parseError.errorString();
-        return QJsonObject();
-    }
-
-    return doc.object();
+    const QJsonObject response = sendWsRequestAndWait("get_room_status", "get_room_status_response", {});
+    return response;
 }
 
 bool YukariConnect::retryRoom()
 {
-    // POST /room/retry - clears Exception state and returns to Idle
-    const QByteArray data = sendPostRequest("/room/retry", QJsonObject());
-    if (data.isEmpty()) {
+    // room_retry - clears Exception state and returns to Idle
+    const QJsonObject response = sendWsRequestAndWait("room_retry", "room_retry_response", {});
+    if (response.isEmpty()) {
         qWarning() << "Failed to retry from Exception state";
-        return false;
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qWarning() << "Failed to parse retry response:" << parseError.errorString();
         return false;
     }
 

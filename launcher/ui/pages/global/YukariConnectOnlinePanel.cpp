@@ -35,12 +35,15 @@
 #include "ui_YukariConnectOnlinePanel.h"
 
 #include <QClipboard>
+#include <QFileDialog>
 #include <QRegularExpression>
 #include <QTimer>
 #include <QDateTime>
 #include <QThread>
 #include <QGuiApplication>
 #include <QMessageBox>
+#include <QFile>
+#include <QTextStream>
 
 #include "Application.h"
 #include "DesktopServices.h"
@@ -73,53 +76,15 @@ YukariConnectOnlinePanel::YukariConnectOnlinePanel(QWidget* parent) : QMainWindo
         savePlayerName();
     });
 
-    // Create state polling timer
+    // Note: In WebSocket mode, state and metadata are pushed by server automatically
+    // We don't need to poll for state changes anymore
+    // The stateChanged signal will be emitted when server pushes state updates
+    // The polling timer is kept for compatibility but does nothing in WebSocket mode
     m_statePollTimer = new QTimer(this);
     m_statePollTimer->setInterval(m_pollingInterval);
     connect(m_statePollTimer, &QTimer::timeout, this, [this]() {
-        auto state = YukariConnect::instance().fetchState();
-        if (state) {
-            // Track if this is a state transition
-            bool stateChanged = (m_lastState != state->state);
-            m_lastState = state->state;
-
-            // Handle Exception state with friendly message (only on transition)
-            if (state->state == YukariConnectTypes::State::Exception && stateChanged) {
-                handleExceptionState(*state);
-            }
-
-            // Note: fetchState() already emits stateChanged signal which triggers
-            // onStateChanged() -> updateStateDisplay(), so we don't need to call it again here.
-            // But we do need to update port display and track player changes.
-
-            // Update port display
-            updatePortDisplay();
-
-            // For HostOk/GuestOk states, continue polling to monitor player changes
-            // Note: We keep polling as long as server is running, regardless of state
-            if (state->state == YukariConnectTypes::State::HostOk ||
-                       state->state == YukariConnectTypes::State::GuestOk) {
-                // In HostOk or GuestOk state, monitor player list changes
-                if (stateChanged) {
-                    // Just reached this state, log it
-                    appendLog(tr("Now monitoring for player changes..."));
-                }
-                // Check if player list changed (detected by profile_index change)
-                if (state->profile_index != m_lastProfileIndex) {
-                    if (!stateChanged) {  // Only log if not the initial state change
-                        appendLog(tr("Player list updated (index: %1)").arg(state->profile_index));
-                    }
-                    m_lastProfileIndex = state->profile_index;
-                }
-            }
-        } else {
-            // API not responding - server likely stopped
-            // Stop polling and update server state
-            stopPollingState();
-            m_serverRunning = false;
-            updateServerButtonState();
-            m_lastProfileIndex = -1;
-        }
+        // In WebSocket mode, we don't poll - server pushes updates automatically
+        // This timer is kept for compatibility but does nothing
     });
 
     // Connect buttons
@@ -133,18 +98,20 @@ YukariConnectOnlinePanel::YukariConnectOnlinePanel(QWidget* parent) : QMainWindo
     connect(ui->pushButton_panic, &QPushButton::clicked, this, &YukariConnectOnlinePanel::onPanicClicked);
     connect(ui->pushButton_copy_code, &QPushButton::clicked, this, &YukariConnectOnlinePanel::onCopyCodeClicked);
     connect(ui->pushButton_fetch_log, &QPushButton::clicked, this, &YukariConnectOnlinePanel::onFetchLogClicked);
+    connect(ui->pushButton_export_log, &QPushButton::clicked, this, &YukariConnectOnlinePanel::onExportLogClicked);
     connect(ui->pushButton_clear_log, &QPushButton::clicked, this, &YukariConnectOnlinePanel::onClearLogClicked);
     connect(ui->pushButton_about, &QPushButton::clicked, this, &YukariConnectOnlinePanel::onAboutClicked);
 
     // Connect player name text changed to restart save timer
     connect(ui->lineEdit_player_name, &QLineEdit::textChanged, this, [this]() {
-        // Restart the timer whenever user types
+        // Restart timer whenever user types
         m_playerNameSaveTimer->start();
     });
 
     // Connect to YukariConnect signals
     connect(&YukariConnect::instance(), &YukariConnect::stateChanged, this, &YukariConnectOnlinePanel::onStateChanged);
     connect(&YukariConnect::instance(), &YukariConnect::availabilityChanged, this, &YukariConnectOnlinePanel::onAvailabilityChanged);
+    connect(&YukariConnect::instance(), &YukariConnect::metaChanged, this, &YukariConnectOnlinePanel::onMetaChanged);
     connect(&YukariConnect::instance(), &YukariConnect::logOutput, this, &YukariConnectOnlinePanel::onLogOutput);
 
     // Show current connection port and server button state
@@ -153,11 +120,8 @@ YukariConnectOnlinePanel::YukariConnectOnlinePanel(QWidget* parent) : QMainWindo
 
     // Auto-start YukariConnect process if not running (delayed to avoid blocking UI)
     QTimer::singleShot(100, this, [this]() {
-        // Check if API is responding to determine actual server state
-        bool apiResponding = (YukariConnect::instance().fetchMeta(500) != nullptr);
-        m_serverRunning = apiResponding;
-
-        if (!apiResponding && !YukariConnect::instance().isProcessRunning()) {
+        // Check if process is already running
+        if (!YukariConnect::instance().isProcessRunning()) {
             ui->label_state_value->setText(tr("Starting..."));
             appendLog(tr("Starting YukariConnect process..."));
 
@@ -166,22 +130,18 @@ YukariConnectOnlinePanel::YukariConnectOnlinePanel(QWidget* parent) : QMainWindo
                 ui->label_state_value->setText(tr("Connected"));
                 m_serverRunning = true;
                 updatePortDisplay();
-                // Start polling when server starts
-                startPollingState();
+                // In WebSocket mode, server will push initial state automatically
             } else {
                 appendLog(tr("Failed to start YukariConnect process. Please check if it is installed."));
                 ui->label_state_value->setText(tr("Failed"));
                 m_serverRunning = false;
             }
-        } else if (apiResponding) {
-            // Server is already running, start polling
+        } else {
+            // Server is already running, wait for WebSocket connection
             ui->label_state_value->setText(tr("Connected"));
-            startPollingState();
         }
         // Update button state after initial check
         updateServerButtonState();
-        // Initial refresh after process starts
-        onRefreshClicked();
     });
 }
 
@@ -230,19 +190,20 @@ void YukariConnectOnlinePanel::onRefreshClicked()
 
     appendLog(tr("Refreshing state..."));
 
-    auto state = YukariConnect::instance().fetchState();
-    if (state) {
-        updateStateDisplay(*state);
-        updatePortDisplay();  // Update port display after successful refresh
+    // In WebSocket mode, server pushes state automatically
+    // Just check if WebSocket is connected
+    if (YukariConnect::instance().isAvailable()) {
+        appendLog(tr("WebSocket connected. Waiting for server to push state updates..."));
+        updatePortDisplay();  // Update port display
     } else {
-        appendLog(tr("Failed to fetch state. Is YukariConnect server running?"));
+        appendLog(tr("Failed to connect to YukariConnect server."));
         ui->label_state_value->setText(tr("Error"));
         // Disable most UI, but keep Start/Stop Server button enabled
         ui->groupBox_actions->setEnabled(false);
         ui->pushButton_stop_server->setEnabled(true);
-        // Show "Start Server" since fetch failed
+        // Show "Start Server" since connection failed
         ui->pushButton_stop_server->setText(tr("Start Server"));
-        ui->pushButton_stop_server->setToolTip(tr("Start the YukariConnect server"));
+        ui->pushButton_stop_server->setToolTip(tr("Start YukariConnect server"));
     }
 
     ui->pushButton_refresh->setEnabled(true);
@@ -253,7 +214,7 @@ void YukariConnectOnlinePanel::onOpenWebUIClicked()
 {
     QString url = YukariConnect::instance().getBaseUrl();
     if (url.isEmpty()) {
-        appendLog(tr("YukariConnect server URL not available. Please start the server first."));
+        appendLog(tr("YukariConnect server URL not available. Please start server first."));
         return;
     }
     appendLog(tr("Opening YukariConnect Web UI in browser: %1").arg(url));
@@ -275,8 +236,7 @@ void YukariConnectOnlinePanel::onHostClicked()
 
     if (YukariConnect::instance().startScanning(playerName)) {
         appendLog(tr("Successfully entered scanning mode. Waiting for room creation..."));
-        // Immediately refresh state to update UI
-        onRefreshClicked();
+        // In WebSocket mode, server will push state updates automatically
     } else {
         appendLog(tr("Failed to enter scanning mode."));
     }
@@ -303,11 +263,10 @@ void YukariConnectOnlinePanel::onJoinClicked()
 
     if (YukariConnect::instance().joinRoom(roomCode, playerName)) {
         appendLog(tr("Successfully joined room. Waiting for connection..."));
-        // Immediately refresh state to update UI
-        onRefreshClicked();
+        // In WebSocket mode, server will push state updates automatically
     } else {
-        appendLog(tr("Failed to join room. Check the room code and try again."));
-        QMessageBox::warning(this, tr("Join Failed"), tr("Failed to join the room. The room code may be invalid or the room is full."));
+        appendLog(tr("Failed to join room. Check room code and try again."));
+        QMessageBox::warning(this, tr("Join Failed"), tr("Failed to join room. The room code may be invalid or room is full."));
     }
 }
 
@@ -317,8 +276,7 @@ void YukariConnectOnlinePanel::onCloseRoomClicked()
 
     if (YukariConnect::instance().cancelState()) {
         appendLog(tr("Room closed successfully. Back to idle state."));
-        // Immediately refresh state to update UI
-        onRefreshClicked();
+        // In WebSocket mode, server will push state updates automatically
     } else {
         appendLog(tr("Failed to close room."));
     }
@@ -332,7 +290,7 @@ void YukariConnectOnlinePanel::onToggleServerClicked()
     if (isStopAction) {
         // Server is running - stop it
         auto reply = QMessageBox::question(this, tr("Stop Server"),
-                                            tr("Are you sure you want to stop the YukariConnect server?\n\nThis will gracefully shut down the server and close all connections."),
+                                            tr("Are you sure you want to stop YukariConnect server?\n\nThis will gracefully shut down the server and close all connections."),
                                             QMessageBox::Yes | QMessageBox::No);
 
         if (reply == QMessageBox::Yes) {
@@ -374,12 +332,7 @@ void YukariConnectOnlinePanel::onToggleServerClicked()
             ui->label_state_value->setText(tr("Connected"));
             updatePortDisplay();
             updateServerButtonState();
-            // Start polling for state changes
-            startPollingState();
-            // Refresh state after a short delay to let server initialize
-            QTimer::singleShot(500, this, [this]() {
-                onRefreshClicked();
-            });
+            // In WebSocket mode, server will push state updates automatically
         } else {
             appendLog(tr("Failed to start YukariConnect server. Please check if it is installed."));
             m_serverRunning = false;
@@ -392,7 +345,7 @@ void YukariConnectOnlinePanel::onToggleServerClicked()
 void YukariConnectOnlinePanel::onRestartClicked()
 {
     auto reply = QMessageBox::question(this, tr("Restart Server"),
-                                        tr("Are you sure you want to restart the YukariConnect server?\n\nThis will disconnect all active connections."),
+                                        tr("Are you sure you want to restart YukariConnect server?\n\nThis will disconnect all active connections."),
                                         QMessageBox::Yes | QMessageBox::No);
 
     if (reply == QMessageBox::Yes) {
@@ -404,7 +357,7 @@ void YukariConnectOnlinePanel::onRestartClicked()
         // Cancel any active state first
         YukariConnect::instance().cancelState();
 
-        // Stop the current process
+        // Stop current process
         YukariConnect::instance().stopProcess();
 
         // Wait a moment for it to fully stop, then restart
@@ -415,12 +368,7 @@ void YukariConnectOnlinePanel::onRestartClicked()
                 ui->label_state_value->setText(tr("Connected"));
                 updatePortDisplay();
                 updateServerButtonState();
-                // Start polling after restart
-                startPollingState();
-                // Refresh state after restart
-                QTimer::singleShot(500, this, [this]() {
-                    onRefreshClicked();
-                });
+                // In WebSocket mode, server will push state updates automatically
             } else {
                 appendLog(tr("Failed to restart YukariConnect server."));
                 m_serverRunning = false;
@@ -444,11 +392,8 @@ void YukariConnectOnlinePanel::onPanicClicked()
             appendLog(tr("Emergency stop successful."));
             // Update button to show Start Server
             ui->pushButton_stop_server->setText(tr("Start Server"));
-            ui->pushButton_stop_server->setToolTip(tr("Start the YukariConnect server"));
-            // Refresh state after a short delay
-            QTimer::singleShot(500, this, [this]() {
-                onRefreshClicked();
-            });
+            ui->pushButton_stop_server->setToolTip(tr("Start YukariConnect server"));
+            // In WebSocket mode, server will push state updates automatically
         } else {
             appendLog(tr("Emergency stop failed."));
         }
@@ -481,6 +426,30 @@ void YukariConnectOnlinePanel::onFetchLogClicked()
     }
 }
 
+void YukariConnectOnlinePanel::onExportLogClicked()
+{
+    QString logText = ui->plainTextEdit_logs->toPlainText();
+    if (logText.isEmpty()) {
+        QMessageBox::information(this, tr("No Logs"), tr("No logs to export."));
+        return;
+    }
+
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Logs"), "yukariconnect_logs.txt", tr("Text Files (*.txt);;All Files (*.*)"));
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << logText;
+        file.close();
+        appendLog(tr("Logs exported to: %1").arg(fileName));
+    } else {
+        QMessageBox::warning(this, tr("Export Failed"), tr("Failed to save logs to file."));
+    }
+}
+
 void YukariConnectOnlinePanel::onClearLogClicked()
 {
     ui->plainTextEdit_logs->clear();
@@ -496,7 +465,7 @@ void YukariConnectOnlinePanel::onAboutClicked()
         "<p><b>Developer:</b> AndreaFrederica  AuraElicase<br>"
         "<b>Project URL:</b> <a href=\"https://github.com/ElicaseTech/YukariConnect\">https://github.com/ElicaseTech/YukariConnect</a></p>"
         "<h4>License</h4>"
-        "<p>YukariConnect is licensed under the <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
+        "<p>YukariConnect is licensed under <b>Mozilla Public License 2.0 (MPL-2.0)</b>.</p>"
     );
 
     QMessageBox::about(this, tr("About YukariConnect"), aboutText);
@@ -504,6 +473,32 @@ void YukariConnectOnlinePanel::onAboutClicked()
 
 void YukariConnectOnlinePanel::onStateChanged(const YukariConnectTypes::StateResponse& state)
 {
+    // Track if this is a state transition
+    bool stateChanged = (m_lastState != state.state);
+    m_lastState = state.state;
+
+    // Handle Exception state with friendly message (only on transition)
+    if (state.state == YukariConnectTypes::State::Exception && stateChanged) {
+        handleExceptionState(state);
+    }
+
+    // For HostOk/GuestOk states, monitor player changes
+    if (state.state == YukariConnectTypes::State::HostOk ||
+        state.state == YukariConnectTypes::State::GuestOk) {
+        // In HostOk or GuestOk state, monitor player list changes
+        if (stateChanged) {
+            // Just reached this state, log it
+            appendLog(tr("Now monitoring for player changes..."));
+        }
+        // Check if player list changed (detected by profile_index change)
+        if (state.profile_index != m_lastProfileIndex) {
+            if (!stateChanged) {  // Only log if not initial state change
+                appendLog(tr("Player list updated (index: %1)").arg(state.profile_index));
+            }
+            m_lastProfileIndex = state.profile_index;
+        }
+    }
+
     updateStateDisplay(state);
 }
 
@@ -528,7 +523,7 @@ void YukariConnectOnlinePanel::onAvailabilityChanged(bool available)
         setUIEnabled(true);
         updateServerButtonState();  // Update button based on actual process state
     } else {
-        // Disable most UI, but keep the Start/Stop Server button enabled
+        // Disable most UI, but keep Start/Stop Server button enabled
         // so users can restart the server
         ui->pushButton_host->setEnabled(false);
         ui->pushButton_join->setEnabled(false);
@@ -537,6 +532,16 @@ void YukariConnectOnlinePanel::onAvailabilityChanged(bool available)
 
         // When server is not available, show "Start Server" button
         updateServerButtonState();
+    }
+}
+
+void YukariConnectOnlinePanel::onMetaChanged(const YukariConnectTypes::MetaInfo& meta)
+{
+    // Handle metadata changes - update version display if panel is visible
+    if (isVisible()) {
+        // Only update UI if panel is visible to prevent crashes
+        qDebug() << "Meta changed, updating version display:" << meta.version;
+        // Version display is handled in the main window, not in this panel
     }
 }
 
@@ -693,13 +698,13 @@ void YukariConnectOnlinePanel::appendLog(const QString& message)
         QTextDocument* doc = ui->plainTextEdit_logs->document();
         int lineCount = doc->blockCount();
         if (lineCount > m_maxLogLines) {
-            // Remove excess lines from the beginning
+            // Remove excess lines from beginning
             QTextCursor cursor(doc);
             cursor.movePosition(QTextCursor::Start);
             while (doc->blockCount() > m_maxLogLines) {
                 cursor.select(QTextCursor::LineUnderCursor);
                 cursor.removeSelectedText();
-                cursor.deleteChar();  // Remove the newline
+                cursor.deleteChar();  // Remove newline
             }
         }
     }
@@ -737,7 +742,7 @@ void YukariConnectOnlinePanel::updateStateHint(YukariConnectTypes::State state)
             hint = tr("Enter your player name and click Create Room to host, or enter a room code to join.");
             break;
         case YukariConnectTypes::State::HostScanning:
-            hint = tr("Open your Minecraft world, press Esc, and click 'Open to LAN' to start the LAN server.");
+            hint = tr("Open your Minecraft world, press Esc, and click 'Open to LAN' to start LAN server.");
             break;
         case YukariConnectTypes::State::HostStarting:
             hint = tr("Starting your room... The server will be ready shortly.");
@@ -749,7 +754,7 @@ void YukariConnectOnlinePanel::updateStateHint(YukariConnectTypes::State state)
             hint = tr("Connecting to the host room... This may take a moment.");
             break;
         case YukariConnectTypes::State::GuestStarting:
-            hint = tr("Setting up connection to the Minecraft server...");
+            hint = tr("Setting up connection to Minecraft server...");
             break;
         case YukariConnectTypes::State::GuestOk:
             hint = tr("Connected! You can now join the game using the connection URL above.");
@@ -772,10 +777,9 @@ void YukariConnectOnlinePanel::setUIEnabled(bool enabled)
 
 void YukariConnectOnlinePanel::startPollingState()
 {
-    if (m_statePollTimer && !m_statePollTimer->isActive()) {
-        m_statePollTimer->start();
-        appendLog(tr("Started polling for state changes..."));
-    }
+    // In WebSocket mode, we don't need to poll - server pushes updates automatically
+    // This method is kept for compatibility but does nothing in WebSocket mode
+    appendLog(tr("WebSocket mode: Server will push state updates automatically."));
 }
 
 QString YukariConnectOnlinePanel::getExceptionString(YukariConnectTypes::ExceptionType type) const
@@ -835,7 +839,7 @@ void YukariConnectOnlinePanel::handleExceptionState(const YukariConnectTypes::St
         case YukariConnectTypes::ExceptionType::GuestProcessCrash:
         case YukariConnectTypes::ExceptionType::HostProcessCrash:
             appendLog(tr("Error: Process crashed. Reason: %1").arg(exceptionMsg));
-            appendLog(tr("Try restarting the YukariConnect server."));
+            appendLog(tr("Try restarting YukariConnect server."));
             break;
         case YukariConnectTypes::ExceptionType::ScaffoldingInvalidResponse:
             appendLog(tr("Protocol error: Received invalid response from server."));
@@ -849,10 +853,7 @@ void YukariConnectOnlinePanel::handleExceptionState(const YukariConnectTypes::St
     appendLog(tr("Auto-recovering from exception state..."));
     if (YukariConnect::instance().retryRoom()) {
         appendLog(tr("Successfully recovered to idle state."));
-        // Refresh state after a short delay to confirm the recovery
-        QTimer::singleShot(200, this, [this]() {
-            onRefreshClicked();
-        });
+        // In WebSocket mode, server will push state updates automatically
     } else {
         appendLog(tr("Failed to recover from exception state. You may need to restart the server."));
     }
@@ -860,10 +861,9 @@ void YukariConnectOnlinePanel::handleExceptionState(const YukariConnectTypes::St
 
 void YukariConnectOnlinePanel::stopPollingState()
 {
-    if (m_statePollTimer && m_statePollTimer->isActive()) {
-        m_statePollTimer->stop();
-        appendLog(tr("Stopped polling state."));
-    }
+    // In WebSocket mode, we don't need to poll - server pushes updates automatically
+    // This method is kept for compatibility but does nothing in WebSocket mode
+    appendLog(tr("Stopped listening for state updates."));
 }
 
 void YukariConnectOnlinePanel::updatePortDisplay()
@@ -886,10 +886,10 @@ void YukariConnectOnlinePanel::updateServerButtonState()
     // Use tracked server state instead of checking API
     if (m_serverRunning) {
         ui->pushButton_stop_server->setText(tr("Stop Server"));
-        ui->pushButton_stop_server->setToolTip(tr("Gracefully stop the YukariConnect server"));
+        ui->pushButton_stop_server->setToolTip(tr("Gracefully stop YukariConnect server"));
     } else {
         ui->pushButton_stop_server->setText(tr("Start Server"));
-        ui->pushButton_stop_server->setToolTip(tr("Start the YukariConnect server"));
+        ui->pushButton_stop_server->setToolTip(tr("Start YukariConnect server"));
     }
 }
 
@@ -927,7 +927,7 @@ void YukariConnectOnlinePanel::onLogOutput(const QString& message)
             QTextDocument* doc = ui->plainTextEdit_logs->document();
             int lineCount = doc->blockCount();
             if (lineCount > m_maxLogLines) {
-                // Remove excess lines from the beginning
+                // Remove excess lines from beginning
                 QTextCursor cursor(doc);
                 cursor.movePosition(QTextCursor::Start);
                 int linesToRemove = lineCount - m_maxLogLines;

@@ -23,7 +23,7 @@
  *  solution for Minecraft.
  *
  *  This integration communicates with the standalone YukariConnect binary via
- *  its HTTP API.
+ *  its WebSocket API.
  *
  *  A future version may replace this with a custom implementation.
  */
@@ -31,13 +31,20 @@
 #pragma once
 
 #include <QByteArray>
+#include <QHash>
 #include <QJsonObject>
-#include <QMap>
+#include <QList>
+#include <QMutex>
 #include <QObject>
 #include <QProcess>
+#include <QSharedPointer>
 #include <QString>
+#include <QStringList>
 
 #include "QObjectPtr.h"
+
+class QEventLoop;
+class QWebSocket;
 
 namespace YukariConnectTypes {
 
@@ -123,7 +130,7 @@ struct MetaInfo {
 /**
  * @brief Manages YukariConnect online functionality
  *
- * This class handles communication with the YukariConnect HTTP server,
+ * This class handles communication with the YukariConnect WebSocket server,
  * including status queries, room management, and panic operations.
  */
 class YukariConnect : public QObject {
@@ -252,6 +259,36 @@ class YukariConnect : public QObject {
      */
     QByteArray fetchLog(bool fetch = true);
 
+    // ==================== HTTP API Methods ====================
+
+    /**
+     * @brief Stop current room via HTTP API
+     * @return true if successful
+     */
+    bool httpStopRoom();
+
+    /**
+     * @brief Retry from Exception state via HTTP API
+     * @return true if successful
+     */
+    bool httpRetryRoom();
+
+    /**
+     * @brief Start host mode via HTTP API
+     * @param player Player name
+     * @param scaffoldingPort Scaffolding server port (optional)
+     * @return true if successful
+     */
+    bool httpStartHost(const QString& player, int scaffoldingPort = 0);
+
+    /**
+     * @brief Start guest mode via HTTP API
+     * @param room Room code to join
+     * @param player Player name
+     * @return true if successful
+     */
+    bool httpStartGuest(const QString& room, const QString& player);
+
     /**
      * @brief Start the YukariConnect process
      * @return true if process was started successfully
@@ -328,18 +365,31 @@ class YukariConnect : public QObject {
      * @brief Emitted when process outputs log data
      */
     void logOutput(const QString& message);
+    /**
+     * @brief Emitted when metadata is received from server
+     */
+    void metaChanged(const YukariConnectTypes::MetaInfo& meta);
 
    private:
     YukariConnect(QObject* parent = nullptr);
-    ~YukariConnect() = default;
+    ~YukariConnect();
 
-    QByteArray sendGetRequest(const QString& endpoint, const QMap<QString, QString>& params = {}, int timeoutMs = 5000);
-    // Returns true if HTTP request succeeded (status 200), regardless of response body
-    bool sendGetRequestWithStatus(const QString& endpoint, const QMap<QString, QString>& params = {}, int timeoutMs = 5000);
-    // Send request without waiting for response (fire and forget)
-    void sendGetRequestAsync(const QString& endpoint, const QMap<QString, QString>& params = {});
-    // Send POST request with JSON body
-    QByteArray sendPostRequest(const QString& endpoint, const QJsonObject& body, int timeoutMs = 5000);
+    struct PendingWsResponse {
+        QEventLoop* loop = nullptr;
+        QJsonObject response;
+        bool completed = false;
+    };
+
+    QString getWebSocketUrl() const;
+    void ensureWebSocket();
+    bool ensureWebSocketConnected(int timeoutMs = 5000);
+    void resetWebSocket();
+    void handleWebSocketMessage(const QString& message);
+
+    bool sendWsRequest(const QString& command, const QJsonObject& data = {});
+    QJsonObject sendWsRequestAndWait(const QString& command, const QString& responseCommand, const QJsonObject& data = {}, int timeoutMs = 5000);
+    void sendWsRequestAsync(const QString& command, const QJsonObject& data = {});
+    QJsonObject sendHttpRequest(const QString& endpoint, const QJsonObject& data, const QString& method);
     QString getPortFilePath() const;
     bool waitForPortFile(quint32 timeoutMs = 15000);
     bool readPortFromFile(quint16& port) const;
@@ -350,5 +400,10 @@ class YukariConnect : public QObject {
     mutable QString m_portFilePath;
     bool m_wasStartedSuccessfully = false;  // Track if HMCL mode started successfully
     bool m_stopOnClose = true;  // Whether to stop YukariConnect when launcher closes (default: true)
+    QWebSocket* m_webSocket = nullptr;
+    QString m_webSocketUrl;
+    QHash<QString, QList<QSharedPointer<PendingWsResponse>>> m_pendingResponses;
+    QStringList m_logLines;
+    mutable QMutex m_logMutex;
     static YukariConnect* s_instance;
 };

@@ -561,6 +561,8 @@ QByteArray Terracotta::sendGetRequest(const QString& endpoint, const QMap<QStrin
     if (reply->error() != QNetworkReply::NoError) {
         qWarning() << "Terracotta request failed:" << reply->errorString() << "URL:" << urlStr;
         emit availabilityChanged(false);
+        // Reset the start flag when server becomes unavailable
+        m_wasStartedSuccessfully = false;
         reply->deleteLater();
         return QByteArray();
     }
@@ -615,6 +617,8 @@ bool Terracotta::sendGetRequestWithStatus(const QString& endpoint, const QMap<QS
         qWarning() << "Terracotta request failed:" << reply->errorString() << "URL:" << urlStr
                    << "HTTP status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         emit availabilityChanged(false);
+        // Reset the start flag when server becomes unavailable
+        m_wasStartedSuccessfully = false;
         reply->deleteLater();
         return false;
     }
@@ -970,9 +974,19 @@ void Terracotta::forceKillProcess()
 
 bool Terracotta::shutdownAndWait(int timeoutMs)
 {
+    // First check if the process was ever started successfully
+    // If we never started it or it was already marked as stopped, don't try to shut down
+    if (!m_wasStartedSuccessfully) {
+        qDebug() << "Terracotta was not started, skipping shutdown";
+        return true;
+    }
+
     // Check if Terracotta API is responding (with very short timeout)
-    if (fetchMeta(100) == nullptr) {
+    // Use an even shorter timeout to avoid blocking
+    if (fetchMeta(50) == nullptr) {
         // Already not running
+        qDebug() << "Terracotta not responding, assuming already stopped";
+        m_wasStartedSuccessfully = false;
         return true;
     }
 
@@ -985,13 +999,18 @@ bool Terracotta::shutdownAndWait(int timeoutMs)
     const int maxIterations = timeoutMs / sleepMs;
     for (int i = 0; i < maxIterations; i++) {
         QThread::msleep(sleepMs);
-        if (fetchMeta(100) == nullptr) {
+        // Use very short timeout to avoid blocking
+        if (fetchMeta(50) == nullptr) {
             // Stopped successfully
+            qDebug() << "Terracotta stopped successfully";
+            m_wasStartedSuccessfully = false;
             return true;
         }
     }
 
     // Timeout - but we assume it has stopped
+    qDebug() << "Terracotta shutdown timeout, assuming stopped";
+    m_wasStartedSuccessfully = false;
     return false;
 }
 

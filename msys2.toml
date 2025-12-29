@@ -30,6 +30,7 @@ mingw-w64-ucrt-x86_64-qt6-tools = "*"
 mingw-w64-ucrt-x86_64-qt6-translations = "*"
 mingw-w64-ucrt-x86_64-qt6-declarative = "*"
 mingw-w64-ucrt-x86_64-qt6-networkauth = "*"
+mingw-w64-ucrt-x86_64-qt6-websockets = "6.10.1-1"
 
 # app deps
 mingw-w64-ucrt-x86_64-quazip-qt6 = "*"

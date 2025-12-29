@@ -97,6 +97,7 @@ YukariConnectPage::YukariConnectPage(QWidget* parent) : QWidget(parent), ui(new 
 
     // Connect to YukariConnect signals
     connect(&YukariConnect::instance(), &YukariConnect::availabilityChanged, this, &YukariConnectPage::onAvailabilityChanged);
+    connect(&YukariConnect::instance(), &YukariConnect::metaChanged, this, &YukariConnectPage::onMetaChanged);
 
     refreshStatus();
 }
@@ -305,6 +306,17 @@ void YukariConnectPage::onAvailabilityChanged(bool available)
 void YukariConnectPage::refreshStatus()
 {
     updateStatus();
+}
+
+void YukariConnectPage::onMetaChanged(const YukariConnectTypes::MetaInfo& meta)
+{
+    // Only update UI if page is visible to prevent crashes
+    if (!isVisible()) {
+        qDebug() << "Meta changed but page not visible, skipping UI update";
+        return;
+    }
+    qDebug() << "Meta changed, updating version display:" << meta.version;
+    ui->label_version_value->setText(meta.version);
 }
 
 void YukariConnectPage::updateStatus()

@@ -1,3 +1,7 @@
+/*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ */
 // SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Prism Launcher - Minecraft Launcher
@@ -37,6 +41,8 @@
 #pragma once
 #include <java/JavaVersion.h>
 #include <minecraft/mod/DataPackFolderModel.h>
+#include <minecraft/mod/YesSteveModelFolderModel.h>
+#include <minecraft/mod/CustomPlayerModelFolderModel.h>
 #include <QDir>
 #include <QProcess>
 #include "BaseInstance.h"
@@ -118,6 +124,8 @@ class MinecraftInstance : public BaseInstance {
     std::shared_ptr<ResourcePackFolderModel> resourcePackList();
     std::shared_ptr<TexturePackFolderModel> texturePackList();
     std::shared_ptr<ShaderPackFolderModel> shaderPackList();
+    std::shared_ptr<YesSteveModelFolderModel> yesSteveModelList();
+    std::shared_ptr<CustomPlayerModelFolderModel> customPlayerModelList();
     std::shared_ptr<DataPackFolderModel> dataPackList();
     QList<std::shared_ptr<ResourceFolderModel>> resourceLists();
     std::shared_ptr<WorldList> worldList();
@@ -169,6 +177,8 @@ class MinecraftInstance : public BaseInstance {
     mutable std::shared_ptr<ResourcePackFolderModel> m_resource_pack_list;
     mutable std::shared_ptr<ShaderPackFolderModel> m_shader_pack_list;
     mutable std::shared_ptr<TexturePackFolderModel> m_texture_pack_list;
+    mutable std::shared_ptr<YesSteveModelFolderModel> m_yes_steve_model_list;
+    mutable std::shared_ptr<CustomPlayerModelFolderModel> m_custom_player_model_list;
     mutable std::shared_ptr<DataPackFolderModel> m_data_pack_list;
     mutable std::shared_ptr<WorldList> m_world_list;
 };

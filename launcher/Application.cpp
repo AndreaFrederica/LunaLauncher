@@ -599,6 +599,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         if (!migrated)
             migrated = handleDataMigration(
+                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"), "PrismLauncher",
+                "prismlauncher.cfg");
+        if (!migrated)
+            migrated = handleDataMigration(
                 dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
                 "polymc.cfg");
         if (!migrated)
@@ -1200,7 +1204,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             }
         }
 
-        auto update_success_marker = QFileInfo(FS::PathCombine(m_dataPath, ".prism_launcher_update.success"));
+        auto update_success_marker = QFileInfo(FS::PathCombine(m_dataPath, ".lunalauncher_update.success"));
         if (update_success_marker.exists()) {
             auto infoMsg = tr("Update succeeded\n"
                               "\n"

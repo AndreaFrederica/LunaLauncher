@@ -1,3 +1,7 @@
+/*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ */
 #pragma once
 #include <FileSystem.h>
 #include <ui/pages/instance/DataPackPage.h>
@@ -17,6 +21,8 @@
 #include "ui/pages/instance/TexturePackPage.h"
 #include "ui/pages/instance/VersionPage.h"
 #include "ui/pages/instance/WorldListPage.h"
+#include "ui/pages/instance/YesSteveModelPage.h"
+#include "ui/pages/instance/CustomPlayerModelPage.h"
 
 class InstancePageProvider : protected QObject, public BasePageProvider {
     Q_OBJECT
@@ -40,6 +46,8 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
         values.append(new GlobalDataPackPage(onesix.get()));
         values.append(new TexturePackPage(onesix.get(), onesix->texturePackList()));
         values.append(new ShaderPackPage(onesix.get(), onesix->shaderPackList()));
+        values.append(new YesSteveModelPage(onesix.get(), onesix->yesSteveModelList()));
+        values.append(new CustomPlayerModelPage(onesix.get(), onesix->customPlayerModelList()));
         values.append(new NotesPage(onesix.get()));
         values.append(new WorldListPage(onesix, onesix->worldList()));
         values.append(new ServersPage(onesix));

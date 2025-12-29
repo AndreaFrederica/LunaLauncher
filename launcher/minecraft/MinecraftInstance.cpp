@@ -1,3 +1,7 @@
+/*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ */
 // SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Prism Launcher - Minecraft Launcher
@@ -1354,6 +1358,24 @@ std::shared_ptr<ShaderPackFolderModel> MinecraftInstance::shaderPackList()
     return m_shader_pack_list;
 }
 
+std::shared_ptr<YesSteveModelFolderModel> MinecraftInstance::yesSteveModelList()
+{
+    if (!m_yes_steve_model_list) {
+        QDir dir(QDir(instanceConfigFolder()).filePath("yes_steve_model/custom"));
+        m_yes_steve_model_list.reset(new YesSteveModelFolderModel(dir, this));
+    }
+    return m_yes_steve_model_list;
+}
+
+std::shared_ptr<CustomPlayerModelFolderModel> MinecraftInstance::customPlayerModelList()
+{
+    if (!m_custom_player_model_list) {
+        QDir dir(QDir(gameRoot()).filePath("custom-models"));
+        m_custom_player_model_list.reset(new CustomPlayerModelFolderModel(dir, this));
+    }
+    return m_custom_player_model_list;
+}
+
 std::shared_ptr<DataPackFolderModel> MinecraftInstance::dataPackList()
 {
     if (!m_data_pack_list && settings()->get("GlobalDataPacksEnabled").toBool()) {
@@ -1365,7 +1387,7 @@ std::shared_ptr<DataPackFolderModel> MinecraftInstance::dataPackList()
 
 QList<std::shared_ptr<ResourceFolderModel>> MinecraftInstance::resourceLists()
 {
-    return { loaderModList(), coreModList(), nilModList(), resourcePackList(), texturePackList(), shaderPackList(), dataPackList() };
+    return { loaderModList(), coreModList(), nilModList(), resourcePackList(), texturePackList(), shaderPackList(), yesSteveModelList(), customPlayerModelList(), dataPackList() };
 }
 
 std::shared_ptr<WorldList> MinecraftInstance::worldList()

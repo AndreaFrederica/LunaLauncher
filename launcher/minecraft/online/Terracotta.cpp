@@ -198,8 +198,24 @@ Terracotta& Terracotta::instance()
     return *s_instance;
 }
 
+void Terracotta::setStartupMode(StartupMode mode)
+{
+    m_startupMode = mode;
+}
+
+Terracotta::StartupMode Terracotta::getStartupMode() const
+{
+    return m_startupMode;
+}
+
 Terracotta::Terracotta(QObject* parent) : QObject(parent), m_baseUrl("http://localhost:12580")
-{}
+{
+    auto s = APPLICATION->settings();
+    int startupMode = s->contains("TerracottaStartupMode")
+                          ? s->get("TerracottaStartupMode").toInt()
+                          : static_cast<int>(StartupMode::HMCL);
+    m_startupMode = static_cast<StartupMode>(startupMode);
+}
 
 QString Terracotta::getLocalPath() const
 {
@@ -855,7 +871,16 @@ bool Terracotta::startProcess()
     });
 
     // Start with --hmcl parameter to get port via file
-    const QStringList args = { "--hmcl", portFile };
+    QStringList args;
+    if (m_startupMode == StartupMode::HMCL) {
+#ifdef Q_OS_WIN32
+        args = { "--hmcl2", portFile };
+#else
+        args = { "--hmcl", portFile };
+#endif
+    } else {
+        args = {};
+    }
     qDebug() << "Starting Terracotta:" << exePath << args;
 
     m_process->start(exePath, args);
@@ -899,36 +924,28 @@ bool Terracotta::startProcess()
     }
 
     // Process is still running - wait for port file (primary mode)
-    if (!waitForPortFile(8000)) {
-        qWarning() << "Terracotta port file did not appear within timeout";
-        // Check if process is still running - if so, it might be doing something else
-        if (m_process && m_process->state() == QProcess::Running) {
-            qWarning() << "Process still running but no port file - terminating";
-            stopProcess();
+    if (m_startupMode == StartupMode::HMCL) {
+        if (!waitForPortFile(8000)) {
+            qWarning() << "Terracotta port file did not appear within timeout";
+            if (m_process && m_process->state() == QProcess::Running) {
+                qWarning() << "Process still running but no port file - terminating";
+                stopProcess();
+            }
+            return false;
         }
-        return false;
+        if (!readPortFromFile(detectedPort)) {
+            qWarning() << "Failed to read port from file";
+            stopProcess();
+            return false;
+        }
+        portFileRead = true;
+        m_baseUrl = QString("http://127.0.0.1:%1").arg(detectedPort);
+        qDebug() << "Terracotta started on port (hmcl mode):" << detectedPort;
+        m_wasStartedSuccessfully = true;
+        emit availabilityChanged(true);
+        return true;
     }
-
-    // Read the actual port from file
-    if (!readPortFromFile(detectedPort)) {
-        qWarning() << "Failed to read port from file";
-        stopProcess();
-        return false;
-    }
-
-    portFileRead = true;
-
-    // Update base URL with actual port
-    m_baseUrl = QString("http://127.0.0.1:%1").arg(detectedPort);
-    qDebug() << "Terracotta started on port (primary mode):" << detectedPort;
-
-    // Mark as successfully started - the process may exit but the web server continues
-    m_wasStartedSuccessfully = true;
-    emit availabilityChanged(true);
-
-    // Note: In HMCL mode, the process may exit here but the web server continues
-    // Don't stop the process - let it exit naturally
-    return true;
+    return false;
 }
 
 void Terracotta::stopProcess()
@@ -1016,13 +1033,14 @@ bool Terracotta::shutdownAndWait(int timeoutMs)
 
 bool Terracotta::isProcessRunning() const
 {
-    // In HMCL mode, the process exits after writing the port file
-    // but the web server continues running in the background
-    // Check if we successfully started it and the base URL is set to something other than default
-    if (m_wasStartedSuccessfully) {
-        return true;
+    if (m_startupMode == StartupMode::HMCL) {
+        if (m_wasStartedSuccessfully) {
+            return true;
+        }
+        return m_process && m_process->state() == QProcess::Running;
+    } else {
+        return m_process && m_process->state() == QProcess::Running;
     }
-    return m_process && m_process->state() == QProcess::Running;
 }
 
 void Terracotta::setStopOnClose(bool stopOnClose)

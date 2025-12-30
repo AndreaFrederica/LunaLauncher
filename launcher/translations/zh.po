@@ -1694,3 +1694,23 @@ msgstr "启动 Terracotta 服务器"
 #: TerracottaOnlinePanel.cpp:359
 msgid "Stopped"
 msgstr "已停止"
+#
+#: TerracottaPage.ui
+msgid "Startup Mode:"
+msgstr "启动模式："
+#
+#: TerracottaPage.ui
+msgid "Foreground (controllable) or HMCL-compatible (simulate HMCL)"
+msgstr "前台（可控）或 HMCL 兼容（模拟 HMCL）"
+#
+#: TerracottaPage.cpp
+msgid "Foreground (Controllable)"
+msgstr "前台（可控）"
+#
+#: TerracottaPage.cpp
+msgid "HMCL-compatible (Simulate HMCL)"
+msgstr "HMCL 兼容（模拟 HMCL）"
+#
+#: TerracottaOnlinePanel.cpp
+msgid "Terracotta is not running."
+msgstr "Terracotta 未运行。"

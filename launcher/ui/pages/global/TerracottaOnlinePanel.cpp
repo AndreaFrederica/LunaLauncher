@@ -155,38 +155,7 @@ TerracottaOnlinePanel::TerracottaOnlinePanel(QWidget* parent) : QMainWindow(pare
     updatePortDisplay();
     updateServerButtonState();
 
-    // Auto-start Terracotta process if not running (delayed to avoid blocking UI)
-    QTimer::singleShot(100, this, [this]() {
-        // Check if API is responding to determine actual server state
-        bool apiResponding = (Terracotta::instance().fetchMeta(500) != nullptr);
-        m_serverRunning = apiResponding;
-
-        if (!apiResponding && !Terracotta::instance().isProcessRunning()) {
-            ui->label_state_value->setText(tr("Starting..."));
-            appendLog(tr("Starting Terracotta process..."));
-
-            if (Terracotta::instance().startProcess()) {
-                appendLog(tr("Terracotta process started successfully."));
-                ui->label_state_value->setText(tr("Connected"));
-                m_serverRunning = true;
-                updatePortDisplay();
-                // Start polling when server starts
-                startPollingState();
-            } else {
-                appendLog(tr("Failed to start Terracotta process. Please check if it is installed."));
-                ui->label_state_value->setText(tr("Failed"));
-                m_serverRunning = false;
-            }
-        } else if (apiResponding) {
-            // Server is already running, start polling
-            ui->label_state_value->setText(tr("Connected"));
-            startPollingState();
-        }
-        // Update button state after initial check
-        updateServerButtonState();
-        // Initial refresh after process starts
-        onRefreshClicked();
-    });
+    updateServerButtonState();
 }
 
 TerracottaOnlinePanel::~TerracottaOnlinePanel()
@@ -217,19 +186,13 @@ void TerracottaOnlinePanel::onRefreshClicked()
     m_isRefreshing = true;
     ui->pushButton_refresh->setEnabled(false);
 
-    // Start process if not running
     if (!Terracotta::instance().isProcessRunning()) {
-        appendLog(tr("Terracotta not running, starting..."));
-        if (!Terracotta::instance().startProcess()) {
-            appendLog(tr("Failed to start Terracotta process."));
-            ui->label_state_value->setText(tr("Not Running"));
-            setUIEnabled(false);
-            ui->pushButton_refresh->setEnabled(true);
-            m_isRefreshing = false;
-            return;
-        }
-        // Give it a moment to start up
-        QThread::msleep(500);
+        appendLog(tr("Terracotta is not running."));
+        ui->label_state_value->setText(tr("Not Running"));
+        setUIEnabled(false);
+        ui->pushButton_refresh->setEnabled(true);
+        m_isRefreshing = false;
+        return;
     }
 
     appendLog(tr("Refreshing state..."));

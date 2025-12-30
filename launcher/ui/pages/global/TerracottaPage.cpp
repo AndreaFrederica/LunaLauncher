@@ -36,6 +36,9 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     ui->comboBox_download_source->addItem(tr("GitHub (Official)"), static_cast<int>(TerracottaDownloadSource::GitHub));
     ui->comboBox_download_source->addItem(tr("Gitee (Mirror for China)"), static_cast<int>(TerracottaDownloadSource::Mirror));
 
+    ui->comboBox_startup_mode->addItem(tr("Foreground (Controllable)"), static_cast<int>(Terracotta::StartupMode::Foreground));
+    ui->comboBox_startup_mode->addItem(tr("HMCL-compatible (Simulate HMCL)"), static_cast<int>(Terracotta::StartupMode::HMCL));
+
     // Load settings
     auto s = APPLICATION->settings();
     QString url = s->get("TerracottaServerURL").toString();
@@ -43,6 +46,7 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     int maxLogLines = s->get("TerracottaMaxLogLines").toInt();
     // Default to true if setting doesn't exist (stop Terracotta when launcher closes)
     bool stopOnClose = s->contains("TerracottaStopOnClose") ? s->get("TerracottaStopOnClose").toBool() : true;
+    int startupMode = s->contains("TerracottaStartupMode") ? s->get("TerracottaStartupMode").toInt() : static_cast<int>(Terracotta::StartupMode::HMCL);
 
     // Set values from settings
     if (!url.isEmpty()) {
@@ -66,6 +70,10 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     // Set stop on close checkbox (default true if not set)
     ui->checkBox_stop_on_close->setChecked(stopOnClose);
     Terracotta::instance().setStopOnClose(stopOnClose);
+    int idx = ui->comboBox_startup_mode->findData(startupMode);
+    int fallbackIdx = ui->comboBox_startup_mode->findData(static_cast<int>(Terracotta::StartupMode::HMCL));
+    ui->comboBox_startup_mode->setCurrentIndex(idx < 0 ? (fallbackIdx < 0 ? 0 : fallbackIdx) : idx);
+    Terracotta::instance().setStartupMode(static_cast<Terracotta::StartupMode>(ui->comboBox_startup_mode->currentData().toInt()));
 
     // Connect buttons
     connect(ui->pushButton_download, &QPushButton::clicked, this, &TerracottaPage::onDownloadButtonClicked);
@@ -75,6 +83,9 @@ TerracottaPage::TerracottaPage(QWidget* parent) : QWidget(parent), ui(new Ui::Te
     connect(ui->lineEdit_url, &QLineEdit::editingFinished, this, [this]() {
         Terracotta::instance().setBaseUrl(ui->lineEdit_url->text());
         updateStatus();
+    });
+    connect(ui->comboBox_startup_mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        Terracotta::instance().setStartupMode(static_cast<Terracotta::StartupMode>(ui->comboBox_startup_mode->currentData().toInt()));
     });
 
     // Connect polling interval change
@@ -119,6 +130,8 @@ bool TerracottaPage::apply()
     // Save stop on close setting
     s->set("TerracottaStopOnClose", ui->checkBox_stop_on_close->isChecked());
     Terracotta::instance().setStopOnClose(ui->checkBox_stop_on_close->isChecked());
+    s->set("TerracottaStartupMode", ui->comboBox_startup_mode->currentData().toInt());
+    Terracotta::instance().setStartupMode(static_cast<Terracotta::StartupMode>(ui->comboBox_startup_mode->currentData().toInt()));
 
     return true;
 }

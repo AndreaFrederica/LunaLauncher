@@ -221,6 +221,50 @@
            </layout>
           </item>
           <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_startup_mode">
+            <item>
+             <widget class="QLabel" name="label_startup_mode">
+              <property name="text">
+               <string>Startup Mode:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboBox_startup_mode">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_startup_mode_hint">
+              <property name="text">
+               <string>Foreground (controllable) or HMCL-compatible (simulate HMCL)</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: gray; font-size: 9pt;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_startup_mode">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
            <layout class="QHBoxLayout" name="horizontalLayout_poll_interval">
             <item>
              <widget class="QLabel" name="label_poll_interval">

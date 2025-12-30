@@ -298,6 +298,13 @@ class Terracotta : public QObject {
      */
     [[nodiscard]] bool getStopOnClose() const;
 
+    enum class StartupMode {
+        Foreground,
+        HMCL
+    };
+    void setStartupMode(StartupMode mode);
+    [[nodiscard]] StartupMode getStartupMode() const;
+
    signals:
     /**
      * @brief Emitted when the state changes
@@ -328,5 +335,6 @@ class Terracotta : public QObject {
     mutable QString m_portFilePath;
     bool m_wasStartedSuccessfully = false;  // Track if HMCL mode started successfully
     bool m_stopOnClose = true;  // Whether to stop Terracotta when launcher closes (default: true)
+    StartupMode m_startupMode = StartupMode::HMCL;
     static Terracotta* s_instance;
 };

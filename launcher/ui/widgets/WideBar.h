@@ -40,6 +40,8 @@ class WideBar : public QToolBar {
 
     void removeAction(QAction* action);
 
+    void setUniformWidths(bool enabled);
+
    private:
     struct BarEntry {
         enum class Type { None, Action, Separator, Spacer } type = Type::None;
@@ -59,6 +61,7 @@ class WideBar : public QToolBar {
     QList<QAction*> m_context_menu_actions;
 
     bool m_use_default_action = false;
+    bool m_uniform_widths = false;
 
     // Menu to toggle visibility from buttons in the bar
     std::unique_ptr<QMenu> m_bar_menu = nullptr;

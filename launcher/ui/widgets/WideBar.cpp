@@ -2,6 +2,7 @@
 
 #include <QContextMenuEvent>
 #include <QCryptographicHash>
+#include <QDebug>
 #include <QToolButton>
 
 class ActionButton : public QToolButton {
@@ -318,6 +319,50 @@ void WideBar::removeAction(QAction* action)
     iter->bar_action->setVisible(false);
     removeAction(iter->bar_action);
     m_entries.erase(iter);
+}
+
+void WideBar::setUniformWidths(bool enabled)
+{
+    m_uniform_widths = enabled;
+
+    if (!enabled) {
+        // Reset to natural widths - iterate through all children directly
+        for (auto* child : findChildren<QToolButton*>()) {
+            child->setMinimumWidth(0);
+            child->setMaximumWidth(16777215);
+            child->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            child->setStyleSheet("");
+            child->updateGeometry();
+        }
+        updateGeometry();
+        return;
+    }
+
+    // Find the maximum width among all action buttons
+    int maxWidth = 0;
+    QList<QToolButton*> buttons;
+    for (auto* child : findChildren<QToolButton*>()) {
+        // Skip the toolbar extension button
+        if (child->objectName() == "qt_toolbar_ext_button")
+            continue;
+        child->setMinimumWidth(0);
+        child->setMaximumWidth(16777215);
+        int w = child->sizeHint().width();
+        qDebug() << "Button:" << child->text() << "width:" << w << "ptr:" << child;
+        maxWidth = qMax(maxWidth, w);
+        buttons.append(child);
+    }
+
+    // Add some padding
+    maxWidth += 10;
+    qDebug() << "Max button width:" << maxWidth << "Total buttons:" << buttons.count();
+
+    // Apply the maximum width to all action buttons using stylesheet
+    QString style = QString("QToolButton { max-width: %1px; min-width: %1px; }").arg(maxWidth);
+    for (auto* button : buttons) {
+        button->setStyleSheet(style);
+        qDebug() << "Set button" << button->text() << "to fixed width:" << maxWidth;
+    }
 }
 
 #include "WideBar.moc"

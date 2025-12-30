@@ -118,6 +118,7 @@
 #include "ui/themes/ThemeManager.h"
 #include "ui/widgets/LabeledToolButton.h"
 #include "ui/widgets/UserHeaderWidget.h"
+#include "ui/widgets/WideBar.h"
 #include "settings/Setting.h"
 
 #include "minecraft/PackProfile.h"
@@ -343,6 +344,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->horizontalLayout->addWidget(view);
         if (APPLICATION->settings()->get("UseNewUI").toBool()) {
             setupNewLayout();
+            // Set uniform button widths for mainToolBar
+            setToolBarButtonWidths(ui->mainToolBar);
             m_newLayoutActive = true;
         } else {
             m_newLayoutActive = false;
@@ -1989,4 +1992,37 @@ void MainWindow::setupOldLayout()
     // Restore instance toolbar to right and vertical
     ui->instanceToolBar->setOrientation(Qt::Vertical);
     addToolBar(Qt::RightToolBarArea, ui->instanceToolBar);
+}
+
+void MainWindow::setToolBarButtonWidths(QToolBar* toolBar)
+{
+    if (!toolBar)
+        return;
+
+    // Find all QToolButton widgets in the toolbar
+    QList<QToolButton*> buttons;
+    int maxWidth = 0;
+
+    for (auto* widget : toolBar->findChildren<QToolButton*>()) {
+        // Skip the toolbar extension button
+        if (widget->objectName() == "qt_toolbar_ext_button")
+            continue;
+        widget->setMinimumWidth(0);
+        widget->setMaximumWidth(16777215);
+        int w = widget->sizeHint().width();
+        qDebug() << "Button:" << widget->text() << "width:" << w;
+        maxWidth = qMax(maxWidth, w);
+        buttons.append(widget);
+    }
+
+    // Add some padding
+    maxWidth += 10;
+    qDebug() << "Max button width:" << maxWidth << "Total buttons:" << buttons.count();
+
+    // Apply uniform width using stylesheet
+    QString style = QString("QToolButton { max-width: %1px; min-width: %1px; }").arg(maxWidth);
+    for (auto* button : buttons) {
+        button->setStyleSheet(style);
+        qDebug() << "Set button" << button->text() << "to fixed width:" << maxWidth;
+    }
 }

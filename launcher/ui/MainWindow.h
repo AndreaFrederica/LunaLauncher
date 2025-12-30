@@ -244,6 +244,7 @@ class MainWindow : public QMainWindow {
     void updateMultiplayerFeatureVisibility();
     void setupNewLayout();
     void setupOldLayout();
+    void setToolBarButtonWidths(QToolBar* toolBar);
 
     void runModalTask(Task* task);
     void instanceFromInstanceTask(InstanceTask* task);

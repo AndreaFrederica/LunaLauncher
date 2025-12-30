@@ -61,6 +61,7 @@ class InstanceView;
 class KonamiCode;
 class InstanceTask;
 class LabeledToolButton;
+class UserHeaderWidget;
 
 namespace TerracottaTypes {
 struct StateResponse;
@@ -241,6 +242,8 @@ class MainWindow : public QMainWindow {
     void updateTerracottaStatus(const TerracottaTypes::StateResponse& state);
     void updateYukariConnectStatus(const YukariConnectTypes::StateResponse& state);
     void updateMultiplayerFeatureVisibility();
+    void setupNewLayout();
+    void setupOldLayout();
 
     void runModalTask(Task* task);
     void instanceFromInstanceTask(InstanceTask* task);
@@ -269,4 +272,11 @@ class MainWindow : public QMainWindow {
 
     // managed by the application object
     Task* m_versionLoadTask = nullptr;
+    bool m_newLayoutActive = false;
+    QWidget* m_accountsSpacer = nullptr;
+    UserHeaderWidget* m_userHeaderWidget = nullptr;
+    QAction* m_userHeaderAction = nullptr;
+    QWidget* m_bottomQuickWidget = nullptr;
+    QAction* m_bottomQuickAction = nullptr;
+    // no extra toolbar, reuse mainToolBar docked vertically for new UI
 };

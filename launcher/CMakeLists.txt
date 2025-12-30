@@ -1214,11 +1214,13 @@ SET(LAUNCHER_SOURCES
     ui/widgets/VersionListView.cpp
     ui/widgets/VersionListView.h
     ui/widgets/VersionSelectWidget.cpp
-    ui/widgets/VersionSelectWidget.h
+    ui/widgets/VersionSelectWidget.cpp
     ui/widgets/ProgressWidget.h
     ui/widgets/ProgressWidget.cpp
     ui/widgets/WideBar.h
     ui/widgets/WideBar.cpp
+    ui/widgets/UserHeaderWidget.h
+    ui/widgets/UserHeaderWidget.cpp
     ui/widgets/AppearanceWidget.h
     ui/widgets/AppearanceWidget.cpp
     ui/widgets/MinecraftSettingsWidget.h

@@ -232,6 +232,8 @@ void LauncherPage::applySettings()
             s->set("InstSortMode", "Name");
             break;
     }
+    // New UI layout toggle (applied on next restart)
+    s->set("UseNewUI", ui->useNewUICheckBox->isChecked());
 
     if (ui->askToRenameDirBtn->isChecked()) {
         s->set("InstRenamingMode", "AskEverytime");
@@ -262,6 +264,7 @@ void LauncherPage::loadSettings()
     }
 
     ui->preferMenuBarCheckBox->setChecked(s->get("MenuBarInsteadOfToolBar").toBool());
+    ui->useNewUICheckBox->setChecked(s->get("UseNewUI").toBool());
 
     // Multiplayer features visibility
     ui->showTerracottaToolBarCheckBox->setChecked(s->get("ShowTerracottaToolBar").toBool());

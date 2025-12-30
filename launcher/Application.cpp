@@ -670,12 +670,14 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
 
         m_settings->registerSetting("MenuBarInsteadOfToolBar", false);
+        m_settings->registerSetting("UseNewUI", false);
 
         // Multiplayer features visibility
         m_settings->registerSetting("ShowTerracottaToolBar", true);
         m_settings->registerSetting("ShowYukariConnectToolBar", true);
         m_settings->registerSetting("ShowTerracottaStatusBar", true);
         m_settings->registerSetting("ShowYukariConnectStatusBar", true);
+        m_settings->registerSetting("TerracottaStartupMode", 1);
 
         m_settings->registerSetting("NumberOfConcurrentTasks", 10);
         m_settings->registerSetting("NumberOfConcurrentDownloads", 6);
@@ -1764,7 +1766,9 @@ MainWindow* Application::showMainWindow(bool minimized)
         m_mainWindow->activateWindow();
     } else {
         m_mainWindow = new MainWindow();
-        m_mainWindow->restoreState(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowState").toString().toUtf8()));
+        if (APPLICATION->settings()->get("UseNewUI").toBool()) {
+            m_mainWindow->restoreState(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowState").toString().toUtf8()));
+        }
         m_mainWindow->restoreGeometry(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowGeometry").toString().toUtf8()));
 
         if (minimized) {

@@ -60,6 +60,7 @@
 #include <QButtonGroup>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -116,6 +117,8 @@
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 #include "ui/widgets/LabeledToolButton.h"
+#include "ui/widgets/UserHeaderWidget.h"
+#include "settings/Setting.h"
 
 #include "minecraft/PackProfile.h"
 #include "minecraft/VersionFile.h"
@@ -336,7 +339,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         view->setSourceOfGroupCollapseStatus(
             [](const QString& groupName) -> bool { return APPLICATION->instances()->isGroupCollapsed(groupName); });
         connect(view, &InstanceView::groupStateChanged, APPLICATION->instances().get(), &InstanceList::on_GroupStateChanged);
+
         ui->horizontalLayout->addWidget(view);
+        if (APPLICATION->settings()->get("UseNewUI").toBool()) {
+            setupNewLayout();
+            m_newLayoutActive = true;
+        } else {
+            m_newLayoutActive = false;
+        }
     }
     // The cat background
     {
@@ -421,9 +431,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     updateMultiplayerFeatureVisibility();
 
     // Add "manage accounts" button, right align
-    QWidget* spacer = new QWidget();
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    ui->mainToolBar->insertWidget(ui->actionAccountsButton, spacer);
+    m_accountsSpacer = new QWidget();
+    m_accountsSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    ui->mainToolBar->insertWidget(ui->actionAccountsButton, m_accountsSpacer);
+
+    // React to UseNewUI toggles instantly
+    // Do not live-switch UI layout; apply on restart only
 
     // Use undocumented property... https://stackoverflow.com/questions/7121718/create-a-scrollbar-in-a-submenu-qt
     ui->accountsMenu->setStyleSheet("QMenu { menu-scrollable: 1; }");
@@ -498,6 +511,14 @@ void MainWindow::retranslateUi()
     if (defaultAccount) {
         auto profileLabel = profileInUseFilter(defaultAccount->profileName(), defaultAccount->isInUse());
         ui->actionAccountsButton->setText(profileLabel);
+    }
+    if (m_userHeaderWidget) {
+        MinecraftAccountPtr account = APPLICATION->accounts()->defaultAccount();
+        QIcon icon = account && !account->getFace().isNull() ? account->getFace() : QIcon::fromTheme("noaccount");
+        auto profileLabel = account ? profileInUseFilter(account->profileName(), account->isInUse()) : tr("Accounts");
+        m_userHeaderWidget->setAvatar(icon);
+        m_userHeaderWidget->setName(profileLabel);
+        m_userHeaderWidget->setMenu(ui->accountsMenu);
     }
 
     changeIconButton->setToolTip(ui->actionChangeInstIcon->toolTip());
@@ -798,12 +819,22 @@ void MainWindow::defaultAccountChanged()
         } else {
             ui->actionAccountsButton->setIcon(face);
         }
+        if (m_userHeaderWidget) {
+            m_userHeaderWidget->setAvatar(ui->actionAccountsButton->icon());
+            m_userHeaderWidget->setName(profileLabel);
+            m_userHeaderWidget->setMenu(ui->accountsMenu);
+        }
         return;
     }
 
     // Set the icon to the "no account" icon.
     ui->actionAccountsButton->setIcon(QIcon::fromTheme("noaccount"));
     ui->actionAccountsButton->setText(tr("Accounts"));
+    if (m_userHeaderWidget) {
+        m_userHeaderWidget->setAvatar(QIcon::fromTheme("noaccount"));
+        m_userHeaderWidget->setName(tr("Accounts"));
+        m_userHeaderWidget->setMenu(ui->accountsMenu);
+    }
 }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* ev)
@@ -1891,4 +1922,71 @@ void MainWindow::refreshCurrentInstance()
 {
     auto current = view->selectionModel()->currentIndex();
     instanceChanged(current, current);
+}
+
+void MainWindow::setupNewLayout()
+{
+    // Keep instance toolbar identical on the right
+    ui->instanceToolBar->setVisible(true);
+    ui->instanceToolBar->setOrientation(Qt::Vertical);
+    addToolBar(Qt::RightToolBarArea, ui->instanceToolBar);
+
+    // Reuse main toolbar vertically on the left
+    ui->mainToolBar->setAllowedAreas(Qt::AllToolBarAreas);
+    ui->mainToolBar->setOrientation(Qt::Vertical);
+    addToolBar(Qt::LeftToolBarArea, ui->mainToolBar);
+    if (m_accountsSpacer) {
+        m_accountsSpacer->setVisible(true);
+        m_accountsSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
+
+    if (!m_userHeaderWidget) {
+        m_userHeaderWidget = new UserHeaderWidget(this);
+        m_userHeaderAction = ui->mainToolBar->insertWidget(ui->mainToolBar->actions().isEmpty() ? nullptr : ui->mainToolBar->actions().first(), m_userHeaderWidget);
+        auto icon = ui->actionAccountsButton->icon();
+        m_userHeaderWidget->setAvatar(icon);
+        m_userHeaderWidget->setName(ui->actionAccountsButton->text());
+        m_userHeaderWidget->setMenu(ui->accountsMenu);
+    }
+    // Move original actions to the bottom (after the spacer) for new UI
+    ui->mainToolBar->removeAction(ui->actionSettings);
+    ui->mainToolBar->removeAction(ui->actionTerracottaOnline);
+    ui->mainToolBar->removeAction(ui->actionYukariConnectOnline);
+    ui->mainToolBar->addAction(ui->actionSettings);
+    ui->mainToolBar->addAction(ui->actionTerracottaOnline);
+    ui->mainToolBar->addAction(ui->actionYukariConnectOnline);
+    // Hide duplicated accounts button on the toolbar (user header handles it)
+    ui->actionAccountsButton->setVisible(false);
+}
+
+void MainWindow::setupOldLayout()
+{
+    // Restore main toolbar to top, horizontal
+    ui->mainToolBar->setAllowedAreas(Qt::TopToolBarArea | Qt::BottomToolBarArea);
+    ui->mainToolBar->setOrientation(Qt::Horizontal);
+    addToolBar(Qt::TopToolBarArea, ui->mainToolBar);
+    if (m_accountsSpacer) {
+        m_accountsSpacer->setVisible(true);
+    }
+    if (m_userHeaderAction) {
+        ui->mainToolBar->removeAction(m_userHeaderAction);
+        m_userHeaderAction = nullptr;
+        delete m_userHeaderWidget;
+        m_userHeaderWidget = nullptr;
+    }
+    // Restore original action order around the help button
+    ui->mainToolBar->removeAction(ui->actionSettings);
+    ui->mainToolBar->removeAction(ui->actionTerracottaOnline);
+    ui->mainToolBar->removeAction(ui->actionYukariConnectOnline);
+    ui->mainToolBar->insertAction(ui->actionHelpButton, ui->actionSettings);
+    ui->mainToolBar->insertAction(ui->actionHelpButton, ui->actionTerracottaOnline);
+    ui->mainToolBar->insertAction(ui->actionHelpButton, ui->actionYukariConnectOnline);
+    // Restore action visibility
+    ui->actionAccountsButton->setVisible(true);
+    ui->actionSettings->setVisible(true);
+    ui->actionTerracottaOnline->setVisible(true);
+    ui->actionYukariConnectOnline->setVisible(true);
+    // Restore instance toolbar to right and vertical
+    ui->instanceToolBar->setOrientation(Qt::Vertical);
+    addToolBar(Qt::RightToolBarArea, ui->instanceToolBar);
 }

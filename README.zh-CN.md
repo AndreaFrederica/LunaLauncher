@@ -24,7 +24,13 @@
 ## 特性
 
 - **P2P 联机**：内置 [Terracotta](https://github.com/burningtnt/Terracotta) P2P 联机功能 - 与朋友一起游戏，无需端口映射或复杂的网络配置
+- **YukariConnect 联机**：内置支持 [YukariConnect](https://github.com/ElicaseTech/YukariConnect) 作为 P2P 联机服务（YukariConnect 旨在作为使用 AGPL 许可的 Terracotta 的替代实现，也可作为独立组件提供）
 - **镜像 API 支持**：内置支持 BMCLAPI 和其他社区镜像，在中国地区下载更快
+- **Fluent 主题**：内置 Fluent Dark/Light 主题与图标资源
+- **新 UI 布局**：可选的实验性三列布局（需重启生效）
+- **服务器预览**：从工具栏快速进入服务器预览
+- **自定义模型**：支持自定义玩家模型（含 Yes Steve 模型）
+- **原理图文件**：资源管理支持 Minecraft 原理图（schematic）文件
 - **跨平台**：支持 Windows、Linux 和 macOS
 
 ---
@@ -247,7 +253,7 @@ cd LunaLauncher
 
 ```bash
 # 导航到源文件夹
-cd /path/to/PrismLauncher
+cd /path/to/LunaLauncher
 
 # 配置 CMake（Debug 构建）
 cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_BUILD_TYPE=Debug -G Ninja
@@ -292,7 +298,7 @@ cp /ucrt64/bin/libcrypto-1_1-x64.dll /ucrt64/bin/libssl-1_1-x64.dll install
 
 ```cmd
 REM 导航到源文件夹
-cd C:\Path\To\PrismLauncher
+cd C:\Path\To\LunaLauncher
 
 REM 配置 CMake（根据需要调整 Qt 路径）
 cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_PREFIX_PATH=C:\Qt\6.6.2\msvc2019_64\lib\cmake

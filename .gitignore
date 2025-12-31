@@ -72,3 +72,4 @@ flatbuild
 
 
 .history/
+.trae/documents/*

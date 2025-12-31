@@ -22,8 +22,13 @@
 ---
 
 ## Features
-- **P2P Multiplayer**: Built-in support for [Terracotta](https://github.com/burningtnt/Terracotta) P2P multiplayer - play with friends without port forwarding or complex network setup
+- **P2P Multiplayer**: Built-in support for [Terracotta](https://github.com/burningtnt/Terracotta) and [YukariConnect](https://github.com/ElicaseTech/YukariConnect) - play with friends without port forwarding or complex network setup (YukariConnect is intended as an alternative to the AGPL-licensed Terracotta and can be provided as a standalone component)
 - **Mirror API Support**: Built-in support for BMCLAPI and other community mirrors for faster downloads in China
+- **Fluent Themes**: Built-in Fluent Dark/Light themes and icon resources
+- **New UI Layout**: Optional experimental 3-column layout (requires restart)
+- **Server Preview**: Quick server preview access from the toolbar
+- **Custom Models**: Support custom player models including the Yes Steve model
+- **Schematic Files**: Resource management support for Minecraft schematic files
 - **Cross-platform**: Available for Windows, Linux, and macOS
 
 ---
@@ -248,7 +253,7 @@ If you prefer not to use the automated scripts, you can follow these manual step
 
 ```bash
 # Navigate to the source folder
-cd /path/to/PrismLauncher
+cd /path/to/LunaLauncher
 
 # Configure CMake (Debug build)
 cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_BUILD_TYPE=Debug -G Ninja
@@ -295,7 +300,7 @@ You will need to run commands from **x64 Native Tools Command Prompt for VS 2022
 
 ```cmd
 REM Navigate to the source folder
-cd C:\Path\To\PrismLauncher
+cd C:\Path\To\LunaLauncher
 
 REM Configure CMake (adjust Qt path as needed)
 cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_PREFIX_PATH=C:\Qt\6.6.2\msvc2019_64\lib\cmake

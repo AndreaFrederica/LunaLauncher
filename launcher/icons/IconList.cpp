@@ -218,7 +218,7 @@ void IconList::directoryChanged(const QString& path)
         QFileInfo addfile(addedPath);
 
         // Determine which directory this file belongs to
-        QDir baseDir = addedFile.absoluteFilePath().startsWith(m_install_dir.absolutePath()) ? m_install_dir : m_dir;
+        QDir baseDir = addfile.absoluteFilePath().startsWith(m_install_dir.absolutePath()) ? m_install_dir : m_dir;
         QString relativePath = baseDir.relativeFilePath(addfile.absoluteFilePath());
         QString key = QFileInfo(relativePath).completeBaseName();
         QString name = formatName(baseDir, addfile);

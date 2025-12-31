@@ -249,6 +249,7 @@ void LauncherPage::applySettings()
     s->set("SkipModpackUpdatePrompt", !ui->modpackUpdatePromptBtn->isChecked());
 
     // Multiplayer features visibility
+    s->set("ShowServerPreview", ui->showServerPreviewCheckBox->isChecked());
     s->set("ShowTerracottaToolBar", ui->showTerracottaToolBarCheckBox->isChecked());
     s->set("ShowYukariConnectToolBar", ui->showYukariConnectToolBarCheckBox->isChecked());
     s->set("ShowTerracottaStatusBar", ui->showTerracottaStatusBarCheckBox->isChecked());
@@ -267,6 +268,7 @@ void LauncherPage::loadSettings()
     ui->useNewUICheckBox->setChecked(s->get("UseNewUI").toBool());
 
     // Multiplayer features visibility
+    ui->showServerPreviewCheckBox->setChecked(s->get("ShowServerPreview").toBool());
     ui->showTerracottaToolBarCheckBox->setChecked(s->get("ShowTerracottaToolBar").toBool());
     ui->showYukariConnectToolBarCheckBox->setChecked(s->get("ShowYukariConnectToolBar").toBool());
     ui->showTerracottaStatusBarCheckBox->setChecked(s->get("ShowTerracottaStatusBar").toBool());

@@ -62,6 +62,9 @@ class KonamiCode;
 class InstanceTask;
 class LabeledToolButton;
 class UserHeaderWidget;
+class WideBar;
+class QToolBar;
+class ServerPreviewWidget;
 
 namespace TerracottaTypes {
 struct StateResponse;
@@ -265,6 +268,7 @@ class MainWindow : public QMainWindow {
     KonamiCode* secretEventFilter = nullptr;
 
     std::shared_ptr<Setting> instanceToolbarSetting = nullptr;
+    std::shared_ptr<Setting> serverToolbarSetting = nullptr;
 
     unique_qobject_ptr<NewsChecker> m_newsChecker;
 
@@ -280,4 +284,6 @@ class MainWindow : public QMainWindow {
     QWidget* m_bottomQuickWidget = nullptr;
     QAction* m_bottomQuickAction = nullptr;
     // no extra toolbar, reuse mainToolBar docked vertically for new UI
+    WideBar* m_serverToolBar = nullptr;
+    ServerPreviewWidget* m_serverPreviewWidget = nullptr;
 };

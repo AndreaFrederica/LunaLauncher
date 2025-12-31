@@ -119,6 +119,7 @@
 #include "ui/widgets/LabeledToolButton.h"
 #include "ui/widgets/UserHeaderWidget.h"
 #include "ui/widgets/WideBar.h"
+#include "ui/widgets/ServerPreviewWidget.h"
 #include "settings/Setting.h"
 
 #include "minecraft/PackProfile.h"
@@ -1587,6 +1588,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));
     APPLICATION->settings()->set("MainWindowGeometry", QString::fromUtf8(saveGeometry().toBase64()));
     instanceToolbarSetting->set(QString::fromUtf8(ui->instanceToolBar->getVisibilityState().toBase64()));
+    if (m_serverToolBar && serverToolbarSetting) {
+        serverToolbarSetting->set(QString::fromUtf8(m_serverToolBar->getVisibilityState().toBase64()));
+    }
 
     // Stop YukariConnect server if setting is enabled
     if (YukariConnect::instance().getStopOnClose()) {
@@ -1696,6 +1700,9 @@ void MainWindow::instanceChanged(const QModelIndex& current, [[maybe_unused]] co
         updateLaunchButton();
 
         APPLICATION->settings()->set("SelectedInstance", m_selectedInstance->id());
+        if (m_serverPreviewWidget) {
+            m_serverPreviewWidget->setInstance(m_selectedInstance);
+        }
 
         connect(m_selectedInstance.get(), &BaseInstance::runningStatusChanged, this, &MainWindow::refreshCurrentInstance);
         connect(m_selectedInstance.get(), &BaseInstance::profilerChanged, this, &MainWindow::refreshCurrentInstance);
@@ -1732,6 +1739,9 @@ void MainWindow::selectionBad()
     updateLaunchButton();
     renameButton->setText(tr("Rename Instance"));
     updateInstanceToolIcon("grass");
+    if (m_serverPreviewWidget) {
+        m_serverPreviewWidget->setInstance(nullptr);
+    }
 
     // ...and then see if we can enable the previously selected instance
     setSelectedInstanceById(APPLICATION->settings()->get("SelectedInstance").toString());
@@ -1906,6 +1916,12 @@ void MainWindow::updateMultiplayerFeatureVisibility()
 
     m_statusTerracotta->setVisible(showTerracottaStatusBar);
     m_statusYukariConnect->setVisible(showYukariConnectStatusBar);
+
+    // Server Preview Toolbar visibility
+    bool showServerPreview = s->get("ShowServerPreview").toBool();
+    if (m_serverToolBar) {
+        m_serverToolBar->setVisible(showServerPreview);
+    }
 }
 
 // "Instance actions" are actions that require an instance to be selected (i.e. "new instance" is not here)
@@ -1930,6 +1946,20 @@ void MainWindow::refreshCurrentInstance()
 void MainWindow::setupNewLayout()
 {
     // Keep instance toolbar identical on the right
+    if (!m_serverToolBar) {
+        m_serverToolBar = new WideBar(this);
+        m_serverToolBar->setOrientation(Qt::Vertical);
+        auto const setting_name = QString("WideBarVisibility_ServerToolBar");
+        serverToolbarSetting = APPLICATION->settings()->getOrRegisterSetting(setting_name);
+        m_serverToolBar->setVisibilityState(QByteArray::fromBase64(serverToolbarSetting->get().toString().toUtf8()));
+        if (!m_serverPreviewWidget) {
+            m_serverPreviewWidget = new ServerPreviewWidget(this);
+            m_serverToolBar->addWidget(m_serverPreviewWidget);
+        }
+        addToolBar(Qt::RightToolBarArea, m_serverToolBar);
+        bool showServerPreview = APPLICATION->settings()->get("ShowServerPreview").toBool();
+        m_serverToolBar->setVisible(showServerPreview);
+    }
     ui->instanceToolBar->setVisible(true);
     ui->instanceToolBar->setOrientation(Qt::Vertical);
     addToolBar(Qt::RightToolBarArea, ui->instanceToolBar);

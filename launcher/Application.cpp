@@ -673,6 +673,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("UseNewUI", false);
 
         // Multiplayer features visibility
+        m_settings->registerSetting("ShowServerPreview", true);
         m_settings->registerSetting("ShowTerracottaToolBar", true);
         m_settings->registerSetting("ShowYukariConnectToolBar", true);
         m_settings->registerSetting("ShowTerracottaStatusBar", true);

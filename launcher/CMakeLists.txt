@@ -1233,6 +1233,10 @@ SET(LAUNCHER_SOURCES
     ui/widgets/MinecraftSettingsWidget.cpp
     ui/widgets/JavaSettingsWidget.h
     ui/widgets/JavaSettingsWidget.cpp
+    ui/widgets/ServerPreviewWidget.h
+    ui/widgets/ServerPreviewWidget.cpp
+    ui/widgets/MotdRenderer.h
+    ui/widgets/MotdRenderer.cpp
 
     # GUI - instance group view
     ui/instanceview/InstanceProxyModel.cpp

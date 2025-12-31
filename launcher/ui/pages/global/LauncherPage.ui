@@ -196,6 +196,13 @@
            </widget>
           </item>
           <item>
+           <widget class="QCheckBox" name="showServerPreviewCheckBox">
+            <property name="text">
+             <string>Show Server Preview in toolbar</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QCheckBox" name="showTerracottaToolBarCheckBox">
             <property name="text">
              <string>Show Terracotta button in toolbar</string>

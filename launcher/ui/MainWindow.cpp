@@ -297,6 +297,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         connect(newsLabel, &QAbstractButton::clicked, this, &MainWindow::newsButtonClicked);
         connect(m_newsChecker.get(), &NewsChecker::newsLoaded, this, &MainWindow::updateNewsLabel);
         updateNewsLabel();
+
+        bool showNews = APPLICATION->settings()->get("ShowNewsBar").toBool();
+        ui->newsToolBar->setVisible(showNews);
+        connect(ui->newsToolBar, &QToolBar::visibilityChanged, this, [](bool visible) {
+            APPLICATION->settings()->set("ShowNewsBar", visible);
+        });
     }
 
     // Create the instance list widget
@@ -1364,6 +1370,10 @@ void MainWindow::globalSettingsClosed()
     updateThemeMenu();
     updateStatusCenter();
     updateMultiplayerFeatureVisibility();
+
+    ui->actionToggleStatusBar->setChecked(APPLICATION->settings()->get("StatusBarVisible").toBool());
+    ui->newsToolBar->setVisible(APPLICATION->settings()->get("ShowNewsBar").toBool());
+
     // This needs to be done to prevent UI elements disappearing in the event the config is changed
     // but Prism Launcher exits abnormally, causing the window state to never be saved:
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));

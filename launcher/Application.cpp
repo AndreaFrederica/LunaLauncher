@@ -824,6 +824,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("CatFit", "fit");
 
         m_settings->registerSetting("StatusBarVisible", true);
+        m_settings->registerSetting("ShowNewsBar", true);
 
         m_settings->registerSetting("ToolbarsLocked", false);
 

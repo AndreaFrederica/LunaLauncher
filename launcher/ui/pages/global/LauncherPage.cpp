@@ -234,6 +234,8 @@ void LauncherPage::applySettings()
     }
     // New UI layout toggle (applied on next restart)
     s->set("UseNewUI", ui->useNewUICheckBox->isChecked());
+    s->set("ShowNewsBar", ui->showNewsBarCheckBox->isChecked());
+    s->set("StatusBarVisible", ui->showStatusBarCheckBox->isChecked());
 
     if (ui->askToRenameDirBtn->isChecked()) {
         s->set("InstRenamingMode", "AskEverytime");
@@ -266,6 +268,8 @@ void LauncherPage::loadSettings()
 
     ui->preferMenuBarCheckBox->setChecked(s->get("MenuBarInsteadOfToolBar").toBool());
     ui->useNewUICheckBox->setChecked(s->get("UseNewUI").toBool());
+    ui->showNewsBarCheckBox->setChecked(s->get("ShowNewsBar").toBool());
+    ui->showStatusBarCheckBox->setChecked(s->get("StatusBarVisible").toBool());
 
     // Multiplayer features visibility
     ui->showServerPreviewCheckBox->setChecked(s->get("ShowServerPreview").toBool());

@@ -173,6 +173,20 @@
              </widget>
              </item>
           <item>
+           <widget class="QCheckBox" name="showNewsBarCheckBox">
+            <property name="text">
+             <string>Show News Bar</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="showStatusBarCheckBox">
+            <property name="text">
+             <string>Show Status Bar</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="verticalSpacer_3">
             <property name="orientation">
              <enum>Qt::Orientation::Vertical</enum>

@@ -374,6 +374,10 @@ set(MINECRAFT_SOURCES
     minecraft/mod/YesSteveModel.cpp
     minecraft/mod/YesSteveModelFolderModel.h
     minecraft/mod/YesSteveModelFolderModel.cpp
+    minecraft/mod/SchematicResource.h
+    minecraft/mod/SchematicResource.cpp
+    minecraft/mod/SchematicsFolderModel.h
+    minecraft/mod/SchematicsFolderModel.cpp
     minecraft/mod/DataPack.h
     minecraft/mod/DataPack.cpp
     minecraft/mod/DataPackFolderModel.h
@@ -969,6 +973,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/instance/YesSteveModelPage.cpp
     ui/pages/instance/CustomPlayerModelPage.h
     ui/pages/instance/CustomPlayerModelPage.cpp
+    ui/pages/instance/SchematicsPage.h
+    ui/pages/instance/SchematicsPage.cpp
     ui/pages/instance/ShaderPackPage.h
     ui/pages/instance/ShaderPackPage.cpp
     ui/pages/instance/ModFolderPage.cpp

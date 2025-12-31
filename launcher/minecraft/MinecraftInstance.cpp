@@ -1376,6 +1376,16 @@ std::shared_ptr<CustomPlayerModelFolderModel> MinecraftInstance::customPlayerMod
     return m_custom_player_model_list;
 }
 
+std::shared_ptr<SchematicsFolderModel> MinecraftInstance::schematicsList()
+{
+    static std::shared_ptr<SchematicsFolderModel> m_schematics_list;
+    if (!m_schematics_list) {
+        QDir dir(QDir(gameRoot()).filePath("schematics"));
+        m_schematics_list.reset(new SchematicsFolderModel(dir, this));
+    }
+    return m_schematics_list;
+}
+
 std::shared_ptr<DataPackFolderModel> MinecraftInstance::dataPackList()
 {
     if (!m_data_pack_list && settings()->get("GlobalDataPacksEnabled").toBool()) {
@@ -1387,7 +1397,7 @@ std::shared_ptr<DataPackFolderModel> MinecraftInstance::dataPackList()
 
 QList<std::shared_ptr<ResourceFolderModel>> MinecraftInstance::resourceLists()
 {
-    return { loaderModList(), coreModList(), nilModList(), resourcePackList(), texturePackList(), shaderPackList(), yesSteveModelList(), customPlayerModelList(), dataPackList() };
+    return { loaderModList(), coreModList(), nilModList(), resourcePackList(), texturePackList(), shaderPackList(), yesSteveModelList(), customPlayerModelList(), schematicsList(), dataPackList() };
 }
 
 std::shared_ptr<WorldList> MinecraftInstance::worldList()

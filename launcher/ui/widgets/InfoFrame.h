@@ -41,6 +41,7 @@
 #include "minecraft/mod/Mod.h"
 #include "minecraft/mod/ResourcePack.h"
 #include "minecraft/mod/TexturePack.h"
+#include "minecraft/mod/SchematicResource.h"
 
 namespace Ui {
 class InfoFrame;
@@ -63,6 +64,7 @@ class InfoFrame : public QFrame {
 
     void updateWithMod(Mod const& m);
     void updateWithResource(Resource const& resource);
+    void updateWithSchematic(SchematicResource& schem);
     void updateWithResourcePack(ResourcePack& rp);
     void updateWithDataPack(DataPack& rp);
     void updateWithTexturePack(TexturePack& tp);

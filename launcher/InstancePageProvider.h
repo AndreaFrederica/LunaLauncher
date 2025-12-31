@@ -23,6 +23,7 @@
 #include "ui/pages/instance/WorldListPage.h"
 #include "ui/pages/instance/YesSteveModelPage.h"
 #include "ui/pages/instance/CustomPlayerModelPage.h"
+#include "ui/pages/instance/SchematicsPage.h"
 
 class InstancePageProvider : protected QObject, public BasePageProvider {
     Q_OBJECT
@@ -48,6 +49,7 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
         values.append(new ShaderPackPage(onesix.get(), onesix->shaderPackList()));
         values.append(new YesSteveModelPage(onesix.get(), onesix->yesSteveModelList()));
         values.append(new CustomPlayerModelPage(onesix.get(), onesix->customPlayerModelList()));
+        values.append(new SchematicsPage(onesix.get(), onesix->schematicsList()));
         values.append(new NotesPage(onesix.get()));
         values.append(new WorldListPage(onesix, onesix->worldList()));
         values.append(new ServersPage(onesix));

@@ -43,6 +43,7 @@
 #include <minecraft/mod/DataPackFolderModel.h>
 #include <minecraft/mod/YesSteveModelFolderModel.h>
 #include <minecraft/mod/CustomPlayerModelFolderModel.h>
+#include <minecraft/mod/SchematicsFolderModel.h>
 #include <QDir>
 #include <QProcess>
 #include "BaseInstance.h"
@@ -126,6 +127,7 @@ class MinecraftInstance : public BaseInstance {
     std::shared_ptr<ShaderPackFolderModel> shaderPackList();
     std::shared_ptr<YesSteveModelFolderModel> yesSteveModelList();
     std::shared_ptr<CustomPlayerModelFolderModel> customPlayerModelList();
+    std::shared_ptr<SchematicsFolderModel> schematicsList();
     std::shared_ptr<DataPackFolderModel> dataPackList();
     QList<std::shared_ptr<ResourceFolderModel>> resourceLists();
     std::shared_ptr<WorldList> worldList();

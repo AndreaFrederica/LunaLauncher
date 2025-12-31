@@ -1,0 +1,21 @@
+{
+    "colors": {
+        "AlternateBase": "#f5f5f5",
+        "Base": "#ffffff",
+        "BrightText": "#ff0000",
+        "Button": "#f0f0f0",
+        "ButtonText": "#000000",
+        "Highlight": "#2a82da",
+        "HighlightedText": "#ffffff",
+        "Link": "#2a82da",
+        "Text": "#000000",
+        "ToolTipBase": "#ffffff",
+        "ToolTipText": "#000000",
+        "Window": "#ffffff",
+        "WindowText": "#000000",
+        "fadeAmount": 0.5,
+        "fadeColor": "#c4c7ca"
+    },
+    "name": "Fluent Light",
+    "widgets": "Fusion"
+}

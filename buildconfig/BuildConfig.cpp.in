@@ -45,6 +45,7 @@ Config::Config()
     LAUNCHER_NAME = "@Launcher_Name@";
     LAUNCHER_APP_BINARY_NAME = "@Launcher_APP_BINARY_NAME@";
     LAUNCHER_DISPLAYNAME = "@Launcher_DisplayName@";
+    PRISM_LAUNCHER_DISPLAYNAME = "Prism Launcher";
     LAUNCHER_COPYRIGHT = "@Launcher_Copyright@";
     LAUNCHER_DOMAIN = "@Launcher_Domain@";
     LAUNCHER_CONFIGFILE = "@Launcher_ConfigFile@";

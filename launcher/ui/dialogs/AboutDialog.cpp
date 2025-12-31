@@ -55,8 +55,8 @@ QString getCreditsHtml()
     QString fileContent = QString::fromUtf8(dataFile.readAll());
     dataFile.close();
 
-    return fileContent.arg(QObject::tr("%1 Developers").arg(BuildConfig.LAUNCHER_DISPLAYNAME), QObject::tr("MultiMC Developers"),
-                           QObject::tr("With special thanks to"));
+    return fileContent.arg(QObject::tr("Luna Launcher Developers"), QObject::tr("%1 Developers").arg(BuildConfig.PRISM_LAUNCHER_DISPLAYNAME),
+                           QObject::tr("MultiMC Developers"), QObject::tr("With special thanks to"), QObject::tr("Fluent-Dark Theme"));
 }
 
 QString getLicenseHtml()

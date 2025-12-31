@@ -1701,3 +1701,17 @@ install(
     DESTINATION ${RESOURCES_DEST_DIR}/translations
     COMPONENT Runtime
 )
+
+# Install exresources - extra runtime resources that match user data directory structure
+# These files are copied as-is and can be overridden by user's custom files
+# Structure matches: themes/, iconthemes/, translations/, catpacks/
+install(
+    DIRECTORY
+        exresources/themes
+        exresources/iconthemes
+        exresources/translations
+        exresources/catpacks
+    DESTINATION ${RESOURCES_DEST_DIR}
+    USE_SOURCE_PERMISSIONS
+    COMPONENT Runtime
+)

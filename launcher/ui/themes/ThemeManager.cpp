@@ -21,10 +21,12 @@
 #include "ThemeManager.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QIcon>
 #include <QImageReader>
+#include <QSet>
 #include <QStyle>
 #include <QStyleFactory>
 #include "Exception.h"
@@ -119,15 +121,38 @@ void ThemeManager::initializeIcons()
         themeWarningLog() << "Couldn't create icon theme folder";
     themeDebugLog() << "Icon Theme Folder Path: " << m_iconThemeFolder.absolutePath();
 
-    QDirIterator directoryIterator(m_iconThemeFolder.path(), QDir::Dirs | QDir::NoDotAndDotDot);
-    while (directoryIterator.hasNext()) {
-        QDir dir(directoryIterator.next());
-        IconTheme theme(dir.dirName(), dir.path());
-        if (!theme.load())
-            continue;
+    // Collect icon theme folders from both user data directory and launcher install directory
+    QList<QDir> iconThemeFolders;
+    iconThemeFolders.append(m_iconThemeFolder);
 
-        addIconTheme(std::move(theme));
-        themeDebugLog() << "Loaded Custom Icon Theme from" << dir.path();
+    // Add icon themes from launcher installation directory
+    QDir installIconDir(QCoreApplication::applicationDirPath() + "/resources/iconthemes");
+    if (installIconDir.exists()) {
+        themeDebugLog() << "Found installation icon theme directory:" << installIconDir.absolutePath();
+        iconThemeFolders.append(installIconDir);
+    }
+
+    // Load icon themes from all collected folders (user themes take precedence)
+    QSet<QString> loadedIconIds;
+    for (const QDir& iconFolder : iconThemeFolders) {
+        QDirIterator directoryIterator(iconFolder.path(), QDir::Dirs | QDir::NoDotAndDotDot);
+        while (directoryIterator.hasNext()) {
+            QDir dir(directoryIterator.next());
+            QString themeId = dir.dirName();
+
+            // Skip if already loaded from user folder
+            if (loadedIconIds.contains(themeId)) {
+                continue;
+            }
+
+            IconTheme theme(themeId, dir.path());
+            if (!theme.load())
+                continue;
+
+            addIconTheme(std::move(theme));
+            themeDebugLog() << "Loaded Custom Icon Theme from" << dir.path();
+            loadedIconIds.insert(themeId);
+        }
     }
 
     themeDebugLog() << "<> Icon themes initialized.";
@@ -160,22 +185,47 @@ void ThemeManager::initializeWidgets()
         themeWarningLog() << "Couldn't create theme folder";
     themeDebugLog() << "Theme Folder Path: " << m_applicationThemeFolder.absolutePath();
 
-    QDirIterator directoryIterator(m_applicationThemeFolder.path(), QDir::Dirs | QDir::NoDotAndDotDot);
-    while (directoryIterator.hasNext()) {
-        QDir dir(directoryIterator.next());
-        QFileInfo themeJson(dir.absoluteFilePath("theme.json"));
-        if (themeJson.exists()) {
-            // Load "theme.json" based themes
-            themeDebugLog() << "Loading JSON Theme from:" << themeJson.absoluteFilePath();
-            addTheme(std::make_unique<CustomTheme>(getTheme(darkThemeId), themeJson, true));
-        } else {
-            // Load pure QSS Themes
-            QDirIterator stylesheetFileIterator(dir.absoluteFilePath(""), { "*.qss", "*.css" }, QDir::Files);
-            while (stylesheetFileIterator.hasNext()) {
-                QFile customThemeFile(stylesheetFileIterator.next());
-                QFileInfo customThemeFileInfo(customThemeFile);
-                themeDebugLog() << "Loading QSS Theme from:" << customThemeFileInfo.absoluteFilePath();
-                addTheme(std::make_unique<CustomTheme>(getTheme(darkThemeId), customThemeFileInfo, false));
+    // Collect theme folders from both user data directory and launcher install directory
+    QList<QDir> themeFolders;
+    themeFolders.append(m_applicationThemeFolder);
+
+    // Add themes from launcher installation directory
+    QDir installThemeDir(QCoreApplication::applicationDirPath() + "/resources/themes");
+    if (installThemeDir.exists()) {
+        themeDebugLog() << "Found installation theme directory:" << installThemeDir.absolutePath();
+        themeFolders.append(installThemeDir);
+    }
+
+    // Load themes from all collected folders (user themes take precedence)
+    QSet<QString> loadedThemeIds;
+    for (const QDir& themeFolder : themeFolders) {
+        QDirIterator directoryIterator(themeFolder.path(), QDir::Dirs | QDir::NoDotAndDotDot);
+        while (directoryIterator.hasNext()) {
+            QDir dir(directoryIterator.next());
+            QString themeId = dir.dirName();
+
+            // Skip if already loaded from user folder
+            if (loadedThemeIds.contains(themeId)) {
+                continue;
+            }
+
+            QFileInfo themeJson(dir.absoluteFilePath("theme.json"));
+            if (themeJson.exists()) {
+                // Load "theme.json" based themes
+                themeDebugLog() << "Loading JSON Theme from:" << themeJson.absoluteFilePath();
+                addTheme(std::make_unique<CustomTheme>(getTheme(darkThemeId), themeJson, true));
+                loadedThemeIds.insert(themeId);
+            } else {
+                // Load pure QSS Themes
+                QDirIterator stylesheetFileIterator(dir.absoluteFilePath(""), { "*.qss", "*.css" }, QDir::Files);
+                while (stylesheetFileIterator.hasNext()) {
+                    QFile customThemeFile(stylesheetFileIterator.next());
+                    QFileInfo customThemeFileInfo(customThemeFile);
+                    themeDebugLog() << "Loading QSS Theme from:" << customThemeFileInfo.absoluteFilePath();
+                    addTheme(std::make_unique<CustomTheme>(getTheme(darkThemeId), customThemeFileInfo, false));
+                    loadedThemeIds.insert(themeId);
+                    break; // Only load first QSS file per folder
+                }
             }
         }
     }
@@ -324,6 +374,18 @@ void ThemeManager::initializeCatPacks()
     for (auto format : QImageReader::supportedImageFormats()) {
         supportedImageFormats.append("*." + format);
     }
+
+    // Collect catpack folders from both user data directory and launcher install directory
+    QList<QDir> catPackFolders;
+    catPackFolders.append(m_catPacksFolder);
+
+    // Add catpacks from launcher installation directory
+    QDir installCatDir(QCoreApplication::applicationDirPath() + "/resources/catpacks");
+    if (installCatDir.exists()) {
+        themeDebugLog() << "Found installation catpack directory:" << installCatDir.absolutePath();
+        catPackFolders.append(installCatDir);
+    }
+
     auto loadFiles = [this, supportedImageFormats](QDir dir) {
         // Load image files directly
         QDirIterator ImageFileIterator(dir.absoluteFilePath(""), supportedImageFormats, QDir::Files);
@@ -335,22 +397,35 @@ void ThemeManager::initializeCatPacks()
         }
     };
 
-    loadFiles(m_catPacksFolder);
+    // Load catpacks from all collected folders (user catpacks take precedence)
+    QSet<QString> loadedCatIds;
+    for (const QDir& catFolder : catPackFolders) {
+        loadFiles(catFolder);
 
-    QDirIterator directoryIterator(m_catPacksFolder.path(), QDir::Dirs | QDir::NoDotAndDotDot);
-    while (directoryIterator.hasNext()) {
-        QDir dir(directoryIterator.next());
-        QFileInfo manifest(dir.absoluteFilePath("catpack.json"));
-        if (manifest.isFile()) {
-            try {
-                // Load background manifest
-                themeDebugLog() << "Loading background manifest from:" << manifest.absoluteFilePath();
-                addCatPack(std::unique_ptr<CatPack>(new JsonCatPack(manifest)));
-            } catch (const Exception& e) {
-                themeWarningLog() << "Couldn't load catpack json:" << e.cause();
+        QDirIterator directoryIterator(catFolder.path(), QDir::Dirs | QDir::NoDotAndDotDot);
+        while (directoryIterator.hasNext()) {
+            QDir dir(directoryIterator.next());
+            QString catId = dir.dirName();
+
+            // Skip if already loaded from user folder
+            if (loadedCatIds.contains(catId)) {
+                continue;
             }
-        } else {
-            loadFiles(dir);
+
+            QFileInfo manifest(dir.absoluteFilePath("catpack.json"));
+            if (manifest.isFile()) {
+                try {
+                    // Load background manifest
+                    themeDebugLog() << "Loading background manifest from:" << manifest.absoluteFilePath();
+                    addCatPack(std::unique_ptr<CatPack>(new JsonCatPack(manifest)));
+                    loadedCatIds.insert(catId);
+                } catch (const Exception& e) {
+                    themeWarningLog() << "Couldn't load catpack json:" << e.cause();
+                }
+            } else {
+                loadFiles(dir);
+                loadedCatIds.insert(catId);
+            }
         }
     }
 }

@@ -44,6 +44,7 @@
 #include <QFile>
 #include <QLibraryInfo>
 #include <QLocale>
+#include <QSet>
 #include <QTranslator>
 #include <locale>
 
@@ -154,6 +155,7 @@ struct Language {
 
 struct TranslationsModel::Private {
     QDir m_dir;
+    QDir m_install_dir;
 
     // initial state is just english
     QList<Language> m_languages = { Language(defaultLangCode) };
@@ -182,11 +184,19 @@ TranslationsModel::TranslationsModel(QString path, QObject* parent) : QAbstractL
     d.reset(new Private);
     d->m_dir.setPath(path);
     FS::ensureFolderPathExists(path);
+
+    // Set install translations directory
+    QString installPath = QCoreApplication::applicationDirPath() + "/resources/translations";
+    d->m_install_dir.setPath(installPath);
+
     reloadLocalFiles();
 
     d->watcher = new QFileSystemWatcher(this);
     connect(d->watcher, &QFileSystemWatcher::directoryChanged, this, &TranslationsModel::translationDirChanged);
     d->watcher->addPath(d->m_dir.canonicalPath());
+    if (d->m_install_dir.exists()) {
+        d->watcher->addPath(d->m_install_dir.canonicalPath());
+    }
 }
 
 TranslationsModel::~TranslationsModel() {}
@@ -272,34 +282,56 @@ void TranslationsModel::reloadLocalFiles()
 {
     QMap<QString, Language> languages = { { defaultLangCode, Language(defaultLangCode) } };
 
+    // Read index from user data directory
     readIndex(d->m_dir.absoluteFilePath("index_v2.json"), languages);
-    auto entries = d->m_dir.entryInfoList({ "mmc_*.qm", "*.po" }, QDir::Files | QDir::NoDotAndDotDot);
-    for (auto& entry : entries) {
-        auto completeSuffix = entry.completeSuffix();
-        QString langCode;
-        FileType fileType = FileType::NONE;
-        if (completeSuffix == "qm") {
-            langCode = entry.baseName().remove(0, 4);
-            fileType = FileType::QM;
-        } else if (completeSuffix == "po") {
-            langCode = entry.baseName();
-            fileType = FileType::PO;
-        } else {
-            continue;
-        }
 
-        auto langIter = languages.find(langCode);
-        if (langIter != languages.end()) {
-            auto& language = *langIter;
-            if (int(fileType) > int(language.localFileType)) {
-                language.localFileType = fileType;
+    // Collect translation files from both directories
+    QList<QDir> translationDirs;
+    translationDirs.append(d->m_dir);
+
+    // Add install directory if it exists
+    if (d->m_install_dir.exists()) {
+        translationDirs.append(d->m_install_dir);
+    }
+
+    // Scan translation files from all directories (user files take precedence)
+    QSet<QString> processedLangCodes;
+    for (const QDir& dir : translationDirs) {
+        auto entries = dir.entryInfoList({ "mmc_*.qm", "*.po" }, QDir::Files | QDir::NoDotAndDotDot);
+        for (auto& entry : entries) {
+            auto completeSuffix = entry.completeSuffix();
+            QString langCode;
+            FileType fileType = FileType::NONE;
+            if (completeSuffix == "qm") {
+                langCode = entry.baseName().remove(0, 4);
+                fileType = FileType::QM;
+            } else if (completeSuffix == "po") {
+                langCode = entry.baseName();
+                fileType = FileType::PO;
+            } else {
+                continue;
             }
-        } else {
-            if (fileType == FileType::PO) {
-                Language localFound(langCode);
-                localFound.localFileType = FileType::PO;
-                languages.insert(langCode, localFound);
+
+            // Skip if already processed from user directory
+            if (processedLangCodes.contains(langCode)) {
+                continue;
             }
+
+            auto langIter = languages.find(langCode);
+            if (langIter != languages.end()) {
+                auto& language = *langIter;
+                if (int(fileType) > int(language.localFileType)) {
+                    language.localFileType = fileType;
+                }
+            } else {
+                if (fileType == FileType::PO) {
+                    Language localFound(langCode);
+                    localFound.localFileType = FileType::PO;
+                    languages.insert(langCode, localFound);
+                }
+            }
+
+            processedLangCodes.insert(langCode);
         }
     }
 

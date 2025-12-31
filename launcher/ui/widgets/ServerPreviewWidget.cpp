@@ -17,12 +17,13 @@
 #include <tag_list.h>
 #include <tag_string.h>
 #include <io/stream_reader.h>
+#include <io/stream_writer.h>
 #include <sstream>
 #include <QFileInfo>
 #include <QEnterEvent>
 
-ServerEntryWidget::ServerEntryWidget(InstancePtr instance, const QString &name, const MinecraftTarget &target, const QPixmap &initialIcon, QWidget *parent)
-    : QWidget(parent), m_instance(instance), m_target(target), m_name(name), m_cachedIcon(initialIcon)
+ServerEntryWidget::ServerEntryWidget(InstancePtr instance, int index, const QString &name, const MinecraftTarget &target, const QPixmap &initialIcon, QWidget *parent)
+    : QWidget(parent), m_instance(instance), m_index(index), m_target(target), m_name(name), m_cachedIcon(initialIcon)
 {
     QHBoxLayout *layout = new QHBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
@@ -105,8 +106,14 @@ void ServerEntryWidget::refreshStatus()
                     QByteArray iconData = QByteArray::fromBase64(faviconStr.toLatin1());
                     if (icon.loadFromData(iconData)) {
                         m_cachedIcon = icon;
+                        saveIconToDisk(iconData);
                     }
                 }
+            } else if (m_cachedIcon.isNull() || m_cachedIcon.toImage() == QIcon::fromTheme("unknown_server").pixmap(32, 32).toImage()) {
+                 // Keep using m_cachedIcon if we have it, otherwise fallback if needed?
+                 // Actually m_cachedIcon is already set to initialIcon which might be unknown_server or from servers.dat
+                 // If ping succeeds but no favicon, we just keep what we have (m_cachedIcon)
+                 // No action needed here, icon = m_cachedIcon is already set
             }
 
             updateUI(isOnline, players, motdHtml, icon);
@@ -146,6 +153,41 @@ void ServerEntryWidget::updateUI(bool isOnline, int players, const QString &motd
         .arg(players);
 
     setToolTip(m_fullMotdHtml);
+}
+
+void ServerEntryWidget::saveIconToDisk(const QByteArray &iconData)
+{
+    if (!m_instance) return;
+
+    QString serversDatPath = FS::PathCombine(m_instance->gameRoot(), "servers.dat");
+    try {
+        // Read existing NBT
+        if (QFileInfo::exists(serversDatPath)) {
+            QByteArray input = FS::read(serversDatPath);
+            std::istringstream foo(std::string(input.constData(), input.size()));
+            auto pair = nbt::io::read_compound(foo);
+
+            if (pair.second) {
+                auto& serversList = pair.second->at("servers").as<nbt::tag_list>();
+                
+                // Safety check for index
+                if (m_index >= 0 && m_index < (int)serversList.size()) {
+                    auto& serverTag = serversList[m_index].as<nbt::tag_compound>();
+                    
+                    // Update icon field
+                    serverTag.insert("icon", iconData.toBase64().toStdString());
+
+                    // Write back
+                    std::ostringstream s;
+                    nbt::io::write_tag("", *pair.second, s);
+                    QByteArray val(s.str().data(), (int)s.str().size());
+                    FS::write(serversDatPath, val);
+                }
+            }
+        }
+    } catch (...) {
+        qWarning() << "Failed to save icon to servers.dat for instance" << m_instance->id();
+    }
 }
 
 void ServerEntryWidget::updateOfflineUI(const QString &error)
@@ -331,7 +373,7 @@ void ServerPreviewWidget::loadServerInfo()
                     QString name = QString::fromUtf8(nameStr.c_str());
                     MinecraftTarget target = MinecraftTarget::parse(QString::fromUtf8(addressStr.c_str()), false);
 
-                    ServerEntryWidget *entry = new ServerEntryWidget(m_instance, name, target, icon, m_container);
+                    ServerEntryWidget *entry = new ServerEntryWidget(m_instance, i, name, target, icon, m_container);
                     connect(entry, &ServerEntryWidget::selected, this, &ServerPreviewWidget::onEntrySelected);
                     m_layout->addWidget(entry);
                     m_entries.append(entry);

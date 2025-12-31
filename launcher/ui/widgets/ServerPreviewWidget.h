@@ -15,7 +15,7 @@ class ServerEntryWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit ServerEntryWidget(InstancePtr instance, const QString &name, const MinecraftTarget &target, const QPixmap &initialIcon, QWidget *parent = nullptr);
+    explicit ServerEntryWidget(InstancePtr instance, int index, const QString &name, const MinecraftTarget &target, const QPixmap &initialIcon, QWidget *parent = nullptr);
     void setSelected(bool selected);
     bool isSelected() const { return m_isSelected; }
 
@@ -38,8 +38,10 @@ private slots:
 
 private:
     void updateStyle();
+    void saveIconToDisk(const QByteArray &iconData);
 
     InstancePtr m_instance;
+    int m_index;
     MinecraftTarget m_target;
     QString m_name;
     bool m_isSelected = false;

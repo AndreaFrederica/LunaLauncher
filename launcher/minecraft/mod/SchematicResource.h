@@ -1,5 +1,5 @@
 /*
- *  Luna Launcher - Minecraft Launcher 
+ *  Luna Launcher - Minecraft Launcher
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  */
 #pragma once

@@ -1721,6 +1721,7 @@ install(
         exresources/iconthemes
         exresources/translations
         exresources/catpacks
+        exresources/icons
     DESTINATION ${EXRESOURCE_DEST_DIR}
     USE_SOURCE_PERMISSIONS
     COMPONENT Runtime

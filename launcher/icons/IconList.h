@@ -108,4 +108,5 @@ class IconList : public QAbstractListModel {
     QMap<QString, int> m_nameIndex;
     QList<MMCIcon> m_icons;
     QDir m_dir;
+    QDir m_install_dir;
 };

@@ -37,6 +37,7 @@
 #include "IconList.h"
 #include <FileSystem.h>
 #include <QDebug>
+#include <QCoreApplication>
 #include <QFileSystemWatcher>
 #include <QMap>
 #include <QMimeData>
@@ -61,6 +62,16 @@ IconList::IconList(const QStringList& builtinPaths, const QString& path, QObject
     for (const auto& builtinName : builtinNames) {
         addThemeIcon(builtinName);
     }
+
+    // Initialize install directory path
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString installIconPath;
+#ifdef Q_OS_MACOS
+    installIconPath = FS::PathCombine(appDir, "..", "Resources", "icons");
+#else
+    installIconPath = FS::PathCombine(appDir, "resource", "icons");
+#endif
+    m_install_dir.setPath(installIconPath);
 
     m_watcher.reset(new QFileSystemWatcher());
     m_isWatching = false;
@@ -110,7 +121,15 @@ bool IconList::addPathRecursively(const QString& path)
 QStringList IconList::getIconFilePaths() const
 {
     QStringList iconFiles{};
-    QStringList directories{ m_dir.absolutePath() };
+    QStringList directories;
+
+    // Add install directory first if it exists (user directory will override)
+    if (m_install_dir.exists()) {
+        directories.append(m_install_dir.absolutePath());
+    }
+    // Then add user directory (takes precedence)
+    directories.append(m_dir.absolutePath());
+
     while (!directories.isEmpty()) {
         QString first = directories.takeFirst();
         QDir dir(first);
@@ -171,7 +190,10 @@ void IconList::directoryChanged(const QString& path)
     for (const QString& removedPath : toRemove) {
         qDebug() << "Removing icon " << removedPath;
         QFileInfo removedFile(removedPath);
-        QString relativePath = m_dir.relativeFilePath(removedFile.absoluteFilePath());
+
+        // Determine which directory this file belongs to
+        QDir baseDir = removedFile.absoluteFilePath().startsWith(m_install_dir.absolutePath()) ? m_install_dir : m_dir;
+        QString relativePath = baseDir.relativeFilePath(removedFile.absoluteFilePath());
         QString key = QFileInfo(relativePath).completeBaseName();
 
         int idx = getIconIndex(key);
@@ -194,9 +216,12 @@ void IconList::directoryChanged(const QString& path)
         qDebug() << "Adding icon " << addedPath;
 
         QFileInfo addfile(addedPath);
-        QString relativePath = m_dir.relativeFilePath(addfile.absoluteFilePath());
+
+        // Determine which directory this file belongs to
+        QDir baseDir = addedFile.absoluteFilePath().startsWith(m_install_dir.absolutePath()) ? m_install_dir : m_dir;
+        QString relativePath = baseDir.relativeFilePath(addfile.absoluteFilePath());
         QString key = QFileInfo(relativePath).completeBaseName();
-        QString name = formatName(m_dir, addfile);
+        QString name = formatName(baseDir, addfile);
 
         if (addIcon(key, name, addfile.filePath(), IconType::FileBased)) {
             m_watcher->addPath(addedPath);
@@ -213,7 +238,10 @@ void IconList::fileChanged(const QString& path)
     QFileInfo checkfile(path);
     if (!checkfile.exists())
         return;
-    QString key = m_dir.relativeFilePath(checkfile.absoluteFilePath());
+
+    // Determine which directory this file belongs to
+    QDir baseDir = checkfile.absoluteFilePath().startsWith(m_install_dir.absolutePath()) ? m_install_dir : m_dir;
+    QString key = baseDir.relativeFilePath(checkfile.absoluteFilePath());
     int idx = getIconIndex(key);
     if (idx == -1)
         return;
@@ -239,8 +267,17 @@ void IconList::startWatching()
     auto abs_path = m_dir.absolutePath();
     FS::ensureFolderPathExists(abs_path);
     m_isWatching = addPathRecursively(abs_path);
+
+    // Also watch install directory if it exists
+    if (m_install_dir.exists()) {
+        auto install_path = m_install_dir.absolutePath();
+        if (addPathRecursively(install_path)) {
+            m_isWatching = true;
+        }
+    }
+
     if (m_isWatching) {
-        qDebug() << "Started watching " << abs_path;
+        qDebug() << "Started watching icon directories";
     } else {
         qDebug() << "Failed to start watching " << abs_path;
     }

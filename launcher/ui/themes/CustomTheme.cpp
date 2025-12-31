@@ -48,6 +48,9 @@ CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest
     if (isManifest) {
         m_id = fileInfo.dir().dirName();
 
+        // Save the absolute path to the theme directory
+        m_themeDirPath = fileInfo.dir().absolutePath();
+
         QString path = FS::PathCombine("themes", m_id);
         QString pathResources = FS::PathCombine("themes", m_id, "resources");
 
@@ -60,7 +63,8 @@ CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest
             themeWarningLog() << "Resources directory for" << m_id << "could not be created";
         }
 
-        auto themeFilePath = FS::PathCombine(path, themeFile);
+        // Use absolute path to read the theme.json file
+        QString themeFilePath = fileInfo.absoluteFilePath();
 
         m_palette = baseTheme->colorScheme();
 
@@ -78,7 +82,8 @@ CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest
             return;
         }
 
-        auto qssFilePath = FS::PathCombine(path, m_qssFilePath);
+        // Use absolute path to load the QSS file
+        QString qssFilePath = FS::PathCombine(m_themeDirPath, m_qssFilePath);
         QFileInfo info(qssFilePath);
         if (info.isFile()) {
             try {
@@ -119,7 +124,8 @@ CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest
 
 QStringList CustomTheme::searchPaths()
 {
-    QString pathResources = FS::PathCombine("themes", m_id, "resources");
+    // Use the absolute path to the theme's resources directory
+    QString pathResources = FS::PathCombine(m_themeDirPath, "resources");
     if (QFileInfo::exists(pathResources))
         return { pathResources };
 

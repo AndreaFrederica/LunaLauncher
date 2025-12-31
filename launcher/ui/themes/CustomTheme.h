@@ -67,6 +67,7 @@ class CustomTheme : public ITheme {
     QString m_widgets;
     QString m_qssFilePath;
     LogColors m_logColors;
+    QString m_themeDirPath;  // Absolute path to the theme directory
     /**
      * The tooltip could be defined in the theme json,
      * or composed of other fields that could be in there.

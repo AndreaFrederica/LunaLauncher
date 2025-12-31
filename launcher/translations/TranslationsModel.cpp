@@ -186,7 +186,15 @@ TranslationsModel::TranslationsModel(QString path, QObject* parent) : QAbstractL
     FS::ensureFolderPathExists(path);
 
     // Set install translations directory
-    QString installPath = QCoreApplication::applicationDirPath() + "/resources/translations";
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString installPath;
+#ifdef Q_OS_MACOS
+    // On macOS, appDir is .app/Contents/MacOS, resources are in Resources
+    installPath = FS::PathCombine(appDir, "..", "Resources", "translations");
+#else
+    // On Windows/Linux, resources are in resource subdirectory
+    installPath = FS::PathCombine(appDir, "resource", "translations");
+#endif
     d->m_install_dir.setPath(installPath);
 
     reloadLocalFiles();
@@ -294,44 +302,101 @@ void TranslationsModel::reloadLocalFiles()
         translationDirs.append(d->m_install_dir);
     }
 
-    // Scan translation files from all directories (user files take precedence)
-    QSet<QString> processedLangCodes;
+    // Helper function to process a file entry
+    auto processEntry = [&](const QFileInfo& entry) -> QPair<QString, QPair<FileType, bool>> {
+        auto completeSuffix = entry.completeSuffix();
+        QString fileName = entry.fileName();
+        bool isPriority = false;
+
+        // Check for priority prefix (!)
+        if (fileName.startsWith('!')) {
+            isPriority = true;
+            fileName = fileName.mid(1);  // Remove the ! prefix
+        }
+
+        QString langCode;
+        FileType fileType = FileType::NONE;
+        if (completeSuffix == "qm") {
+            if (fileName.startsWith("mmc_")) {
+                langCode = fileName.mid(4);  // Remove "mmc_" prefix
+            } else {
+                return qMakePair(QString(), qMakePair(FileType::NONE, false));  // Invalid .qm file name
+            }
+            fileType = FileType::QM;
+        } else if (completeSuffix == "po") {
+            langCode = fileName;  // .po files use the whole filename as langCode
+            fileType = FileType::PO;
+        } else {
+            return qMakePair(QString(), qMakePair(FileType::NONE, false));
+        }
+
+        return qMakePair(langCode, qMakePair(fileType, isPriority));
+    };
+
+    // Scan translation files from all directories
+    // First pass: scan all files, collect priority (!) and normal files separately
+    QList<QPair<QString, QPair<FileType, bool>>> priorityFiles;
+    QMap<QString, QPair<FileType, bool>> normalFiles;
+
     for (const QDir& dir : translationDirs) {
-        auto entries = dir.entryInfoList({ "mmc_*.qm", "*.po" }, QDir::Files | QDir::NoDotAndDotDot);
+        auto entries = dir.entryInfoList({ "mmc_*.qm", "*.po", "!*.po" }, QDir::Files | QDir::NoDotAndDotDot);
         for (auto& entry : entries) {
-            auto completeSuffix = entry.completeSuffix();
-            QString langCode;
-            FileType fileType = FileType::NONE;
-            if (completeSuffix == "qm") {
-                langCode = entry.baseName().remove(0, 4);
-                fileType = FileType::QM;
-            } else if (completeSuffix == "po") {
-                langCode = entry.baseName();
-                fileType = FileType::PO;
-            } else {
+            auto result = processEntry(entry);
+            if (result.first.isEmpty() || result.second.first == FileType::NONE)
                 continue;
-            }
 
-            // Skip if already processed from user directory
-            if (processedLangCodes.contains(langCode)) {
-                continue;
-            }
+            auto langCode = result.first;
+            auto fileType = result.second.first;
+            bool isPriority = result.second.second;
 
-            auto langIter = languages.find(langCode);
-            if (langIter != languages.end()) {
-                auto& language = *langIter;
-                if (int(fileType) > int(language.localFileType)) {
-                    language.localFileType = fileType;
-                }
+            if (isPriority) {
+                priorityFiles.append(qMakePair(langCode, qMakePair(fileType, true)));
             } else {
-                if (fileType == FileType::PO) {
-                    Language localFound(langCode);
-                    localFound.localFileType = FileType::PO;
-                    languages.insert(langCode, localFound);
+                // Only keep normal file if we don't have one yet (user dir processed first)
+                if (!normalFiles.contains(langCode)) {
+                    normalFiles.insert(langCode, qMakePair(fileType, false));
                 }
             }
+        }
+    }
 
-            processedLangCodes.insert(langCode);
+    // Second pass: process normal files
+    for (auto iter = normalFiles.begin(); iter != normalFiles.end(); ++iter) {
+        QString langCode = iter.key();
+        auto fileType = iter.value().first;
+
+        auto langIter = languages.find(langCode);
+        if (langIter != languages.end()) {
+            auto& language = *langIter;
+            if (int(fileType) > int(language.localFileType)) {
+                language.localFileType = fileType;
+            }
+        } else {
+            if (fileType == FileType::PO) {
+                Language localFound(langCode);
+                localFound.localFileType = FileType::PO;
+                languages.insert(langCode, localFound);
+            }
+        }
+    }
+
+    // Third pass: process priority (!) files - these override everything
+    for (const auto& priorityFile : priorityFiles) {
+        QString langCode = priorityFile.first;
+        auto fileType = priorityFile.second.first;
+
+        auto langIter = languages.find(langCode);
+        if (langIter != languages.end()) {
+            auto& language = *langIter;
+            if (int(fileType) > int(language.localFileType)) {
+                language.localFileType = fileType;
+            }
+        } else {
+            if (fileType == FileType::PO) {
+                Language localFound(langCode);
+                localFound.localFileType = FileType::PO;
+                languages.insert(langCode, localFound);
+            }
         }
     }
 

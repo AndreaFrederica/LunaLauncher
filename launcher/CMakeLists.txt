@@ -1704,14 +1704,24 @@ install(
 
 # Install exresources - extra runtime resources that match user data directory structure
 # These files are copied as-is and can be overridden by user's custom files
-# Structure matches: themes/, iconthemes/, translations/, catpacks/
+# On Windows: install to "resource" subdirectory
+# On macOS: install to Resources directory inside .app bundle
+# On Linux: install to resources subdirectory
+if(WIN32)
+    set(EXRESOURCE_DEST_DIR "resource")
+elseif(APPLE)
+    set(EXRESOURCE_DEST_DIR "${RESOURCES_DEST_DIR}")
+else()
+    set(EXRESOURCE_DEST_DIR "${RESOURCES_DEST_DIR}/resources")
+endif()
+
 install(
     DIRECTORY
         exresources/themes
         exresources/iconthemes
         exresources/translations
         exresources/catpacks
-    DESTINATION ${RESOURCES_DEST_DIR}
+    DESTINATION ${EXRESOURCE_DEST_DIR}
     USE_SOURCE_PERMISSIONS
     COMPONENT Runtime
 )

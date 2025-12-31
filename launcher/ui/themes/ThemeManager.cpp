@@ -126,9 +126,17 @@ void ThemeManager::initializeIcons()
     iconThemeFolders.append(m_iconThemeFolder);
 
     // Add icon themes from launcher installation directory
-    QDir installIconDir(QCoreApplication::applicationDirPath() + "/resources/iconthemes");
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString installIconPath;
+#ifdef Q_OS_MACOS
+    // On macOS, appDir is .app/Contents/MacOS, resources are in Resources
+    installIconPath = FS::PathCombine(appDir, "..", "Resources", "iconthemes");
+#else
+    // On Windows/Linux, resources are in resource subdirectory
+    installIconPath = FS::PathCombine(appDir, "resource", "iconthemes");
+#endif
+    QDir installIconDir(installIconPath);
     if (installIconDir.exists()) {
-        themeDebugLog() << "Found installation icon theme directory:" << installIconDir.absolutePath();
         iconThemeFolders.append(installIconDir);
     }
 
@@ -154,6 +162,16 @@ void ThemeManager::initializeIcons()
             loadedIconIds.insert(themeId);
         }
     }
+
+    // Update icon theme search paths to include both user and install directories
+    QStringList searchPaths = QIcon::themeSearchPaths();
+    for (const QDir& folder : iconThemeFolders) {
+        QString path = folder.absolutePath();
+        if (!searchPaths.contains(path)) {
+            searchPaths.append(path);
+        }
+    }
+    QIcon::setThemeSearchPaths(searchPaths);
 
     themeDebugLog() << "<> Icon themes initialized.";
 }
@@ -190,9 +208,15 @@ void ThemeManager::initializeWidgets()
     themeFolders.append(m_applicationThemeFolder);
 
     // Add themes from launcher installation directory
-    QDir installThemeDir(QCoreApplication::applicationDirPath() + "/resources/themes");
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString installThemePath;
+#ifdef Q_OS_MACOS
+    installThemePath = FS::PathCombine(appDir, "..", "Resources", "themes");
+#else
+    installThemePath = FS::PathCombine(appDir, "resource", "themes");
+#endif
+    QDir installThemeDir(installThemePath);
     if (installThemeDir.exists()) {
-        themeDebugLog() << "Found installation theme directory:" << installThemeDir.absolutePath();
         themeFolders.append(installThemeDir);
     }
 
@@ -380,9 +404,15 @@ void ThemeManager::initializeCatPacks()
     catPackFolders.append(m_catPacksFolder);
 
     // Add catpacks from launcher installation directory
-    QDir installCatDir(QCoreApplication::applicationDirPath() + "/resources/catpacks");
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString installCatPath;
+#ifdef Q_OS_MACOS
+    installCatPath = FS::PathCombine(appDir, "..", "Resources", "catpacks");
+#else
+    installCatPath = FS::PathCombine(appDir, "resource", "catpacks");
+#endif
+    QDir installCatDir(installCatPath);
     if (installCatDir.exists()) {
-        themeDebugLog() << "Found installation catpack directory:" << installCatDir.absolutePath();
         catPackFolders.append(installCatDir);
     }
 

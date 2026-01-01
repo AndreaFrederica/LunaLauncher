@@ -45,6 +45,9 @@
 #include "Application.h"
 #include "BuildConfig.h"
 
+#include <QFontDatabase>
+#include <QDirIterator>
+
 #include "DataMigrationTask.h"
 #include "java/JavaInstallList.h"
 #include "minecraft/MirrorDownload.h"
@@ -393,6 +396,37 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // on macOS, touch the root to force Finder to reload the .app metadata (and fix any icon change issues)
         FS::updateTimestamp(m_rootPath);
 #endif
+    }
+
+    // Load custom fonts from exresources
+    {
+        QStringList potentialFontPaths;
+#if defined(Q_OS_WIN32)
+        potentialFontPaths << FS::PathCombine(binPath, "resource", "fonts");
+#elif defined(Q_OS_MAC)
+        potentialFontPaths << FS::PathCombine(binPath, "../Resources", "fonts");
+#else
+        potentialFontPaths << FS::PathCombine(m_rootPath, "share", BuildConfig.LAUNCHER_NAME, "resources", "fonts");
+        potentialFontPaths << FS::PathCombine(m_rootPath, "resources", "fonts");
+#endif
+
+        for (const QString& path : potentialFontPaths) {
+            QDir fontDir(path);
+            if (fontDir.exists()) {
+                qInfo() << "Loading fonts from" << path;
+                QDirIterator it(path, QStringList() << "*.ttf" << "*.otf", QDir::Files);
+                while (it.hasNext()) {
+                    QString fontPath = it.next();
+                    int fontId = QFontDatabase::addApplicationFont(fontPath);
+                    if (fontId != -1) {
+                        qDebug() << "Loaded font:" << fontPath;
+                    } else {
+                        qWarning() << "Failed to load font:" << fontPath;
+                    }
+                }
+                break;
+            }
+        }
     }
 
     QString adjustedBy;

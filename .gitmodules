@@ -10,3 +10,6 @@
 [submodule "libraries/qtermwidget"]
 	path = libraries/qtermwidget
 	url = https://github.com/AndreaFrederica/-qtermwidget.git
+[submodule "website"]
+	path = website
+	url = https://github.com/AndreaFrederica/LunaLauncher_webpage.git

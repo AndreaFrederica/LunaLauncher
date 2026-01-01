@@ -18,6 +18,7 @@ public:
     explicit ServerEntryWidget(InstancePtr instance, int index, const QString &name, const MinecraftTarget &target, const QPixmap &initialIcon, QWidget *parent = nullptr);
     void setSelected(bool selected);
     bool isSelected() const { return m_isSelected; }
+    int calculateIdealWidth() const;
 
 signals:
     void selected(ServerEntryWidget* entry);

@@ -708,6 +708,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         // Multiplayer features visibility
         m_settings->registerSetting("ShowServerPreview", true);
+        m_settings->registerSetting("ServerPreviewDynamicWidth", true);
         m_settings->registerSetting("ShowTerracottaToolBar", true);
         m_settings->registerSetting("ShowYukariConnectToolBar", true);
         m_settings->registerSetting("ShowTerracottaStatusBar", true);

@@ -217,6 +217,13 @@
            </widget>
           </item>
           <item>
+           <widget class="QCheckBox" name="serverPreviewDynamicWidthCheckBox">
+            <property name="text">
+             <string>Auto-adjust Server Preview width to fit names</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QCheckBox" name="showTerracottaToolBarCheckBox">
             <property name="text">
              <string>Show Terracotta button in toolbar</string>

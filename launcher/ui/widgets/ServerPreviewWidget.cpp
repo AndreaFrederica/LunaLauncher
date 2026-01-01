@@ -21,6 +21,7 @@
 #include <sstream>
 #include <QFileInfo>
 #include <QEnterEvent>
+#include <QFontMetrics>
 
 ServerEntryWidget::ServerEntryWidget(InstancePtr instance, int index, const QString &name, const MinecraftTarget &target, const QPixmap &initialIcon, QWidget *parent)
     : QWidget(parent), m_instance(instance), m_index(index), m_target(target), m_name(name), m_cachedIcon(initialIcon)
@@ -64,10 +65,29 @@ ServerEntryWidget::ServerEntryWidget(InstancePtr instance, int index, const QStr
 
     // Set a fixed height to look good in the toolbar
     setFixedHeight(48);
-    // Set a reasonable width
+    // Dynamic width will be handled by the parent container or minimum width logic
+    // But we set a reasonable minimum
     setMinimumWidth(200);
 
     refreshStatus();
+}
+
+int ServerEntryWidget::calculateIdealWidth() const
+{
+    // Icon (32) + Spacing (8) + Spacing in text layout (likely small) + Margins (4*2)
+    int baseWidth = 32 + 8 + 8;
+
+    QFontMetrics fm(m_nameLabel->font());
+    int nameWidth = fm.horizontalAdvance(m_name);
+
+    // Status text width estimation (e.g. "99999 players")
+    QFontMetrics statusFm(m_statusLabel->font());
+    int statusWidth = statusFm.horizontalAdvance(tr("99999 players"));
+
+    int textWidth = std::max(nameWidth, statusWidth);
+
+    // Add some padding
+    return baseWidth + textWidth + 20;
 }
 
 void ServerEntryWidget::refreshStatus()
@@ -169,11 +189,11 @@ void ServerEntryWidget::saveIconToDisk(const QByteArray &iconData)
 
             if (pair.second) {
                 auto& serversList = pair.second->at("servers").as<nbt::tag_list>();
-                
+
                 // Safety check for index
                 if (m_index >= 0 && m_index < (int)serversList.size()) {
                     auto& serverTag = serversList[m_index].as<nbt::tag_compound>();
-                    
+
                     // Update icon field
                     serverTag.insert("icon", iconData.toBase64().toStdString());
 
@@ -393,4 +413,15 @@ void ServerPreviewWidget::loadServerInfo()
     }
 
     m_layout->addStretch();
+
+    // Adjust width based on content if setting enabled
+    if (APPLICATION->settings()->get("ServerPreviewDynamicWidth").toBool()) {
+        int maxWidth = 200; // Minimum default
+        for (auto entry : m_entries) {
+            maxWidth = std::max(maxWidth, entry->calculateIdealWidth());
+        }
+        // Cap at some reasonable max to prevent it from taking over the screen
+        maxWidth = std::min(maxWidth, 400);
+        setMinimumWidth(maxWidth);
+    }
 }

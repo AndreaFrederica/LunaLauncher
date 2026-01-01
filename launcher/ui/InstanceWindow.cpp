@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2023 TheKodeToad <TheKodeToad@proton.me>
@@ -137,7 +140,10 @@ InstanceWindow::InstanceWindow(InstancePtr instance, QWidget* parent) : QMainWin
 
     // add ourself as the modpack page's instance window
     {
-        static_cast<ManagedPackPage*>(m_container->getPage("managed_pack"))->setInstanceWindow(this);
+        auto page = m_container->getPage("managed_pack");
+        if (page) {
+            static_cast<ManagedPackPage*>(page)->setInstanceWindow(this);
+        }
     }
 
     show();

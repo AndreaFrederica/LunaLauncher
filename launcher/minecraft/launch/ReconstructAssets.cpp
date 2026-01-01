@@ -1,4 +1,8 @@
-/* Copyright 2013-2021 MultiMC Contributors
+/*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ * 
+ * Copyright 2013-2021 MultiMC Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +25,7 @@
 
 void ReconstructAssets::executeTask()
 {
-    auto instance = m_parent->instance();
+    auto instance = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
     auto components = instance->getPackProfile();
     auto profile = components->getProfile();
     auto assets = profile->getMinecraftAssets();

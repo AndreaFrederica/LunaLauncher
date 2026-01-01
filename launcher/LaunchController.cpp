@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2023 TheKodeToad <TheKodeToad@proton.me>
@@ -74,6 +77,17 @@ void LaunchController::executeTask()
 
     if (!JavaCommon::checkJVMArgs(m_instance->settings()->get("JvmArgs").toString(), m_parentWidget)) {
         emitFailed(tr("Invalid Java arguments specified. Please fix this first."));
+        return;
+    }
+
+    // Server instances do not require any account; they just run a program.
+    if (m_instance->traits().contains("server")) {
+        m_session = std::make_shared<AuthSession>();
+        m_session->wants_online = false;
+        m_session->demo = false;
+        // Use a placeholder offline name; server launches don't use it anyway.
+        m_session->MakeOffline("Server");
+        launchInstance();
         return;
     }
 

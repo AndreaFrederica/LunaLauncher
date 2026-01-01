@@ -24,6 +24,12 @@
 #include "ui/pages/instance/YesSteveModelPage.h"
 #include "ui/pages/instance/CustomPlayerModelPage.h"
 #include "ui/pages/instance/SchematicsPage.h"
+#include "server/ServerInstance.h"
+#include "ui/pages/server/ServerConsolePage.h"
+#include "ui/pages/server/ServerSettingsPage.h"
+#include "ui/pages/server/ServerPropertyPage.h"
+#include "ui/pages/server/ServerPluginsPage.h"
+#include "ui/pages/server/ServerJavaPage.h"
 
 class InstancePageProvider : protected QObject, public BasePageProvider {
     Q_OBJECT
@@ -34,8 +40,31 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
     virtual QList<BasePage*> getPages() override
     {
         QList<BasePage*> values;
+
+        if (auto serverInst = std::dynamic_pointer_cast<ServerInstance>(inst)) {
+            values.append(new ServerConsolePage(serverInst.get()));
+
+            // Mods page
+            auto modsPage = new ModFolderPage(serverInst.get(), serverInst->loaderModList());
+            modsPage->setFilter("%1 (*.jar *.zip)");
+            values.append(modsPage);
+
+            // Plugins page
+            values.append(new ServerPluginsPage(serverInst.get(), serverInst->pluginList()));
+
+            values.append(new NotesPage(serverInst.get()));
+            values.append(new ServerSettingsPage(serverInst.get()));
+            values.append(new ServerJavaPage(serverInst.get()));
+            values.append(new ServerPropertyPage(serverInst.get()));
+            values.append(new OtherLogsPage("logs", tr("Logs"), "Other-Logs", inst));
+            return values;
+        }
+
         values.append(new LogPage(inst));
         std::shared_ptr<MinecraftInstance> onesix = std::dynamic_pointer_cast<MinecraftInstance>(inst);
+        if (!onesix) {
+            return values;
+        }
         values.append(new VersionPage(onesix.get()));
         values.append(ManagedPackPage::createPage(onesix.get()));
         auto modsPage = new ModFolderPage(onesix.get(), onesix->loaderModList());

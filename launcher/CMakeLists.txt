@@ -799,6 +799,33 @@ endif()
 
 ################################ COMPILE ################################
 
+set(SERVER_SOURCES
+    server/ServerInstance.cpp
+    server/ServerInstance.h
+    server/ServerLaunchTask.cpp
+    server/ServerLaunchTask.h
+    server/ServerInstanceCreationTask.cpp
+    server/ServerInstanceCreationTask.h
+    server/PropertiesFile.cpp
+    server/PropertiesFile.h
+    ui/pages/server/ServerConsolePage.cpp
+    ui/pages/server/ServerConsolePage.h
+    ui/pages/server/ServerConsoleWidget.cpp
+    ui/pages/server/ServerConsoleWidget.h
+    ui/pages/server/ServerPage.cpp
+    ui/pages/server/ServerPage.h
+    ui/pages/server/ServerSettingsPage.cpp
+    ui/pages/server/ServerSettingsPage.h
+    ui/pages/server/ServerPropertyPage.cpp
+    ui/pages/server/ServerPropertyPage.h
+    ui/pages/server/ServerPluginsPage.cpp
+    ui/pages/server/ServerPluginsPage.h
+    ui/pages/server/ServerJavaPage.cpp
+    ui/pages/server/ServerJavaPage.h
+)
+
+set_source_files_properties(ui/pages/server/ServerConsoleWidget.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
 set(LOGIC_SOURCES
     ${CORE_SOURCES}
     ${NET_SOURCES}
@@ -806,6 +833,7 @@ set(LOGIC_SOURCES
     ${UPDATE_SOURCES}
     ${NEWS_SOURCES}
     ${MINECRAFT_SOURCES}
+    ${SERVER_SOURCES}
     ${SCREENSHOTS_SOURCES}
     ${TASKS_SOURCES}
     ${SETTINGS_SOURCES}
@@ -1423,6 +1451,7 @@ target_link_libraries(Launcher_logic
     qdcss
     BuildConfig
     Qt${QT_VERSION_MAJOR}::Widgets
+    qtermwidget
 )
 
 if(TARGET PkgConfig::libqrencode)

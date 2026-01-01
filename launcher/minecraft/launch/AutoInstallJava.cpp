@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2023-2024 Trial97 <alexandru.tripon97@gmail.com>
  *
@@ -57,7 +60,7 @@
 #include "tasks/SequentialTask.h"
 
 AutoInstallJava::AutoInstallJava(LaunchTask* parent)
-    : LaunchStep(parent), m_instance(m_parent->instance()), m_supported_arch(SysInfo::getSupportedJavaArchitecture()) {};
+    : LaunchStep(parent), m_instance(std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance())), m_supported_arch(SysInfo::getSupportedJavaArchitecture()) {};
 
 void AutoInstallJava::executeTask()
 {

@@ -7,3 +7,6 @@
 [submodule "tools/Msys2Manager"]
 	path = tools/Msys2Manager
 	url = https://github.com/AndreaFrederica/Msys2Manager.git
+[submodule "libraries/qtermwidget"]
+	path = libraries/qtermwidget
+	url = https://github.com/AndreaFrederica/-qtermwidget.git

@@ -746,6 +746,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ConsoleFontSize", defaultSize);
         m_settings->registerSetting("ConsoleMaxLines", 100000);
         m_settings->registerSetting("ConsoleOverflowStop", true);
+        m_settings->registerSetting("ConsoleColorScheme", QString("Builtin Dark"));
 
         logModel->setMaxLines(getConsoleMaxLines(settings()));
         logModel->setStopOnOverflow(shouldStopOnConsoleOverflow(settings()));

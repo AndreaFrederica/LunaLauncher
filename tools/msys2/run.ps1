@@ -78,13 +78,13 @@ function Parse-TomlTasks {
                 # commands = ["cmd1", "cmd2"]
                 elseif ($l -match '^\s*commands\s*=\s*\[(.+)\]\s*$') {
                     $arrayContent = $matches[1]
-                    $cmds = ([regex]::Matches($arrayContent, '"([^"]*)"')).Forwards | ForEach-Object { $_.Groups[1].Value }
+                    $cmds = [regex]::Matches($arrayContent, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value }
                     $script:tasks[$currentTask] = $cmds -join ';'
                 }
                 # depends_on = ["dep1", "dep2"]
                 elseif ($l -match '^\s*depends_on\s*=\s*\[(.+)\]\s*$') {
                     $arrayContent = $matches[1]
-                    $deps = ([regex]::Matches($arrayContent, '"([^"]*)"')).Forwards | ForEach-Object { $_.Groups[1].Value }
+                    $deps = [regex]::Matches($arrayContent, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value }
                     $script:taskDependencies[$currentTask] = $deps
                 }
                 # description = "..."

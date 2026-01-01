@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2023 TheKodeToad <TheKodeToad@proton.me>
@@ -60,6 +63,7 @@
 #include "NullInstance.h"
 #include "WatchLock.h"
 #include "minecraft/MinecraftInstance.h"
+#include "server/ServerInstance.h"
 #include "minecraft/ShortcutUtils.h"
 #include "settings/INISettingsObject.h"
 
@@ -681,6 +685,8 @@ InstancePtr InstanceList::loadInstance(const InstanceId& id)
     // OneSix instance
     if (inst_type == "OneSix" || inst_type.isEmpty()) {
         inst.reset(new MinecraftInstance(m_globalSettings, instanceSettings, instanceRoot));
+    } else if (inst_type == "Server") {
+        inst.reset(new ServerInstance(m_globalSettings, instanceSettings, instanceRoot));
     } else {
         inst.reset(new NullInstance(m_globalSettings, instanceSettings, instanceRoot));
     }

@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
+ *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *
@@ -42,7 +45,7 @@
 
 void ModMinecraftJar::executeTask()
 {
-    auto m_inst = m_parent->instance();
+    auto m_inst = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
 
     if (!m_inst->getJarMods().size()) {
         emitSucceeded();
@@ -82,7 +85,7 @@ void ModMinecraftJar::finalize()
 
 bool ModMinecraftJar::removeJar()
 {
-    auto m_inst = m_parent->instance();
+    auto m_inst = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
     auto finalJarPath = QDir(m_inst->binRoot()).absoluteFilePath("minecraft.jar");
     QFile finalJar(finalJarPath);
     if (finalJar.exists()) {

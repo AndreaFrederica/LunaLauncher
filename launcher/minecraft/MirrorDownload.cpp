@@ -29,13 +29,12 @@ const std::array<MirrorDownload::MirrorTypeInfo, 3> MirrorDownload::MirrorTypes 
             ""   // FMLLibsURL - use BuildConfig.FMLLIBS_BASE_URL
         },
         // BMCLAPI - https://bmclapi2.bangbang93.com
-        // Note: BMCLAPI does not host FML Libraries, so this will fall back to default
         {
             QT_TRANSLATE_NOOP("APIPage", "BMCLAPI"),
             "https://bmclapi2.bangbang93.com/",
             "https://bmclapi2.bangbang93.com/assets/",
             "https://bmclapi2.bangbang93.com/maven/",
-            ""  // FML Libraries - use default (BMCLAPI doesn't provide this)
+            "https://bmclapi2.bangbang93.com/maven/"  // FML Libraries
         },
         // Custom - User-provided URLs
         {

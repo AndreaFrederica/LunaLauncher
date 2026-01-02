@@ -312,7 +312,7 @@ void APIPage::applySettings()
         s->set("MetaURLOverride", "");  // Keep default for Prism Launcher meta
         s->set("ResourceURL", mirrorInfo.defaultAssetsUrl);
         s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
-        s->set("FMLLibsURL", "");
+        s->set("FMLLibsURL", mirrorInfo.defaultFMLLibsUrl);
         s->set("MojangDownloadsMirrorURL", "");  // BMCLAPI URL is handled in code, not stored
     }
 

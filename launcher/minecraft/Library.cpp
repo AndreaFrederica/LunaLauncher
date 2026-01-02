@@ -110,7 +110,8 @@ void Library::getApplicableFiles(const RuntimeContext& runtimeContext,
 QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeContext,
                                                   class HttpMetaCache* cache,
                                                   QStringList& failedLocalFiles,
-                                                  const QString& overridePath) const
+                                                  const QString& overridePath,
+                                                  std::shared_ptr<SettingsObject> settings) const
 {
     QList<Net::NetRequest::Ptr> out;
     bool stale = isAlwaysStale();
@@ -130,13 +131,26 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
     };
 
     // Lambda function to rewrite Mojang URLs to mirror URLs
-    auto rewrite_url = [](QString url) -> QString {
-        auto s = APPLICATION->settings();
+    auto rewrite_url = [settings](QString url) -> QString {
+        auto s = settings ? settings : APPLICATION->settings();
         int mirrorType = s->get("DownloadMirrorType").toInt();
         QString replacementUrl;
 
         if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
             replacementUrl = "https://bmclapi2.bangbang93.com";
+
+            // Fabric
+            url.replace("https://meta.fabricmc.net", "https://bmclapi2.bangbang93.com/fabric-meta");
+            url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
+
+            // Forge
+            url.replace("https://files.minecraftforge.net/maven", "https://bmclapi2.bangbang93.com/maven");
+
+            // NeoForge
+            url.replace("https://maven.neoforged.net/releases", "https://bmclapi2.bangbang93.com/maven");
+
+            // Libraries
+            url.replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven");
         } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
             // For custom mirrors, use the user-provided URL
             replacementUrl = s->get("MojangDownloadsMirrorURL").toString();
@@ -151,9 +165,13 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
             url.replace("https://launcher.mojang.com/", replacementUrl);
             url.replace("https://piston-data.mojang.com/", replacementUrl);
             url.replace("https://piston-meta.mojang.com/", replacementUrl);
+            url.replace("https://launchermeta.mojang.com/", replacementUrl);
+            url.replace("https://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
             url.replace("http://launcher.mojang.com/", replacementUrl);
             url.replace("http://piston-data.mojang.com/", replacementUrl);
             url.replace("http://piston-meta.mojang.com/", replacementUrl);
+            url.replace("http://launchermeta.mojang.com/", replacementUrl);
+            url.replace("http://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
         }
         return url;
     };
@@ -232,14 +250,15 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
             }
         }
     } else {
-        auto raw_dl = [this, raw_storage]() {
+        auto raw_dl = [this, raw_storage, settings]() {
             if (!m_absoluteURL.isEmpty()) {
                 return m_absoluteURL;
             }
 
             if (m_repositoryURL.isEmpty()) {
                 // Check for LibrariesURL override setting
-                auto librariesUrl = APPLICATION->settings()->get("LibrariesURL").toString();
+                auto s = settings ? settings : APPLICATION->settings();
+                auto librariesUrl = s->get("LibrariesURL").toString();
                 if (!librariesUrl.isEmpty()) {
                     return librariesUrl + raw_storage;
                 }

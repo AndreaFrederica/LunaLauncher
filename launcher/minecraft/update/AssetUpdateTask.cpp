@@ -48,6 +48,8 @@ void AssetUpdateTask::executeTask()
         urlString.replace("http://launchermeta.mojang.com/", replacementUrl);
         urlString.replace("http://launcher.mojang.com/", replacementUrl);
         urlString.replace("http://piston-meta.mojang.com/", replacementUrl);
+        urlString.replace("https://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
+        urlString.replace("http://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
         indexUrl = QUrl(urlString);
     }
 

@@ -147,7 +147,8 @@ class Library {
     QList<Net::NetRequest::Ptr> getDownloads(const RuntimeContext& runtimeContext,
                                              class HttpMetaCache* cache,
                                              QStringList& failedLocalFiles,
-                                             const QString& overridePath) const;
+                                             const QString& overridePath,
+                                             std::shared_ptr<SettingsObject> settings = nullptr) const;
 
     QString getCompatibleNative(const RuntimeContext& runtimeContext) const;
 

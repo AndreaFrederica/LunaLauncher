@@ -73,3 +73,7 @@ flatbuild
 
 .history/
 .trae/documents/*
+
+third_party/*
+vcpkg_installed/*
+aqtinstall.log

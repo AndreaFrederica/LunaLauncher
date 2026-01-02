@@ -180,13 +180,22 @@ Start Menu > Visual Studio 2022 > x64 Native Tools Command Prompt for VS 2022
 ```powershell
 # From x64 Native Tools Command Prompt:
 
-# 1. Install dependencies and configure
+# 1. Check / configure MSVC
+pixi run check_msvc
+
+# 2. Install Qt
+pixi run install_qt
+
+# 3. Install vcpkg
+pixi run install_vcpkg
+
+# 4. Configure
 pixi run configure
 
-# 2. Build
+# 5. Build
 pixi run build
 
-# 3. Install
+# 6. Install
 pixi run install
 ```
 
@@ -194,10 +203,13 @@ pixi run install
 
 | Command                | Description             |
 | ---------------------- | ----------------------- |
-| `pixi run configure` | Configure CMake         |
-| `pixi run build`     | Build the project       |
-| `pixi run install`   | Install to `install/` |
-| `pixi run portable`  | Create portable build   |
+| `pixi run check_msvc`   | Verify MSVC toolchain (sets up env if needed) |
+| `pixi run install_qt`   | Download/install Qt via Pixi                  |
+| `pixi run install_vcpkg`| Install vcpkg dependencies                    |
+| `pixi run configure`    | Configure CMake                               |
+| `pixi run build`        | Build the project                             |
+| `pixi run install`      | Install to `install/`                         |
+| `pixi run portable`     | Create portable build                         |
 
 ### Other Platforms
 

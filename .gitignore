@@ -74,3 +74,7 @@ flatbuild
 .history/
 .trae/documents/*
 Testing/Temporary/*
+
+third_party/*
+vcpkg_installed/*
+aqtinstall.log

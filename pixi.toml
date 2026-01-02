@@ -9,29 +9,36 @@ channels = [
 ]
 
 [dependencies]
-qt6-main = ">=6.10.1,<7"
 cmake = ">=4.2.1,<5"
-ninja = ">=1.13.2,<2"
 openssl = ">=3.6.0,<4"
 libarchive = ">=3.8.2,<4"
 zlib = ">=1.3.1,<2"
 zstd = ">=1.5.7,<2"
 pkg-config = ">=0.29.2,<0.30"
 openjdk = "21.*"
-qt6-networkauth = ">=6.10.1,<7"
+python = ">=3.14.2,<3.15"
+ninja = ">=1.13.2,<2"
+git = ">=2.52.0,<3"
 
+[target.win-64.dependencies]
+powershell = ">=7.5.4,<8"
 
+[pypi-dependencies]
+aqtinstall = ">=3.3.0, <4"
 
 [tasks]
+check_msvc = { cmd = ["pwsh", "-File", "./scripts/check_msvc.ps1"] }
+install_qt = { cmd = ["python", "scripts/install_qt.py"] }
+install_vcpkg = { cmd = ["python", "scripts/install_vcpkg.py"] }  
 configure = { cmd = [
-  "cmake", "-S", ".", "-B", "build", "-G", "Ninja",
+  "cmake", "-S", ".", "-B", "build",
   "-DCMAKE_BUILD_TYPE=Release",
   "-DCMAKE_INSTALL_PREFIX=install",
   "-DENABLE_LTO=ON",
-  "-DCMAKE_PREFIX_PATH=%CONDA_PREFIX%\\Library",
-  "-DQt6_DIR=%CONDA_PREFIX%\\Library\\lib\\cmake\\Qt6"
+  "-DCMAKE_PREFIX_PATH=third_party/qt/6.10.1/msvc2022_64/lib/cmake",
+  "-DCMAKE_TOOLCHAIN_FILE=third_party/vcpkg/scripts/buildsystems/vcpkg.cmake"
 ] }
 
-build = { cmd = ["cmake", "--build", "build", "-j"] }
-install = { cmd = ["cmake", "--install", "build"] }
+build = { cmd = ["cmake", "--build", "build", "--config", "Release", "-j"] }
+install = { cmd = ["cmake", "--install", "build", "--config", "Release"] }
 portable = { cmd = ["cmake", "--install", "build", "--component", "portable"] }

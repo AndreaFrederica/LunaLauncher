@@ -48,7 +48,9 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dbghelp.h>
+#ifdef _MSC_VER
 #pragma comment(lib, "dbghelp.lib")
+#endif
 #endif
 
 static QString crashLogPath;
@@ -98,7 +100,7 @@ static void captureStackTrace(QStringList& frames)
     stackFrame.AddrFrame.Mode = AddrModeFlat;
     stackFrame.AddrStack.Mode = AddrModeFlat;
 
-    SYMBOL_INFO* symbol = (SYMBOL_INFO*)malloc(sizeof(SYMBOL_INFO) + 256 * sizeof(char));
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(::operator new(sizeof(SYMBOL_INFO) + 256 * sizeof(char)));
     symbol->MaxNameLen = 255;
     symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 
@@ -134,12 +136,15 @@ static void captureStackTrace(QStringList& frames)
         if (stackFrame.AddrReturn.Offset == 0) break;
     }
 
-    free(symbol);
+    ::operator delete(symbol);
     SymCleanup(hProcess);
 }
 
 LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
 {
+    // Set up crash log path first
+    crashLogPath = QDir::current().filePath("crash.log");
+
     QString message = QString("[CRASH] %1 - Windows Exception Code: 0x%2")
                           .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs))
                           .arg(exceptionInfo->ExceptionRecord->ExceptionCode, 8, 16, QChar('0'));
@@ -163,7 +168,7 @@ LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
 
     // Try to write minidump
     QString dumpPath = crashLogPath.replace(".log", ".dmp");
-    HANDLE hDumpFile = CreateFile((LPCWSTR)dumpPath.utf16(), GENERIC_WRITE, FILE_SHARE_WRITE, nullptr,
+    HANDLE hDumpFile = CreateFile(reinterpret_cast<LPCWSTR>(dumpPath.utf16()), GENERIC_WRITE, FILE_SHARE_WRITE, nullptr,
                                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hDumpFile != INVALID_HANDLE_VALUE) {
         MINIDUMP_EXCEPTION_INFORMATION mdei;
@@ -178,7 +183,7 @@ LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
     }
 
     // Show crash dialog before exiting
-    MessageBoxW(nullptr, (LPCWSTR)message.utf16(), L"Prism Launcher Crashed", MB_OK | MB_ICONERROR);
+    MessageBoxW(nullptr, reinterpret_cast<LPCWSTR>(message.utf16()), L"Prism Launcher Crashed", MB_OK | MB_ICONERROR);
 
     return EXCEPTION_EXECUTE_HANDLER;
 }
@@ -189,6 +194,9 @@ LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
 
 static void unixSignalHandler(int sig)
 {
+    // Set up crash log path first
+    crashLogPath = QDir::current().filePath("crash.log");
+
     QString message = QString("[CRASH] %1 - Unix Signal: %2 (%3)")
                           .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs))
                           .arg(strsignal(sig))
@@ -253,10 +261,6 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
                           .arg(context.line)
                           .arg(context.function);
 
-    // Write to crash log
-    writeCrashLog(message);
-
-    // Print to stderr (console output)
     fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
 
     // Also output via OutputDebugString on Windows for IDE/debugger
@@ -278,19 +282,6 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
 
 int main(int argc, char* argv[])
 {
-    // Set up crash log path
-    crashLogPath = QDir::current().filePath("crash.log");
-    QFile::remove(crashLogPath);  // Clear old crash log
-    writeCrashLog(QString("[START] Prism Launcher started at %1").arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs)));
-#ifdef Q_OS_WIN
-    writeCrashLog(QString("[INFO] Command line: %1").arg(QString::fromWCharArray(GetCommandLineW())));
-#else
-    writeCrashLog(QString("[INFO] Command line: %1").arg(QString::fromLocal8Bit(qPrintable(QCoreApplication::arguments().join(' ')))));
-#endif
-
-    // Install message handler first
-    qInstallMessageHandler(messageHandler);
-
 #ifdef Q_OS_WIN
     // Set up Windows exception handler
     SetUnhandledExceptionFilter(windowsExceptionHandler);
@@ -298,6 +289,9 @@ int main(int argc, char* argv[])
     // Set up Unix signal handlers
     setupUnixSignalHandlers();
 #endif
+
+    // Install message handler
+    qInstallMessageHandler(messageHandler);
 
     // initialize Qt
     Application app(argc, argv);
@@ -322,18 +316,13 @@ int main(int argc, char* argv[])
             Q_INIT_RESOURCE(flat_white);
 
             Q_INIT_RESOURCE(shaders);
-            int result = app.exec();
-            writeCrashLog(QString("[END] Prism Launcher exited with code: %1").arg(result));
-            return result;
+            return app.exec();
         }
         case Application::Failed:
-            writeCrashLog("[ERROR] Application failed to initialize");
             return 1;
         case Application::Succeeded:
-            writeCrashLog("[END] Application succeeded (no-op exit)");
             return 0;
         default:
-            writeCrashLog("[ERROR] Unknown application status");
             return -1;
     }
 }

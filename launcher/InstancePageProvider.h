@@ -30,6 +30,7 @@
 #include "ui/pages/server/ServerPropertyPage.h"
 #include "ui/pages/server/ServerPluginsPage.h"
 #include "ui/pages/server/ServerJavaPage.h"
+#include "ui/pages/server/ServerModLoaderPage.h"
 
 class InstancePageProvider : protected QObject, public BasePageProvider {
     Q_OBJECT
@@ -53,6 +54,7 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
             values.append(new ServerPluginsPage(serverInst.get(), serverInst->pluginList()));
 
             values.append(new NotesPage(serverInst.get()));
+            values.append(new ServerModLoaderPage(serverInst.get()));
             values.append(new ServerSettingsPage(serverInst.get()));
             values.append(new ServerJavaPage(serverInst.get()));
             values.append(new ServerPropertyPage(serverInst.get()));

@@ -822,6 +822,8 @@ set(SERVER_SOURCES
     ui/pages/server/ServerPluginsPage.h
     ui/pages/server/ServerJavaPage.cpp
     ui/pages/server/ServerJavaPage.h
+    ui/pages/server/ServerModLoaderPage.cpp
+    ui/pages/server/ServerModLoaderPage.h
 )
 
 set_source_files_properties(ui/pages/server/ServerConsoleWidget.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)

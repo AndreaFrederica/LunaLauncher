@@ -4,6 +4,7 @@
 */
 #pragma once
 #include "BaseInstance.h"
+#include "modplatform/ModIndex.h"
 
 class ServerInstance : public BaseInstance
 {
@@ -53,6 +54,16 @@ public:
 
     std::shared_ptr<class ModFolderModel> loaderModList() const;
     std::shared_ptr<class ModFolderModel> pluginList() const;
+
+    // ModLoader configuration
+    ModPlatform::ModLoaderTypes getModLoaderTypes() const;
+    void setModLoaderTypes(ModPlatform::ModLoaderTypes types);
+    QString getMinecraftVersion() const;
+    void setMinecraftVersion(const QString &version);
+
+    // PluginLoader configuration (for future plugin download system)
+    ModPlatform::PluginLoaderTypes getPluginLoaderTypes() const;
+    void setPluginLoaderTypes(ModPlatform::PluginLoaderTypes types);
 
 private:
     Task::Ptr m_launchTask;

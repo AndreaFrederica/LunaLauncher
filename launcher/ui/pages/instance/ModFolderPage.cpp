@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 Jamie Mansfield <jmansfield@cadixdev.org>
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
@@ -65,6 +67,8 @@
 #include "tasks/ConcurrentTask.h"
 #include "tasks/Task.h"
 #include "ui/dialogs/ProgressDialog.h"
+
+#include "server/ServerInstance.h"
 
 ModFolderPage::ModFolderPage(BaseInstance* inst, std::shared_ptr<ModFolderModel> model, QWidget* parent)
     : ExternalResourcesPage(inst, model, parent), m_model(model)
@@ -141,6 +145,43 @@ void ModFolderPage::removeItems(const QItemSelection& selection)
 
 void ModFolderPage::downloadMods()
 {
+    // Check if it's a server instance
+    if (m_instance->traits().contains("server")) {
+        auto serverInst = dynamic_cast<ServerInstance*>(m_instance);
+        if (!serverInst) {
+            return;
+        }
+
+        // Check if mod loaders are configured
+        auto loaders = serverInst->getModLoaderTypes();
+        if (loaders == 0) {
+            auto response = QMessageBox::warning(
+                this,
+                tr("Mod Loader Not Configured"),
+                tr("You need to configure the mod loader type before downloading mods.\n"
+                   "Would you like to open the Mod Loader configuration page?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::Yes
+            );
+
+            if (response == QMessageBox::Yes) {
+                // TODO: Switch to ModLoader page
+                QMessageBox::information(this, tr("Info"),
+                    tr("Please go to the 'Mod Loader' page in the settings to configure your server's mod loader."));
+            }
+            return;
+        }
+
+        // Create download dialog for server
+        m_downloadDialog = new ResourceDownload::ModDownloadDialog(this, m_model, m_instance);
+        connect(this, &QObject::destroyed, m_downloadDialog, &QDialog::close);
+        connect(m_downloadDialog, &QDialog::finished, this, &ModFolderPage::downloadDialogFinished);
+
+        m_downloadDialog->open();
+        return;
+    }
+
+    // Original Minecraft instance logic
     if (m_instance->typeName() != "Minecraft")
         return;  // this is a null instance or a legacy instance
 
@@ -403,8 +444,8 @@ inline bool ModFolderPage::handleNoModLoader()
             InstallLoaderDialog dialog(profile, QString(), this);
             bool ret = dialog.exec();
             this->m_container->refreshContainer();
-            
-            // returning negation of dialog.exec which'll be true if the install loader dialog got canceled/closed 
+
+            // returning negation of dialog.exec which'll be true if the install loader dialog got canceled/closed
             // and false if the user went through and installed a loader
             return !ret;
         }

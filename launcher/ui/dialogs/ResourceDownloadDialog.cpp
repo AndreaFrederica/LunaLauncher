@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2023 TheKodeToad <TheKodeToad@proton.me>
@@ -46,6 +48,8 @@
 #include "modplatform/flame/FlameAPI.h"
 #include "modplatform/modrinth/ModrinthAPI.h"
 #include "ui/widgets/PageContainer.h"
+
+#include "server/ServerInstance.h"
 
 namespace ResourceDownload {
 
@@ -285,6 +289,21 @@ QList<BasePage*> ModDownloadDialog::getPages()
 {
     QList<BasePage*> pages;
 
+    // Check if it's a server instance
+    if (m_instance->traits().contains("server")) {
+        auto serverInst = dynamic_cast<ServerInstance*>(m_instance);
+        if (serverInst) {
+            auto loaders = serverInst->getModLoaderTypes();
+
+            if (ModrinthAPI::validateModLoaders(loaders))
+                pages.append(ModrinthModPage::create(this, *m_instance));
+            if (APPLICATION->capabilities() & Application::SupportsFlame && FlameAPI::validateModLoaders(loaders))
+                pages.append(FlameModPage::create(this, *m_instance));
+        }
+        return pages;
+    }
+
+    // Original Minecraft instance logic
     auto loaders = static_cast<MinecraftInstance*>(m_instance)->getPackProfile()->getSupportedModLoaders().value();
 
     if (ModrinthAPI::validateModLoaders(loaders))

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 flowln <flowlnlnln@gmail.com>
  *  Copyright (c) 2023 Trial97 <alexandru.tripon97@gmail.com>
@@ -46,6 +48,20 @@ enum ModLoaderType {
 };
 Q_DECLARE_FLAGS(ModLoaderTypes, ModLoaderType)
 QList<ModLoaderType> modLoaderTypesToList(ModLoaderTypes flags);
+
+// Plugin loader types for server instances
+enum PluginLoaderType {
+    Paper = 1 << 0,
+    Spigot = 1 << 1,
+    Bukkit = 1 << 2,
+    Purpur = 1 << 3,
+    Sponge = 1 << 4,
+    Velocity = 1 << 5,
+    Waterfall = 1 << 6,
+    BungeeCord = 1 << 7
+};
+Q_DECLARE_FLAGS(PluginLoaderTypes, PluginLoaderType)
+QList<PluginLoaderType> pluginLoaderTypesToList(PluginLoaderTypes flags);
 
 enum class ResourceProvider { MODRINTH, FLAME };
 

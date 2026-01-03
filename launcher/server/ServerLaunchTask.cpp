@@ -420,13 +420,13 @@ bool ServerLaunchTask::isProcessRunning(qint64 pid)
 void ServerLaunchTask::emitSucceeded()
 {
     qDebug() << "ServerLaunchTask::emitSucceeded() - Called";
-    
+
     // Match LaunchTask behavior: set running state before emitting signals
     if (m_instance) {
         m_instance->setRunning(false);
         qDebug() << "ServerLaunchTask: Set instance running state to false";
     }
-    
+
     qDebug() << "ServerLaunchTask::emitSucceeded() - Calling Task::emitSucceeded()";
     Task::emitSucceeded();
     qDebug() << "ServerLaunchTask::emitSucceeded() - Task::emitSucceeded() returned";

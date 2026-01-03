@@ -116,8 +116,14 @@ void ServerLaunchTask::executeTask()
 
     QStringList envList = QProcessEnvironment::systemEnvironment().toStringList();
 
+    // Use reasonable default terminal size that matches typical console windows
+    // These will be updated via resizePty() when the console widget connects
+    const int defaultCols = 120;  // More standard for modern terminals
+    const int defaultRows = 30;   // Better than 24 for visibility
+
     qDebug() << "ServerLaunchTask: Starting PTY process:" << cmd;
-    bool success = m_ptyProcess->startProcess(cmd, args, workDir, envList, 80, 24);
+    qDebug() << "ServerLaunchTask: Initial terminal size:" << defaultCols << "x" << defaultRows;
+    bool success = m_ptyProcess->startProcess(cmd, args, workDir, envList, defaultCols, defaultRows);
     if (!success) {
         QString err = m_ptyProcess->lastError();
         qCritical() << "ServerLaunchTask: Failed to start PTY process:" << err;
@@ -308,7 +314,10 @@ void ServerLaunchTask::writeToStdin(const QByteArray &data)
 void ServerLaunchTask::resizePty(int cols, int rows)
 {
     if (m_ptyProcess) {
+        qDebug() << "ServerLaunchTask::resizePty - resizing to:" << cols << "x" << rows;
         m_ptyProcess->resize(cols, rows);
+    } else {
+        qWarning() << "ServerLaunchTask::resizePty - cannot resize, no PTY process";
     }
 }
 

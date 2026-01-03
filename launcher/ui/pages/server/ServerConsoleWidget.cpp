@@ -77,6 +77,7 @@ ServerConsoleWidget::ServerConsoleWidget(QWidget *parent) : QWidget(parent)
     font.setStyleHint(QFont::TypeWriter, QFont::PreferAntialias);
     qDebug() << "ServerConsoleWidget: Setting terminal font to:" << font.family() << "pointSize:" << font.pointSize();
     m_console->setTerminalFont(font);
+
     // Try to set color scheme, with fallback for resource loading issues
     QString scheme = settings->get("ConsoleColorScheme").toString();
     if (scheme.isEmpty()) {
@@ -109,6 +110,9 @@ ServerConsoleWidget::ServerConsoleWidget(QWidget *parent) : QWidget(parent)
 
     connect(m_console, &QTermWidget::sendData, this, &ServerConsoleWidget::sendData);
     connect(m_console, &QTermWidget::termSizeChange, this, &ServerConsoleWidget::termSizeChange);
+
+    // Log initial terminal size for debugging
+    qDebug() << "ServerConsoleWidget: Initial terminal size:" << m_console->screenColumnsCount() << "x" << m_console->screenLinesCount();
 }
 
 ServerConsoleWidget::~ServerConsoleWidget() {}

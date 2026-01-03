@@ -96,8 +96,12 @@ void ServerConsolePage::connectToTask(Ptr task)
     // Connect to console output
     connect(task.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
 
-    // Sync terminal size
-    task->resizePty(m_console->columns(), m_console->lines());
+    // Immediately sync terminal size to prevent cursor positioning issues
+    // This must happen BEFORE any output is displayed
+    int cols = m_console->columns();
+    int rows = m_console->lines();
+    qDebug() << "ServerConsolePage::connectToTask - syncing terminal size:" << cols << "x" << rows;
+    task->resizePty(cols, rows);
 }
 
 void ServerConsolePage::disconnectConsole()

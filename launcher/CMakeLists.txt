@@ -1523,6 +1523,11 @@ if(APPLE)
     endif()
 endif()
 
+# Windows-specific libraries for crash dump generation
+if(WIN32)
+    target_link_libraries(Launcher_logic dbghelp)
+endif()
+
 target_link_libraries(Launcher_logic)
 
 add_executable(${Launcher_Name} MACOSX_BUNDLE WIN32 main.cpp ${LAUNCHER_RCS})

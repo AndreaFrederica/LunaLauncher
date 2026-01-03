@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
+ *  Luna Launcher - Minecraft Launcher
+ *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *
@@ -35,8 +37,268 @@
 
 #include "Application.h"
 
+#include <QDir>
+#include <QFile>
+#include <QDateTime>
+#include <QTextStream>
+#include <QDebug>
+#include <csignal>
+#include <cstdlib>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
+
+static QString crashLogPath;
+
+void writeCrashLog(const QString& message)
+{
+    QFile file(crashLogPath);
+    if (file.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << message << "\n";
+        file.close();
+    }
+}
+
+#ifdef Q_OS_WIN
+
+// Helper function to capture stack trace with detailed symbols
+static void captureStackTrace(QStringList& frames)
+{
+    HANDLE hProcess = GetCurrentProcess();
+    SymInitialize(hProcess, nullptr, TRUE);
+
+    CONTEXT context;
+    RtlCaptureContext(&context);
+
+    STACKFRAME64 stackFrame;
+    memset(&stackFrame, 0, sizeof(stackFrame));
+
+#ifdef _M_AMD64
+    DWORD machineType = IMAGE_FILE_MACHINE_AMD64;
+    stackFrame.AddrPC.Offset = context.Rip;
+    stackFrame.AddrFrame.Offset = context.Rbp;
+    stackFrame.AddrStack.Offset = context.Rsp;
+#elif _M_IX86
+    DWORD machineType = IMAGE_FILE_MACHINE_I386;
+    stackFrame.AddrPC.Offset = context.Eip;
+    stackFrame.AddrFrame.Offset = context.Ebp;
+    stackFrame.AddrStack.Offset = context.Esp;
+#elif _M_ARM64
+    DWORD machineType = IMAGE_FILE_MACHINE_ARM64;
+    stackFrame.AddrPC.Offset = context.Pc;
+    stackFrame.AddrFrame.Offset = context.Fp;
+    stackFrame.AddrStack.Offset = context.Sp;
+#endif
+
+    stackFrame.AddrPC.Mode = AddrModeFlat;
+    stackFrame.AddrFrame.Mode = AddrModeFlat;
+    stackFrame.AddrStack.Mode = AddrModeFlat;
+
+    SYMBOL_INFO* symbol = (SYMBOL_INFO*)malloc(sizeof(SYMBOL_INFO) + 256 * sizeof(char));
+    symbol->MaxNameLen = 255;
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+    IMAGEHLP_LINE64 line;
+    line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+    for (int i = 0; i < 64; i++) {
+        if (!StackWalk64(machineType, hProcess, GetCurrentThread(), &stackFrame,
+                         &context, nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) {
+            break;
+        }
+
+        QString frame = QString("  #%1: ").arg(i);
+
+        // Get function name
+        if (SymFromAddr(hProcess, stackFrame.AddrPC.Offset, nullptr, symbol)) {
+            frame += QString::fromLocal8Bit(symbol->Name);
+        } else {
+            frame += QString("0x%1").arg(stackFrame.AddrPC.Offset, 0, 16);
+        }
+
+        // Get file and line
+        DWORD displacement = 0;
+        if (SymGetLineFromAddr64(hProcess, stackFrame.AddrPC.Offset, &displacement, &line)) {
+            wchar_t wfilePath[MAX_PATH];
+            MultiByteToWideChar(CP_ACP, 0, line.FileName, -1, wfilePath, MAX_PATH);
+            QString filePath = QString::fromWCharArray(wfilePath);
+            frame += QString(" (%1:%2)").arg(filePath.mid(filePath.lastIndexOf('\\') + 1)).arg(line.LineNumber);
+        }
+
+        frames.append(frame);
+
+        if (stackFrame.AddrReturn.Offset == 0) break;
+    }
+
+    free(symbol);
+    SymCleanup(hProcess);
+}
+
+LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
+{
+    QString message = QString("[CRASH] %1 - Windows Exception Code: 0x%2")
+                          .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs))
+                          .arg(exceptionInfo->ExceptionRecord->ExceptionCode, 8, 16, QChar('0'));
+
+    // Output to console/debugger
+    OutputDebugStringA(message.toLocal8Bit().constData());
+    OutputDebugStringA("\n");
+    fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
+
+    writeCrashLog(message);
+
+    // Capture detailed stack trace
+    QStringList frames;
+    captureStackTrace(frames);
+
+    writeCrashLog("[CRASH] Stack Trace:");
+    for (const QString& frame : frames) {
+        fprintf(stderr, "%s\n", frame.toLocal8Bit().constData());
+        writeCrashLog(frame);
+    }
+
+    // Try to write minidump
+    QString dumpPath = crashLogPath.replace(".log", ".dmp");
+    HANDLE hDumpFile = CreateFile((LPCWSTR)dumpPath.utf16(), GENERIC_WRITE, FILE_SHARE_WRITE, nullptr,
+                                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hDumpFile != INVALID_HANDLE_VALUE) {
+        MINIDUMP_EXCEPTION_INFORMATION mdei;
+        mdei.ThreadId = GetCurrentThreadId();
+        mdei.ExceptionPointers = exceptionInfo;
+        mdei.ClientPointers = FALSE;
+
+        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hDumpFile,
+                          MiniDumpNormal, &mdei, nullptr, nullptr);
+        CloseHandle(hDumpFile);
+        writeCrashLog(QString("[CRASH] Minidump written to: %1").arg(dumpPath));
+    }
+
+    // Show crash dialog before exiting
+    MessageBoxW(nullptr, (LPCWSTR)message.utf16(), L"Prism Launcher Crashed", MB_OK | MB_ICONERROR);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#else
+#include <signal.h>
+#include <execinfo.h>
+#include <cstring>
+
+static void unixSignalHandler(int sig)
+{
+    QString message = QString("[CRASH] %1 - Unix Signal: %2 (%3)")
+                          .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs))
+                          .arg(strsignal(sig))
+                          .arg(sig);
+
+    fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
+    writeCrashLog(message);
+
+    // Try to get backtrace
+    void* buffer[100];
+    int nframes = backtrace(buffer, 100);
+    char** symbols = backtrace_symbols(buffer, nframes);
+
+    if (symbols) {
+        writeCrashLog("[CRASH] Backtrace:");
+        for (int i = 0; i < nframes; i++) {
+            QString frame = QString("  #%1: %2").arg(i).arg(symbols[i]);
+            fprintf(stderr, "%s\n", frame.toLocal8Bit().constData());
+            writeCrashLog(frame);
+        }
+        free(symbols);
+    }
+
+    // Re-raise signal for default handler
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void setupUnixSignalHandlers()
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = unixSignalHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGABRT, &sa, nullptr);
+    sigaction(SIGBUS, &sa, nullptr);
+    sigaction(SIGILL, &sa, nullptr);
+    sigaction(SIGFPE, &sa, nullptr);
+}
+#endif
+
+void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+{
+    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
+    QString level;
+    switch (type) {
+        case QtDebugMsg: level = "DEBUG"; break;
+        case QtInfoMsg: level = "INFO"; break;
+        case QtWarningMsg: level = "WARNING"; break;
+        case QtCriticalMsg: level = "CRITICAL"; break;
+        case QtFatalMsg: level = "FATAL"; break;
+    }
+
+    QString message = QString("[%1] [%2] %3 (%4:%5, %6)")
+                          .arg(timestamp)
+                          .arg(level)
+                          .arg(msg)
+                          .arg(context.file ? context.file : "unknown")
+                          .arg(context.line)
+                          .arg(context.function);
+
+    // Write to crash log
+    writeCrashLog(message);
+
+    // Print to stderr (console output)
+    fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
+
+    // Also output via OutputDebugString on Windows for IDE/debugger
+#ifdef Q_OS_WIN
+    OutputDebugStringA(message.toLocal8Bit().constData());
+    OutputDebugStringA("\n");
+#endif
+
+    // For fatal messages, also trigger crash handler
+    if (type == QtFatalMsg) {
+#ifdef Q_OS_WIN
+        // Raise exception to trigger our handler
+        RaiseException(0xE0000001, 0, 0, nullptr);
+#else
+        abort();
+#endif
+    }
+}
+
 int main(int argc, char* argv[])
 {
+    // Set up crash log path
+    crashLogPath = QDir::current().filePath("crash.log");
+    QFile::remove(crashLogPath);  // Clear old crash log
+    writeCrashLog(QString("[START] Prism Launcher started at %1").arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs)));
+#ifdef Q_OS_WIN
+    writeCrashLog(QString("[INFO] Command line: %1").arg(QString::fromWCharArray(GetCommandLineW())));
+#else
+    writeCrashLog(QString("[INFO] Command line: %1").arg(QString::fromLocal8Bit(qPrintable(QCoreApplication::arguments().join(' ')))));
+#endif
+
+    // Install message handler first
+    qInstallMessageHandler(messageHandler);
+
+#ifdef Q_OS_WIN
+    // Set up Windows exception handler
+    SetUnhandledExceptionFilter(windowsExceptionHandler);
+#else
+    // Set up Unix signal handlers
+    setupUnixSignalHandlers();
+#endif
+
     // initialize Qt
     Application app(argc, argv);
 
@@ -60,13 +322,18 @@ int main(int argc, char* argv[])
             Q_INIT_RESOURCE(flat_white);
 
             Q_INIT_RESOURCE(shaders);
-            return app.exec();
+            int result = app.exec();
+            writeCrashLog(QString("[END] Prism Launcher exited with code: %1").arg(result));
+            return result;
         }
         case Application::Failed:
+            writeCrashLog("[ERROR] Application failed to initialize");
             return 1;
         case Application::Succeeded:
+            writeCrashLog("[END] Application succeeded (no-op exit)");
             return 0;
         default:
+            writeCrashLog("[ERROR] Unknown application status");
             return -1;
     }
 }

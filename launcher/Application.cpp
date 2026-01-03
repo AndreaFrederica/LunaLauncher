@@ -91,6 +91,7 @@
 #include "ui/themes/ThemeManager.h"
 
 #include "ApplicationMessage.h"
+#include "server/ServerInstance.h"
 
 #include <iostream>
 #include <mutex>
@@ -1152,7 +1153,20 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 #endif
 
     connect(this, &Application::aboutToQuit, [this]() {
+        qDebug() << "Application::aboutToQuit - Starting cleanup";
         if (m_instances) {
+            // Stop all running server instances before saving
+            for (int i = 0; i < m_instances->count(); ++i) {
+                auto instance = m_instances->at(i);
+                if (instance && instance->isRunning()) {
+                    qDebug() << "Application::aboutToQuit - Stopping running instance:" << instance->id();
+                    // Try to stop the server if it's a ServerInstance
+                    auto serverInstance = std::dynamic_pointer_cast<ServerInstance>(instance);
+                    if (serverInstance) {
+                        serverInstance->stopServer();
+                    }
+                }
+            }
             // save any remaining instance state
             m_instances->saveNow();
         }
@@ -1160,6 +1174,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             logFile->flush();
             logFile->close();
         }
+        qDebug() << "Application::aboutToQuit - Cleanup complete";
     });
 
     updateCapabilities();
@@ -1737,6 +1752,8 @@ void Application::updateIsRunning(bool running)
 
 void Application::controllerSucceeded()
 {
+    qDebug() << "Application::controllerSucceeded() - Called";
+
     auto controller = qobject_cast<LaunchController*>(sender());
     if (!controller)
         return;
@@ -1878,6 +1895,8 @@ InstanceWindow* Application::showInstanceWindow(InstancePtr instance, QString pa
 void Application::on_windowClose()
 {
     m_openWindows--;
+    qDebug() << "Application::on_windowClose - openWindows:" << m_openWindows << "runningInstances:" << m_runningInstances;
+
     auto instWindow = qobject_cast<InstanceWindow*>(sender());
     if (instWindow) {
         QMutexLocker locker(&m_instanceExtrasMutex);
@@ -1896,7 +1915,9 @@ void Application::on_windowClose()
         m_viewLogWindow = nullptr;
     }
     // quit when there are no more windows.
+    qDebug() << "Application::on_windowClose - shouldExitNow:" << shouldExitNow();
     if (shouldExitNow()) {
+        qDebug() << "Application::on_windowClose - Calling exit(0)";
         exit(0);
     }
 }

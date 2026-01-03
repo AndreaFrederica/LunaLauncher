@@ -33,6 +33,13 @@ ServerInstance::ServerInstance(SettingsObjectPtr globalSettings, SettingsObjectP
     settings->registerSetting("JvmArgs", "");
 }
 
+ServerInstance::~ServerInstance()
+{
+    qDebug() << "ServerInstance::~ServerInstance() - Destroying instance";
+    // Ensure server is stopped and task is released
+    stopServer();
+}
+
 void ServerInstance::saveNow()
 {
     // Settings are auto-saved
@@ -45,8 +52,13 @@ QString ServerInstance::id() const
 
 shared_qobject_ptr<LaunchTask> ServerInstance::createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin)
 {
+    Q_UNUSED(account)
+    Q_UNUSED(targetToJoin)
+
+    // Always create a fresh task
+    m_launchTask.reset();
     shared_qobject_ptr<ServerLaunchTask> task(new ServerLaunchTask(this));
-    setLaunchTask(task);
+    m_launchTask = task;
     return task;
 }
 
@@ -80,15 +92,44 @@ void ServerInstance::setWorkingDir(const QString &dir)
     m_settings->set("WorkingDir", dir);
 }
 
-void ServerInstance::setLaunchTask(Task::Ptr task)
+bool ServerInstance::startServer()
 {
-    m_launchTask = task;
-    emit runningStatusChanged(isRunning());
+    qDebug() << "ServerInstance::startServer() - Creating new task";
 
-    connect(task.data(), &Task::finished, this, [this]() {
-        emit runningStatusChanged(isRunning());
-    });
+    // Clean up any existing task first
+    stopServer();
+
+    // Create and start new task
+    auto task = createLaunchTask({}, {});
+    auto serverTask = task.dynamicCast<ServerLaunchTask>();
+
+    if (!serverTask) {
+        qWarning() << "ServerInstance::startServer() - Failed to cast to ServerLaunchTask";
+        return false;
+    }
+
+    // Start the server
+    serverTask->start();
+
+    return isRunning();
 }
+
+void ServerInstance::stopServer()
+{
+    qDebug() << "ServerInstance::stopServer() - Stopping server";
+
+    // Stop the current task if running
+    if (m_launchTask) {
+        auto serverTask = m_launchTask.dynamicCast<ServerLaunchTask>();
+        if (serverTask && serverTask->canStop()) {
+            serverTask->stop();
+        }
+    }
+
+    qDebug() << "ServerInstance::stopServer() - Server stopped";
+}
+
+
 
 std::shared_ptr<ModFolderModel> ServerInstance::loaderModList() const
 {

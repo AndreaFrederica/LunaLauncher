@@ -16,18 +16,19 @@ ServerConsolePage::ServerConsolePage(ServerInstance *instance, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
 
     m_console = new ServerConsoleWidget(this);
-
     layout->addWidget(m_console);
 
+    // Connect to running status changes
     connect(m_instance, &ServerInstance::runningStatusChanged, this, &ServerConsolePage::onRunningStatusChanged);
 
-    // Connect console output
+    // Connect console I/O
     connect(m_console, &ServerConsoleWidget::sendData, this, &ServerConsolePage::onSendData);
     connect(m_console, &ServerConsoleWidget::termSizeChange, this, &ServerConsolePage::onTermSizeChange);
 }
 
 ServerConsolePage::~ServerConsolePage()
 {
+    disconnectConsole();
 }
 
 QString ServerConsolePage::displayName() const
@@ -57,30 +58,53 @@ bool ServerConsolePage::shouldDisplay() const
 
 void ServerConsolePage::openedImpl()
 {
-    // Re-check running status
+    // Re-check running status when page opens
     onRunningStatusChanged(m_instance->isRunning());
 }
 
 void ServerConsolePage::closedImpl()
 {
+    // Keep connection alive when page is closed
 }
 
 void ServerConsolePage::onRunningStatusChanged(bool running)
 {
-    // Disconnect previous task if any
-    if (m_currentTask) {
-         disconnect(m_currentTask.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
-    }
+    qDebug() << "ServerConsolePage::onRunningStatusChanged - running:" << running;
 
     if (running) {
-        m_currentTask = m_instance->launchTask().dynamicCast<ServerLaunchTask>();
-
-        if (m_currentTask) {
-            connect(m_currentTask.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
-            // Sync initial size
-            m_currentTask->resizePty(m_console->columns(), m_console->lines());
-        }
+        // Connect to the current task
+        connectToTask(m_instance->launchTask().dynamicCast<ServerLaunchTask>());
     } else {
+        // Disconnect from any task
+        disconnectConsole();
+    }
+}
+
+void ServerConsolePage::connectToTask(Ptr task)
+{
+    if (!task) {
+        qWarning() << "ServerConsolePage::connectToTask - task is null";
+        return;
+    }
+
+    // Disconnect from previous task first
+    disconnectConsole();
+
+    m_currentTask = task;
+    qDebug() << "ServerConsolePage::connectToTask - connected to task";
+
+    // Connect to console output
+    connect(task.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
+
+    // Sync terminal size
+    task->resizePty(m_console->columns(), m_console->lines());
+}
+
+void ServerConsolePage::disconnectConsole()
+{
+    if (m_currentTask) {
+        qDebug() << "ServerConsolePage::disconnectConsole - disconnecting from task";
+        disconnect(m_currentTask.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
         m_currentTask.reset();
     }
 }

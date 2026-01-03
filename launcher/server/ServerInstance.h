@@ -10,6 +10,7 @@ class ServerInstance : public BaseInstance
     Q_OBJECT
 public:
     explicit ServerInstance(SettingsObjectPtr globalSettings, SettingsObjectPtr settings, const QString &rootDir);
+    virtual ~ServerInstance();
 
     void saveNow() override;
     QString id() const override;
@@ -44,7 +45,10 @@ public:
     void setArguments(const QStringList &args);
     void setWorkingDir(const QString &dir);
 
-    void setLaunchTask(Task::Ptr task);
+    // Server lifecycle management
+    bool startServer();
+    void stopServer();
+
     Task::Ptr launchTask() const { return m_launchTask; }
 
     std::shared_ptr<class ModFolderModel> loaderModList() const;

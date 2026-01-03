@@ -18,6 +18,8 @@ class ServerConsolePage : public QWidget, public BasePage
     Q_OBJECT
 
 public:
+    using Ptr = shared_qobject_ptr<ServerLaunchTask>;
+
     explicit ServerConsolePage(ServerInstance *instance, QWidget *parent = nullptr);
     virtual ~ServerConsolePage() override;
 
@@ -38,7 +40,11 @@ private slots:
     void onTermSizeChange(int lines, int columns);
 
 private:
+    void connectToTask(Ptr task);
+    void disconnectConsole();
+
+private:
     ServerInstance *m_instance;
     ServerConsoleWidget *m_console = nullptr;
-    shared_qobject_ptr<ServerLaunchTask> m_currentTask;
+    Ptr m_currentTask;
 };

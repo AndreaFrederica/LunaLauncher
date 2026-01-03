@@ -42,6 +42,7 @@
 #include "launch/steps/PrintServers.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
+#include "server/ServerLaunchTask.h"
 
 #include "ui/InstanceWindow.h"
 #include "ui/MainWindow.h"
@@ -409,6 +410,48 @@ void LaunchController::launchInstance()
     if (!m_instance->reloadSettings()) {
         QMessageBox::critical(m_parentWidget, tr("Error!"), tr("Couldn't load the instance profile."));
         emitFailed(tr("Couldn't load the instance profile."));
+        return;
+    }
+
+    // Special handling for server instances
+    if (m_instance->traits().contains("server")) {
+        // For server instances, properly stop the old server first before starting a new one
+        qDebug() << "LaunchController::launchInstance() - server instance, m_launcher:" << m_launcher.get();
+        if (m_launcher) {
+            auto oldServerTask = m_launcher.dynamicCast<ServerLaunchTask>();
+            qDebug() << "LaunchController: Old task is ServerLaunchTask:" << (bool)oldServerTask;
+            if (oldServerTask) {
+                qDebug() << "LaunchController: canStop:" << oldServerTask->canStop();
+                if (oldServerTask->canStop()) {
+                    qDebug() << "LaunchController: Stopping old server before starting new one";
+                    oldServerTask->stop();
+                }
+            }
+            m_launcher.reset();
+        } else {
+            qDebug() << "LaunchController: No old launcher to stop";
+        }
+
+        auto serverTask = m_instance->createLaunchTask(m_session, m_targetToJoin).dynamicCast<ServerLaunchTask>();
+        if (!serverTask) {
+            emitFailed(tr("Couldn't create server launch task."));
+            return;
+        }
+
+        m_launcher = serverTask;
+
+        auto console = qobject_cast<InstanceWindow*>(m_parentWidget);
+        auto showConsole = m_instance->settings()->get("ShowConsole").toBool();
+        if (!console && showConsole) {
+            APPLICATION->showInstanceWindow(m_instance);
+        }
+
+        // Connect to server task signals
+        connect(serverTask.get(), &ServerLaunchTask::succeeded, this, &LaunchController::onSucceeded);
+        connect(serverTask.get(), &ServerLaunchTask::failed, this, &LaunchController::onFailed);
+
+        // Start the server using Task::start() to properly initialize the state machine
+        serverTask->start();
         return;
     }
 

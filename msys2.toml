@@ -65,7 +65,8 @@ install_debug = "cmake --install build-debug"
 portable = "cmake --install build-release --component portable"
 portable_debug = "cmake --install build-debug --component portable"
 
-clean = "rm -rf build-release build-debug install-release install-debug"
+clean = "rm -rf build-release build-debug"
+clean_all = "rm -rf build-release build-debug install-release install-debug"
 test = "./build-debug/launcher/lunalauncher.exe"
 test_install = "./install-debug/lunalauncher.exe"
 

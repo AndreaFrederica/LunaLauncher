@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(find:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:hangar.papermc.io)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)"
     ]
   }
 }

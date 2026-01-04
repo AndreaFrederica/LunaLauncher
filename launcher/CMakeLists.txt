@@ -1480,6 +1480,7 @@ target_link_libraries(Launcher_logic
     ${ZLIB_LIBRARIES}
     qdcss
     simplewebp
+    quickjs-interface
     BuildConfig
     Qt${QT_VERSION_MAJOR}::Widgets
     qtermwidget

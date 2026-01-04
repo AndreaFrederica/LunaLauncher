@@ -286,6 +286,10 @@ auto ResourceUpdateDialog::ensureMetadata() -> bool
             case ModPlatform::ResourceProvider::FLAME:
                 flame_tmp.push_back(resource);
                 break;
+            case ModPlatform::ResourceProvider::HANGAR:
+                // Updates are currently implemented for Modrinth/Flame only.
+                // Keep metadata generation/update flow stable by ignoring Hangar here.
+                break;
         }
     };
 
@@ -388,6 +392,9 @@ void ResourceUpdateDialog::onMetadataEnsured(Resource* resource)
         case ModPlatform::ResourceProvider::FLAME:
             m_flameToUpdate.push_back(resource);
             break;
+        case ModPlatform::ResourceProvider::HANGAR:
+            // Update checking not supported in this dialog yet.
+            break;
     }
 }
 
@@ -397,6 +404,8 @@ ModPlatform::ResourceProvider next(ModPlatform::ResourceProvider p)
         case ModPlatform::ResourceProvider::MODRINTH:
             return ModPlatform::ResourceProvider::FLAME;
         case ModPlatform::ResourceProvider::FLAME:
+            return ModPlatform::ResourceProvider::MODRINTH;
+        case ModPlatform::ResourceProvider::HANGAR:
             return ModPlatform::ResourceProvider::MODRINTH;
     }
 

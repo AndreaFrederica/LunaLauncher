@@ -60,6 +60,8 @@ const char* ProviderCapabilities::name(ResourceProvider p)
             return "modrinth";
         case ResourceProvider::FLAME:
             return "curseforge";
+        case ResourceProvider::HANGAR:
+            return "hangar";
     }
     return {};
 }
@@ -71,6 +73,8 @@ QString ProviderCapabilities::readableName(ResourceProvider p)
             return "Modrinth";
         case ResourceProvider::FLAME:
             return "CurseForge";
+        case ResourceProvider::HANGAR:
+            return "Hangar";
     }
     return {};
 }
@@ -83,14 +87,23 @@ QStringList ProviderCapabilities::hashType(ResourceProvider p)
         case ResourceProvider::FLAME:
             // Try newer formats first, fall back to old format
             return { "sha1", "md5", "murmur2" };
+        case ResourceProvider::HANGAR:
+            return { "sha256" };
     }
     return {};
 }
 
 QString getMetaURL(ResourceProvider provider, QVariant projectID)
 {
-    return ((provider == ModPlatform::ResourceProvider::FLAME) ? "https://www.curseforge.com/projects/" : "https://modrinth.com/mod/") +
-           projectID.toString();
+    switch (provider) {
+        case ModPlatform::ResourceProvider::FLAME:
+            return "https://www.curseforge.com/projects/" + projectID.toString();
+        case ModPlatform::ResourceProvider::MODRINTH:
+            return "https://modrinth.com/mod/" + projectID.toString();
+        case ModPlatform::ResourceProvider::HANGAR:
+            return "https://hangar.papermc.io/" + projectID.toString();
+    }
+    return {};
 }
 
 auto getModLoaderAsString(ModLoaderType type) -> const QString

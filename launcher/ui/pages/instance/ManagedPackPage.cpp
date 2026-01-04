@@ -286,8 +286,12 @@ void ModrinthManagedPackPage::parseManagedPack()
     };
     callbacks.on_fail = [this](QString reason, int) { setFailState(); };
     callbacks.on_abort = [this]() { setFailState(); };
-    m_fetch_job = m_api.getProjectVersions(
-        { std::make_shared<ModPlatform::IndexedPack>(m_pack), {}, {}, ModPlatform::ResourceType::Modpack }, std::move(callbacks));
+    {
+        ResourceAPI::VersionSearchArgs args;
+        args.pack = std::make_shared<ModPlatform::IndexedPack>(m_pack);
+        args.resourceType = ModPlatform::ResourceType::Modpack;
+        m_fetch_job = m_api.getProjectVersions(std::move(args), std::move(callbacks));
+    }
 
     ui->changelogTextBrowser->setText(tr("Fetching changelogs..."));
 
@@ -458,8 +462,12 @@ void FlameManagedPackPage::parseManagedPack()
     };
     callbacks.on_fail = [this](QString reason, int) { setFailState(); };
     callbacks.on_abort = [this]() { setFailState(); };
-    m_fetch_job = m_api.getProjectVersions(
-        { std::make_shared<ModPlatform::IndexedPack>(m_pack), {}, {}, ModPlatform::ResourceType::Modpack }, std::move(callbacks));
+    {
+        ResourceAPI::VersionSearchArgs args;
+        args.pack = std::make_shared<ModPlatform::IndexedPack>(m_pack);
+        args.resourceType = ModPlatform::ResourceType::Modpack;
+        m_fetch_job = m_api.getProjectVersions(std::move(args), std::move(callbacks));
+    }
 
     m_fetch_job->start();
 }

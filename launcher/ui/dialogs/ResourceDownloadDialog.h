@@ -32,6 +32,7 @@
 
 class BaseInstance;
 class ModFolderModel;
+class PluginFolderModel;
 class PageContainer;
 class QVBoxLayout;
 class QDialogButtonBox;
@@ -179,6 +180,23 @@ class DataPackDownloadDialog final : public ResourceDownloadDialog {
     //: String that gets appended to the data pack download dialog title ("Download " + resourcesString())
     QString resourcesString() const override { return tr("data packs"); }
     QString geometrySaveKey() const override { return "DataPackDownloadGeometry"; }
+
+    QList<BasePage*> getPages() override;
+
+   private:
+    BaseInstance* m_instance;
+};
+
+class PluginDownloadDialog final : public ResourceDownloadDialog {
+    Q_OBJECT
+
+   public:
+    explicit PluginDownloadDialog(QWidget* parent, const std::shared_ptr<PluginFolderModel>& plugins, BaseInstance* instance);
+    ~PluginDownloadDialog() override = default;
+
+    //: String that gets appended to the plugin download dialog title ("Download " + resourcesString())
+    QString resourcesString() const override { return tr("plugins"); }
+    QString geometrySaveKey() const override { return "PluginDownloadGeometry"; }
 
     QList<BasePage*> getPages() override;
 

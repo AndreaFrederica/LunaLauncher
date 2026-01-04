@@ -131,7 +131,7 @@ bool ServerModLoaderPage::apply()
 
     m_instance->setModLoaderTypes(types);
 
-    // Save plugin loader types (for future use)
+    // Save plugin loader types
     ModPlatform::PluginLoaderTypes pluginTypes = ModPlatform::PluginLoaderTypes();
     if (m_paperCheck->isChecked())
         pluginTypes |= ModPlatform::Paper;

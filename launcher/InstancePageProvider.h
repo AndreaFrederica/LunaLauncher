@@ -12,6 +12,7 @@
 #include "ui/pages/instance/LogPage.h"
 #include "ui/pages/instance/ManagedPackPage.h"
 #include "ui/pages/instance/ModFolderPage.h"
+#include "ui/pages/instance/PluginFolderPage.h"
 #include "ui/pages/instance/NotesPage.h"
 #include "ui/pages/instance/OtherLogsPage.h"
 #include "ui/pages/instance/ResourcePackPage.h"
@@ -27,8 +28,11 @@
 #include "server/ServerInstance.h"
 #include "ui/pages/server/ServerConsolePage.h"
 #include "ui/pages/server/ServerSettingsPage.h"
+#include "ui/pages/server/ServerEulaPage.h"
+#include "ui/pages/server/ServerOpsPage.h"
+#include "ui/pages/server/ServerPlayerListPage.h"
+#include "ui/pages/server/ServerYamlEditorPage.h"
 #include "ui/pages/server/ServerPropertyPage.h"
-#include "ui/pages/server/ServerPluginsPage.h"
 #include "ui/pages/server/ServerJavaPage.h"
 #include "ui/pages/server/ServerModLoaderPage.h"
 
@@ -51,13 +55,22 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
             values.append(modsPage);
 
             // Plugins page
-            values.append(new ServerPluginsPage(serverInst.get(), serverInst->pluginList()));
+            auto pluginsPage = new PluginFolderPage(serverInst.get(), serverInst->pluginList());
+            pluginsPage->setFilter("%1 (*.jar)");
+            values.append(pluginsPage);
 
             values.append(new NotesPage(serverInst.get()));
             values.append(new ServerModLoaderPage(serverInst.get()));
             values.append(new ServerSettingsPage(serverInst.get()));
             values.append(new ServerJavaPage(serverInst.get()));
+            values.append(new ServerEulaPage(serverInst.get()));
             values.append(new ServerPropertyPage(serverInst.get()));
+            values.append(new ServerYamlEditorPage(serverInst.get(), ServerYamlEditorPage::Bukkit));
+            values.append(new ServerYamlEditorPage(serverInst.get(), ServerYamlEditorPage::Spigot));
+            values.append(new ServerOpsPage(serverInst.get()));
+            values.append(new ServerPlayerListPage(serverInst.get(), ServerPlayerListPage::Whitelist));
+            values.append(new ServerPlayerListPage(serverInst.get(), ServerPlayerListPage::BannedPlayers));
+            values.append(new ServerPlayerListPage(serverInst.get(), ServerPlayerListPage::BannedIPs));
             values.append(new OtherLogsPage("logs", tr("Logs"), "Other-Logs", inst));
             return values;
         }

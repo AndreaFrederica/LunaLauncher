@@ -61,9 +61,8 @@ enum PluginLoaderType {
     BungeeCord = 1 << 7
 };
 Q_DECLARE_FLAGS(PluginLoaderTypes, PluginLoaderType)
-QList<PluginLoaderType> pluginLoaderTypesToList(PluginLoaderTypes flags);
 
-enum class ResourceProvider { MODRINTH, FLAME };
+enum class ResourceProvider { MODRINTH, FLAME, HANGAR };
 
 enum class DependencyType { REQUIRED, OPTIONAL, INCOMPATIBLE, EMBEDDED, TOOL, INCLUDE, UNKNOWN };
 
@@ -125,6 +124,7 @@ struct IndexedVersion {
     QString date;
     QString fileName;
     ModLoaderTypes loaders = {};
+    PluginLoaderTypes pluginLoaders = {};  // For server plugins (Hangar)
     QString hash_type;
     QString hash;
     bool is_preferred = true;

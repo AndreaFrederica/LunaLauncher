@@ -62,7 +62,8 @@ void ModListView::setModel(QAbstractItemModel* model)
 void ModListView::setResizeModes(const QList<QHeaderView::ResizeMode>& modes)
 {
     auto head = header();
-    for (int i = 0; i < modes.count(); i++) {
+    int count = qMin(modes.count(), head->count());
+    for (int i = 0; i < count; i++) {
         head->setSectionResizeMode(i, modes[i]);
     }
 }

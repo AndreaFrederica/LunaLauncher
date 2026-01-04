@@ -84,7 +84,8 @@ class ResourceAPI {
         std::optional<std::list<Version>> versions;
         std::optional<ModPlatform::Side> side;
         std::optional<QStringList> categoryIds;
-        bool openSource;
+        bool openSource = false;
+        std::optional<ModPlatform::PluginLoaderTypes> pluginLoaders;  // For server plugins (Hangar)
     };
 
     struct VersionSearchArgs {
@@ -93,6 +94,7 @@ class ResourceAPI {
         std::optional<std::list<Version>> mcVersions;
         std::optional<ModPlatform::ModLoaderTypes> loaders;
         ModPlatform::ResourceType resourceType;
+        std::optional<ModPlatform::PluginLoaderTypes> pluginLoaders;  // For server plugins (Hangar)
     };
 
     struct ProjectInfoArgs {
@@ -116,21 +118,8 @@ class ResourceAPI {
     virtual Task::Ptr getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const = 0;
 
     virtual Task::Ptr getProjectInfo(ProjectInfoArgs&&, Callback<ModPlatform::IndexedPack::Ptr>&&) const;
-    Task::Ptr getProjectVersions(VersionSearchArgs&& args, Callback<QVector<ModPlatform::IndexedVersion>>&& callbacks) const;
+    virtual Task::Ptr getProjectVersions(VersionSearchArgs&& args, Callback<QVector<ModPlatform::IndexedVersion>>&& callbacks) const;
     virtual Task::Ptr getDependencyVersion(DependencySearchArgs&&, Callback<ModPlatform::IndexedVersion>&&) const;
-
-   protected:
-    inline QString debugName() const { return "External resource API"; }
-
-    QString mapMCVersionToModrinth(Version v) const;
-
-    QString getGameVersionsString(std::list<Version> mcVersions) const;
-
-   public:
-    virtual auto getSearchURL(SearchArgs const& args) const -> std::optional<QString> = 0;
-    virtual auto getInfoURL(QString const& id) const -> std::optional<QString> = 0;
-    virtual auto getVersionsURL(VersionSearchArgs const& args) const -> std::optional<QString> = 0;
-    virtual auto getDependencyURL(DependencySearchArgs const& args) const -> std::optional<QString> = 0;
 
     /** Functions to load data into a pack.
      *
@@ -153,4 +142,16 @@ class ResourceAPI {
      */
 
     virtual void loadExtraPackInfo(ModPlatform::IndexedPack&, QJsonObject&) const = 0;
+
+    // Helper functions for Modrinth API version strings
+    QString getGameVersionsString(std::list<Version> mcVersions) const;
+    QString mapMCVersionToModrinth(Version v) const;
+
+   protected:
+    inline QString debugName() const { return "External resource API"; }
+
+    virtual auto getSearchURL(SearchArgs const& args) const -> std::optional<QString> = 0;
+    virtual auto getInfoURL(QString const& id) const -> std::optional<QString> = 0;
+    virtual auto getVersionsURL(VersionSearchArgs const& args) const -> std::optional<QString> = 0;
+    virtual auto getDependencyURL(DependencySearchArgs const& args) const -> std::optional<QString> = 0;
 };

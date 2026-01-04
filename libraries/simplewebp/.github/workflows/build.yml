@@ -1,0 +1,50 @@
+name: Build & Test
+on: [push, pull_request]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    - name: Update Dependencies
+      run: sudo apt-get update && sudo apt-get install g++
+    - name: Compile C Example
+      working-directory: test
+      run: gcc -o /dev/null webp2pam.c
+    - name: Compile C++ Example
+      working-directory: test
+      run: g++ -std=c++17 -o /dev/null webp2pam.cpp
+  test:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+      fail-fast: false
+    runs-on: ${{ matrix.runner }}
+    needs: build
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        submodules: true
+    - name: Update Dependencies
+      run: sudo apt-get update && sudo apt-get install g++
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - name: Make Virtual Environment
+      working-directory: test
+      run: python -m venv --upgrade-deps venv
+    - name: Install Python Dependencies For Test Script
+      working-directory: test
+      run: venv/bin/pip install Pillow numpy
+    - name: Compile Test Example
+      working-directory: test
+      run: g++ -fsanitize=address -g -std=c++17 webp2pam.cpp
+    - name: Run Test
+      working-directory: test
+      run: venv/bin/python test.py

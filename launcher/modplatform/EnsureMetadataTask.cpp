@@ -120,6 +120,10 @@ void EnsureMetadataTask::executeTask()
         case (ModPlatform::ResourceProvider::FLAME):
             version_task = flameVersionsTask();
             break;
+        case (ModPlatform::ResourceProvider::HANGAR):
+            // HANGAR metadata update not yet implemented
+            emitSucceeded();
+            return;
     }
 
     auto invalidade_leftover = [this] {
@@ -139,6 +143,9 @@ void EnsureMetadataTask::executeTask()
                 break;
             case (ModPlatform::ResourceProvider::FLAME):
                 project_task = flameProjectsTask();
+                break;
+            case (ModPlatform::ResourceProvider::HANGAR):
+                // HANGAR metadata update not yet implemented
                 break;
         }
 

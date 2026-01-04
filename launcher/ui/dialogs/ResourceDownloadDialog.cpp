@@ -30,6 +30,7 @@
 
 #include "minecraft/PackProfile.h"
 #include "minecraft/mod/ModFolderModel.h"
+#include "minecraft/mod/PluginFolderModel.h"
 #include "minecraft/mod/ResourcePackFolderModel.h"
 #include "minecraft/mod/ShaderPackFolderModel.h"
 #include "minecraft/mod/TexturePackFolderModel.h"
@@ -43,9 +44,11 @@
 #include "ui/pages/modplatform/ResourcePage.h"
 
 #include "ui/pages/modplatform/flame/FlameResourcePages.h"
+#include "ui/pages/modplatform/hangar/HangarResourcePages.h"
 #include "ui/pages/modplatform/modrinth/ModrinthResourcePages.h"
 
 #include "modplatform/flame/FlameAPI.h"
+#include "modplatform/hangar/HangarAPI.h"
 #include "modplatform/modrinth/ModrinthAPI.h"
 #include "ui/widgets/PageContainer.h"
 
@@ -411,6 +414,9 @@ void ResourceDownloadDialog::setResourceMetadata(const std::shared_ptr<Metadata:
         case ModPlatform::ResourceProvider::FLAME:
             selectPage(Flame::id());
             break;
+        case ModPlatform::ResourceProvider::HANGAR:
+            selectPage(Hangar::id());
+            break;
     }
     setWindowTitle(tr("Change %1 version").arg(meta->name));
     m_container->hidePageList();
@@ -439,6 +445,54 @@ QList<BasePage*> DataPackDownloadDialog::getPages()
     pages.append(ModrinthDataPackPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame)
         pages.append(FlameDataPackPage::create(this, *m_instance));
+    return pages;
+}
+
+PluginDownloadDialog::PluginDownloadDialog(QWidget* parent,
+                                           const std::shared_ptr<PluginFolderModel>& plugins,
+                                           BaseInstance* instance)
+    : ResourceDownloadDialog(parent, plugins), m_instance(instance)
+{
+    setWindowTitle(dialogTitle());
+
+    initializeContainer();
+    connectButtons();
+
+    if (!geometrySaveKey().isEmpty())
+        restoreGeometry(QByteArray::fromBase64(APPLICATION->settings()->get(geometrySaveKey()).toByteArray()));
+}
+
+QList<BasePage*> PluginDownloadDialog::getPages()
+{
+    QList<BasePage*> pages;
+
+    // Check if it's a server instance
+    if (m_instance && m_instance->traits().contains("server")) {
+        auto serverInst = dynamic_cast<ServerInstance*>(m_instance);
+        if (serverInst) {
+            auto loaders = serverInst->getPluginLoaderTypes();
+
+            qDebug() << "PluginDownloadDialog::getPages() - Plugin loaders:" << static_cast<int>(loaders);
+
+            // Only add pages if plugin loaders are configured
+            if (loaders != 0) {
+                // Add Hangar page
+                pages.append(HangarPluginPage::create(this, *m_instance));
+
+                // Modrinth also has plugins, but for now we focus on Hangar
+                // Future: Add Modrinth plugin support
+            } else {
+                qWarning() << "PluginDownloadDialog::getPages() - No plugin loaders configured, returning empty page list!";
+            }
+        } else {
+            qWarning() << "PluginDownloadDialog::getPages() - Failed to cast to ServerInstance!";
+        }
+    } else {
+        qWarning() << "PluginDownloadDialog::getPages() - Not a server instance or m_instance is null!";
+    }
+
+    qDebug() << "PluginDownloadDialog::getPages() - Returning" << pages.size() << "pages";
+
     return pages;
 }
 

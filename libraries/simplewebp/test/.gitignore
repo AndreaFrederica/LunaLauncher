@@ -1,0 +1,15 @@
+*.exe
+*.dll
+*.so
+*.pyc
+*.webp
+*.pam
+*.png
+*.o
+*.obj
+*.lib
+*.exp
+*.pdb
+a.out
+testlog.txt
+venv/

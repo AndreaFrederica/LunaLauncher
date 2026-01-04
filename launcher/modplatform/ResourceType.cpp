@@ -28,6 +28,7 @@ static const QMap<ResourceType, QString> s_packedTypeNames = { { ResourceType::R
                                                                { ResourceType::ShaderPack, QObject::tr("shader pack") },
                                                                { ResourceType::World, QObject::tr("world save") },
                                                                { ResourceType::Mod, QObject::tr("mod") },
+                                                               { ResourceType::Plugin, QObject::tr("plugin") },
                                                                { ResourceType::Unknown, QObject::tr("unknown") } };
 
 namespace ResourceTypeUtils {

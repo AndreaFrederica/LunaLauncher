@@ -362,6 +362,10 @@ set(MINECRAFT_SOURCES
     minecraft/mod/ModDetails.h
     minecraft/mod/ModFolderModel.h
     minecraft/mod/ModFolderModel.cpp
+    minecraft/mod/Plugin.h
+    minecraft/mod/Plugin.cpp
+    minecraft/mod/PluginFolderModel.h
+    minecraft/mod/PluginFolderModel.cpp
     minecraft/mod/Resource.h
     minecraft/mod/Resource.cpp
     minecraft/mod/ResourceFolderModel.h
@@ -551,6 +555,10 @@ set(API_SOURCES
     modplatform/flame/FlameAPI.cpp
     modplatform/modrinth/ModrinthAPI.h
     modplatform/modrinth/ModrinthAPI.cpp
+    modplatform/hangar/HangarAPI.h
+    modplatform/hangar/HangarAPI.cpp
+    modplatform/hangar/HangarPackIndex.h
+    modplatform/hangar/HangarPackIndex.cpp
     modplatform/helpers/HashUtils.h
     modplatform/helpers/HashUtils.cpp
     modplatform/helpers/OverrideUtils.h
@@ -818,6 +826,14 @@ set(SERVER_SOURCES
     ui/pages/server/ServerSettingsPage.h
     ui/pages/server/ServerPropertyPage.cpp
     ui/pages/server/ServerPropertyPage.h
+    ui/pages/server/ServerEulaPage.cpp
+    ui/pages/server/ServerEulaPage.h
+    ui/pages/server/ServerOpsPage.cpp
+    ui/pages/server/ServerOpsPage.h
+    ui/pages/server/ServerPlayerListPage.cpp
+    ui/pages/server/ServerPlayerListPage.h
+    ui/pages/server/ServerYamlEditorPage.cpp
+    ui/pages/server/ServerYamlEditorPage.h
     ui/pages/server/ServerPluginsPage.cpp
     ui/pages/server/ServerPluginsPage.h
     ui/pages/server/ServerJavaPage.cpp
@@ -1009,6 +1025,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/instance/ShaderPackPage.cpp
     ui/pages/instance/ModFolderPage.cpp
     ui/pages/instance/ModFolderPage.h
+    ui/pages/instance/PluginFolderPage.cpp
+    ui/pages/instance/PluginFolderPage.h
     ui/pages/instance/NotesPage.cpp
     ui/pages/instance/NotesPage.h
     ui/pages/instance/LogPage.cpp
@@ -1073,6 +1091,11 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/ModModel.cpp
     ui/pages/modplatform/ModModel.h
 
+    ui/pages/modplatform/PluginPage.cpp
+    ui/pages/modplatform/PluginPage.h
+    ui/pages/modplatform/PluginModel.cpp
+    ui/pages/modplatform/PluginModel.h
+
     ui/pages/modplatform/ResourcePackPage.cpp
     ui/pages/modplatform/ResourcePackModel.cpp
 
@@ -1136,6 +1159,11 @@ SET(LAUNCHER_SOURCES
 
     ui/pages/modplatform/modrinth/ModrinthResourcePages.cpp
     ui/pages/modplatform/modrinth/ModrinthResourcePages.h
+
+    ui/pages/modplatform/hangar/HangarResourcePages.cpp
+    ui/pages/modplatform/hangar/HangarResourcePages.h
+    ui/pages/modplatform/hangar/HangarResourceModels.cpp
+    ui/pages/modplatform/hangar/HangarResourceModels.h
 
     # GUI - dialogs
     ui/dialogs/AboutDialog.cpp
@@ -1451,6 +1479,7 @@ target_link_libraries(Launcher_logic
     nbt++
     ${ZLIB_LIBRARIES}
     qdcss
+    simplewebp
     BuildConfig
     Qt${QT_VERSION_MAJOR}::Widgets
     qtermwidget

@@ -5,12 +5,18 @@
 #include "ResourceModel.h"
 
 #include <QCryptographicHash>
+#include <QFile>
 #include <QIcon>
+#include <QImageReader>
 #include <QList>
 #include <QMessageBox>
 #include <QPixmapCache>
 #include <QUrl>
 #include <algorithm>
+
+extern "C" {
+#include <simplewebp.h>
+}
 #include <memory>
 
 #include "Application.h"
@@ -331,8 +337,54 @@ std::optional<QIcon> ResourceModel::getIcon(QModelIndex& index, const QUrl& url)
 
     auto full_file_path = cache_entry->getFullPath();
     connect(icon_fetch_action.get(), &Task::succeeded, this, [this, url, full_file_path, index] {
-        auto icon = QIcon(full_file_path);
-        QPixmapCache::insert(url.toString(), icon.pixmap(icon.actualSize({ 64, 64 })));
+        QImage image;
+
+        // Try loading with Qt first
+        QImageReader reader(full_file_path);
+        image = reader.read();
+
+        // If Qt fails, check if it's a WebP file and try using simplewebp
+        if (image.isNull()) {
+            QFile file(full_file_path);
+            if (file.open(QIODevice::ReadOnly)) {
+                QByteArray data = file.readAll();
+                file.close();
+
+                // Check WebP file signature: "RIFF" at offset 0 and "WEBP" at offset 8
+                bool isWebP = data.size() >= 12 &&
+                             data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' &&
+                             data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P';
+
+                if (isWebP) {
+                    // Try to decode using simplewebp
+                    simplewebp* webp = nullptr;
+                    simplewebp_error error = simplewebp_load_from_memory(
+                        data.data(), data.size(), nullptr, &webp);
+
+                    if (error == SIMPLEWEBP_NO_ERROR && webp) {
+                        size_t width, height;
+                        simplewebp_get_dimensions(webp, &width, &height);
+
+                        // Allocate buffer for RGBA data
+                        QByteArray buffer(width * height * 4, 0);
+                        error = simplewebp_decode(webp, buffer.data(), nullptr);
+
+                        if (error == SIMPLEWEBP_NO_ERROR) {
+                            // Create QImage from RGBA data
+                            image = QImage(reinterpret_cast<const uchar*>(buffer.constData()),
+                                         width, height, width * 4, QImage::Format_RGBA8888).copy();
+                        }
+
+                        simplewebp_unload(webp);
+                    }
+                }
+            }
+        }
+
+        if (!image.isNull()) {
+            QPixmap pixmap = QPixmap::fromImage(image);
+            QPixmapCache::insert(url.toString(), pixmap);
+        }
 
         m_currently_running_icon_actions.remove(url);
 

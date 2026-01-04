@@ -7,6 +7,7 @@
 #include "settings/INISettingsObject.h"
 #include "FileSystem.h"
 #include "minecraft/mod/ModFolderModel.h"
+#include "minecraft/mod/PluginFolderModel.h"
 #include "Application.h"
 #include "modplatform/ModIndex.h"
 
@@ -149,12 +150,12 @@ std::shared_ptr<ModFolderModel> ServerInstance::loaderModList() const
     return m_loaderModList;
 }
 
-std::shared_ptr<ModFolderModel> ServerInstance::pluginList() const
+std::shared_ptr<PluginFolderModel> ServerInstance::pluginList() const
 {
     if (!m_pluginList)
     {
         bool is_indexed = !APPLICATION->settings()->get("ModMetadataDisabled").toBool();
-        m_pluginList.reset(new ModFolderModel(QDir(FS::PathCombine(instanceRoot(), "plugins")), const_cast<ServerInstance*>(this), is_indexed, true));
+        m_pluginList.reset(new PluginFolderModel(QDir(FS::PathCombine(instanceRoot(), "plugins")), const_cast<ServerInstance*>(this), is_indexed, true));
     }
     return m_pluginList;
 }

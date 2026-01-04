@@ -53,7 +53,7 @@ public:
     Task::Ptr launchTask() const { return m_launchTask; }
 
     std::shared_ptr<class ModFolderModel> loaderModList() const;
-    std::shared_ptr<class ModFolderModel> pluginList() const;
+    std::shared_ptr<class PluginFolderModel> pluginList() const;
 
     // ModLoader configuration
     ModPlatform::ModLoaderTypes getModLoaderTypes() const;
@@ -61,12 +61,12 @@ public:
     QString getMinecraftVersion() const;
     void setMinecraftVersion(const QString &version);
 
-    // PluginLoader configuration (for future plugin download system)
+    // PluginLoader configuration (for server plugins like Paper, Spigot, etc.)
     ModPlatform::PluginLoaderTypes getPluginLoaderTypes() const;
     void setPluginLoaderTypes(ModPlatform::PluginLoaderTypes types);
 
 private:
     Task::Ptr m_launchTask;
     mutable std::shared_ptr<class ModFolderModel> m_loaderModList;
-    mutable std::shared_ptr<class ModFolderModel> m_pluginList;
+    mutable std::shared_ptr<class PluginFolderModel> m_pluginList;
 };

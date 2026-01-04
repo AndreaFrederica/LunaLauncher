@@ -32,7 +32,7 @@ ServerPropertyPage::ServerPropertyPage(ServerInstance *instance, QWidget *parent
 ServerPropertyPage::~ServerPropertyPage() {}
 
 QString ServerPropertyPage::displayName() const { return tr("Server Properties"); }
-QIcon ServerPropertyPage::icon() const { return QIcon::fromTheme("document-edit"); }
+QIcon ServerPropertyPage::icon() const { return QIcon::fromTheme("settings"); }
 QString ServerPropertyPage::id() const { return "server-properties"; }
 QString ServerPropertyPage::helpPage() const { return "Server Properties"; }
 bool ServerPropertyPage::shouldDisplay() const { return true; }

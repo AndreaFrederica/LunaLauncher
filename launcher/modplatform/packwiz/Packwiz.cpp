@@ -174,6 +174,10 @@ void V1::updateModIndex(const QDir& index_dir, Mod& mod)
                 { "version", mod.version().toString().toStdString() },
             };
             break;
+        case (ModPlatform::ResourceProvider::HANGAR):
+            // Packwiz does not support HANGAR provider
+            qWarning() << QString("Packwiz export for HANGAR provider is not supported for file %1").arg(normalized_fname);
+            return;
     }
 
     toml::array loaders;

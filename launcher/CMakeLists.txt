@@ -559,6 +559,16 @@ set(API_SOURCES
     modplatform/hangar/HangarAPI.cpp
     modplatform/hangar/HangarPackIndex.h
     modplatform/hangar/HangarPackIndex.cpp
+
+    # JavaScript API 桥接层
+    modplatform/jsapi/JSResourceAPI.h
+    modplatform/jsapi/JSResourceAPI.cpp
+    modplatform/jsapi/JSAPIManager.h
+    modplatform/jsapi/JSAPIManager.cpp
+
+    # JavaScript API 资源文件
+    modplatform/jsapi/jsapi.qrc
+
     modplatform/helpers/HashUtils.h
     modplatform/helpers/HashUtils.cpp
     modplatform/helpers/OverrideUtils.h
@@ -1164,6 +1174,9 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/hangar/HangarResourcePages.h
     ui/pages/modplatform/hangar/HangarResourceModels.cpp
     ui/pages/modplatform/hangar/HangarResourceModels.h
+
+    ui/pages/modplatform/JSApiPluginPage.cpp
+    ui/pages/modplatform/JSApiPluginPage.h
 
     # GUI - dialogs
     ui/dialogs/AboutDialog.cpp
@@ -1795,5 +1808,16 @@ install(
         exresources/fonts
     DESTINATION ${EXRESOURCE_DEST_DIR}
     USE_SOURCE_PERMISSIONS
+    COMPONENT Runtime
+)
+
+# Install JavaScript API files for dynamic loading
+install(
+    FILES
+        modplatform/jsapi/modrinth_plugin_api.js
+        modplatform/jsapi/resource-api.d.ts
+        modplatform/jsapi/README.md
+        modplatform/jsapi/DEPLOYMENT.md
+    DESTINATION ${EXRESOURCE_DEST_DIR}/jsapi
     COMPONENT Runtime
 )

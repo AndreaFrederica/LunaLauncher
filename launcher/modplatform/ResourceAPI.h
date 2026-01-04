@@ -150,6 +150,13 @@ class ResourceAPI {
    protected:
     inline QString debugName() const { return "External resource API"; }
 
+   public:
+    // Get the API identifier for display and configuration
+    inline virtual QString apiName() const { return debugName(); }
+
+    // Get the meta entry base for this API (used for storage keys)
+    inline virtual QString metaEntryBase() const { return debugName(); }
+
     virtual auto getSearchURL(SearchArgs const& args) const -> std::optional<QString> = 0;
     virtual auto getInfoURL(QString const& id) const -> std::optional<QString> = 0;
     virtual auto getVersionsURL(VersionSearchArgs const& args) const -> std::optional<QString> = 0;

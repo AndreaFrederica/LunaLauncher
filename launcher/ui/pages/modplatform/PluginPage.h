@@ -30,10 +30,18 @@ class PluginPage : public ResourcePage {
     Q_OBJECT
 
    public:
+    // Create a page without a custom API (uses internal API creation)
     template <typename T>
     static T* create(PluginDownloadDialog* dialog, BaseInstance& instance)
     {
-        auto page = new T(dialog, instance);
+        return create<T>(dialog, instance, nullptr);
+    }
+
+    // Create a page with a custom API (useful for JS APIs)
+    template <typename T>
+    static T* create(PluginDownloadDialog* dialog, BaseInstance& instance, ResourceAPI* customApi)
+    {
+        auto page = new T(dialog, instance, customApi);
         auto model = static_cast<PluginModel*>(page->getModel());
 
         connect(model, &ResourceModel::versionListUpdated, page, &ResourcePage::versionListUpdated);

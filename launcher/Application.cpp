@@ -78,6 +78,8 @@
 
 #include "ui/setupwizard/AutoJavaWizardPage.h"
 #include "ui/setupwizard/JavaWizardPage.h"
+
+#include "modplatform/jsapi/JSAPIManager.h"
 #include "ui/setupwizard/LanguageWizardPage.h"
 #include "ui/setupwizard/LoginWizardPage.h"
 #include "ui/setupwizard/PasteWizardPage.h"
@@ -656,6 +658,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "Compiled by                : " << BuildConfig.compilerID();
         qInfo() << "Build Artifact             : " << BuildConfig.BUILD_ARTIFACT;
         qInfo() << "Updates Enabled           : " << (updaterEnabled() ? "Yes" : "No");
+
+        // Initialize JavaScript API manager
+        JSAPIManager::instance().initialize();
+
         if (adjustedBy.size()) {
             qInfo() << "Work dir before adjustment : " << origcwdPath;
             qInfo() << "Work dir after adjustment  : " << QDir::currentPath();

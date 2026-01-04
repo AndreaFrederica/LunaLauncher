@@ -27,12 +27,12 @@ class HangarPluginPage : public PluginPage {
     Q_OBJECT
 
    public:
-    static HangarPluginPage* create(PluginDownloadDialog* dialog, BaseInstance& instance)
+    static HangarPluginPage* create(PluginDownloadDialog* dialog, BaseInstance& instance, ResourceAPI* customApi = nullptr)
     {
-        return PluginPage::create<HangarPluginPage>(dialog, instance);
+        return PluginPage::create<HangarPluginPage>(dialog, instance, customApi);
     }
 
-    HangarPluginPage(PluginDownloadDialog* dialog, BaseInstance& instance);
+    HangarPluginPage(PluginDownloadDialog* dialog, BaseInstance& instance, ResourceAPI* customApi = nullptr);
     ~HangarPluginPage() override = default;
 
     QString displayName() const override { return "Hangar"; }

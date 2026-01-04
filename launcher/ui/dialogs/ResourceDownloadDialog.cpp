@@ -46,8 +46,10 @@
 #include "ui/pages/modplatform/flame/FlameResourcePages.h"
 #include "ui/pages/modplatform/hangar/HangarResourcePages.h"
 #include "ui/pages/modplatform/modrinth/ModrinthResourcePages.h"
+#include "ui/pages/modplatform/JSApiPluginPage.h"
 
 #include "modplatform/flame/FlameAPI.h"
+#include "modplatform/jsapi/JSAPIManager.h"
 #include "modplatform/hangar/HangarAPI.h"
 #include "modplatform/modrinth/ModrinthAPI.h"
 #include "ui/widgets/PageContainer.h"
@@ -476,11 +478,33 @@ QList<BasePage*> PluginDownloadDialog::getPages()
 
             // Only add pages if plugin loaders are configured
             if (loaders != 0) {
-                // Add Hangar page
-                pages.append(HangarPluginPage::create(this, *m_instance));
+                // First, check for JS APIs for plugin downloads
+                auto& jsApiManager = JSAPIManager::instance();
 
-                // Modrinth also has plugins, but for now we focus on Hangar
-                // Future: Add Modrinth plugin support
+                // Debug logging
+                auto allApis = jsApiManager.getAllAPIs();
+                qDebug() << "PluginDownloadDialog::getPages() - Total loaded APIs:" << allApis.size();
+                for (const auto& api : allApis) {
+                    const auto& meta = api->getMetadata();
+                    qDebug() << "API:" << api->apiName()
+                             << "Enabled:" << meta.enabled
+                             << "SupportedTypes:" << meta.supportedTypes
+                             << "TargetType:" << static_cast<int>(ModPlatform::ResourceType::Plugin);
+                }
+
+                auto pluginApis = jsApiManager.getAPIsForType(ModPlatform::ResourceType::Plugin);
+
+                if (!pluginApis.isEmpty()) {
+                    // Create pages for each JS API
+                    for (auto& api : pluginApis) {
+                        qDebug() << "PluginDownloadDialog::getPages() - Adding JS API page:" << api->apiName();
+                        pages.append(JSApiPluginPage::create(this, *m_instance, api.get()));
+                    }
+                }
+
+                // Always add Hangar as fallback/default
+                qDebug() << "PluginDownloadDialog::getPages() - Adding Hangar page";
+                pages.append(HangarPluginPage::create(this, *m_instance));
             } else {
                 qWarning() << "PluginDownloadDialog::getPages() - No plugin loaders configured, returning empty page list!";
             }

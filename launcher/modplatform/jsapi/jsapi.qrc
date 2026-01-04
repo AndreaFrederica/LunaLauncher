@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/jsapi">
+        <!-- 内置的 JavaScript API 实现 -->
+        <file>modrinth_plugin_api.js</file>
+
+        <!-- TypeScript 定义文件 -->
+        <file>resource-api.d.ts</file>
+
+        <!-- 文档 -->
+        <file>README.md</file>
+        <file>DEPLOYMENT.md</file>
+    </qresource>
+</RCC>

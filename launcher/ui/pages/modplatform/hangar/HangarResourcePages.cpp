@@ -18,7 +18,7 @@
 
 namespace ResourceDownload {
 
-HangarPluginPage::HangarPluginPage(PluginDownloadDialog* dialog, BaseInstance& instance) : PluginPage(dialog, instance)
+HangarPluginPage::HangarPluginPage(PluginDownloadDialog* dialog, BaseInstance& instance, ResourceAPI* customApi) : PluginPage(dialog, instance)
 {
     m_model = new HangarPluginModel(instance);
     m_ui->packView->setModel(m_model);

@@ -42,11 +42,12 @@ jobs:
       - name: Configure
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_INSTALL_PREFIX=install `
-            -DENABLE_LTO=ON `
-            -DCMAKE_PREFIX_PATH=$env:QT_CMAKE_PREFIX `
-            -DCMAKE_TOOLCHAIN_FILE=third_party/vcpkg/scripts/buildsystems/vcpkg.cmake
+          $toolchain = (Resolve-Path ".\third_party\vcpkg\scripts\buildsystems\vcpkg.cmake").Path
+          if (-not (Test-Path $toolchain)) {
+            Write-Host "Toolchain file not found at $toolchain"
+            exit 1
+          }
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_PREFIX_PATH="$env:QT_CMAKE_PREFIX" -DCMAKE_TOOLCHAIN_FILE="$toolchain"
       - name: Build
         shell: pwsh
         run: |

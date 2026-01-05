@@ -1740,13 +1740,25 @@ if(WIN32 OR (UNIX AND APPLE))
     )
 
     # Bundle our linked dependencies
+    set(LAUNCHER_BUNDLE_DIRECTORIES
+        ${QT_BINS_DIR}
+        ${QT_LIBS_DIR}
+        ${QT_LIBEXECS_DIR}
+    )
+    if(WIN32 AND NOT MSVC)
+        cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH LAUNCHER_TOOLCHAIN_BIN_DIR)
+        if(LAUNCHER_TOOLCHAIN_BIN_DIR)
+            list(PREPEND LAUNCHER_BUNDLE_DIRECTORIES ${LAUNCHER_TOOLCHAIN_BIN_DIR})
+        endif()
+    endif()
+    if(NOT WIN32 OR MSVC OR Launcher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH)
+        list(PREPEND LAUNCHER_BUNDLE_DIRECTORIES ${CMAKE_SYSTEM_LIBRARY_PATH})
+    endif()
     install(
         RUNTIME_DEPENDENCY_SET LAUNCHER_DEPENDENCY_SET
         COMPONENT bundle
         DIRECTORIES
-            ${CMAKE_SYSTEM_LIBRARY_PATH}
-            ${QT_LIBS_DIR}
-            ${QT_LIBEXECS_DIR}
+            ${LAUNCHER_BUNDLE_DIRECTORIES}
         PRE_EXCLUDE_REGEXES
             "^(api-ms-win|ext-ms)-.*\\.dll$"
             # FIXME: Why aren't these caught by the below regex???

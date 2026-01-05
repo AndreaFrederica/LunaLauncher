@@ -52,9 +52,9 @@ mingw-w64-ucrt-x86_64-clang-tools-extra = "*"
 
 [tasks]
 # 常用构建脚本
-configure = "cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install-release -DENABLE_LTO=ON"
-configure_debug = "cmake -S . -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install-debug -DENABLE_LTO=OFF"
-configure_debug_ignore = "cmake -S . -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install-debug -DENABLE_LTO=OFF -DCMAKE_CXX_FLAGS_DEBUG=-s -DCMAKE_C_FLAGS_DEBUG=-s"
+configure = "cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install-release -DENABLE_LTO=ON -DLauncher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH=OFF"
+configure_debug = "cmake -S . -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install-debug -DENABLE_LTO=OFF -DLauncher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH=OFF"
+configure_debug_ignore = "cmake -S . -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install-debug -DENABLE_LTO=OFF -DLauncher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH=OFF -DCMAKE_CXX_FLAGS_DEBUG=-s -DCMAKE_C_FLAGS_DEBUG=-s"
 
 build = "cmake --build build-release --parallel"
 build_debug = "cmake --build build-debug --parallel"

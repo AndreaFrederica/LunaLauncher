@@ -104,6 +104,7 @@
                 "CMAKE_C_COMPILER": "${sourceDir}/.msys2/msys64/ucrt64/bin/gcc.exe",
                 "CMAKE_CXX_COMPILER": "${sourceDir}/.msys2/msys64/ucrt64/bin/g++.exe",
                 "CMAKE_RC_COMPILER": "${sourceDir}/.msys2/msys64/ucrt64/bin/windres.exe",
+                "Launcher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH": "OFF",
                 "ENABLE_LTO": "OFF",
                 "CMAKE_CXX_FLAGS_DEBUG": "-s",
                 "CMAKE_C_FLAGS_DEBUG": "-s"

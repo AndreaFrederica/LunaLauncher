@@ -1,0 +1,68 @@
+name: Windows MSVC Build
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+jobs:
+  build-msvc:
+    runs-on: windows-2022
+    env:
+      BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+      QT_CMAKE_PREFIX: third_party/qt/6.10.1/msvc2022_64/lib/cmake
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+          vsversion: 2022
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install Python deps
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install aqtinstall
+      - name: Install Qt
+        shell: pwsh
+        run: |
+          python scripts/install_qt.py
+      - name: Install vcpkg
+        shell: pwsh
+        run: |
+          python scripts/install_vcpkg.py
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_INSTALL_PREFIX=install `
+            -DENABLE_LTO=ON `
+            -DCMAKE_PREFIX_PATH=$env:QT_CMAKE_PREFIX `
+            -DCMAKE_TOOLCHAIN_FILE=third_party/vcpkg/scripts/buildsystems/vcpkg.cmake
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config $env:BUILD_TYPE -j
+      - name: Install
+        shell: pwsh
+        run: |
+          cmake --install build --config $env:BUILD_TYPE
+      - name: Install portable component
+        shell: pwsh
+        run: |
+          cmake --install build --component portable --config $env:BUILD_TYPE --prefix install-portable
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Windows-MSVC-${{ github.sha }}-${{ inputs.build_type || 'Release' }}
+          path: |
+            install/**
+            install-portable/**

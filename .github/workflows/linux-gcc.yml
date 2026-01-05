@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: true
-      - name: Install host dependencies
+      - name: Install host dependencies and Qt (system)
         shell: bash
         run: |
           sudo apt-get -y update
@@ -24,7 +24,9 @@ jobs:
             dpkg-dev \
             ninja-build extra-cmake-modules pkg-config scdoc \
             cmark gamemode-dev libarchive-dev libcmark-dev libqrencode-dev zlib1g-dev \
-            libxcb-cursor-dev
+            libxcb-cursor-dev \
+            openjdk-17-jdk \
+            qt6-base-dev qt6-base-dev-tools qt6-multimedia-dev qt6-networkauth-dev qt6-websockets-dev qt6-svg-dev qt6-5compat-dev qt6-imageformats-dev qt6-translations-dev qt6-declarative-dev
       - name: Install tomlplusplus (x86_64 workaround)
         if: ${{ runner.arch != 'ARM64' }}
         shell: bash
@@ -41,37 +43,12 @@ jobs:
         shell: bash
         run: |
           sudo apt-get -y install libtomlplusplus-dev
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-      - name: Install Python deps
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install aqtinstall
-      - name: Install Qt
-        shell: bash
-        run: |
-          python scripts/install_qt.py
-      - name: Discover Qt CMake prefix
-        id: qt-prefix
-        shell: bash
-        run: |
-          QT_PREFIX="$(ls -d third_party/qt/6.10.1/*/lib/cmake | head -n 1 || true)"
-          if [ -z "$QT_PREFIX" ] || [ ! -d "$QT_PREFIX" ]; then
-            echo "::error::Failed to locate Qt CMake prefix under third_party/qt/6.10.1/*/lib/cmake"
-            ls -la third_party/qt/6.10.1 || true
-            exit 1
-          fi
-          echo "QT_CMAKE_PREFIX=$QT_PREFIX" >> "$GITHUB_ENV"
       - name: Configure
         shell: bash
         run: |
           cmake -S . -B build -G "Ninja Multi-Config" \
             -DCMAKE_INSTALL_PREFIX=install \
-            -DENABLE_LTO=ON \
-            -DCMAKE_PREFIX_PATH="$QT_CMAKE_PREFIX"
+            -DENABLE_LTO=ON
       - name: Build
         shell: bash
         run: |

@@ -34,7 +34,7 @@ jobs:
           host: 'linux'
           target: 'desktop'
           arch: 'linux_gcc_64'
-          modules: 'qtwebsockets qtnetworkauth qtmultimedia qttools qtsvg qtimageformats qt5compat qtlocation'
+          modules: 'qtwebsockets qtnetworkauth qtmultimedia qtimageformats qt5compat qtlocation'
           install-deps: 'true'
           cache: 'true'
       - name: Install tomlplusplus (x86_64 workaround)

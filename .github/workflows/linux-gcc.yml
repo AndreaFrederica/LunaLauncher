@@ -1,0 +1,82 @@
+name: Linux GCC Build
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    env:
+      BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install host dependencies and Qt (system)
+        shell: bash
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install \
+            dpkg-dev \
+            ninja-build extra-cmake-modules pkg-config scdoc \
+            cmark gamemode-dev libarchive-dev libcmark-dev libqrencode-dev zlib1g-dev \
+            libxcb-cursor-dev \
+            libdbus-1-dev \
+            openjdk-17-jdk
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.1'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'gcc_64'
+          modules: 'qtwebsockets qtnetworkauth qtmultimedia qttools qtsvg qtimageformats'
+          install-deps: 'true'
+          cache: 'true'
+      - name: Install tomlplusplus (x86_64 workaround)
+        if: ${{ runner.arch != 'ARM64' }}
+        shell: bash
+        run: |
+          deb_arch="$(dpkg-architecture -q DEB_HOST_ARCH)"
+          curl -Lo libtomlplusplus-dev.deb http://mirrors.kernel.org/ubuntu/pool/universe/t/tomlplusplus/libtomlplusplus-dev_3.4.0+ds-0.2build1_"$deb_arch".deb
+          curl -Lo libtomlplusplus3t64.deb http://mirrors.kernel.org/ubuntu/pool/universe/t/tomlplusplus/libtomlplusplus3t64_3.4.0+ds-0.2build1_"$deb_arch".deb
+          sudo dpkg -i libtomlplusplus3t64.deb
+          sudo dpkg -i libtomlplusplus-dev.deb
+          rm *.deb
+          sudo apt-get install -f
+      - name: Install tomlplusplus (ARM64)
+        if: ${{ runner.arch == 'ARM64' }}
+        shell: bash
+        run: |
+          sudo apt-get -y install libtomlplusplus-dev
+      - name: Configure
+        shell: bash
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}/lib/cmake
+        run: |
+          cmake -S . -B build -G "Ninja Multi-Config" \
+            -DCMAKE_INSTALL_PREFIX=install \
+            -DENABLE_LTO=ON
+      - name: Build
+        shell: bash
+        run: |
+          cmake --build build --config "$BUILD_TYPE" -j
+      - name: Install
+        shell: bash
+        run: |
+          cmake --install build --config "$BUILD_TYPE"
+      - name: Install portable component
+        shell: bash
+        run: |
+          cmake --install build --component portable --config "$BUILD_TYPE" --prefix install-portable
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Linux-GCC-${{ github.sha }}-${{ inputs.build_type || 'Release' }}
+          path: |
+            install/**
+            install-portable/**

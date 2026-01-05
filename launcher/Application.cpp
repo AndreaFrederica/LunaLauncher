@@ -409,7 +409,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 #elif defined(Q_OS_MAC)
         potentialFontPaths << FS::PathCombine(binPath, "../Resources", "fonts");
 #else
-        potentialFontPaths << FS::PathCombine(m_rootPath, "share", BuildConfig.LAUNCHER_NAME, "resources", "fonts");
+        potentialFontPaths << FS::PathCombine(FS::PathCombine(m_rootPath, "share", BuildConfig.LAUNCHER_NAME), "resources", "fonts");
         potentialFontPaths << FS::PathCombine(m_rootPath, "resources", "fonts");
 #endif
 

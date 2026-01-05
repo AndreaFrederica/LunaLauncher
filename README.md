@@ -14,6 +14,7 @@
 <p align="center">
   Luna Launcher is a custom launcher for Minecraft that allows you to manage multiple Minecraft installations with ease.<br />
   <br />
+  Visit our website at <a href="https://lunalauncher.sirrus.cc">lunalauncher.sirrus.cc</a> for more information.<br />
   This project is an independent <b>fork</b> of Prism Launcher and is <b>not</b> endorsed by or affiliated with the Prism Launcher project.
   <br />
   It improves accessibility by supporting community-maintained mirror APIs such as <b>BMCLAPI</b>.
@@ -22,6 +23,12 @@
 ---
 
 ## Features
+
+> **Note:** Luna is an enhanced fork of Prism Launcher, adding extra features on top of Prism's foundation while maintaining full compatibility with Prism Launcher instances and functionality.
+>
+> We welcome developers to backport Luna's features to the upstream Prism Launcher. Luna does not proactively submit PRs due to limited developer time—all Luna maintainers are hobbyist developers who also maintain other open source projects. If you're interested in contributing, please reach out to us!
+
+- **Server Management (In Development)**: Manage Minecraft server instances directly from the launcher, including downloading, configuring, and managing server JARs
 - **P2P Multiplayer**: Built-in support for [Terracotta](https://github.com/burningtnt/Terracotta) and [YukariConnect](https://github.com/ElicaseTech/YukariConnect) - play with friends without port forwarding or complex network setup (YukariConnect is intended as an alternative to the AGPL-licensed Terracotta and can be provided as a standalone component)
 - **Mirror API Support**: Built-in support for BMCLAPI and other community mirrors for faster downloads in China
 - **Fluent Themes**: Built-in Fluent Dark/Light themes and icon resources

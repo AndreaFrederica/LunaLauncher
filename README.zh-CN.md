@@ -12,7 +12,10 @@
 </p>
 
 <p align="center">
-  Luna Launcher 是一个自定义的 Minecraft 启动器，让你可以轻松管理多个 Minecraft 安装。<br />
+  Luna Launcher 是一个自定义的 Minecraft 启动器，让你可以轻松管理多个 Minecraft 安装。
+  <br />
+  访问我们的官网 [lunalauncher.sirrus.cc](https://lunalauncher.sirrus.cc) 了解更多信息。
+  <br />
   <br />
   本项目是 Prism Launcher 的独立 <b>分支</b>，<b>未被</b> Prism Launcher 项目认可或与其关联。
   <br />
@@ -23,6 +26,11 @@
 
 ## 特性
 
+> **注意：** Luna 是 Prism Launcher 的增强分支，在 Prism 的基础上额外增加了更多功能，同时保持与 Prism Launcher 实例和功能的完全兼容。
+>
+> 我们欢迎开发者将 Luna 的功能反向移植到上游 Prism Launcher。Luna 没有主动提交 PR 是因为开发者时间有限——Luna 的维护者全是业余开发者，同时还需要维护其他开源项目。如果您有兴趣参与开发，请随时联系我们！
+
+- **服务端管理（开发中）**：直接从启动器管理 Minecraft 服务端实例，包括下载、配置和管理服务端 JAR 文件
 - **P2P 联机**：内置 [Terracotta](https://github.com/burningtnt/Terracotta) P2P 联机功能 - 与朋友一起游戏，无需端口映射或复杂的网络配置
 - **YukariConnect 联机**：内置支持 [YukariConnect](https://github.com/ElicaseTech/YukariConnect) 作为 P2P 联机服务（YukariConnect 旨在作为使用 AGPL 许可的 Terracotta 的替代实现，也可作为独立组件提供）
 - **镜像 API 支持**：内置支持 BMCLAPI 和其他社区镜像，在中国地区下载更快

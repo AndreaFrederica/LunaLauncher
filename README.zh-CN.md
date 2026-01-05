@@ -16,6 +16,8 @@
   <br />
   访问我们的官网 [lunalauncher.sirrus.cc](https://lunalauncher.sirrus.cc) 了解更多信息。
   <br />
+  开发版本可以在 <a href="https://github.com/AndreaFrederica/LunaLauncher/actions">GitHub Actions</a> 下载。
+  <br />
   <br />
   本项目是 Prism Launcher 的独立 <b>分支</b>，<b>未被</b> Prism Launcher 项目认可或与其关联。
   <br />

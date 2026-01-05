@@ -15,6 +15,8 @@
   Luna Launcher is a custom launcher for Minecraft that allows you to manage multiple Minecraft installations with ease.<br />
   <br />
   Visit our website at <a href="https://lunalauncher.sirrus.cc">lunalauncher.sirrus.cc</a> for more information.<br />
+  <br />
+  Development builds are available on <a href="https://github.com/AndreaFrederica/LunaLauncher/actions">GitHub Actions</a>.<br />
   This project is an independent <b>fork</b> of Prism Launcher and is <b>not</b> endorsed by or affiliated with the Prism Launcher project.
   <br />
   It improves accessibility by supporting community-maintained mirror APIs such as <b>BMCLAPI</b>.

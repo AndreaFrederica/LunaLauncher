@@ -262,7 +262,7 @@ bool JSResourceAPI::loadMetadata()
 
     // 读取 supportedTypes 数组
     JSValue typesArray = JS_GetPropertyStr(m_context, metadataObj, "supportedTypes");
-    if (JS_IsArray(m_context, typesArray)) {
+    if (JS_IsArray(typesArray)) {
         JSValue lengthVal = JS_GetPropertyStr(m_context, typesArray, "length");
         uint32_t length;
         if (JS_ToUint32(m_context, &length, lengthVal) == 0) {
@@ -656,7 +656,7 @@ auto JSResourceAPI::getSortingMethods() const -> QList<ResourceAPI::SortingMetho
     QList<ResourceAPI::SortingMethod> methods;
 
     JSValue result = callJSFunction("getSortingMethods", 0, nullptr);
-    if (!JS_IsUndefined(result) && JS_IsArray(m_context, result)) {
+    if (!JS_IsUndefined(result) && JS_IsArray(result)) {
         // 解析排序方法数组
         // TODO: 实现完整的数组解析
         JS_FreeValue(m_context, result);

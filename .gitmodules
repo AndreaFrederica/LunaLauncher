@@ -13,3 +13,6 @@
 [submodule "website"]
 	path = website
 	url = https://github.com/AndreaFrederica/LunaLauncher_webpage.git
+[submodule "libraries/quickjs-ng"]
+	path = libraries/quickjs-ng
+	url = https://github.com/AndreaFrederica/quickjs-ng.git

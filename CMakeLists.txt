@@ -501,7 +501,7 @@ add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
 add_subdirectory(libraries/murmur2) # Hash for usage with the CurseForge API
 add_subdirectory(libraries/qdcss) # css parser
 add_subdirectory(libraries/simplewebp) # WebP image decoder
-add_subdirectory(libraries/quickjs) # JavaScript engine
+add_subdirectory(libraries/quickjs-ng) # JavaScript engine
 add_subdirectory(libraries/qtermwidget)
 
 ############################### Built Artifacts ###############################

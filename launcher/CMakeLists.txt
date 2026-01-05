@@ -243,6 +243,8 @@ set(MINECRAFT_SOURCES
     minecraft/online/Terracotta.h
     minecraft/online/TerracottaDownload.cpp
     minecraft/online/TerracottaDownload.h
+    minecraft/online/TerracottaReleaseUtils.cpp
+    minecraft/online/TerracottaReleaseUtils.h
     minecraft/online/YukariConnect.cpp
     minecraft/online/YukariConnect.h
     minecraft/online/YukariConnectDownload.cpp

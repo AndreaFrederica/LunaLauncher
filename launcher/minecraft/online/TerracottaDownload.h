@@ -53,5 +53,6 @@ class TerracottaDownload : public Task {
     QString m_metadataPath;
     QString m_version;
     bool m_useMirror;
+    bool m_isArchive = false;
     QJsonObject m_metadataObj;
 };

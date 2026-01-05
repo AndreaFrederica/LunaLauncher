@@ -24,9 +24,22 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QTemporaryDir>
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "MMCZip.h"
+#include "TerracottaReleaseUtils.h"
+
+namespace {
+#ifdef Q_OS_WIN32
+constexpr auto kTerracottaOs = TerracottaReleaseUtils::Os::Windows;
+#elif defined(Q_OS_MACOS)
+constexpr auto kTerracottaOs = TerracottaReleaseUtils::Os::MacOS;
+#else
+constexpr auto kTerracottaOs = TerracottaReleaseUtils::Os::Linux;
+#endif
+}
 
 TerracottaDownload::TerracottaDownload(bool useMirror, QObject* parent) : Task(parent), m_useMirror(useMirror)
 {
@@ -96,58 +109,16 @@ void TerracottaDownload::downloadInfoFinished()
     const QJsonObject obj = doc.object();
     m_version = obj["tag_name"].toString();
 
-    // Get the download URL for the current platform
     QString exeDownloadUrl;
 
     const QJsonArray assets = obj["assets"].toArray();
-    for (const QJsonValue& assetVal : assets) {
-        const QJsonObject asset = assetVal.toObject();
-        const QString name = asset["name"].toString();
-
-        // Match platform-specific files
-#ifdef Q_OS_WIN32
-        if (name.contains("windows") && name.endsWith(".exe")) {
-            // Prefer x86_64, fallback to arm64
-            if (name.contains("x86_64")) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-                break;
-            } else if (name.contains("arm64") && exeDownloadUrl.isEmpty()) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-            }
-        }
-#elif defined(Q_OS_MACOS)
-        if (name.contains("macos") && !name.endsWith(".pkg") && !name.endsWith(".tar.gz")) {
-            // Prefer arm64 (Apple Silicon), fallback to x86_64
-            if (name.contains("arm64")) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-                break;
-            } else if (name.contains("x86_64") && exeDownloadUrl.isEmpty()) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-            }
-        }
-#else
-        if (name.contains("linux") && !name.endsWith(".tar.gz")) {
-            // Prefer x86_64, then fallback to other architectures
-            if (name.contains("x86_64")) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-                break;
-            } else if (name.contains("arm64") && exeDownloadUrl.isEmpty()) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-            } else if (name.contains("loongarch64") && exeDownloadUrl.isEmpty()) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-            } else if (name.contains("riscv64") && exeDownloadUrl.isEmpty()) {
-                exeDownloadUrl = asset["browser_download_url"].toString();
-            }
-        }
-#endif
-    }
+    exeDownloadUrl = TerracottaReleaseUtils::pickDownloadUrl(assets, kTerracottaOs);
 
     if (exeDownloadUrl.isEmpty()) {
         emitFailed(tr("Could not find Terracotta download for current platform"));
         return;
     }
 
-    // Save metadata for later reference
     m_metadataObj = obj;
 
     startExecutableDownload(exeDownloadUrl, m_version);
@@ -157,8 +128,9 @@ void TerracottaDownload::startExecutableDownload(const QString& url, const QStri
 {
     setStatus(tr("Downloading Terracotta (%1)...").arg(version));
 
-    // Ensure parent directory exists
     QDir().mkpath(QFileInfo(m_exePath).absolutePath());
+
+    m_isArchive = TerracottaReleaseUtils::isArchiveUrl(url);
 
     QNetworkRequest request((QUrl(url)));
     request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
@@ -186,28 +158,60 @@ void TerracottaDownload::downloadExecutableFinished()
     m_exeReply->deleteLater();
     m_exeReply = nullptr;
 
-    // Write to file
-    QFile file(m_exePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        emitFailed(tr("Failed to open Terracotta for writing: %1").arg(file.errorString()));
-        return;
+    if (m_isArchive) {
+        QTemporaryDir tempDir;
+        if (!tempDir.isValid()) {
+            emitFailed(tr("Failed to create temporary directory"));
+            return;
+        }
+        QString archivePath = FS::PathCombine(tempDir.path(), "download.archive");
+        QFile file(archivePath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            emitFailed(tr("Failed to open temporary file for writing: %1").arg(file.errorString()));
+            return;
+        }
+        file.write(exeData);
+        file.close();
+
+        QString extractPath = FS::PathCombine(tempDir.path(), "extracted");
+        QDir().mkpath(extractPath);
+
+        if (!MMCZip::extractDir(archivePath, extractPath)) {
+            emitFailed(tr("Failed to extract Terracotta archive"));
+            return;
+        }
+
+        const QString foundExePath = TerracottaReleaseUtils::findExecutableInDir(extractPath, kTerracottaOs);
+        if (foundExePath.isEmpty()) {
+            emitFailed(tr("Could not find Terracotta executable in the downloaded archive"));
+            return;
+        }
+
+        QFile::remove(m_exePath);
+        if (!QFile::copy(foundExePath, m_exePath)) {
+            emitFailed(tr("Failed to move Terracotta executable to target location"));
+            return;
+        }
+    } else {
+        QFile file(m_exePath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            emitFailed(tr("Failed to open Terracotta for writing: %1").arg(file.errorString()));
+            return;
+        }
+
+        file.write(exeData);
+        file.close();
     }
 
-    file.write(exeData);
-    file.close();
-
-    // Make executable on Unix-like systems
 #ifndef Q_OS_WIN32
     QFile::setPermissions(m_exePath, QFile::permissions(m_exePath) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);
 #endif
 
-    // Save metadata
     if (!m_version.isEmpty()) {
         QJsonObject metadataObj;
         metadataObj["version"] = m_version;
         metadataObj["download_time"] = QDateTime::currentDateTime().toString(Qt::ISODate);
 
-        // Add relevant info from the release metadata
         if (!m_metadataObj.isEmpty()) {
             metadataObj["tag_name"] = m_metadataObj["tag_name"].toString();
             metadataObj["html_url"] = m_metadataObj["html_url"].toString();

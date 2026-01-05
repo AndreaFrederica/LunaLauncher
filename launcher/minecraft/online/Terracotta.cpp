@@ -43,6 +43,8 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "MMCZip.h"
+#include "TerracottaReleaseUtils.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -57,6 +59,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
 
@@ -65,6 +68,16 @@
 #endif
 
 Terracotta* Terracotta::s_instance = nullptr;
+
+namespace {
+#ifdef Q_OS_WIN32
+constexpr auto kTerracottaOs = TerracottaReleaseUtils::Os::Windows;
+#elif defined(Q_OS_MACOS)
+constexpr auto kTerracottaOs = TerracottaReleaseUtils::Os::MacOS;
+#else
+constexpr auto kTerracottaOs = TerracottaReleaseUtils::Os::Linux;
+#endif
+}
 
 namespace TerracottaTypes {
 
@@ -321,51 +334,7 @@ QString Terracotta::downloadLatest(bool useMirror)
 
     expectedVersion = obj["tag_name"].toString();
     const QJsonArray assets = obj["assets"].toArray();
-    for (const QJsonValue& assetVal : assets) {
-        const QJsonObject asset = assetVal.toObject();
-        const QString name = asset["name"].toString();
-
-        // Match platform-specific files
-        // Format: terracotta-{version}-{platform}-{arch}
-        // Windows: terracotta-*-windows-{arch}.exe
-        // Linux: terracotta-*-linux-{arch}
-        // macOS: terracotta-*-macos-{arch}
-#ifdef Q_OS_WIN32
-        if (name.contains("windows") && name.endsWith(".exe")) {
-            // Prefer x86_64, fallback to arm64
-            if (name.contains("x86_64")) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-                break;
-            } else if (name.contains("arm64") && assetDownloadUrl.isEmpty()) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-            }
-        }
-#elif defined(Q_OS_MACOS)
-        if (name.contains("macos") && !name.endsWith(".pkg") && !name.endsWith(".tar.gz")) {
-            // Prefer arm64 (Apple Silicon), fallback to x86_64
-            if (name.contains("arm64")) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-                break;
-            } else if (name.contains("x86_64") && assetDownloadUrl.isEmpty()) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-            }
-        }
-#else
-        if (name.contains("linux") && !name.endsWith(".tar.gz")) {
-            // Prefer x86_64, then fallback to other architectures
-            if (name.contains("x86_64")) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-                break;
-            } else if (name.contains("arm64") && assetDownloadUrl.isEmpty()) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-            } else if (name.contains("loongarch64") && assetDownloadUrl.isEmpty()) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-            } else if (name.contains("riscv64") && assetDownloadUrl.isEmpty()) {
-                assetDownloadUrl = asset["browser_download_url"].toString();
-            }
-        }
-#endif
-    }
+    assetDownloadUrl = TerracottaReleaseUtils::pickDownloadUrl(assets, kTerracottaOs);
 
     if (assetDownloadUrl.isEmpty()) {
         qWarning() << "Could not find Terracotta download for current platform";
@@ -387,15 +356,51 @@ QString Terracotta::downloadLatest(bool useMirror)
     const QByteArray exeData = reply->readAll();
     reply->deleteLater();
 
-    // Write to cache
-    QFile file(cachePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qWarning() << "Failed to open Terracotta for writing:" << file.errorString();
-        return QString();
-    }
+    if (TerracottaReleaseUtils::isArchiveUrl(assetDownloadUrl)) {
+        QTemporaryDir tempDir;
+        if (!tempDir.isValid()) {
+            qWarning() << "Failed to create temporary directory";
+            return QString();
+        }
 
-    file.write(exeData);
-    file.close();
+        const QString archivePath = FS::PathCombine(tempDir.path(), "download.archive");
+        QFile file(archivePath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning() << "Failed to open temporary file for writing:" << file.errorString();
+            return QString();
+        }
+        file.write(exeData);
+        file.close();
+
+        const QString extractPath = FS::PathCombine(tempDir.path(), "extracted");
+        QDir().mkpath(extractPath);
+
+        if (!MMCZip::extractDir(archivePath, extractPath)) {
+            qWarning() << "Failed to extract Terracotta archive";
+            return QString();
+        }
+
+        const QString foundExePath = TerracottaReleaseUtils::findExecutableInDir(extractPath, kTerracottaOs);
+        if (foundExePath.isEmpty()) {
+            qWarning() << "Could not find Terracotta executable in archive";
+            return QString();
+        }
+
+        QFile::remove(cachePath);
+        if (!QFile::copy(foundExePath, cachePath)) {
+            qWarning() << "Failed to move Terracotta executable to cache path";
+            return QString();
+        }
+    } else {
+        QFile file(cachePath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning() << "Failed to open Terracotta for writing:" << file.errorString();
+            return QString();
+        }
+
+        file.write(exeData);
+        file.close();
+    }
 
     // Make executable on Unix-like systems
 #ifndef Q_OS_WIN32

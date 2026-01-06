@@ -2,6 +2,18 @@ name: Build Linux+Windows and Publish Release
 on:
   workflow_dispatch:
     inputs:
+      enable_linux_gcc:
+        description: Enable Linux GCC build
+        type: boolean
+        default: true
+      enable_windows_msvc:
+        description: Enable Windows MSVC build
+        type: boolean
+        default: true
+      enable_windows_gcc:
+        description: Enable Windows GCC (MSYS2) build
+        type: boolean
+        default: false
       build_type:
         description: Build type (Release/Debug)
         type: string
@@ -18,6 +30,7 @@ permissions:
   contents: write
 jobs:
   build_linux:
+    if: ${{ inputs.enable_linux_gcc }}
     uses: ./.github/workflows/linux-gcc.yml
     with:
       build_type: ${{ inputs.build_type || 'Release' }}
@@ -25,16 +38,27 @@ jobs:
       prerelease: ${{ inputs.prerelease }}
       version: ${{ inputs.version }}
   build_windows:
+    if: ${{ inputs.enable_windows_msvc }}
     uses: ./.github/workflows/windows-msvc.yml
     with:
       build_type: ${{ inputs.build_type || 'Release' }}
       publish_release: false
       prerelease: ${{ inputs.prerelease }}
       version: ${{ inputs.version }}
+  build_windows_gcc:
+    if: ${{ inputs.enable_windows_gcc }}
+    uses: ./.github/workflows/windows-gcc.yml
+    with:
+      build_type: ${{ inputs.build_type || 'Release' }}
+      publish_release: false
+      prerelease: ${{ inputs.prerelease }}
+      version: ${{ inputs.version }}
   publish:
+    if: ${{ always() }}
     needs:
       - build_linux
       - build_windows
+      - build_windows_gcc
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -61,20 +85,51 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v7
       - name: Package artifacts
+        id: package
         shell: bash
         run: |
           version="${{ steps.meta.outputs.version }}"
           build_type="${{ inputs.build_type || 'Release' }}"
 
-          linux_dir="$(ls -d Linux-GCC-* | head -n 1)"
-          test -n "$linux_dir"
-          tar -czf "PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz" -C "$linux_dir" install
-          tar -czf "PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz" -C "$linux_dir" install-portable
+          files=()
 
-          windows_dir="$(ls -d Windows-MSVC-* | head -n 1)"
-          test -n "$windows_dir"
-          (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-${version}-${build_type}.zip" install)
-          (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-Portable-${version}-${build_type}.zip" install-portable)
+          if [ "${{ inputs.enable_linux_gcc }}" = "true" ]; then
+            linux_dir="$(ls -d Linux-GCC-* | head -n 1)"
+            test -n "$linux_dir"
+            tar -czf "PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz" -C "$linux_dir" install
+            tar -czf "PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz" -C "$linux_dir" install-portable
+            files+=("PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz")
+            files+=("PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz")
+          fi
+
+          if [ "${{ inputs.enable_windows_msvc }}" = "true" ]; then
+            windows_dir="$(ls -d Windows-MSVC-* | head -n 1)"
+            test -n "$windows_dir"
+            (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-${version}-${build_type}.zip" install)
+            (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-Portable-${version}-${build_type}.zip" install-portable)
+            files+=("PrismLauncher-Windows-MSVC-${version}-${build_type}.zip")
+            files+=("PrismLauncher-Windows-MSVC-Portable-${version}-${build_type}.zip")
+          fi
+
+          if [ "${{ inputs.enable_windows_gcc }}" = "true" ]; then
+            windows_gcc_dir="$(ls -d Windows-GCC-* | head -n 1)"
+            test -n "$windows_gcc_dir"
+            (cd "$windows_gcc_dir" && zip -r -9 "../PrismLauncher-Windows-GCC-${version}-${build_type}.zip" install)
+            (cd "$windows_gcc_dir" && zip -r -9 "../PrismLauncher-Windows-GCC-Portable-${version}-${build_type}.zip" install-portable)
+            files+=("PrismLauncher-Windows-GCC-${version}-${build_type}.zip")
+            files+=("PrismLauncher-Windows-GCC-Portable-${version}-${build_type}.zip")
+          fi
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No targets enabled; nothing to publish."
+            exit 1
+          fi
+
+          {
+            echo "files<<EOF"
+            printf "%s\n" "${files[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -83,8 +138,4 @@ jobs:
           name: Prism Launcher ${{ steps.meta.outputs.version }}
           body: ${{ steps.meta.outputs.message }}
           prerelease: ${{ inputs.prerelease }}
-          files: |
-            PrismLauncher-Linux-GCC-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.tar.gz
-            PrismLauncher-Linux-GCC-Portable-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.tar.gz
-            PrismLauncher-Windows-MSVC-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip
-            PrismLauncher-Windows-MSVC-Portable-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip
+          files: ${{ steps.package.outputs.files }}

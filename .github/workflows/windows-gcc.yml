@@ -1,0 +1,152 @@
+name: Windows GCC Build
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+      publish_release:
+        description: Publish artifacts to GitHub Release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+      publish_release:
+        description: Publish artifacts to GitHub Release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+permissions:
+  contents: write
+jobs:
+  build-gcc:
+    runs-on: windows-2022
+    env:
+      BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Cache MSYS2 environment
+        uses: actions/cache@v4
+        id: msys2_cache
+        with:
+          path: .msys2
+          key: msys2-${{ runner.os }}-${{ hashFiles('msys2.lock') }}
+          restore-keys: |
+            msys2-${{ runner.os }}-
+      - name: Bootstrap MSYS2 (tools)
+        if: ${{ steps.msys2_cache.outputs.cache-hit != 'true' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\bootstrap.ps1
+      - name: Configure (Release)
+        if: ${{ env.BUILD_TYPE == 'Release' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 configure -DCMAKE_INSTALL_PREFIX=install
+      - name: Build (Release)
+        if: ${{ env.BUILD_TYPE == 'Release' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 build
+      - name: Install (Release)
+        if: ${{ env.BUILD_TYPE == 'Release' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 install --prefix install
+      - name: Install portable component (Release)
+        if: ${{ env.BUILD_TYPE == 'Release' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 portable --prefix install-portable
+      - name: Configure (Debug)
+        if: ${{ env.BUILD_TYPE == 'Debug' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 configure_debug -DCMAKE_INSTALL_PREFIX=install
+      - name: Build (Debug)
+        if: ${{ env.BUILD_TYPE == 'Debug' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 build_debug
+      - name: Install (Debug)
+        if: ${{ env.BUILD_TYPE == 'Debug' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 install_debug --prefix install
+      - name: Install portable component (Debug)
+        if: ${{ env.BUILD_TYPE == 'Debug' }}
+        shell: pwsh
+        run: |
+          .\tools\msys2\run.ps1 portable_debug --prefix install-portable
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Windows-GCC-${{ github.sha }}-${{ inputs.build_type || 'Release' }}
+          path: |
+            install/**
+            install-portable/**
+      - name: Prepare release metadata
+        id: release_meta
+        if: ${{ inputs.publish_release }}
+        shell: pwsh
+        run: |
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $version = "${{ inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = $shortSha }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $msg = (git log -1 --pretty=%B)
+          "message<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $msg | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Package artifacts for release
+        if: ${{ inputs.publish_release }}
+        shell: pwsh
+        run: |
+          $version = "${{ steps.release_meta.outputs.version }}"
+          $buildType = "${{ inputs.build_type || 'Release' }}"
+          $zip1 = "PrismLauncher-Windows-GCC-$version-$buildType.zip"
+          $zip2 = "PrismLauncher-Windows-GCC-Portable-$version-$buildType.zip"
+          if (Test-Path $zip1) { Remove-Item -Force $zip1 }
+          if (Test-Path $zip2) { Remove-Item -Force $zip2 }
+          Compress-Archive -Path "install\*" -DestinationPath $zip1 -Force
+          Compress-Archive -Path "install-portable\*" -DestinationPath $zip2 -Force
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Prism Launcher ${{ steps.release_meta.outputs.version }}
+          body: ${{ steps.release_meta.outputs.message }}
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            PrismLauncher-Windows-GCC-${{ steps.release_meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip
+            PrismLauncher-Windows-GCC-Portable-${{ steps.release_meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip

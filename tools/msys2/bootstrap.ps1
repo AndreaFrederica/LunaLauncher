@@ -57,6 +57,47 @@ function Format-Rate {
     return ("{0}/s" -f (Format-Bytes -Bytes $BytesPerSecond))
 }
 
+function Try-GetContentLength {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+
+        [int]$TimeoutMs = 5000
+    )
+
+    try {
+        $req = [System.Net.HttpWebRequest]::Create($Url)
+        $req.Method = "HEAD"
+        $req.Timeout = $TimeoutMs
+        $req.ReadWriteTimeout = $TimeoutMs
+        $req.AllowAutoRedirect = $true
+        $resp = $req.GetResponse()
+        $len = [double]$resp.ContentLength
+        $resp.Close()
+        if ($len -gt 0) { return $len }
+    }
+    catch {}
+
+    try {
+        $req = [System.Net.HttpWebRequest]::Create($Url)
+        $req.Method = "GET"
+        $req.Timeout = $TimeoutMs
+        $req.ReadWriteTimeout = $TimeoutMs
+        $req.AllowAutoRedirect = $true
+        $req.AddRange(0, 0)
+        $resp = $req.GetResponse()
+        $cr = $resp.Headers["Content-Range"]
+        $len = [double]$resp.ContentLength
+        $resp.Close()
+
+        if ($cr -and $cr -match '/(\d+)$') { return [double]$Matches[1] }
+        if ($len -gt 0) { return $len }
+    }
+    catch {}
+
+    return 0.0
+}
+
 function Download-FileWithProgress {
     param(
         [Parameter(Mandatory = $true)]
@@ -70,18 +111,25 @@ function Download-FileWithProgress {
 
     Write-Host ">> Starting download: $Url"
 
+    $logStepPercent = 10
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        $logStepPercent = 1
+    }
+
     if (Test-Path $DestinationPath) {
         Remove-Item $DestinationPath -Force
     }
 
     $startTime = [DateTimeOffset]::UtcNow
-    $lastLogThreshold = -10
+    $lastLogThreshold = 0
     $lastLogTime = $startTime
     $lastLogBytes = 0.0
 
     $bitsCmd = Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue
-    if ($bitsCmd) {
+    $useBits = ($bitsCmd -and ($env:GITHUB_ACTIONS -ne "true"))
+    if ($useBits) {
         $job = $null
+        $knownTotal = Try-GetContentLength -Url $Url -TimeoutMs 5000
         try {
             $job = Start-BitsTransfer -Source $Url -Destination $DestinationPath -Asynchronous -ErrorAction Stop
 
@@ -99,7 +147,15 @@ function Download-FileWithProgress {
                     Resume-BitsTransfer -BitsJob $job -ErrorAction SilentlyContinue | Out-Null
                 }
 
-                $total = [double]$job.BytesTotal
+                $total = 0.0
+                if ($knownTotal -gt 0) {
+                    $total = $knownTotal
+                } else {
+                    $rawTotal = $job.BytesTotal
+                    if ($rawTotal -ne [UInt64]::MaxValue) {
+                        $total = [double]$rawTotal
+                    }
+                }
                 $done = [double]$job.BytesTransferred
 
                 $now = [DateTimeOffset]::UtcNow
@@ -108,8 +164,8 @@ function Download-FileWithProgress {
 
                 if ($total -gt 0) {
                     $pct = [int][Math]::Floor(($done / $total) * 100)
-                    $threshold = [int]([Math]::Floor($pct / 10) * 10)
-                    if ($threshold -ge ($lastLogThreshold + 10) -and $threshold -le 100) {
+                    $threshold = [int]([Math]::Floor($pct / $logStepPercent) * $logStepPercent)
+                    if ($threshold -ge $logStepPercent -and $threshold -ge ($lastLogThreshold + $logStepPercent) -and $threshold -le 100) {
                         $speed = ($done - $lastLogBytes) / $dt
                         Write-Host (">> Download {0}% ({1}/{2}) {3}" -f $threshold, (Format-Bytes -Bytes $done), (Format-Bytes -Bytes $total), (Format-Rate -BytesPerSecond $speed))
                         $lastLogThreshold = $threshold

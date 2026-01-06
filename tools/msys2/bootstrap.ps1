@@ -68,6 +68,57 @@ if (-not (Test-Path $bash)) {
         [Net.ServicePointManager]::SecurityProtocol -bor
         [Net.SecurityProtocolType]::Tls12
 
+    $mirrorSetting = Get-TomlValue "mirror"
+    if ($downloadUrl -match '^https?://repo\.msys2\.org/distrib/x86_64/' -or ($baseUrl -match '^https?://repo\.msys2\.org/distrib/x86_64/?$')) {
+        $mirrorHosts = @(
+            "mirror.umd.edu",
+            "mirror.accum.se",
+            "ftp.nluug.nl",
+            "ftp2.osuosl.org",
+            "mirror.internet.asn.au",
+            "mirror.selfnet.de",
+            "mirror.yandex.ru",
+            "mirrors.dotsrc.org",
+            "mirrors.tuna.tsinghua.edu.cn",
+            "mirrors.ustc.edu.cn",
+            "mirror.nju.edu.cn",
+            "mirrors.bfsu.edu.cn",
+            "mirror.clarkson.edu",
+            "distrohub.kyiv.ua",
+            "mirror.archlinux.tw",
+            "us.mirrors.cicku.me",
+            "ca.mirrors.cicku.me"
+        )
+
+        $candidateRoots = New-Object System.Collections.Generic.List[string]
+        if ($mirrorSetting) {
+            $m = $mirrorSetting.Trim()
+            if ($m) {
+                $candidateRoots.Add($m.TrimEnd('/'))
+            }
+        }
+        $candidateRoots.Add("https://repo.msys2.org")
+        foreach ($h in $mirrorHosts) {
+            $candidateRoots.Add(("https://{0}" -f $h))
+            $candidateRoots.Add(("https://{0}/msys2" -f $h))
+        }
+
+        $downloadPath = $downloadUrl -replace '^https?://[^/]+', ''
+        $candidateUrls = $candidateRoots |
+            ForEach-Object { ("{0}{1}" -f $_, $downloadPath) } |
+            Select-Object -Unique
+
+        Write-Host ">> Probing mirrors for fastest MSYS2 base download..."
+        $pickedResult = & (Join-Path $PSScriptRoot "mirror-probe.ps1") -DownloadUrl $downloadUrl -Mirror $mirrorSetting -TimeoutMs 2000
+        $picked = $pickedResult.download_url
+        if ($picked) {
+            $downloadUrl = $picked
+            Write-Host ">> Selected fastest mirror: $downloadUrl"
+        } else {
+            Write-Host ">> Mirror probing failed; using default: $downloadUrl"
+        }
+    }
+
     # 如果之前有残留，先删掉
     if (Test-Path $archive) {
         Remove-Item $archive -Force

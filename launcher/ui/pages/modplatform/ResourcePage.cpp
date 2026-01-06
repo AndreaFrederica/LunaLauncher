@@ -45,6 +45,7 @@
 #include <StringUtils.h>
 #include <QDesktopServices>
 #include <QKeyEvent>
+#include <QDebug>
 
 #include "Markdown.h"
 
@@ -306,20 +307,32 @@ void ResourcePage::versionListUpdated(const QModelIndex& index)
 
                 m_ui->versionSelectionBox->addItem(versionText, QVariant(i));
             }
+            if (m_ui->versionSelectionBox->count() > 0) {
+                m_ui->versionSelectionBox->setCurrentIndex(0);
+                qDebug() << "[Select] Defaulting version index to 0 for pack" << current_pack->name
+                         << "data=" << m_ui->versionSelectionBox->itemData(0).toInt();
+            }
         }
         if (m_ui->versionSelectionBox->count() == 0) {
             m_ui->versionSelectionBox->addItem(tr("No valid version found."), QVariant(-1));
             m_ui->resourceSelectionButton->setText(tr("Cannot select invalid version :("));
+            qDebug() << "[Select] No valid versions for current pack";
         }
 
         if (m_enableQueue.contains(index.row())) {
             m_enableQueue.remove(index.row());
-            onResourceToggle(index);
+            if (m_ui->versionSelectionBox->count() > 0 && m_ui->versionSelectionBox->itemData(0).toInt() >= 0)
+                onResourceToggle(index);
+            else
+                updateSelectionButton();
         } else
             updateSelectionButton();
     } else if (m_enableQueue.contains(index.row())) {
         m_enableQueue.remove(index.row());
-        onResourceToggle(index);
+        if (m_ui->versionSelectionBox->count() > 0 && m_ui->versionSelectionBox->itemData(0).toInt() >= 0)
+            onResourceToggle(index);
+        else
+            updateSelectionButton();
     }
 }
 
@@ -357,6 +370,7 @@ void ResourcePage::onSelectionChanged(QModelIndex curr, [[maybe_unused]] QModelI
 void ResourcePage::onVersionSelectionChanged(int index)
 {
     m_selectedVersionIndex = m_ui->versionSelectionBox->itemData(index).toInt();
+    qDebug() << "[Select] Version selection changed index=" << index << "selectedVersionIndex=" << m_selectedVersionIndex;
     updateSelectionButton();
 }
 
@@ -394,15 +408,20 @@ void ResourcePage::onResourceSelected()
         return;
 
     auto current_pack = getCurrentPack();
-    if (!current_pack || !current_pack->versionsLoaded || current_pack->versions.size() < m_selectedVersionIndex)
+    if (!current_pack || !current_pack->versionsLoaded || m_selectedVersionIndex >= current_pack->versions.size())
         return;
 
     auto& version = current_pack->versions[m_selectedVersionIndex];
     Q_ASSERT(!version.downloadUrl.isNull());
+    qDebug() << "[Select] onResourceSelected pack=" << current_pack->name << "versionIdx=" << m_selectedVersionIndex
+             << "version=" << version.version;
     if (version.is_currently_selected)
         removeResourceFromDialog(current_pack->name);
     else
         addResourceToDialog(current_pack, version);
+
+    // Update the pack selection status
+    current_pack->selectVersion(m_selectedVersionIndex);
 
     // Save the modified pack (and prevent warning in release build)
     [[maybe_unused]] bool set = setCurrentPack(current_pack);
@@ -416,26 +435,56 @@ void ResourcePage::onResourceSelected()
 
 void ResourcePage::onResourceToggle(const QModelIndex& index)
 {
+    // Prevent recursion
+    static bool isRunning = false;
+    if (isRunning)
+        return;
+    isRunning = true;
+
     const bool isSelected = index == m_ui->packView->currentIndex();
     auto pack = m_model->data(index, Qt::UserRole).value<ModPlatform::IndexedPack::Ptr>();
 
+    if (!pack) {
+        qDebug() << "[Toggle] Invalid pack at row" << index.row();
+        isRunning = false;
+        return;
+    }
+
+    qDebug() << "[Toggle] row=" << index.row() << "isSelected=" << isSelected << "versionsLoaded=" << pack->versionsLoaded
+             << "pack=" << pack->name;
     if (pack->versionsLoaded) {
         if (pack->isAnyVersionSelected())
             removeResourceFromDialog(pack->name);
         else {
-            auto version = std::find_if(pack->versions.begin(), pack->versions.end(), [this](const ModPlatform::IndexedVersion& version) {
-                return m_model->checkVersionFilters(version);
-            });
+            ModPlatform::IndexedVersion* chosen = nullptr;
+            int chosenIndex = -1;
+            if (m_selectedVersionIndex >= 0 && m_selectedVersionIndex < pack->versions.size()) {
+                auto& v = pack->versions[m_selectedVersionIndex];
+                if (m_model->checkVersionFilters(v))
+                    { chosen = &v; chosenIndex = m_selectedVersionIndex; }
+            }
+            if (!chosen) {
+                auto it = std::find_if(pack->versions.begin(), pack->versions.end(), [this](const ModPlatform::IndexedVersion& version) {
+                    return m_model->checkVersionFilters(version);
+                });
+                if (it != pack->versions.end())
+                    { chosen = &(*it); chosenIndex = static_cast<int>(std::distance(pack->versions.begin(), it)); }
+            }
 
-            if (version == pack->versions.end()) {
+            if (!chosen) {
                 auto errorMessage = new QMessageBox(
                     QMessageBox::Warning, tr("No versions available"),
                     tr("No versions for '%1' are available.\nThe author likely blocked third-party launchers.").arg(pack->name),
                     QMessageBox::Ok, this);
 
                 errorMessage->open();
-            } else
-                addResourceToDialog(pack, *version);
+            } else {
+                qDebug() << "[Toggle] Choosing version" << chosen->version << "idx=" << chosenIndex << "for pack" << pack->name;
+                addResourceToDialog(pack, *chosen);
+                if (chosenIndex >= 0) {
+                    pack->selectVersion(chosenIndex);
+                }
+            }
         }
 
         if (isSelected)
@@ -445,15 +494,18 @@ void ResourcePage::onResourceToggle(const QModelIndex& index)
         QVariant variant;
         variant.setValue(pack);
         m_model->setData(index, variant, Qt::UserRole);
+        qDebug() << "[Toggle] Data updated for pack" << pack->name << "selected=" << pack->isAnyVersionSelected();
     } else {
         // the model is just 1 dimensional so this is fine
         m_enableQueue.insert(index.row());
+        qDebug() << "[Toggle] Queued row for enabling (loadEntry) row=" << index.row();
 
         // we can't be sure that this hasn't already been requested...
         // but this does the job well enough and there's not much point preventing edgecases
         if (!isSelected)
             m_model->loadEntry(index);
     }
+    isRunning = false;
 }
 
 void ResourcePage::openUrl(const QUrl& url)

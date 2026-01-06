@@ -34,7 +34,7 @@ namespace ResourceDownload {
 
 QHash<ResourceModel*, bool> ResourceModel::s_running_models;
 
-ResourceModel::ResourceModel(ResourceAPI* api) : QAbstractListModel(), m_api(api)
+ResourceModel::ResourceModel(ResourceAPI* api, bool api_owned) : QAbstractListModel(), m_api(api), m_api_owned(api_owned)
 {
     s_running_models.insert(this, true);
     if (APPLICATION_DYN) {
@@ -45,6 +45,10 @@ ResourceModel::ResourceModel(ResourceAPI* api) : QAbstractListModel(), m_api(api
 ResourceModel::~ResourceModel()
 {
     s_running_models.find(this).value() = false;
+    if (m_api_owned) {
+        delete m_api;
+        m_api = nullptr;
+    }
 }
 
 auto ResourceModel::data(const QModelIndex& index, int role) const -> QVariant

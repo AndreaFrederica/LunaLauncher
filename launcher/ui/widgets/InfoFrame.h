@@ -63,6 +63,7 @@ class InfoFrame : public QFrame {
     void clear();
 
     void updateWithMod(Mod const& m);
+    void updateWithPlugin(class Plugin const& plugin);
     void updateWithResource(Resource const& resource);
     void updateWithSchematic(SchematicResource& schem);
     void updateWithResourcePack(ResourcePack& rp);

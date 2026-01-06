@@ -35,6 +35,8 @@
 PluginFolderPage::PluginFolderPage(BaseInstance* inst, std::shared_ptr<PluginFolderModel> model, QWidget* parent)
     : ExternalResourcesPage(inst, model, parent), m_model(model)
 {
+    setFilter(tr("Plugins (*.jar)"));
+
     ui->actionDownloadItem->setText(tr("Download Plugins"));
     ui->actionDownloadItem->setToolTip(tr("Download plugins from Hangar and other platforms"));
     ui->actionDownloadItem->setEnabled(true);
@@ -78,8 +80,7 @@ void PluginFolderPage::updateFrame(const QModelIndex& current, [[maybe_unused]] 
     }
 
     // 更新信息面板
-    // TODO: 为插件创建专门的信息展示
-    ui->frame->clear();
+    ui->frame->updateWithPlugin(*plugin);
 }
 
 void PluginFolderPage::removeItems(const QItemSelection& selection)

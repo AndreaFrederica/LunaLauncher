@@ -2,115 +2,370 @@
 /*
  *  Luna Launcher - Minecraft Launcher
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
-*/
+ */
 
 #include "Plugin.h"
 #include "FileSystem.h"
 
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
+#include <QRegularExpression>
 
-Plugin::Plugin(const QFileInfo& file) : QObject()
+#include "archive/ArchiveReader.h"
+
+Plugin::Plugin(const QFileInfo& file) : Resource(file)
 {
-    m_file_info = file;
-    m_internal_id = file.absoluteFilePath();
-    m_changed_date_time = file.lastModified();
-    m_size_info = file.size();
+    // Resource constructor calls parseFile(), which sets m_name, m_type, m_enabled etc.
+    // We only need to parse plugin-specific metadata if it's a valid JAR
 
-    QString suffix = file.suffix().toLower();
+    // Resource::parseFile() sets type to ZIPFILE for .jar
+    // It also handles .disabled suffix
 
-    // 检查文件类型
-    if (suffix == "jar") {
-        m_valid = true;
-        m_enabled = true;
-        m_name = file.completeBaseName();
-    } else if (suffix == "disabled") {
-        // 检查禁用前的扩展名（例如 plugin.jar.disabled）
-        QString baseName = file.completeBaseName();
-        if (baseName.endsWith(".jar", Qt::CaseInsensitive)) {
-            m_valid = true;
-            m_enabled = false;
-            // 移除 .jar 部分作为名称
-            m_name = baseName.left(baseName.length() - 4);
-        } else {
-            m_valid = false;
-            m_enabled = false;
-            m_name = file.fileName();
-        }
-    } else {
-        // 非插件文件（配置文件等）
-        m_valid = false;
-        m_enabled = false;
-        m_name = file.fileName();
-    }
-
-    // 尝试解析 plugin.yml（未来实现）
-    if (m_valid) {
+    if (m_type == ResourceType::ZIPFILE) {
+        // It's a jar file (enabled or disabled)
         parsePluginInfo();
     }
 }
 
-QString Plugin::sizeStr() const
+// sizeStr, setEnabled, enable, disable are removed (inherited from Resource)
+
+
+namespace PluginUtils {
+
+static const QRegularExpression s_newlineRegex("\r\n|\n|\r");
+
+struct PluginDetails {
+    QString name;
+    QString version;
+    QString description;
+    QString website;
+    QStringList authors;
+};
+
+static QString stripInlineComment(QString line)
 {
-    return QLocale().formattedDataSize(m_size_info);
+    bool inSingle = false;
+    bool inDouble = false;
+    for (int i = 0; i < line.size(); i++) {
+        const auto ch = line.at(i);
+        if (ch == '\'' && !inDouble) {
+            inSingle = !inSingle;
+            continue;
+        }
+        if (ch == '"' && !inSingle) {
+            inDouble = !inDouble;
+            continue;
+        }
+        if (ch == '#' && !inSingle && !inDouble) {
+            return line.left(i);
+        }
+    }
+    return line;
 }
 
-void Plugin::setEnabled(bool enabled)
+static QString unquote(QString s)
 {
-    if (!m_valid || m_enabled == enabled)
-        return;
-
-    if (enabled)
-        enable();
-    else
-        disable();
+    s = s.trimmed();
+    if (s.size() >= 2) {
+        const auto first = s.front();
+        const auto last = s.back();
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return s.mid(1, s.size() - 2);
+        }
+    }
+    return s;
 }
 
-bool Plugin::enable()
+static QStringList parseInlineList(QString s)
 {
-    if (!m_valid || m_enabled)
-        return false;
+    s = s.trimmed();
+    if (!s.startsWith('[') || !s.endsWith(']')) {
+        return {};
+    }
+    s = s.mid(1, s.size() - 2);
 
-    QFileInfo file = fileinfo();
-    if (!file.exists())
-        return false;
-
-    QString newPath = file.absolutePath() + "/" + file.completeBaseName();
-    if (!FS::move(file.absoluteFilePath(), newPath))
-        return false;
-
-    m_file_info = QFileInfo(newPath);
-    m_internal_id = m_file_info.absoluteFilePath();
-    m_enabled = true;
-
-    return true;
+    QStringList out;
+    QString current;
+    bool inSingle = false;
+    bool inDouble = false;
+    for (int i = 0; i < s.size(); i++) {
+        const auto ch = s.at(i);
+        if (ch == '\'' && !inDouble) {
+            inSingle = !inSingle;
+            current += ch;
+            continue;
+        }
+        if (ch == '"' && !inSingle) {
+            inDouble = !inDouble;
+            current += ch;
+            continue;
+        }
+        if (ch == ',' && !inSingle && !inDouble) {
+            auto item = unquote(current.trimmed());
+            if (!item.isEmpty())
+                out.append(item);
+            current.clear();
+            continue;
+        }
+        current += ch;
+    }
+    auto item = unquote(current.trimmed());
+    if (!item.isEmpty())
+        out.append(item);
+    return out;
 }
 
-bool Plugin::disable()
+static PluginDetails readBukkitStyleYml(QByteArray contents)
 {
-    if (!m_valid || !m_enabled)
-        return false;
+    PluginDetails details;
 
-    QFileInfo file = fileinfo();
-    if (!file.exists())
-        return false;
+    auto text = QString::fromUtf8(contents);
+    auto lines = text.split(s_newlineRegex);
 
-    QString newPath = file.absoluteFilePath() + ".disabled";
-    if (!FS::move(file.absoluteFilePath(), newPath))
-        return false;
+    bool collectingAuthors = false;
+    int authorsIndent = 0;
 
-    m_file_info = QFileInfo(newPath);
-    m_internal_id = m_file_info.absoluteFilePath();
-    m_enabled = false;
+    bool collectingDescriptionBlock = false;
+    int descriptionIndent = 0;
+    QString descriptionBlock;
 
-    return true;
+    int i = 0;
+    while (i < lines.size()) {
+        QString line = lines.at(i);
+
+        int leadingSpaces = 0;
+        while (leadingSpaces < line.size() && line.at(leadingSpaces) == ' ')
+            leadingSpaces++;
+
+        auto trimmed = line.trimmed();
+        if (trimmed.isEmpty() || trimmed.startsWith('#')) {
+            i++;
+            continue;
+        }
+
+        if (collectingAuthors) {
+            if (leadingSpaces > authorsIndent && trimmed.startsWith('-')) {
+                auto item = trimmed.mid(1).trimmed();
+                item = unquote(stripInlineComment(item).trimmed());
+                if (!item.isEmpty())
+                    details.authors.append(item);
+                i++;
+                continue;
+            }
+            collectingAuthors = false;
+            continue;
+        }
+
+        if (collectingDescriptionBlock) {
+            if (leadingSpaces > descriptionIndent) {
+                descriptionBlock += trimmed;
+                descriptionBlock += "\n";
+                i++;
+                continue;
+            }
+            collectingDescriptionBlock = false;
+            details.description = descriptionBlock.trimmed();
+            continue;
+        }
+
+        if (leadingSpaces != 0) {
+            i++;
+            continue;
+        }
+
+        line = stripInlineComment(line).trimmed();
+        if (line.isEmpty()) {
+            i++;
+            continue;
+        }
+
+        auto colonPos = line.indexOf(':');
+        if (colonPos <= 0) {
+            i++;
+            continue;
+        }
+
+        const auto key = line.left(colonPos).trimmed();
+        auto value = line.mid(colonPos + 1).trimmed();
+
+        if (key.compare("name", Qt::CaseInsensitive) == 0) {
+            auto v = unquote(value);
+            if (!v.isEmpty())
+                details.name = v;
+        } else if (key.compare("version", Qt::CaseInsensitive) == 0) {
+            auto v = unquote(value);
+            if (!v.isEmpty())
+                details.version = v;
+        } else if (key.compare("website", Qt::CaseInsensitive) == 0) {
+            auto v = unquote(value);
+            if (!v.isEmpty())
+                details.website = v;
+        } else if (key.compare("description", Qt::CaseInsensitive) == 0) {
+            if (value == "|" || value == ">" || value.startsWith("|") || value.startsWith(">")) {
+                collectingDescriptionBlock = true;
+                descriptionIndent = leadingSpaces;
+                descriptionBlock.clear();
+            } else {
+                details.description = unquote(value);
+            }
+        } else if (key.compare("author", Qt::CaseInsensitive) == 0) {
+            auto v = unquote(value);
+            if (!v.isEmpty())
+                details.authors = { v };
+        } else if (key.compare("authors", Qt::CaseInsensitive) == 0) {
+            if (value.isEmpty()) {
+                collectingAuthors = true;
+                authorsIndent = leadingSpaces;
+            } else {
+                auto list = parseInlineList(value);
+                if (!list.isEmpty())
+                    details.authors = list;
+                else {
+                    auto v = unquote(value);
+                    if (!v.isEmpty())
+                        details.authors = { v };
+                }
+            }
+        }
+
+        i++;
+    }
+
+    if (collectingDescriptionBlock) {
+        details.description = descriptionBlock.trimmed();
+    }
+
+    return details;
 }
+
+static PluginDetails readVelocityPluginJson(QByteArray contents)
+{
+    PluginDetails details;
+
+    QJsonParseError jsonError;
+    auto doc = QJsonDocument::fromJson(contents, &jsonError);
+    if (!doc.isObject())
+        return details;
+
+    auto obj = doc.object();
+
+    details.name = obj.value("name").toString(details.name);
+    details.version = obj.value("version").toString(details.version);
+    details.description = obj.value("description").toString(details.description);
+
+    auto authorsVal = obj.value("authors");
+    if (authorsVal.isArray()) {
+        for (auto v : authorsVal.toArray()) {
+            auto s = v.toString().trimmed();
+            if (!s.isEmpty())
+                details.authors.append(s);
+        }
+    } else if (authorsVal.isString()) {
+        auto s = authorsVal.toString().trimmed();
+        if (!s.isEmpty())
+            details.authors = { s };
+    }
+
+    if (obj.contains("url") && obj.value("url").isString())
+        details.website = obj.value("url").toString();
+    if (details.website.isEmpty() && obj.contains("website") && obj.value("website").isString())
+        details.website = obj.value("website").toString();
+
+    return details;
+}
+
+static PluginDetails readSpongePluginsJson(QByteArray contents)
+{
+    PluginDetails details;
+
+    QJsonParseError jsonError;
+    auto doc = QJsonDocument::fromJson(contents, &jsonError);
+    if (!doc.isObject())
+        return details;
+
+    auto root = doc.object();
+    auto pluginsVal = root.value("plugins");
+    if (!pluginsVal.isArray() || pluginsVal.toArray().isEmpty())
+        return details;
+
+    auto plugin = pluginsVal.toArray().at(0).toObject();
+    details.name = plugin.value("name").toString(details.name);
+    details.version = plugin.value("version").toString(details.version);
+    details.description = plugin.value("description").toString(details.description);
+
+    auto authorsVal = plugin.value("authors");
+    if (authorsVal.isArray()) {
+        for (auto v : authorsVal.toArray()) {
+            auto s = v.toString().trimmed();
+            if (!s.isEmpty())
+                details.authors.append(s);
+        }
+    } else if (authorsVal.isString()) {
+        auto s = authorsVal.toString().trimmed();
+        if (!s.isEmpty())
+            details.authors = { s };
+    }
+
+    auto links = plugin.value("links");
+    if (links.isObject()) {
+        auto linksObj = links.toObject();
+        details.website = linksObj.value("homepage").toString(details.website);
+    }
+
+    return details;
+}
+
+}  // namespace PluginUtils
 
 void Plugin::parsePluginInfo()
 {
-    // TODO: 解析 plugin.yml 获取版本、描述、作者等信息
-    // 暂时使用文件名作为名称
     m_version = "Unknown";
     m_description = "";
+    m_website = "";
     m_authors.clear();
+
+    MMCZip::ArchiveReader zip(fileinfo().absoluteFilePath());
+
+    auto applyDetails = [&](const PluginUtils::PluginDetails& details) {
+        if (!details.name.isEmpty())
+            m_name = details.name;
+        if (!details.version.isEmpty())
+            m_version = details.version;
+        if (!details.description.isEmpty())
+            m_description = details.description;
+        if (!details.website.isEmpty())
+            m_website = details.website;
+        if (!details.authors.isEmpty())
+            m_authors = details.authors;
+    };
+
+    auto tryReadYml = [&](const QString& path) -> bool {
+        if (auto f = zip.goToFile(path); f) {
+            applyDetails(PluginUtils::readBukkitStyleYml(f->readAll()));
+            return true;
+        }
+        return false;
+    };
+
+    auto tryReadJson = [&](const QString& path, const auto& reader) -> bool {
+        if (auto f = zip.goToFile(path); f) {
+            applyDetails(reader(f->readAll()));
+            return true;
+        }
+        return false;
+    };
+
+    if (tryReadYml("paper-plugin.yml"))
+        return;
+    if (tryReadYml("plugin.yml"))
+        return;
+    if (tryReadYml("bungee.yml"))
+        return;
+    if (tryReadJson("velocity-plugin.json", PluginUtils::readVelocityPluginJson))
+        return;
+    if (tryReadJson("META-INF/sponge_plugins.json", PluginUtils::readSpongePluginsJson))
+        return;
 }

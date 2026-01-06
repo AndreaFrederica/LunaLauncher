@@ -45,6 +45,7 @@
 
 #include "ui/dialogs/CustomMessageBox.h"
 #include "minecraft/mod/SchematicResource.h"
+#include "minecraft/mod/Plugin.h"
 
 void setupLinkToolTip(QLabel* label)
 {
@@ -142,6 +143,44 @@ void InfoFrame::updateWithMod(Mod const& m)
         issueTracker += "<a href=\"" + m.issueTracker() + "\">" + m.issueTracker() + "</a>";
     }
     setIssueTracker(issueTracker);
+}
+
+void InfoFrame::updateWithPlugin(Plugin const& plugin)
+{
+    QString text = "";
+    QString name = plugin.name();
+    QString link = plugin.website();
+
+    if (name.isEmpty()) {
+        name = plugin.fileinfo().fileName();
+    }
+
+    if (link.isEmpty())
+        text = name;
+    else {
+        text = "<a href=\"" + QUrl(link).toEncoded() + "\">" + name + "</a>";
+    }
+
+    if (!plugin.authors().isEmpty())
+        text += " by " + plugin.authors().join(", ");
+
+    if (!plugin.version().isEmpty() && plugin.version() != "Unknown")
+        text += " (" + plugin.version() + ")";
+
+    setName(text);
+
+    if (plugin.description().isEmpty()) {
+        setDescription(QString());
+    } else {
+        setDescription(plugin.description());
+    }
+
+    // Plugins usually don't have icons inside the jar in a standard way like mods (pack.png/icon.png)
+    // So we skip setImage or could set a default one if needed.
+    setImage();
+
+    setLicense(); // Plugins metadata usually doesn't strictly follow license field in yml
+    setIssueTracker(); // Plugins metadata usually doesn't have issue tracker
 }
 
 void InfoFrame::updateWithResource(const Resource& resource)

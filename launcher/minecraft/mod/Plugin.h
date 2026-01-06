@@ -10,55 +10,38 @@
 #include <QFileInfo>
 #include <QObject>
 #include <QString>
+#include <QStringList>
+
+#include <memory>
+
+#include "Resource.h"
 
 /**
- * 服务器插件类 - 独立的插件数据结构
- * 不依赖 Resource/Mod 系统
+ * 服务器插件类 - 兼容 Resource 接口
  */
-class Plugin : public QObject {
+class Plugin : public Resource {
     Q_OBJECT
 public:
-    using Ptr = std::shared_ptr<Plugin>;
+    using Ptr = shared_qobject_ptr<Plugin>;
 
     explicit Plugin(const QFileInfo& file);
     ~Plugin() override = default;
 
     // 基本信息
-    [[nodiscard]] auto name() const -> QString { return m_name; }
     [[nodiscard]] auto version() const -> QString { return m_version; }
     [[nodiscard]] auto description() const -> QString { return m_description; }
+    [[nodiscard]] auto website() const -> QString { return m_website; }
     [[nodiscard]] auto authors() const -> QStringList { return m_authors; }
 
-    // 文件信息
-    [[nodiscard]] auto fileinfo() const -> QFileInfo { return m_file_info; }
-    [[nodiscard]] auto internal_id() const -> QString { return m_internal_id; }
-    [[nodiscard]] auto enabled() const -> bool { return m_enabled; }
-    [[nodiscard]] auto valid() const -> bool { return m_valid; }
-    [[nodiscard]] auto dateTimeChanged() const -> QDateTime { return m_changed_date_time; }
-    [[nodiscard]] auto sizeStr() const -> QString;
-    [[nodiscard]] auto sizeInfo() const -> qint64 { return m_size_info; }
-
-    // 启用/禁用
-    void setEnabled(bool enabled);
-    bool enable();
-    bool disable();
+    // 状态
+    // valid(), enabled(), sizeStr() 等由 Resource 基类提供
 
 private:
-    // 文件信息
-    QFileInfo m_file_info;
-    QString m_internal_id;
-    QString m_name;
-    QDateTime m_changed_date_time;
-    qint64 m_size_info = 0;
-
     // 插件元数据（从 plugin.yml 读取）
     QString m_version;
     QString m_description;
+    QString m_website;
     QStringList m_authors;
-
-    // 状态
-    bool m_enabled = true;
-    bool m_valid = false;
 
     void parsePluginInfo();
 };

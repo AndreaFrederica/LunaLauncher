@@ -203,6 +203,18 @@ struct IndexedPack {
 
         return std::any_of(versions.constBegin(), versions.constEnd(), [](auto const& v) { return v.is_currently_selected; });
     }
+
+    void selectVersion(int index)
+    {
+        if (!versionsLoaded || index < 0 || index >= versions.size())
+            return;
+
+        for (auto& v : versions) {
+            v.is_currently_selected = false;
+        }
+        
+        versions[index].is_currently_selected = true;
+    }
 };
 
 struct OverrideDep {

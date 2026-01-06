@@ -27,6 +27,7 @@ HangarPluginPage::HangarPluginPage(PluginDownloadDialog* dialog, BaseInstance& i
 
     connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HangarPluginPage::onSelectionChanged);
     connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &HangarPluginPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &HangarPluginPage::onResourceSelected);
 
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }

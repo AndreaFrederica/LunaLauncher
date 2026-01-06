@@ -13,32 +13,13 @@
 PluginFolderModel::PluginFolderModel(const QDir& dir, BaseInstance* instance, bool is_indexed, bool create_dir, QObject* parent)
     : ResourceFolderModel(dir, instance, is_indexed, create_dir, parent)
 {
-    // 初始加载插件
-    loadPluginsFromDirectory();
-}
+    // 配置目录过滤器
+    m_dir.setFilter(QDir::Readable | QDir::NoDotAndDotDot | QDir::Files);
+    m_dir.setNameFilters({"*.jar", "*.jar.disabled"});
+    m_dir.setSorting(QDir::Name | QDir::IgnoreCase);
 
-void PluginFolderModel::onUpdateSucceeded()
-{
-    ResourceFolderModel::onUpdateSucceeded();
-    loadPluginsFromDirectory();
-}
-
-void PluginFolderModel::loadPluginsFromDirectory()
-{
-    m_plugins.clear();
-
-    QDir pluginDir = dir();
-    pluginDir.setFilter(QDir::Readable | QDir::NoDotAndDotDot | QDir::Files);
-    pluginDir.setSorting(QDir::Name | QDir::IgnoreCase);
-
-    for (const QFileInfo& entry : pluginDir.entryInfoList()) {
-        auto plugin = std::make_shared<Plugin>(entry);
-
-        // 只添加有效的插件文件
-        if (plugin->valid()) {
-            m_plugins.append(plugin);
-        }
-    }
+    // 触发初始加载
+    update();
 }
 
 int PluginFolderModel::columnCount(const QModelIndex& parent) const
@@ -49,10 +30,14 @@ int PluginFolderModel::columnCount(const QModelIndex& parent) const
 
 QVariant PluginFolderModel::data(const QModelIndex& index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_plugins.size())
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_resources.size())
         return QVariant();
 
-    const auto& plugin = m_plugins[index.row()];
+    auto resource = m_resources[index.row()];
+    auto plugin = resource.dynamicCast<Plugin>();
+    if (!plugin)
+        return QVariant();
+
     int column = index.column();
 
     if (role == Qt::DisplayRole) {
@@ -108,7 +93,7 @@ QVariant PluginFolderModel::headerData(int section, Qt::Orientation orientation,
 
 Plugin::Ptr PluginFolderModel::pluginAt(int index) const
 {
-    if (index < 0 || index >= m_plugins.size())
+    if (index < 0 || index >= m_resources.size())
         return nullptr;
-    return m_plugins[index];
+    return shared_qobject_ptr<Plugin>(m_resources[index].dynamicCast<Plugin>());
 }

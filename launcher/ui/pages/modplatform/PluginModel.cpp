@@ -17,8 +17,8 @@
 
 namespace ResourceDownload {
 
-PluginModel::PluginModel(BaseInstance& base, ResourceAPI* api, QString debugName, QString metaEntryBase)
-    : ResourceModel(api), m_base_instance(base), m_debugName(debugName), m_metaEntryBase(metaEntryBase)
+PluginModel::PluginModel(BaseInstance& base, ResourceAPI* api, QString debugName, QString metaEntryBase, bool api_owned)
+    : ResourceModel(api, api_owned), m_base_instance(base), m_debugName(debugName), m_metaEntryBase(metaEntryBase)
 {
 }
 
@@ -48,6 +48,12 @@ ResourceAPI::SearchArgs PluginModel::createSearchArguments()
             auto loaders = serverInst->getPluginLoaderTypes();
             if (loaders != 0)
                 args.pluginLoaders = loaders;
+            auto mcVer = serverInst->getMinecraftVersion();
+            if (!mcVer.isEmpty()) {
+                std::list<Version> versions;
+                versions.emplace_back(mcVer);
+                args.versions = versions;
+            }
         }
     }
 
@@ -67,13 +73,14 @@ ResourceAPI::VersionSearchArgs PluginModel::createVersionsArguments(const QModel
             auto loaders = serverInst->getPluginLoaderTypes();
             if (loaders != 0)
                 args.pluginLoaders = loaders;
+            auto mcVer = serverInst->getMinecraftVersion();
+            if (!mcVer.isEmpty()) {
+                std::list<Version> versions;
+                versions.emplace_back(mcVer);
+                args.mcVersions = versions;
+            }
         }
     }
-
-    // For server instances, we would get Minecraft version from server settings
-    // For now, leave mcVersions empty to get all versions
-    // std::optional<std::list<Version>> versions{};
-    // args.mcVersions = versions;
 
     return args;
 }
@@ -141,6 +148,35 @@ QVariant PluginModel::getInstalledPackVersion(ModPlatform::IndexedPack::Ptr pack
     }
 
     return {};
+}
+
+bool PluginModel::checkVersionFilters(const ModPlatform::IndexedVersion& v)
+{
+    if (m_base_instance.traits().contains("server")) {
+        if (auto serverInst = dynamic_cast<ServerInstance*>(&m_base_instance)) {
+            auto loaders = serverInst->getPluginLoaderTypes();
+            if (loaders != 0) {
+                if (!(v.pluginLoaders & loaders))
+                    return false;
+            }
+            auto mcVer = serverInst->getMinecraftVersion();
+            if (!mcVer.isEmpty()) {
+                auto mm = mcVer.split('.');
+                QString prefix = mcVer;
+                if (mm.size() >= 2) {
+                    prefix = mm[0] + "." + mm[1];
+                }
+                bool match = false;
+                for (const auto& verStr : v.mcVersion) {
+                    if (verStr == mcVer || verStr.startsWith(prefix))
+                        { match = true; break; }
+                }
+                if (!match)
+                    return false;
+            }
+        }
+    }
+    return !optedOut(v);
 }
 
 }  // namespace ResourceDownload

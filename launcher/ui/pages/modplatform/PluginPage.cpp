@@ -53,13 +53,8 @@ void PluginPage::addResourceToPage(ModPlatform::IndexedPack::Ptr pack,
                                    ModPlatform::IndexedVersion& version,
                                    std::shared_ptr<ResourceFolderModel> base_model)
 {
-    auto pluginList = dynamic_cast<PluginFolderModel*>(base_model.get());
-    if (!pluginList) {
-        qWarning() << "PluginPage::addResourceToPage: base_model is not a PluginFolderModel";
-        return;
-    }
-
-    m_parentDialog->addResource(pack, version);
+    bool is_indexed = !APPLICATION->settings()->get("ModMetadataDisabled").toBool();
+    m_model->addPack(pack, version, base_model, is_indexed);
 }
 
 }  // namespace ResourceDownload

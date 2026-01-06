@@ -29,7 +29,7 @@ class PluginModel : public ResourceModel {
     Q_OBJECT
 
    public:
-    PluginModel(BaseInstance&, ResourceAPI* api, QString debugName, QString metaEntryBase);
+    PluginModel(BaseInstance& base, ResourceAPI* api, QString debugName, QString metaEntryBase, bool api_owned = true);
 
     /* Ask the API for more information */
     void searchWithTerm(const QString& term, unsigned int sort, bool filter_changed);
@@ -46,6 +46,7 @@ class PluginModel : public ResourceModel {
 
    protected:
     virtual bool isPackInstalled(ModPlatform::IndexedPack::Ptr) const override;
+    virtual bool checkVersionFilters(const ModPlatform::IndexedVersion& v) override;
 
    protected:
     BaseInstance& m_base_instance;

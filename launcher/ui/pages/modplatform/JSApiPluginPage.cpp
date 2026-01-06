@@ -24,13 +24,14 @@ JSApiPluginPage::JSApiPluginPage(PluginDownloadDialog* dialog, BaseInstance& ins
     m_apiId = api->metaEntryBase().remove("Plugins");  // Remove "Plugins" suffix to get the ID
 
     // Create model with the provided API
-    m_model = new PluginModel(instance, api, api->apiName(), api->metaEntryBase());
+    m_model = new PluginModel(instance, api, api->apiName(), api->metaEntryBase(), false);
     m_ui->packView->setModel(m_model);
 
     addSortings();
 
     connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &JSApiPluginPage::onSelectionChanged);
     connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &JSApiPluginPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &JSApiPluginPage::onResourceSelected);
 
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }

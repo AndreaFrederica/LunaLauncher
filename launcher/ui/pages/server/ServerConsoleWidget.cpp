@@ -124,3 +124,12 @@ void ServerConsoleWidget::writeData(const QByteArray &data)
 
 int ServerConsoleWidget::columns() const { return m_console->screenColumnsCount(); }
 int ServerConsoleWidget::lines() const { return m_console->screenLinesCount(); }
+
+void ServerConsoleWidget::clear()
+{
+    int old = m_console->historySize();
+    m_console->setHistorySize(0);
+    m_console->setHistorySize(old);
+    const char seq[] = "\x1B[2J\x1B[H";
+    m_console->recvData(seq, sizeof(seq) - 1);
+}

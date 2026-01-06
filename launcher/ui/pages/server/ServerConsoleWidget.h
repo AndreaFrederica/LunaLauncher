@@ -17,6 +17,7 @@ public:
     void writeData(const QByteArray &data);
     int columns() const;
     int lines() const;
+    void clear();
 
 signals:
     void sendData(const char *data, int size);

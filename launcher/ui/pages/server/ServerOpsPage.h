@@ -42,4 +42,5 @@ private:
     QListWidget *m_opsList;
     QPushButton *m_addButton;
     QPushButton *m_removeButton;
+    bool m_fileExistedAtLoad = false;
 };

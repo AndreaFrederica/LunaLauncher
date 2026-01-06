@@ -125,6 +125,7 @@ void ServerPlayerListPage::loadList()
         return;
     }
 
+    m_fileExistedAtLoad = true;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     file.close();
 
@@ -187,6 +188,8 @@ void ServerPlayerListPage::removeEntry()
 
 bool ServerPlayerListPage::apply()
 {
+    if (m_fileExistedAtLoad)
+        return true;
     saveList();
     return true;
 }

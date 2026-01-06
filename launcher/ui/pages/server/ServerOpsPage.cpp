@@ -70,6 +70,7 @@ void ServerOpsPage::loadOps()
         return;
     }
 
+    m_fileExistedAtLoad = true;
     QJsonDocument doc = QJsonDocument::fromJson(opsFile.readAll());
     opsFile.close();
 
@@ -120,6 +121,8 @@ void ServerOpsPage::removeOp()
 
 bool ServerOpsPage::apply()
 {
+    if (m_fileExistedAtLoad)
+        return true;
     saveOps();
     return true;
 }

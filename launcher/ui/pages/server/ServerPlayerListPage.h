@@ -51,4 +51,5 @@ private:
     QListWidget *m_list;
     QPushButton *m_addButton;
     QPushButton *m_removeButton;
+    bool m_fileExistedAtLoad = false;
 };

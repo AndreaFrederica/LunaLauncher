@@ -71,9 +71,11 @@ void ServerYamlEditorPage::loadFile()
 
     if (file.exists() && file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&file);
-        m_editor->setPlainText(in.readAll());
+        m_originalText = in.readAll();
+        m_editor->setPlainText(m_originalText);
         file.close();
     } else {
+        m_originalText.clear();
         m_editor->setPlainText(tr("# File not found. It will be created when you save."));
     }
 }
@@ -83,6 +85,9 @@ bool ServerYamlEditorPage::apply()
     // Avoid initializing config if editor has placeholder or empty
     QString text = m_editor->toPlainText().trimmed();
     if (text.isEmpty() || text.startsWith("# File not found"))
+        return true;
+    // Skip writing if unchanged
+    if (!m_originalText.isEmpty() && text == m_originalText.trimmed())
         return true;
     saveFile();
     return true;

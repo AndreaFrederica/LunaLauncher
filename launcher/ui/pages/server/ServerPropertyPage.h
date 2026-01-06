@@ -6,6 +6,7 @@
 #include "ui/pages/BasePage.h"
 #include <QWidget>
 #include <QTableWidget>
+#include <QMap>
 #include "server/ServerInstance.h"
 
 class ServerPropertyPage : public QWidget, public BasePage
@@ -33,4 +34,6 @@ private:
 private:
     ServerInstance *m_instance;
     QTableWidget *m_table;
+    QMap<QString, QString> m_originalProps;
+    bool m_fileExistedAtLoad = false;
 };

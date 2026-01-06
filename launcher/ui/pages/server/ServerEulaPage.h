@@ -37,4 +37,6 @@ private:
     ServerInstance *m_instance;
     QCheckBox *m_eulaCheckbox;
     QTextEdit *m_eulaText;
+    bool m_fileExistedAtLoad = false;
+    bool m_initialAgreed = false;
 };

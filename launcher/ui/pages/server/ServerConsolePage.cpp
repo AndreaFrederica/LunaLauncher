@@ -15,6 +15,14 @@ ServerConsolePage::ServerConsolePage(ServerInstance *instance, QWidget *parent)
     auto layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
+    auto buttonBar = new QHBoxLayout();
+    buttonBar->setContentsMargins(6, 6, 6, 0);
+    auto clearBtn = new QPushButton(tr("Clear"), this);
+    clearBtn->setIcon(QIcon::fromTheme("edit-clear"));
+    buttonBar->addStretch();
+    buttonBar->addWidget(clearBtn);
+    layout->addLayout(buttonBar);
+
     m_console = new ServerConsoleWidget(this);
     layout->addWidget(m_console);
 
@@ -24,6 +32,7 @@ ServerConsolePage::ServerConsolePage(ServerInstance *instance, QWidget *parent)
     // Connect console I/O
     connect(m_console, &ServerConsoleWidget::sendData, this, &ServerConsolePage::onSendData);
     connect(m_console, &ServerConsoleWidget::termSizeChange, this, &ServerConsolePage::onTermSizeChange);
+    connect(clearBtn, &QPushButton::clicked, m_console, &ServerConsoleWidget::clear);
 }
 
 ServerConsolePage::~ServerConsolePage()

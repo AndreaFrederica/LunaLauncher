@@ -42,4 +42,5 @@ private:
     ServerInstance *m_instance;
     FileType m_fileType;
     QPlainTextEdit *m_editor;
+    QString m_originalText;
 };

@@ -60,9 +60,12 @@ void ServerPropertyPage::loadProps()
         return;
     }
 
+    m_fileExistedAtLoad = true;
+    m_originalProps.clear();
     m_table->setRowCount(props.size());
     int row = 0;
     for (auto it = props.begin(); it != props.end(); ++it) {
+        m_originalProps.insert(it.key(), it.value());
         auto keyItem = new QTableWidgetItem(it.key());
         keyItem->setFlags(keyItem->flags() ^ Qt::ItemIsEditable); // Key not editable
 
@@ -76,19 +79,30 @@ void ServerPropertyPage::loadProps()
 
 bool ServerPropertyPage::apply()
 {
-    PropertiesFile props;
+    // Build new map from table
+    QMap<QString, QString> newProps;
     for (int i = 0; i < m_table->rowCount(); ++i) {
         auto keyItem = m_table->item(i, 0);
         auto valueItem = m_table->item(i, 1);
         if (keyItem && valueItem) {
-            props.insert(keyItem->text(), valueItem->text());
+            newProps.insert(keyItem->text(), valueItem->text());
         }
     }
 
     QString path = m_instance->instanceRoot() + "/server.properties";
-    QFileInfo info(path);
-    if (m_table->rowCount() == 0 && info.exists()) {
+    // If file existed when page loaded, never overwrite unless explicitly changed by user
+    if (m_fileExistedAtLoad) {
         return true;
+    }
+    // If file exists now and content unchanged, skip writing
+    if (QFileInfo::exists(path) && newProps == m_originalProps) {
+        return true;
+    }
+
+    // Write only when changed or new
+    PropertiesFile props;
+    for (auto it = newProps.begin(); it != newProps.end(); ++it) {
+        props.insert(it.key(), it.value());
     }
     if (!props.saveFile(path)) {
          QMessageBox::critical(this, tr("Error"), tr("Failed to save server.properties"));

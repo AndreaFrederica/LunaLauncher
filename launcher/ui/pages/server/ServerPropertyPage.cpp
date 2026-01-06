@@ -85,11 +85,11 @@ bool ServerPropertyPage::apply()
         }
     }
 
-    // Only save if we have data or if the file existed previously.
-    // If it's a new empty server, we might not want to create server.properties prematurely,
-    // but if the user clicked save, they probably intend to.
-
     QString path = m_instance->instanceRoot() + "/server.properties";
+    QFileInfo info(path);
+    if (m_table->rowCount() == 0 && info.exists()) {
+        return true;
+    }
     if (!props.saveFile(path)) {
          QMessageBox::critical(this, tr("Error"), tr("Failed to save server.properties"));
          return false;

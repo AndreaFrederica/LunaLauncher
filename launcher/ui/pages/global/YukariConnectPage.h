@@ -44,7 +44,7 @@ class YukariConnectPage : public QWidget, public BasePage {
     ~YukariConnectPage();
 
     QString displayName() const override { return tr("YukariConnect"); }
-    QIcon icon() const override { return QIcon::fromTheme("yukari-connect"); }
+    QIcon icon() const override { return QIcon::fromTheme("proxy"); }
     QString id() const override { return "yukari-connect"; }
     QString helpPage() const override { return "yukari-connect"; }
     virtual bool apply() override;

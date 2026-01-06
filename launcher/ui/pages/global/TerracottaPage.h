@@ -39,7 +39,7 @@ class TerracottaPage : public QWidget, public BasePage {
     ~TerracottaPage();
 
     QString displayName() const override { return tr("Terracotta"); }
-    QIcon icon() const override { return QIcon::fromTheme("terracotta"); }
+    QIcon icon() const override { return QIcon::fromTheme("proxy"); }
     QString id() const override { return "terracotta"; }
     QString helpPage() const override { return "terracotta"; }
     virtual bool apply() override;

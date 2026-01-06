@@ -13,7 +13,7 @@ public:
     virtual ~CustomPlayerModelPage() = default;
 
     QString displayName() const override { return tr("Custom Player Models"); }
-    QIcon icon() const override { return QIcon::fromTheme("shape-cuboid"); } // You might want to pick a different icon
+    QIcon icon() const override { return QIcon::fromTheme("resourcepacks"); }
     QString id() const override { return "customplayermodel"; }
     QString helpPage() const override { return "Custom-Player-Model"; }
 

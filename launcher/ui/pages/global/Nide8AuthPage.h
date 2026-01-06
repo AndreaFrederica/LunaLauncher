@@ -34,7 +34,7 @@ class Nide8AuthPage : public QWidget, public BasePage {
     ~Nide8AuthPage();
 
     QString displayName() const override { return tr("nide8auth"); }
-    QIcon icon() const override { return QIcon::fromTheme("nide8auth"); }
+    QIcon icon() const override { return QIcon::fromTheme("accounts"); }
     QString id() const override { return "nide8auth"; }
     QString helpPage() const override { return "nide8auth"; }
     virtual bool apply() override;

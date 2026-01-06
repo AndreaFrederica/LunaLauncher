@@ -13,7 +13,7 @@ public:
     virtual ~YesSteveModelPage() = default;
 
     QString displayName() const override { return tr("Yes Steve Models"); }
-    QIcon icon() const override { return QIcon::fromTheme("shape-cuboid"); } 
+    QIcon icon() const override { return QIcon::fromTheme("resourcepacks"); } 
     QString id() const override { return "yesstevemodel"; }
     QString helpPage() const override { return "Yes-Steve-Model"; }
 

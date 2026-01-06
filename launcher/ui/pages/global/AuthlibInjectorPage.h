@@ -34,7 +34,7 @@ class AuthlibInjectorPage : public QWidget, public BasePage {
     ~AuthlibInjectorPage();
 
     QString displayName() const override { return tr("authlib-injector"); }
-    QIcon icon() const override { return QIcon::fromTheme("authlib-injector"); }
+    QIcon icon() const override { return QIcon::fromTheme("accounts"); }
     QString id() const override { return "authlib-injector"; }
     QString helpPage() const override { return "authlib-injector"; }
     virtual bool apply() override;

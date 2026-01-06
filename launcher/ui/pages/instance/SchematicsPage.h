@@ -14,7 +14,7 @@ public:
     QString id() const override { return "Schematics"; }
     QString displayName() const override { return tr("Schematics"); }
     QString helpPage() const override { return "Schematics"; }
-    QIcon icon() const override { return QIcon::fromTheme("applications-graphics"); }
+    QIcon icon() const override { return QIcon::fromTheme("resourcepacks"); }
     bool shouldDisplay() const override { return true; }
 
 private slots:

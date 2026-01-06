@@ -80,6 +80,10 @@ void ServerYamlEditorPage::loadFile()
 
 bool ServerYamlEditorPage::apply()
 {
+    // Avoid initializing config if editor has placeholder or empty
+    QString text = m_editor->toPlainText().trimmed();
+    if (text.isEmpty() || text.startsWith("# File not found"))
+        return true;
     saveFile();
     return true;
 }

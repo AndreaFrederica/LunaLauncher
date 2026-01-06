@@ -237,4 +237,3 @@ void ServerModLoaderPage::updateSummary()
 
     m_summaryLabel->setText(summary);
 }
-

@@ -69,12 +69,8 @@ QString ServerPlayerListPage::displayName() const
 
 QIcon ServerPlayerListPage::icon() const
 {
-    switch (m_listType) {
-        case Whitelist: return QIcon::fromTheme("user-available");
-        case BannedPlayers:
-        case BannedIPs: return QIcon::fromTheme("user-busy");
-    }
-    return QIcon();
+    auto icon = QIcon::fromTheme("accounts");
+    return icon;
 }
 
 QString ServerPlayerListPage::id() const

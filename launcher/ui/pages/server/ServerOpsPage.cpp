@@ -43,7 +43,13 @@ ServerOpsPage::ServerOpsPage(ServerInstance *instance, QWidget *parent)
 ServerOpsPage::~ServerOpsPage() {}
 
 QString ServerOpsPage::displayName() const { return tr("Operators"); }
-QIcon ServerOpsPage::icon() const { return QIcon::fromTheme("user-admin"); }
+QIcon ServerOpsPage::icon() const
+{
+    auto icon = QIcon::fromTheme("user-admin");
+    if (icon.isNull())
+        icon = QIcon::fromTheme("accounts");
+    return icon;
+}
 QString ServerOpsPage::id() const { return "server-ops"; }
 QString ServerOpsPage::helpPage() const { return "Server-Operators"; }
 bool ServerOpsPage::shouldDisplay() const { return true; }

@@ -35,6 +35,176 @@ function Get-PackageNames {
     }
 }
 
+function Format-Bytes {
+    param(
+        [Parameter(Mandatory = $true)]
+        [double]$Bytes
+    )
+
+    if ($Bytes -ge 1GB) { return ("{0:N2} GiB" -f ($Bytes / 1GB)) }
+    if ($Bytes -ge 1MB) { return ("{0:N2} MiB" -f ($Bytes / 1MB)) }
+    if ($Bytes -ge 1KB) { return ("{0:N2} KiB" -f ($Bytes / 1KB)) }
+    return ("{0:N0} B" -f $Bytes)
+}
+
+function Format-Rate {
+    param(
+        [Parameter(Mandatory = $true)]
+        [double]$BytesPerSecond
+    )
+
+    if ($BytesPerSecond -le 0) { return "0 B/s" }
+    return ("{0}/s" -f (Format-Bytes -Bytes $BytesPerSecond))
+}
+
+function Download-FileWithProgress {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath,
+
+        [int]$TimeoutMs = 0
+    )
+
+    Write-Host ">> Starting download: $Url"
+
+    if (Test-Path $DestinationPath) {
+        Remove-Item $DestinationPath -Force
+    }
+
+    $startTime = [DateTimeOffset]::UtcNow
+    $lastLogThreshold = -10
+    $lastLogTime = $startTime
+    $lastLogBytes = 0.0
+
+    $bitsCmd = Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue
+    if ($bitsCmd) {
+        $job = $null
+        try {
+            $job = Start-BitsTransfer -Source $Url -Destination $DestinationPath -Asynchronous -ErrorAction Stop
+
+            while ($true) {
+                $job = Get-BitsTransfer -JobId $job.JobId -ErrorAction Stop
+
+                if ($job.JobState -eq "Transferred") {
+                    Complete-BitsTransfer -BitsJob $job
+                    break
+                }
+                if ($job.JobState -eq "Error" -or $job.JobState -eq "Cancelled") {
+                    throw ("BITS download failed: {0}" -f $job.ErrorDescription)
+                }
+                if ($job.JobState -eq "TransientError") {
+                    Resume-BitsTransfer -BitsJob $job -ErrorAction SilentlyContinue | Out-Null
+                }
+
+                $total = [double]$job.BytesTotal
+                $done = [double]$job.BytesTransferred
+
+                $now = [DateTimeOffset]::UtcNow
+                $dt = ($now - $lastLogTime).TotalSeconds
+                if ($dt -le 0) { $dt = 0.001 }
+
+                if ($total -gt 0) {
+                    $pct = [int][Math]::Floor(($done / $total) * 100)
+                    $threshold = [int]([Math]::Floor($pct / 10) * 10)
+                    if ($threshold -ge ($lastLogThreshold + 10) -and $threshold -le 100) {
+                        $speed = ($done - $lastLogBytes) / $dt
+                        Write-Host (">> Download {0}% ({1}/{2}) {3}" -f $threshold, (Format-Bytes -Bytes $done), (Format-Bytes -Bytes $total), (Format-Rate -BytesPerSecond $speed))
+                        $lastLogThreshold = $threshold
+                        $lastLogTime = $now
+                        $lastLogBytes = $done
+                    }
+                } else {
+                    if (($now - $lastLogTime).TotalSeconds -ge 15) {
+                        $speed = ($done - $lastLogBytes) / $dt
+                        Write-Host (">> Downloaded {0} {1}" -f (Format-Bytes -Bytes $done), (Format-Rate -BytesPerSecond $speed))
+                        $lastLogTime = $now
+                        $lastLogBytes = $done
+                    }
+                }
+
+                Start-Sleep -Seconds 2
+            }
+
+            return
+        }
+        catch {
+            try {
+                if ($job) { Remove-BitsTransfer -BitsJob $job -Confirm:$false -ErrorAction SilentlyContinue | Out-Null }
+            } catch {}
+            if (Test-Path $DestinationPath) { Remove-Item $DestinationPath -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    $handler = New-Object System.Net.Http.HttpClientHandler
+    $handler.AllowAutoRedirect = $true
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    try {
+        if ($TimeoutMs -gt 0) {
+            $client.Timeout = [TimeSpan]::FromMilliseconds($TimeoutMs)
+        } else {
+            $client.Timeout = [TimeSpan]::FromMinutes(30)
+        }
+
+        $resp = $client.GetAsync($Url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        $resp.EnsureSuccessStatusCode() | Out-Null
+
+        $total = $resp.Content.Headers.ContentLength
+        if ($null -eq $total) { $total = 0 }
+        $total = [double]$total
+
+        $stream = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        try {
+            $fs = [System.IO.File]::Open($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            try {
+                $buffer = New-Object byte[] (1024 * 1024)
+                $done = 0.0
+                while ($true) {
+                    $read = $stream.Read($buffer, 0, $buffer.Length)
+                    if ($read -le 0) { break }
+                    $fs.Write($buffer, 0, $read)
+                    $done += $read
+
+                    $now = [DateTimeOffset]::UtcNow
+                    $dt = ($now - $lastLogTime).TotalSeconds
+                    if ($dt -le 0) { $dt = 0.001 }
+
+                    if ($total -gt 0) {
+                        $pct = [int][Math]::Floor(($done / $total) * 100)
+                        $threshold = [int]([Math]::Floor($pct / 10) * 10)
+                        if ($threshold -ge ($lastLogThreshold + 10) -and $threshold -le 100) {
+                            $speed = ($done - $lastLogBytes) / $dt
+                            Write-Host (">> Download {0}% ({1}/{2}) {3}" -f $threshold, (Format-Bytes -Bytes $done), (Format-Bytes -Bytes $total), (Format-Rate -BytesPerSecond $speed))
+                            $lastLogThreshold = $threshold
+                            $lastLogTime = $now
+                            $lastLogBytes = $done
+                        }
+                    } else {
+                        if (($now - $lastLogTime).TotalSeconds -ge 15) {
+                            $speed = ($done - $lastLogBytes) / $dt
+                            Write-Host (">> Downloaded {0} {1}" -f (Format-Bytes -Bytes $done), (Format-Rate -BytesPerSecond $speed))
+                            $lastLogTime = $now
+                            $lastLogBytes = $done
+                        }
+                    }
+                }
+            }
+            finally {
+                $fs.Close()
+            }
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
 # 1) 下载并解压 MSYS2 base
 if (-not (Test-Path $bash)) {
     Write-Host ">> Bootstrapping MSYS2 into .msys2/"
@@ -124,21 +294,7 @@ if (-not (Test-Path $bash)) {
         Remove-Item $archive -Force
     }
 
-    $downloaded = $false
-
-    # 首选：BITS（最稳定，支持断点续传）
-    try {
-        Start-BitsTransfer -Source $downloadUrl -Destination $archive -ErrorAction Stop
-        $downloaded = $true
-    }
-    catch {
-        Write-Warning "BITS download failed, falling back to Invoke-WebRequest"
-    }
-
-    # 兜底：Invoke-WebRequest（理论上这里不会再走到）
-    if (-not $downloaded) {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archive -UseBasicParsing
-    }
+    Download-FileWithProgress -Url $downloadUrl -DestinationPath $archive -TimeoutMs 0
 
     tar -xf $archive -C $envRoot
 

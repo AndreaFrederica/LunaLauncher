@@ -6,6 +6,38 @@ on:
         description: Build type (Release/Debug)
         type: string
         default: Release
+      publish_release:
+        description: Publish artifacts to GitHub Release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+      publish_release:
+        description: Publish artifacts to GitHub Release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+permissions:
+  contents: write
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
@@ -80,3 +112,41 @@ jobs:
           path: |
             install/**
             install-portable/**
+      - name: Prepare release metadata
+        id: release_meta
+        if: ${{ inputs.publish_release }}
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version="$short_sha"
+          fi
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          msg="$(git log -1 --pretty=%B)"
+          {
+            echo "message<<EOF"
+            echo "$msg"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Package artifacts for release
+        if: ${{ inputs.publish_release }}
+        shell: bash
+        run: |
+          version="${{ steps.release_meta.outputs.version }}"
+          build_type="${{ inputs.build_type || 'Release' }}"
+          tar -czf "PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz" install
+          tar -czf "PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz" install-portable
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Prism Launcher ${{ steps.release_meta.outputs.version }}
+          body: ${{ steps.release_meta.outputs.message }}
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            PrismLauncher-Linux-GCC-${{ steps.release_meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.tar.gz
+            PrismLauncher-Linux-GCC-Portable-${{ steps.release_meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.tar.gz

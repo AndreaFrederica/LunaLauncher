@@ -6,6 +6,38 @@ on:
         description: Build type (Release/Debug)
         type: string
         default: Release
+      publish_release:
+        description: Publish artifacts to GitHub Release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+      publish_release:
+        description: Publish artifacts to GitHub Release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+permissions:
+  contents: write
 jobs:
   build-msvc:
     runs-on: windows-2022
@@ -67,3 +99,41 @@ jobs:
           path: |
             install/**
             install-portable/**
+      - name: Prepare release metadata
+        id: release_meta
+        if: ${{ inputs.publish_release }}
+        shell: pwsh
+        run: |
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          "short_sha=$shortSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $version = "${{ inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = $shortSha }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $msg = (git log -1 --pretty=%B)
+          "message<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $msg | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Package artifacts for release
+        if: ${{ inputs.publish_release }}
+        shell: pwsh
+        run: |
+          $version = "${{ steps.release_meta.outputs.version }}"
+          $buildType = "${{ inputs.build_type || 'Release' }}"
+          $zip1 = "PrismLauncher-Windows-MSVC-$version-$buildType.zip"
+          $zip2 = "PrismLauncher-Windows-MSVC-Portable-$version-$buildType.zip"
+          if (Test-Path $zip1) { Remove-Item -Force $zip1 }
+          if (Test-Path $zip2) { Remove-Item -Force $zip2 }
+          Compress-Archive -Path "install\*" -DestinationPath $zip1 -Force
+          Compress-Archive -Path "install-portable\*" -DestinationPath $zip2 -Force
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Prism Launcher ${{ steps.release_meta.outputs.version }}
+          body: ${{ steps.release_meta.outputs.message }}
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            PrismLauncher-Windows-MSVC-${{ steps.release_meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip
+            PrismLauncher-Windows-MSVC-Portable-${{ steps.release_meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip

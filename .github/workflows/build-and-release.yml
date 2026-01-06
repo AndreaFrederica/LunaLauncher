@@ -1,0 +1,90 @@
+name: Build Linux+Windows and Publish Release
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: Build type (Release/Debug)
+        type: string
+        default: Release
+      prerelease:
+        description: Mark GitHub Release as prerelease
+        type: boolean
+        default: true
+      version:
+        description: Release version/tag (empty = short commit id)
+        type: string
+        default: ""
+permissions:
+  contents: write
+jobs:
+  build_linux:
+    uses: ./.github/workflows/linux-gcc.yml
+    with:
+      build_type: ${{ inputs.build_type || 'Release' }}
+      publish_release: false
+      prerelease: ${{ inputs.prerelease }}
+      version: ${{ inputs.version }}
+  build_windows:
+    uses: ./.github/workflows/windows-msvc.yml
+    with:
+      build_type: ${{ inputs.build_type || 'Release' }}
+      publish_release: false
+      prerelease: ${{ inputs.prerelease }}
+      version: ${{ inputs.version }}
+  publish:
+    needs:
+      - build_linux
+      - build_windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - name: Prepare release metadata
+        id: meta
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version="$short_sha"
+          fi
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          msg="$(git log -1 --pretty=%B)"
+          {
+            echo "message<<EOF"
+            echo "$msg"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Download build artifacts
+        uses: actions/download-artifact@v7
+      - name: Package artifacts
+        shell: bash
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          build_type="${{ inputs.build_type || 'Release' }}"
+
+          linux_dir="$(ls -d Linux-GCC-* | head -n 1)"
+          test -n "$linux_dir"
+          tar -czf "PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz" -C "$linux_dir" install
+          tar -czf "PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz" -C "$linux_dir" install-portable
+
+          windows_dir="$(ls -d Windows-MSVC-* | head -n 1)"
+          test -n "$windows_dir"
+          (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-${version}-${build_type}.zip" install)
+          (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-Portable-${version}-${build_type}.zip" install-portable)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Prism Launcher ${{ steps.meta.outputs.version }}
+          body: ${{ steps.meta.outputs.message }}
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            PrismLauncher-Linux-GCC-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.tar.gz
+            PrismLauncher-Linux-GCC-Portable-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.tar.gz
+            PrismLauncher-Windows-MSVC-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip
+            PrismLauncher-Windows-MSVC-Portable-${{ steps.meta.outputs.version }}-${{ inputs.build_type || 'Release' }}.zip

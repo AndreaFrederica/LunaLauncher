@@ -133,13 +133,21 @@ class MinecraftAccount : public QObject, public Usable {
 
     AccountType accountType() const noexcept { return data.type; }
 
-#ifndef LAUNCHER_DISABLE_OWNERSHIP_CHECK
-    bool ownsMinecraft() const { return data.type != AccountType::Offline && data.minecraftEntitlement.ownsMinecraft; }
+    // MSA accounts always check their actual entitlement
+    // Third-party accounts (Offline, Yggdrasil, UnifiedPass) depend on DISABLE_OWNERSHIP_CHECK setting
+    bool ownsMinecraft() const
+    {
+        if (data.type == AccountType::MSA) {
+            return data.minecraftEntitlement.ownsMinecraft;
+        }
+#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+        // When ownership check is disabled, third-party accounts are treated as owning Minecraft
+        return true;
 #else
-    // TESTING ONLY: Always return true when ownership check is disabled
-    // This should ONLY be used for development/testing purposes
-    bool ownsMinecraft() const { return true; }
+        // Otherwise, third-party accounts don't own Minecraft (they rely on having a valid MSA account)
+        return false;
 #endif
+    }
 
     bool hasProfile() const { return data.profileId().size() != 0; }
 

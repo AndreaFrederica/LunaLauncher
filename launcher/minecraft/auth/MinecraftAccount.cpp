@@ -123,10 +123,11 @@ MinecraftAccountPtr MinecraftAccount::createYggdrasil(const QString& username,
     account->data.yggdrasilToken.extra["credentials"] = password;
     account->data.yggdrasilToken.extra["clientToken"] = QUuid::createUuid().toString().remove(s_removeChars);
 
-    // Yggdrasil accounts are assumed to own Minecraft
-    account->data.minecraftEntitlement.canPlayMinecraft = true;
-    account->data.minecraftEntitlement.ownsMinecraft = true;
-    account->data.minecraftEntitlement.validity = Validity::Assumed;
+    // Yggdrasil accounts do not own Minecraft by default
+    // They rely on having a valid MSA account that owns Minecraft
+    account->data.minecraftEntitlement.canPlayMinecraft = false;
+    account->data.minecraftEntitlement.ownsMinecraft = false;
+    account->data.minecraftEntitlement.validity = Validity::Certain;
 
     return account;
 }
@@ -149,10 +150,11 @@ MinecraftAccountPtr MinecraftAccount::createUnifiedPass(const QString& username,
     account->data.unifiedPassToken.extra["credentials"] = password;
     account->data.unifiedPassToken.extra["clientToken"] = QUuid::createUuid().toString().remove(s_removeChars);
 
-    // UnifiedPass accounts are assumed to own Minecraft
-    account->data.minecraftEntitlement.canPlayMinecraft = true;
-    account->data.minecraftEntitlement.ownsMinecraft = true;
-    account->data.minecraftEntitlement.validity = Validity::Assumed;
+    // UnifiedPass accounts do not own Minecraft by default
+    // They rely on having a valid MSA account that owns Minecraft
+    account->data.minecraftEntitlement.canPlayMinecraft = false;
+    account->data.minecraftEntitlement.ownsMinecraft = false;
+    account->data.minecraftEntitlement.validity = Validity::Certain;
 
     return account;
 }

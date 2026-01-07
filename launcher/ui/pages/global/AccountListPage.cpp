@@ -382,7 +382,6 @@ void AccountListPage::on_actionMoveUp_triggered()
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
         m_accounts->moveAccount(selected, -1);
-        ui->listView->selectionModel()->select(ui->listView->indexAbove(selected), QItemSelectionModel::SelectCurrent);
     }
 }
 
@@ -392,6 +391,5 @@ void AccountListPage::on_actionMoveDown_triggered()
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
         m_accounts->moveAccount(selected, 1);
-        ui->listView->selectionModel()->select(ui->listView->indexBelow(selected), QItemSelectionModel::SelectCurrent);
     }
 }

@@ -57,6 +57,7 @@
 #include "ui/InstanceWindow.h"
 #include "ui/MainWindow.h"
 #include "ui/ViewLogWindow.h"
+#include "ui/ToolTipFilter.h"
 
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
@@ -1338,6 +1339,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             msgBox->adjustSize();
             msgBox->open();
         }
+    }
+
+    if (qgetenv("XDG_CURRENT_DESKTOP") == "gamescope") {
+        installEventFilter(new ToolTipFilter);
     }
 
     if (createSetupWizard()) {

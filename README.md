@@ -42,6 +42,18 @@
 
 ---
 
+## LunaUI Custom Panel Scripting
+
+Luna Launcher supports per-instance custom setting panels under `lunaui`.
+
+- Runtime folder: `<instance-root>/lunaui`
+- Development docs: [`docs/lunaui/README.md`](docs/lunaui/README.md)
+- Type definitions (`.d.ts`): [`docs/lunaui/lunaui.d.ts`](docs/lunaui/lunaui.d.ts)
+
+The `.d.ts` file is intended for editor IntelliSense when writing `lunaui/*.js` scripts.
+
+---
+
 ## Installation
 
 Installation instructions and downloads will be provided once stable releases are available.

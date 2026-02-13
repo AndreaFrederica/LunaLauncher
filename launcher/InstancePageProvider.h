@@ -24,6 +24,7 @@
 #include "ui/pages/instance/WorldListPage.h"
 #include "ui/pages/instance/YesSteveModelPage.h"
 #include "ui/pages/instance/CustomPlayerModelPage.h"
+#include "ui/pages/instance/CustomUIPanelPage.h"
 #include "ui/pages/instance/SchematicsPage.h"
 #include "server/ServerInstance.h"
 #include "ui/pages/server/ServerConsolePage.h"
@@ -98,6 +99,7 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
         values.append(new WorldListPage(onesix, onesix->worldList()));
         values.append(new ServersPage(onesix));
         values.append(new ScreenshotsPage(FS::PathCombine(onesix->gameRoot(), "screenshots")));
+        values.append(new CustomUIPanelPage(onesix));
         values.append(new InstanceSettingsPage(onesix));
         values.append(new OtherLogsPage("logs", tr("Other Logs"), "Other-Logs", inst));
         return values;

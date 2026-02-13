@@ -40,6 +40,7 @@
 #include <QHeaderView>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTextDocument>
 
 VersionListView::VersionListView(QWidget* parent) : QTreeView(parent)
 {
@@ -134,8 +135,6 @@ void VersionListView::paintInfoLabel(QPaintEvent* event) const
     // calculate the rect for the overlay
     QPainter painter(viewport());
     painter.setRenderHint(QPainter::Antialiasing, true);
-    QFont font("sans", 20);
-    font.setBold(true);
 
     QRect bounds = viewport()->geometry();
     bounds.moveTop(0);
@@ -145,9 +144,16 @@ void VersionListView::paintInfoLabel(QPaintEvent* event) const
     QColor background = QApplication::palette().color(QPalette::WindowText);
     QColor foreground = QApplication::palette().color(QPalette::Base);
     foreground.setAlpha(190);
-    painter.setFont(font);
-    auto fontMetrics = painter.fontMetrics();
-    auto textRect = fontMetrics.boundingRect(innerBounds, Qt::AlignHCenter | Qt::TextWordWrap, emptyString);
+
+    // Use QTextDocument for HTML/rich text support
+    QTextDocument doc;
+    doc.setHtml(emptyString);
+    doc.setDefaultFont(QFont("sans", 20));
+    doc.setTextWidth(innerBounds.width());
+
+    // Calculate text size using the document
+    QSize textSize = doc.size().toSize();
+    QRect textRect(QPoint(0, 0), textSize);
     textRect.moveCenter(bounds.center());
 
     auto wrapRect = textRect;
@@ -162,7 +168,7 @@ void VersionListView::paintInfoLabel(QPaintEvent* event) const
     painter.setPen(foreground);
     painter.drawRoundedRect(wrapRect, 5.0, 5.0);
 
-    painter.setPen(foreground);
-    painter.setFont(font);
-    painter.drawText(textRect, Qt::AlignHCenter | Qt::TextWordWrap, emptyString);
+    // Draw the HTML content
+    painter.translate(textRect.topLeft());
+    doc.drawContents(&painter);
 }

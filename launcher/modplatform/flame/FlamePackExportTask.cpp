@@ -22,6 +22,8 @@
 #include <QJsonObject>
 
 #include <QCryptographicHash>
+#include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QtConcurrentRun>
@@ -29,6 +31,7 @@
 #include <iterator>
 #include <memory>
 #include "Application.h"
+#include "FileSystem.h"
 #include "Json.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/mod/ModFolderModel.h"
@@ -72,12 +75,41 @@ void FlamePackExportTask::collectFiles()
         emitFailed(tr("Could not search for files"));
         return;
     }
+    collectLunaUiFiles();
 
     pendingHashes.clear();
     resolvedFiles.clear();
 
     m_options.instance->loaderModList()->update();
     connect(m_options.instance->loaderModList().get(), &ModFolderModel::updateFinished, this, &FlamePackExportTask::collectHashes);
+}
+
+void FlamePackExportTask::collectLunaUiFiles()
+{
+    rootExtraFiles.clear();
+
+    const QString lunaUiRootPath = FS::PathCombine(m_options.instance->instanceRoot(), "lunaui");
+    QDir lunaUiRoot(lunaUiRootPath);
+    if (!lunaUiRoot.exists()) {
+        return;
+    }
+
+    QDirIterator it(lunaUiRootPath, QDir::Files | QDir::NoDotAndDotDot | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        const QFileInfo fileInfo = it.fileInfo();
+        if (m_options.filter && m_options.filter(fileInfo)) {
+            continue;
+        }
+
+        const QString relative = lunaUiRoot.relativeFilePath(fileInfo.absoluteFilePath());
+        if (relative == ".." || relative.startsWith("../")) {
+            qWarning() << "Skipping lunaui file outside root:" << fileInfo.absoluteFilePath();
+            continue;
+        }
+
+        rootExtraFiles.append({ fileInfo.absoluteFilePath(), QString("lunaui/%1").arg(relative) });
+    }
 }
 
 void FlamePackExportTask::collectHashes()
@@ -322,6 +354,19 @@ void FlamePackExportTask::buildZip()
     auto zipTask = makeShared<MMCZip::ExportToZipTask>(m_options.output, m_gameRoot, files, "overrides/", true);
     zipTask->addExtraFile("manifest.json", generateIndex());
     zipTask->addExtraFile("modlist.html", generateHTML());
+    for (const auto& entry : rootExtraFiles) {
+        QFile f(entry.first);
+        if (!f.open(QIODevice::ReadOnly)) {
+            qWarning() << "Could not open extra export file:" << entry.first;
+            continue;
+        }
+        auto data = f.readAll();
+        if (f.error() != QFileDevice::NoError) {
+            qWarning() << "Could not read extra export file:" << entry.first;
+            continue;
+        }
+        zipTask->addExtraFile(entry.second, data);
+    }
 
     QStringList exclude;
     std::transform(resolvedFiles.keyBegin(), resolvedFiles.keyEnd(), std::back_insert_iterator(exclude),

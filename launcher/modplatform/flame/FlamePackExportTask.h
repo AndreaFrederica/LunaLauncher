@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <QList>
+#include <QPair>
 #include "MMCZip.h"
 #include "minecraft/MinecraftInstance.h"
 #include "modplatform/flame/FlameAPI.h"
@@ -73,11 +75,13 @@ class FlamePackExportTask : public Task {
     FlameAPI api;
 
     QFileInfoList files;
+    QList<QPair<QString, QString>> rootExtraFiles;
     QMap<QString, HashInfo> pendingHashes{};
     QMap<QString, ResolvedFile> resolvedFiles{};
     Task::Ptr task;
 
     void collectFiles();
+    void collectLunaUiFiles();
     void collectHashes();
     void makeApiRequest();
     void getProjectsInfo();

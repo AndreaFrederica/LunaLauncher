@@ -1032,6 +1032,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/instance/YesSteveModelPage.cpp
     ui/pages/instance/CustomPlayerModelPage.h
     ui/pages/instance/CustomPlayerModelPage.cpp
+    ui/pages/instance/CustomUIPanelPage.h
+    ui/pages/instance/CustomUIPanelPage.cpp
     ui/pages/instance/SchematicsPage.h
     ui/pages/instance/SchematicsPage.cpp
     ui/pages/instance/ShaderPackPage.h

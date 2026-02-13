@@ -54,6 +54,7 @@
    </attribute>
    <addaction name="actionAddMicrosoft"/>
    <addaction name="actionAddOffline"/>
+   <addaction name="actionAddOfflineForced"/>
    <addaction name="actionAddYggdrasil"/>
    <addaction name="actionAddUnifiedPass"/>
    <addaction name="actionRefresh"/>
@@ -92,6 +93,14 @@
   <action name="actionAddOffline">
    <property name="text">
     <string>Add &amp;Offline</string>
+   </property>
+  </action>
+  <action name="actionAddOfflineForced">
+   <property name="text">
+    <string>Force Add Offline (Dev)</string>
+   </property>
+   <property name="toolTip">
+    <string>Developer mode: Add offline account without Microsoft account verification</string>
    </property>
   </action>
   <action name="actionAddYggdrasil">

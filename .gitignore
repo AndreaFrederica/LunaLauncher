@@ -79,3 +79,4 @@ third_party/*
 vcpkg_installed/*
 aqtinstall.log
 *.pyc
+PrismLauncher-portable-noverify/*

@@ -75,6 +75,8 @@ ExportInstanceDialog::ExportInstanceDialog(InstancePtr instance, QWidget* parent
     }
     m_proxyModel->ignoreFilesWithName().append({ ".DS_Store", "thumbs.db", "Thumbs.db" });
     m_proxyModel->loadBlockedPathsFromFile(ignoreFileName());
+    // Keep lunaui enabled by default on each export dialog open.
+    m_proxyModel->blockedPaths().remove("lunaui");
 
     m_ui->treeView->setModel(m_proxyModel);
     m_ui->treeView->setRootIndex(m_proxyModel->mapFromSource(model->index(root)));

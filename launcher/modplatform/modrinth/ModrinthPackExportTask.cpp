@@ -20,9 +20,12 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QtConcurrentRun>
+#include "FileSystem.h"
 #include "Json.h"
 #include "MMCZip.h"
 #include "archive/ExportToZipTask.h"
@@ -80,6 +83,7 @@ void ModrinthPackExportTask::collectFiles()
         emitFailed(tr("Could not search for files"));
         return;
     }
+    collectLunaUiFiles();
 
     pendingHashes.clear();
     resolvedFiles.clear();
@@ -89,6 +93,34 @@ void ModrinthPackExportTask::collectFiles()
         connect(mcInstance->loaderModList().get(), &ModFolderModel::updateFinished, this, &ModrinthPackExportTask::collectHashes);
     } else
         collectHashes();
+}
+
+void ModrinthPackExportTask::collectLunaUiFiles()
+{
+    rootExtraFiles.clear();
+
+    const QString lunaUiRootPath = FS::PathCombine(instance->instanceRoot(), "lunaui");
+    QDir lunaUiRoot(lunaUiRootPath);
+    if (!lunaUiRoot.exists()) {
+        return;
+    }
+
+    QDirIterator it(lunaUiRootPath, QDir::Files | QDir::NoDotAndDotDot | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        const QFileInfo fileInfo = it.fileInfo();
+        if (filter && filter(fileInfo)) {
+            continue;
+        }
+
+        const QString relative = lunaUiRoot.relativeFilePath(fileInfo.absoluteFilePath());
+        if (relative == ".." || relative.startsWith("../")) {
+            qWarning() << "Skipping lunaui file outside root:" << fileInfo.absoluteFilePath();
+            continue;
+        }
+
+        rootExtraFiles.append({ fileInfo.absoluteFilePath(), QString("lunaui/%1").arg(relative) });
+    }
 }
 
 void ModrinthPackExportTask::collectHashes()
@@ -203,6 +235,19 @@ void ModrinthPackExportTask::buildZip()
 
     auto zipTask = makeShared<MMCZip::ExportToZipTask>(output, gameRoot, files, "overrides/", true);
     zipTask->addExtraFile("modrinth.index.json", generateIndex());
+    for (const auto& entry : rootExtraFiles) {
+        QFile f(entry.first);
+        if (!f.open(QIODevice::ReadOnly)) {
+            qWarning() << "Could not open extra export file:" << entry.first;
+            continue;
+        }
+        auto data = f.readAll();
+        if (f.error() != QFileDevice::NoError) {
+            qWarning() << "Could not read extra export file:" << entry.first;
+            continue;
+        }
+        zipTask->addExtraFile(entry.second, data);
+    }
 
     zipTask->setExcludeFiles(resolvedFiles.keys());
 

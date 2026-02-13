@@ -20,6 +20,8 @@
 
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QList>
+#include <QPair>
 #include "BaseInstance.h"
 #include "MMCZip.h"
 #include "minecraft/MinecraftInstance.h"
@@ -63,11 +65,13 @@ class ModrinthPackExportTask : public Task {
 
     ModrinthAPI api;
     QFileInfoList files;
+    QList<QPair<QString, QString>> rootExtraFiles;
     QMap<QString, QString> pendingHashes;
     QMap<QString, ResolvedFile> resolvedFiles;
     Task::Ptr task;
 
     void collectFiles();
+    void collectLunaUiFiles();
     void collectHashes();
     void makeApiRequest();
     void parseApiResponse(std::shared_ptr<QByteArray> response);

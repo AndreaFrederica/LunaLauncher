@@ -45,6 +45,18 @@
 
 ---
 
+## LunaUI 自定义面板脚本开发
+
+Luna Launcher 支持基于实例的 `lunaui` 自定义设置面板。
+
+- 运行目录：`<实例根目录>/lunaui`
+- 开发文档：[`docs/lunaui/README.md`](docs/lunaui/README.md)
+- 类型定义（`.d.ts`）：[`docs/lunaui/lunaui.d.ts`](docs/lunaui/lunaui.d.ts)
+
+`.d.ts` 主要用于在编写 `lunaui/*.js` 时提供编辑器智能提示。
+
+---
+
 ## 安装
 
 正式版本的安装说明和下载将在稳定版本发布后提供。

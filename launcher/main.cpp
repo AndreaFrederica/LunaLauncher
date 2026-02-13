@@ -44,6 +44,7 @@
 #include <QDebug>
 #include <csignal>
 #include <cstdlib>
+#include <cstdio>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -68,13 +69,19 @@ void writeCrashLog(const QString& message)
 #ifdef Q_OS_WIN
 
 // Helper function to capture stack trace with detailed symbols
-static void captureStackTrace(QStringList& frames)
+static void captureStackTrace(QStringList& frames, const CONTEXT* sourceContext)
 {
-    HANDLE hProcess = GetCurrentProcess();
-    SymInitialize(hProcess, nullptr, TRUE);
+    if (!sourceContext) {
+        return;
+    }
 
-    CONTEXT context;
-    RtlCaptureContext(&context);
+    HANDLE hProcess = GetCurrentProcess();
+    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+    if (!SymInitialize(hProcess, nullptr, TRUE)) {
+        return;
+    }
+
+    CONTEXT context = *sourceContext;
 
     STACKFRAME64 stackFrame;
     memset(&stackFrame, 0, sizeof(stackFrame));
@@ -100,16 +107,16 @@ static void captureStackTrace(QStringList& frames)
     stackFrame.AddrFrame.Mode = AddrModeFlat;
     stackFrame.AddrStack.Mode = AddrModeFlat;
 
-    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(::operator new(sizeof(SYMBOL_INFO) + 256 * sizeof(char)));
-    symbol->MaxNameLen = 255;
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(::operator new(sizeof(SYMBOL_INFO) + 512 * sizeof(char)));
+    symbol->MaxNameLen = 511;
     symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 
     IMAGEHLP_LINE64 line;
     line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 
     for (int i = 0; i < 64; i++) {
-        if (!StackWalk64(machineType, hProcess, GetCurrentThread(), &stackFrame,
-                         &context, nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) {
+        if (!StackWalk64(machineType, hProcess, GetCurrentThread(), &stackFrame, &context, nullptr,
+                         SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) {
             break;
         }
 
@@ -125,9 +132,7 @@ static void captureStackTrace(QStringList& frames)
         // Get file and line
         DWORD displacement = 0;
         if (SymGetLineFromAddr64(hProcess, stackFrame.AddrPC.Offset, &displacement, &line)) {
-            wchar_t wfilePath[MAX_PATH];
-            MultiByteToWideChar(CP_ACP, 0, line.FileName, -1, wfilePath, MAX_PATH);
-            QString filePath = QString::fromWCharArray(wfilePath);
+            QString filePath = QString::fromLocal8Bit(line.FileName);
             frame += QString(" (%1:%2)").arg(filePath.mid(filePath.lastIndexOf('\\') + 1)).arg(line.LineNumber);
         }
 
@@ -142,12 +147,26 @@ static void captureStackTrace(QStringList& frames)
 
 LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
 {
+    static LONG inHandler = 0;
+    if (InterlockedCompareExchange(&inHandler, 1, 0) != 0) {
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+
     // Set up crash log path first
     crashLogPath = QDir::current().filePath("crash.log");
 
+    DWORD code = 0;
+    const CONTEXT* contextRecord = nullptr;
+    if (exceptionInfo && exceptionInfo->ExceptionRecord) {
+        code = exceptionInfo->ExceptionRecord->ExceptionCode;
+    }
+    if (exceptionInfo && exceptionInfo->ContextRecord) {
+        contextRecord = exceptionInfo->ContextRecord;
+    }
+
     QString message = QString("[CRASH] %1 - Windows Exception Code: 0x%2")
                           .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs))
-                          .arg(exceptionInfo->ExceptionRecord->ExceptionCode, 8, 16, QChar('0'));
+                          .arg(code, 8, 16, QChar('0'));
 
     // Output to console/debugger
     OutputDebugStringA(message.toLocal8Bit().constData());
@@ -158,26 +177,35 @@ LONG WINAPI windowsExceptionHandler(EXCEPTION_POINTERS* exceptionInfo)
 
     // Capture detailed stack trace
     QStringList frames;
-    captureStackTrace(frames);
+    captureStackTrace(frames, contextRecord);
 
     writeCrashLog("[CRASH] Stack Trace:");
-    for (const QString& frame : frames) {
-        fprintf(stderr, "%s\n", frame.toLocal8Bit().constData());
-        writeCrashLog(frame);
+    if (frames.isEmpty()) {
+        writeCrashLog("  <unavailable>");
+    } else {
+        for (const QString& frame : frames) {
+            fprintf(stderr, "%s\n", frame.toLocal8Bit().constData());
+            writeCrashLog(frame);
+        }
     }
 
     // Try to write minidump
-    QString dumpPath = crashLogPath.replace(".log", ".dmp");
+    QString dumpPath = crashLogPath;
+    dumpPath.replace(".log", ".dmp");
     HANDLE hDumpFile = CreateFile(reinterpret_cast<LPCWSTR>(dumpPath.utf16()), GENERIC_WRITE, FILE_SHARE_WRITE, nullptr,
                                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hDumpFile != INVALID_HANDLE_VALUE) {
         MINIDUMP_EXCEPTION_INFORMATION mdei;
-        mdei.ThreadId = GetCurrentThreadId();
-        mdei.ExceptionPointers = exceptionInfo;
-        mdei.ClientPointers = FALSE;
+        MINIDUMP_EXCEPTION_INFORMATION* mdeiPtr = nullptr;
+        if (exceptionInfo) {
+            mdei.ThreadId = GetCurrentThreadId();
+            mdei.ExceptionPointers = exceptionInfo;
+            mdei.ClientPointers = FALSE;
+            mdeiPtr = &mdei;
+        }
 
-        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hDumpFile,
-                          MiniDumpNormal, &mdei, nullptr, nullptr);
+        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hDumpFile, MiniDumpNormal, mdeiPtr, nullptr,
+                          nullptr);
         CloseHandle(hDumpFile);
         writeCrashLog(QString("[CRASH] Minidump written to: %1").arg(dumpPath));
     }
@@ -243,6 +271,20 @@ static void setupUnixSignalHandlers()
 
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
+    static thread_local bool inMessageHandler = false;
+    if (inMessageHandler) {
+        return;
+    }
+    struct ScopedFlagReset {
+        bool& ref;
+        ~ScopedFlagReset() { ref = false; }
+    };
+    inMessageHandler = true;
+    ScopedFlagReset reset{ inMessageHandler };
+
+    auto file = context.file ? context.file : "unknown";
+    auto function = context.function ? context.function : "unknown";
+
     QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
     QString level;
     switch (type) {
@@ -257,15 +299,17 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
                           .arg(timestamp)
                           .arg(level)
                           .arg(msg)
-                          .arg(context.file ? context.file : "unknown")
+                          .arg(file)
                           .arg(context.line)
-                          .arg(context.function);
+                          .arg(function);
 
-    fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
+    auto encoded = message.toLocal8Bit();
+    fprintf(stderr, "%s\n", encoded.constData());
+    fflush(stderr);
 
     // Also output via OutputDebugString on Windows for IDE/debugger
 #ifdef Q_OS_WIN
-    OutputDebugStringA(message.toLocal8Bit().constData());
+    OutputDebugStringA(encoded.constData());
     OutputDebugStringA("\n");
 #endif
 
@@ -273,7 +317,8 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
     if (type == QtFatalMsg) {
 #ifdef Q_OS_WIN
         // Raise exception to trigger our handler
-        RaiseException(0xE0000001, 0, 0, nullptr);
+        RaiseException(0xE0000001, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+        TerminateProcess(GetCurrentProcess(), 1);
 #else
         abort();
 #endif

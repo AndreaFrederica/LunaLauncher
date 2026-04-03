@@ -90,13 +90,19 @@ void ModrinthCheckUpdate::getUpdateModsForLoader(std::optional<ModPlatform::ModL
     QStringList hashes;
     if (forceModLoaderCheck && loader.has_value()) {
         for (auto hash : m_mappings.keys()) {
-            if (m_mappings[hash]->metadata()->loaders & loader.value()) {
+            if (m_mappings.value(hash)->metadata()->loaders & loader.value()) {
                 hashes.append(hash);
             }
         }
     } else {
         hashes = m_mappings.keys();
     }
+
+    if (hashes.isEmpty()) {
+        checkNextLoader();
+        return;
+    }
+
     auto job = api.latestVersions(hashes, m_hashType, m_gameVersions, loader, response);
 
     connect(job.get(), &Task::succeeded, this, [this, response, loader] { checkVersionsResponse(response, loader); });
@@ -116,8 +122,8 @@ void ModrinthCheckUpdate::checkVersionsResponse(std::shared_ptr<QByteArray> resp
     QJsonParseError parse_error{};
     QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
     if (parse_error.error != QJsonParseError::NoError) {
-        qWarning() << "Error while parsing JSON response from ModrinthCheckUpdate at " << parse_error.offset
-                   << " reason: " << parse_error.errorString();
+        qWarning() << "Error while parsing JSON response from ModrinthCheckUpdate at" << parse_error.offset
+                   << "reason:" << parse_error.errorString();
         qWarning() << *response;
 
         emitFailed(parse_error.errorString());
@@ -136,7 +142,7 @@ void ModrinthCheckUpdate::checkVersionsResponse(std::shared_ptr<QByteArray> resp
             // If the returned project is empty, but we have Modrinth metadata,
             // it means this specific version is not available
             if (project_obj.isEmpty()) {
-                qDebug() << "Mod " << m_mappings.find(hash).value()->name() << " got an empty response." << "Hash: " << hash;
+                qDebug() << "Mod" << m_mappings.find(hash).value()->name() << "got an empty response. Hash:" << hash;
                 ++iter;
                 continue;
             }

@@ -105,7 +105,7 @@ CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest
         // themeDebugLog << "Theme Path: " << path;
 
         if (!FS::ensureFilePathExists(path)) {
-            themeWarningLog() << m_name << " Theme file path doesn't exist!";
+            themeWarningLog().nospace() << m_name << ": Theme file path doesn't exist!";
             m_palette = baseTheme->colorScheme();
             m_styleSheet = baseTheme->appStyleSheet();
             return;
@@ -262,7 +262,7 @@ bool CustomTheme::read(const QString& path, bool& hasCustomLogColors)
                 readAndSetLogColor(MessageLevel::Fatal, true, "Fatal");
             }
         } catch (const Exception& e) {
-            themeWarningLog() << "Couldn't load theme json: " << e.cause();
+            themeWarningLog() << "Couldn't load theme json:" << e.cause();
             return false;
         }
     } else {

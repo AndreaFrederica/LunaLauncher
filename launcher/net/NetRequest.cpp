@@ -76,12 +76,12 @@ void NetRequest::executeTask()
     m_state = m_sink->init(request);
     switch (m_state) {
         case State::Succeeded:
-            qCDebug(logCat) << getUid().toString() << "Request cache hit " << m_url.toString();
+            qCDebug(logCat) << getUid().toString() << "Request cache hit" << m_url.toString();
             emit succeeded();
             emit finished();
             return;
         case State::Running:
-            qCDebug(logCat) << getUid().toString() << "Running " << m_url.toString();
+            qCDebug(logCat) << getUid().toString() << "Running" << m_url.toString();
             break;
         case State::Inactive:
         case State::Failed:
@@ -160,7 +160,7 @@ void NetRequest::onProgress(qint64 bytesReceived, qint64 bytesTotal)
 void NetRequest::downloadError(QNetworkReply::NetworkError error)
 {
     if (error == QNetworkReply::OperationCanceledError) {
-        qCCritical(logCat) << getUid().toString() << "Aborted " << m_url.toString();
+        qCCritical(logCat) << getUid().toString() << "Aborted" << m_url.toString();
         m_state = State::Failed;
     } else {
         if (m_options & Option::AcceptLocalFiles) {
@@ -170,9 +170,11 @@ void NetRequest::downloadError(QNetworkReply::NetworkError error)
             }
         }
         // error happened during download.
-        qCCritical(logCat) << getUid().toString() << "Failed" << m_url.toString() << "with reason" << error;
+        qCCritical(logCat) << getUid().toString() << "Failed" << m_url.toString() << "with error" << error;
         if (m_reply)
-            qCCritical(logCat) << getUid().toString() << "HTTP Status" << replyStatusCode() << ";error" << errorString();
+            qCCritical(logCat) << getUid().toString() << "HTTP status:" << replyStatusCode() << errorString();
+        if (m_errorResponse.size() > 0)
+            qCCritical(logCat) << getUid().toString() << "Response from server:" << m_errorResponse;
         m_state = State::Failed;
     }
 }
@@ -181,7 +183,7 @@ void NetRequest::sslErrors(const QList<QSslError>& errors)
 {
     int i = 1;
     for (auto error : errors) {
-        qCCritical(logCat) << getUid().toString() << "Request" << m_url.toString() << "SSL Error #" << i << " : " << error.errorString();
+        qCCritical(logCat).nospace() << getUid().toString() << " Request " << m_url.toString() << " SSL Error #" << i << ": " << error.errorString();
         auto cert = error.certificate();
         qCCritical(logCat) << getUid().toString() << "Certificate in question:\n" << cert.toText();
         i++;
@@ -236,7 +238,7 @@ auto NetRequest::handleRedirect() -> bool
     }
 
     m_url = QUrl(redirect.toString());
-    qCDebug(logCat) << getUid().toString() << "Following redirect to " << m_url.toString();
+    qCDebug(logCat) << getUid().toString() << "Following redirect to" << m_url.toString();
     executeTask();
 
     return true;
@@ -355,12 +357,15 @@ void NetRequest::downloadReadyRead()
     if (m_state == State::Running) {
         auto data = m_reply->readAll();
         m_state = m_sink->write(data);
+        if (replyStatusCode() >= 400) {
+            m_errorResponse.append(data);
+        }
         if (m_state == State::Failed) {
             qCCritical(logCat) << getUid().toString() << "Failed to process response chunk:" << m_sink->failReason();
         }
         // qDebug() << "Request" << m_url.toString() << "gained" << data.size() << "bytes";
     } else {
-        qCCritical(logCat) << getUid().toString() << "Cannot write download data! illegal status " << m_status;
+        qCCritical(logCat) << getUid().toString() << "Cannot write download data! illegal status" << m_status;
     }
 }
 

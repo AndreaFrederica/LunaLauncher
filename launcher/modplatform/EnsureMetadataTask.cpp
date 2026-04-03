@@ -233,8 +233,8 @@ Task::Ptr EnsureMetadataTask::modrinthVersionsTask()
         QJsonParseError parse_error{};
         QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Modrinth::CurrentVersions at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
+            qWarning() << "Error while parsing JSON response from Modrinth::CurrentVersions at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
             qWarning() << *response;
 
             failed(parse_error.errorString());
@@ -293,8 +293,8 @@ Task::Ptr EnsureMetadataTask::modrinthProjectsTask()
         QJsonParseError parse_error{};
         auto doc = QJsonDocument::fromJson(*response, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Modrinth projects task at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
+            qWarning() << "Error while parsing JSON response from Modrinth projects task at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
             qWarning() << *response;
             return;
         }
@@ -361,8 +361,8 @@ Task::Ptr EnsureMetadataTask::flameVersionsTask()
         QJsonParseError parse_error{};
         QJsonDocument doc = QJsonDocument::fromJson(*response, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Modrinth::CurrentVersions at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
+            qWarning() << "Error while parsing JSON response from Flame::CurrentVersions at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
             qWarning() << *response;
 
             failed(parse_error.errorString());
@@ -443,8 +443,8 @@ Task::Ptr EnsureMetadataTask::flameProjectsTask()
         QJsonParseError parse_error{};
         auto doc = QJsonDocument::fromJson(*response, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
-            qWarning() << "Error while parsing JSON response from Modrinth projects task at " << parse_error.offset
-                       << " reason: " << parse_error.errorString();
+            qWarning() << "Error while parsing JSON response from Flame projects task at" << parse_error.offset
+                       << "reason:" << parse_error.errorString();
             qWarning() << *response;
             return;
         }

@@ -48,13 +48,6 @@
 #include "minecraft/auth/AuthlibInjectorDownloadTask.h"
 #include "minecraft/auth/Nide8Auth.h"
 #include "minecraft/auth/Nide8AuthDownloadTask.h"
-#include "minecraft/launch/AutoInstallJava.h"
-#include "minecraft/launch/CreateGameFolders.h"
-#include "minecraft/launch/ExtractNatives.h"
-#include "minecraft/launch/PrintInstanceInfo.h"
-#include "minecraft/update/AssetUpdateTask.h"
-#include "minecraft/update/FMLLibrariesTask.h"
-#include "minecraft/update/LibrariesTask.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
 
@@ -71,12 +64,22 @@
 #include "launch/steps/QuitAfterGameStop.h"
 #include "launch/steps/TextPrint.h"
 
+#include "minecraft/launch/AutoInstallJava.h"
 #include "minecraft/launch/ClaimAccount.h"
+#include "minecraft/launch/CreateGameFolders.h"
+#include "minecraft/launch/EnsureOfflineLibraries.h"
+#include "minecraft/launch/ExtractNatives.h"
 #include "minecraft/launch/LauncherPartLaunch.h"
 #include "minecraft/launch/ModMinecraftJar.h"
+#include "minecraft/launch/PrintInstanceInfo.h"
 #include "minecraft/launch/ReconstructAssets.h"
 #include "minecraft/launch/ScanModFolders.h"
 #include "minecraft/launch/VerifyJavaInstall.h"
+
+#include "minecraft/update/AssetUpdateTask.h"
+#include "minecraft/update/FMLLibrariesTask.h"
+#include "minecraft/update/FoldersTask.h"
+#include "minecraft/update/LibrariesTask.h"
 
 #include "java/JavaUtils.h"
 
@@ -92,7 +95,6 @@
 #include "AssetsUtils.h"
 #include "MinecraftLoadAndCheck.h"
 #include "PackProfile.h"
-#include "minecraft/update/FoldersTask.h"
 
 #include "tools/BaseProfiler.h"
 
@@ -976,21 +978,13 @@ QStringList MinecraftInstance::verboseDescription(AuthSessionPtr session, Minecr
         out << "Libraries:";
         QStringList jars, nativeJars;
         profile->getLibraryFiles(runtimeContext(), jars, nativeJars, getLocalLibraryPath(), binRoot());
-        auto printLibFile = [&out](const QString& path) {
-            QFileInfo info(path);
-            if (info.exists()) {
-                out << "  " + path;
-            } else {
-                out << "  " + path + " (missing)";
-            }
-        };
         for (auto file : jars) {
-            printLibFile(file);
+            out << "  " + file;
         }
         out << "";
         out << "Native libraries:";
         for (auto file : nativeJars) {
-            printLibFile(file);
+            out << "  " + file;
         }
         out << "";
     }
@@ -1239,6 +1233,8 @@ shared_qobject_ptr<LaunchTask> MinecraftInstance::createLaunchTask(AuthSessionPt
         for (auto t : createUpdateTask()) {
             process->appendStep(makeShared<TaskStepWrapper>(pptr, t));
         }
+    } else {
+        process->appendStep(makeShared<EnsureOfflineLibraries>(pptr, this));
     }
 
     // if there are any jar mods

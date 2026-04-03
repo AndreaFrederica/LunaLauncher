@@ -58,6 +58,9 @@ on:
         description: Type of build (Debug or Release)
         type: string
         default: Debug
+      environment:
+        description: Deployment environment to run under
+        type: string
   workflow_dispatch:
     inputs:
       build-type:
@@ -69,6 +72,8 @@ jobs:
   build:
     name: Build (${{ matrix.artifact-name }})
 
+    environment: ${{ inputs.environment || '' }}
+
     permissions:
       # Required for Azure Trusted Signing
       id-token: write
@@ -79,17 +84,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             artifact-name: Linux
             cmake-preset: linux
+            qt-version: 6.10.2
 
-            # NOTE(@getchoo): Yes, we're intentionally using 24.04 here!!!
-            #
-            # It's not really documented anywhere AFAICT, but upstream Qt binaries
-            # *for the same version* are compiled against 24.04 on ARM, and *not* 22.04 like x64
           - os: ubuntu-24.04-arm
             artifact-name: Linux-aarch64
             cmake-preset: linux
+            qt-version: 6.10.2
 
           - os: windows-2022
             artifact-name: Windows-MinGW-w64
@@ -108,16 +111,19 @@ jobs:
             cmake-preset: windows_msvc
             # TODO(@getchoo): This is the default in setup-dependencies/windows. Why isn't it working?!?!
             vcvars-arch: amd64
+            qt-version: 6.10.2
 
           - os: windows-11-arm
             artifact-name: Windows-MSVC-arm64
             cmake-preset: windows_msvc
             vcvars-arch: arm64
+            qt-version: 6.10.2
 
-          - os: macos-14
+          - os: macos-26
             artifact-name: macOS
             cmake-preset: macos_universal
             macosx-deployment-target: 12.0
+            qt-version: 6.9.3
 
     runs-on: ${{ matrix.os }}
 
@@ -151,7 +157,7 @@ jobs:
           artifact-name: ${{ matrix.artifact-name }}
           msystem: ${{ matrix.msystem }}
           vcvars-arch: ${{ matrix.vcvars-arch }}
-          qt-architecture: ${{ matrix.qt-architecture }}
+          qt-version: ${{ matrix.qt-version }}
 
       ##
       # BUILD
@@ -210,6 +216,8 @@ jobs:
       - name: Package (Windows)
         if: ${{ runner.os == 'Windows' }}
         uses: ./.github/actions/package/windows
+        env:
+          CI_HAS_ACCESS_TO_AZURE: ${{ vars.CI_HAS_ACCESS_TO_AZURE || '' }}
         with:
           version: ${{ steps.short-version.outputs.version }}
           build-type: ${{ steps.setup-dependencies.outputs.build-type }}

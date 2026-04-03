@@ -119,7 +119,7 @@ void ThemeManager::initializeIcons()
 
     if (!m_iconThemeFolder.mkpath("."))
         themeWarningLog() << "Couldn't create icon theme folder";
-    themeDebugLog() << "Icon Theme Folder Path: " << m_iconThemeFolder.absolutePath();
+    themeDebugLog() << "Icon Theme Folder Path:" << m_iconThemeFolder.absolutePath();
 
     // Collect icon theme folders from both user data directory and launcher install directory
     QList<QDir> iconThemeFolders;
@@ -201,7 +201,7 @@ void ThemeManager::initializeWidgets()
 
     if (!m_applicationThemeFolder.mkpath("."))
         themeWarningLog() << "Couldn't create theme folder";
-    themeDebugLog() << "Theme Folder Path: " << m_applicationThemeFolder.absolutePath();
+    themeDebugLog() << "Theme Folder Path:" << m_applicationThemeFolder.absolutePath();
 
     // Collect theme folders from both user data directory and launcher install directory
     QList<QDir> themeFolders;

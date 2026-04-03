@@ -41,6 +41,9 @@
 				"type": "equals",
 				"lhs": "${hostSystemName}",
 				"rhs": "Darwin"
+			},
+			"cacheVariables": {
+				"CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
 			}
 		},
 		{
@@ -50,6 +53,7 @@
 				"macos"
 			],
 			"cacheVariables": {
+				"CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
 				"CMAKE_OSX_ARCHITECTURES": "x86_64;arm64",
 				"VCPKG_TARGET_TRIPLET": "universal-osx"
 			}
@@ -76,6 +80,9 @@
 				"type": "equals",
 				"lhs": "${hostSystemName}",
 				"rhs": "Windows"
+			},
+			"cacheVariables": {
+				"CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
 			}
 		},
 		{
@@ -106,8 +113,8 @@
 				"CMAKE_RC_COMPILER": "${sourceDir}/.msys2/msys64/ucrt64/bin/windres.exe",
 				"Launcher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH": "OFF",
 				"ENABLE_LTO": "OFF",
-				"CMAKE_CXX_FLAGS_DEBUG": "-s",
-				"CMAKE_C_FLAGS_DEBUG": "-s"
+				"CMAKE_CXX_FLAGS_DEBUG": "-g0",
+				"CMAKE_C_FLAGS_DEBUG": "-g0"
 			}
 		}
 	],
@@ -130,7 +137,7 @@
 				"lhs": "${hostSystemName}",
 				"rhs": "Darwin"
 			},
-      "configurePreset": "macos"
+			"configurePreset": "macos"
 		},
 		{
 			"name": "macos_universal",
@@ -187,11 +194,11 @@
 				}
 			}
 		},
-	  {
-		  "name": "linux",
+		{
+			"name": "linux",
 			"displayName": "Linux",
 			"inherits": [
-			  "base"
+				"base"
 			],
 			"condition": {
 				"type": "equals",
@@ -200,11 +207,11 @@
 			},
 			"configurePreset": "linux"
 		},
-	  {
-		  "name": "macos",
+		{
+			"name": "macos",
 			"displayName": "macOS",
 			"inherits": [
-			  "base"
+				"base"
 			],
 			"condition": {
 				"type": "equals",
@@ -213,11 +220,11 @@
 			},
 			"configurePreset": "macos"
 		},
-	  {
-		  "name": "macos_universal",
+		{
+			"name": "macos_universal",
 			"displayName": "macOS (Universal Binary)",
 			"inherits": [
-			  "base"
+				"base"
 			],
 			"condition": {
 				"type": "equals",
@@ -226,11 +233,11 @@
 			},
 			"configurePreset": "macos_universal"
 		},
-	  {
-		  "name": "windows_mingw",
+		{
+			"name": "windows_mingw",
 			"displayName": "Windows (MinGW)",
 			"inherits": [
-			  "base"
+				"base"
 			],
 			"condition": {
 				"type": "equals",
@@ -239,11 +246,11 @@
 			},
 			"configurePreset": "windows_mingw"
 		},
-	  {
-		  "name": "windows_msvc",
+		{
+			"name": "windows_msvc",
 			"displayName": "Windows (MSVC)",
 			"inherits": [
-			  "base"
+				"base"
 			],
 			"condition": {
 				"type": "equals",

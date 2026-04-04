@@ -23,7 +23,9 @@
 #include <archive_entry.h>
 #include <QDir>
 #include <QFileInfo>
+#include <QUrl>
 #include <memory>
+#include <optional>
 
 namespace MMCZip {
 QStringList ArchiveReader::getFiles()
@@ -57,7 +59,7 @@ QByteArray ArchiveReader::File::readAll(int* outStatus)
         data.append(static_cast<const char*>(buff), static_cast<qsizetype>(size));
     }
     if (status != ARCHIVE_EOF && status != ARCHIVE_OK) {
-        qWarning() << "libarchive read error: " << archive_error_string(m_archive.get());
+        qWarning() << "libarchive read error:" << archive_error_string(m_archive.get());
     }
     if (outStatus) {
         *outStatus = status;
@@ -128,7 +130,37 @@ static int copy_data(struct archive* ar, struct archive* aw, bool notBlock = fal
     }
 }
 
+bool willEscapeRoot(const QDir& root, archive_entry* entry)
+{
+    const char* entryPathC = archive_entry_pathname(entry);
+    const char* linkTargetC = archive_entry_symlink(entry);
+    const char* hardlinkC = archive_entry_hardlink(entry);
+
+    if (!entryPathC || (!linkTargetC && !hardlinkC))
+        return false;
+
+    QString entryPath = QString::fromUtf8(entryPathC);
+    QString linkTarget = linkTargetC ? QString::fromUtf8(linkTargetC) : QString::fromUtf8(hardlinkC);
+
+    QString linkFullPath = root.filePath(entryPath);
+    auto rootDir = QUrl::fromLocalFile(root.absolutePath());
+
+    if (!rootDir.isParentOf(QUrl::fromLocalFile(linkFullPath)))
+        return true;
+
+    QDir linkDir = QFileInfo(linkFullPath).dir();
+    if (!QDir::isAbsolutePath(linkTarget)) {
+        linkTarget = (linkTargetC ? linkDir : root).filePath(linkTarget);
+    }
+    return !rootDir.isParentOf(QUrl::fromLocalFile(QDir::cleanPath(linkTarget)));
+}
+
 bool ArchiveReader::File::writeFile(archive* out, QString targetFileName, bool notBlock)
+{
+    return writeFile(out, targetFileName, {}, notBlock);
+};
+
+bool ArchiveReader::File::writeFile(archive* out, QString targetFileName, std::optional<QDir> root, bool notBlock)
 {
     auto entry = m_entry;
     std::unique_ptr<archive_entry, decltype(&archive_entry_free)> entryClone(nullptr, &archive_entry_free);
@@ -137,6 +169,10 @@ bool ArchiveReader::File::writeFile(archive* out, QString targetFileName, bool n
         entry = entryClone.get();
         auto nameUtf8 = targetFileName.toUtf8();
         archive_entry_set_pathname_utf8(entry, nameUtf8.constData());
+    }
+    if (root.has_value() && willEscapeRoot(root.value(), entry)) {
+        qCritical() << "Failed to write header to entry:" << filename() << "-" << "file outside root";
+        return false;
     }
     if (archive_write_header(out, entry) < ARCHIVE_OK) {
         qCritical() << "Failed to write header to entry:" << filename() << "-" << archive_error_string(out);
@@ -151,7 +187,7 @@ bool ArchiveReader::File::writeFile(archive* out, QString targetFileName, bool n
     auto r = archive_write_finish_entry(out);
     if (r < ARCHIVE_OK)
         qCritical() << "Failed to finish writing entry:" << archive_error_string(out);
-    return (r > ARCHIVE_WARN);
+    return (r >= ARCHIVE_WARN);
 }
 
 bool ArchiveReader::parse(std::function<bool(File*, bool&)> doStuff)
@@ -180,6 +216,7 @@ bool ArchiveReader::parse(std::function<bool(File*, bool&)> doStuff)
     archive_read_close(a);
     return true;
 }
+
 bool ArchiveReader::parse(std::function<bool(File*)> doStuff)
 {
     return parse([doStuff](File* f, bool&) { return doStuff(f); });

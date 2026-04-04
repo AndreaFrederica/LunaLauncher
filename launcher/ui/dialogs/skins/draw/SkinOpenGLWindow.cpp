@@ -20,6 +20,7 @@
 
 #include <QMouseEvent>
 #include <QOpenGLBuffer>
+#include <QProcessEnvironment>
 #include <QVector2D>
 #include <QVector3D>
 #include <QtMath>
@@ -217,9 +218,6 @@ void SkinOpenGLWindow::paintGL()
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    // Enable back face culling
-    glEnable(GL_CULL_FACE);
-
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -273,10 +271,10 @@ QColor calculateContrastingColor(const QColor& color)
 {
     auto luma = Rainbow::luma(color);
     if (luma < 0.5) {
-        constexpr float contrast = 0.05;
+        constexpr float contrast = 0.05f;
         return Rainbow::lighten(color, contrast);
     } else {
-        constexpr float contrast = 0.2;
+        constexpr float contrast = 0.2f;
         return Rainbow::darken(color, contrast);
     }
 }
@@ -333,6 +331,10 @@ void SkinOpenGLWindow::setElytraVisible(bool visible)
 
 bool SkinOpenGLWindow::hasOpenGL()
 {
+    if (!QProcessEnvironment::systemEnvironment().value(QStringLiteral("LAUNCHER_DISABLE_GLVULKAN")).isEmpty()) {
+        return false;
+    }
+
     QOpenGLContext ctx;
     return ctx.create();
 }

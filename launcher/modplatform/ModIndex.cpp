@@ -25,11 +25,14 @@
 
 namespace ModPlatform {
 
-static const QMap<QString, IndexedVersionType> s_indexed_version_type_names = {
-    { "release", IndexedVersionType::Release },
-    { "beta", IndexedVersionType::Beta },
-    { "alpha", IndexedVersionType::Alpha }
-};
+ModLoaderType operator|(ModLoaderType lhs, ModLoaderType rhs)
+{
+    return static_cast<ModLoaderType>(static_cast<std::uint16_t>(lhs) | static_cast<std::uint16_t>(rhs));
+}
+
+static const QMap<QString, IndexedVersionType> s_indexed_version_type_names = { { "release", IndexedVersionType::Release },
+                                                                                { "beta", IndexedVersionType::Beta },
+                                                                                { "alpha", IndexedVersionType::Alpha } };
 
 static const QList<ModLoaderType> loaderList = { NeoForge, Forge, Cauldron,     LiteLoader, Quilt, Fabric,
                                                  Babric,   BTA,   LegacyFabric, Ornithe,    Rift };
@@ -45,11 +48,13 @@ QList<ModLoaderType> modLoaderTypesToList(ModLoaderTypes flags)
     return flagList;
 }
 
-QString IndexedVersionType::toString() const {
+QString IndexedVersionType::toString() const
+{
     return s_indexed_version_type_names.key(m_type, "unknown");
 }
 
-IndexedVersionType IndexedVersionType::fromString(const QString& type) {
+IndexedVersionType IndexedVersionType::fromString(const QString& type)
+{
     return s_indexed_version_type_names.value(type, IndexedVersionType::Unknown);
 }
 
@@ -190,5 +195,41 @@ Side SideUtils::fromString(QString side)
     if (side == "both")
         return Side::UniversalSide;
     return Side::UniversalSide;
+}
+
+QString DependencyTypeUtils::toString(DependencyType type)
+{
+    switch (type) {
+        case DependencyType::REQUIRED:
+            return "REQUIRED";
+        case DependencyType::OPTIONAL:
+            return "OPTIONAL";
+        case DependencyType::INCOMPATIBLE:
+            return "INCOMPATIBLE";
+        case DependencyType::EMBEDDED:
+            return "EMBEDDED";
+        case DependencyType::TOOL:
+            return "TOOL";
+        case DependencyType::INCLUDE:
+            return "INCLUDE";
+        case DependencyType::UNKNOWN:
+            return "UNKNOWN";
+    }
+    return "UNKNOWN";
+}
+
+DependencyType DependencyTypeUtils::fromString(const QString& str)
+{
+    static const QHash<QString, DependencyType> map = {
+        { "REQUIRED", DependencyType::REQUIRED },
+        { "OPTIONAL", DependencyType::OPTIONAL },
+        { "INCOMPATIBLE", DependencyType::INCOMPATIBLE },
+        { "EMBEDDED", DependencyType::EMBEDDED },
+        { "TOOL", DependencyType::TOOL },
+        { "INCLUDE", DependencyType::INCLUDE },
+        { "UNKNOWN", DependencyType::UNKNOWN },
+    };
+
+    return map.value(str.toUpper(), DependencyType::UNKNOWN);
 }
 }  // namespace ModPlatform

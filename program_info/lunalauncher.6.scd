@@ -1,15 +1,12 @@
 lunalauncher(6)
 
-
 # NAME
 
 lunalauncher - a launcher and instance manager for Minecraft.
 
-
 # SYNOPSIS
 
 *lunalauncher* [OPTIONS...]
-
 
 # DESCRIPTION
 

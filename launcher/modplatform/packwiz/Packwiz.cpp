@@ -24,10 +24,12 @@
 #include <QObject>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "FileSystem.h"
 #include "StringUtils.h"
 
+#include "Version.h"
 #include "modplatform/ModIndex.h"
 
 #include <toml++/toml.h>
@@ -50,7 +52,7 @@ auto getRealIndexName(const QDir& index_dir, QString normalized_fname, bool shou
 
         if (should_find_match && !QString::compare(normalized_fname, real_fname, Qt::CaseSensitive)) {
             qCritical() << "Could not find a match for a valid metadata file!";
-            qCritical() << "File: " << normalized_fname;
+            qCritical() << "File:" << normalized_fname;
             return {};
         }
     }
@@ -59,7 +61,7 @@ auto getRealIndexName(const QDir& index_dir, QString normalized_fname, bool shou
 }
 
 // Helpers
-static inline auto indexFileName(QString const& mod_slug) -> QString
+static inline auto indexFileName(const QString& mod_slug) -> QString
 {
     if (mod_slug.endsWith(".pw.toml"))
         return mod_slug;
@@ -115,13 +117,15 @@ auto V1::createModFormat([[maybe_unused]] const QDir& index_dir,
     mod.side = mod_version.side == ModPlatform::Side::NoSide ? mod_pack.side : mod_version.side;
     mod.loaders = mod_version.loaders;
     mod.mcVersions = mod_version.mcVersion;
-    mod.mcVersions.sort();
+    std::sort(mod.mcVersions.begin(), mod.mcVersions.end(),
+              [](QString a, QString b) { return Version(std::move(a)) < Version(std::move(b)); });
     mod.releaseType = mod_version.version_type;
 
     mod.version_number = mod_version.version_number;
     if (mod.version_number.isNull())  // on CurseForge, there is only a version name - not a version number
         mod.version_number = mod_version.version;
 
+    mod.dependencies = mod_version.dependencies;
     return mod;
 }
 
@@ -194,6 +198,16 @@ void V1::updateModIndex(const QDir& index_dir, Mod& mod)
         return;
     }
 
+    toml::array deps;
+    for (auto dep : mod.dependencies) {
+        auto tbl = toml::table{ { "addonId", dep.addonId.toString().toStdString() },
+                                { "type", ModPlatform::DependencyTypeUtils::toString(dep.type).toStdString() } };
+        if (!dep.version.isEmpty()) {
+            tbl.emplace("version", dep.version.toStdString());
+        }
+        deps.push_back(tbl);
+    }
+
     // Put TOML data into the file
     QTextStream in_stream(&index_file);
     {
@@ -204,6 +218,7 @@ void V1::updateModIndex(const QDir& index_dir, Mod& mod)
                                 { "x-prismlauncher-mc-versions", mcVersions },
                                 { "x-prismlauncher-release-type", mod.releaseType.toString().toStdString() },
                                 { "x-prismlauncher-version-number", mod.version_number.toStdString() },
+                                { "x-prismlauncher-dependencies", deps },
                                 { "download",
                                   toml::table{
                                       { "mode", mod.mode.toStdString() },
@@ -255,14 +270,14 @@ auto V1::getIndexForMod(const QDir& index_dir, QString slug) -> Mod
         table = toml::parse_file(StringUtils::toStdString(index_dir.absoluteFilePath(real_fname)));
     } catch (const toml::parse_error& err) {
         qWarning() << QString("Could not open file %1!").arg(normalized_fname);
-        qWarning() << "Reason: " << QString(err.what());
+        qWarning() << "Reason:" << QString(err.what());
         return {};
     }
 #else
     toml::parse_result result = toml::parse_file(StringUtils::toStdString(index_dir.absoluteFilePath(real_fname)));
     if (!result) {
         qWarning() << QString("Could not open file %1!").arg(normalized_fname);
-        qWarning() << "Reason: " << result.error().description();
+        qWarning() << "Reason:" << result.error().description();
         return {};
     }
     table = result.table();
@@ -293,7 +308,8 @@ auto V1::getIndexForMod(const QDir& index_dir, QString slug) -> Mod
                     }
                 }
             }
-            mod.mcVersions.sort();
+            std::sort(mod.mcVersions.begin(), mod.mcVersions.end(),
+                      [](QString a, QString b) { return Version(std::move(a)) < Version(std::move(b)); });
         }
     }
     mod.version_number = table["x-prismlauncher-version-number"].value_or("");
@@ -332,6 +348,23 @@ auto V1::getIndexForMod(const QDir& index_dir, QString slug) -> Mod
         } else {
             qCritical() << QString("No mod provider on mod metadata!");
             return {};
+        }
+    }
+    {  // dependencies
+        auto deps = table["x-prismlauncher-dependencies"].as_array();
+        if (deps) {
+            for (auto&& depNode : *deps) {
+                auto dep = depNode.as_table();
+                if (dep) {
+                    ModPlatform::Dependency d;
+                    d.addonId = stringEntry(*dep, "addonId");
+                    if (dep->contains("version")) {
+                        d.version = stringEntry(*dep, "version");
+                    }
+                    d.type = ModPlatform::DependencyTypeUtils::fromString(stringEntry(*dep, "type"));
+                    mod.dependencies << d;
+                }
+            }
         }
     }
 

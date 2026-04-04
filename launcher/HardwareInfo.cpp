@@ -23,36 +23,16 @@
 #include <QOpenGLFunctions>
 #include <QProcessEnvironment>
 
-#ifndef Q_OS_MACOS
-#include <QVulkanInstance>
-#include <QVulkanWindow>
-#endif
-
 namespace {
 bool vulkanInfo(QStringList& out)
 {
     if (!QProcessEnvironment::systemEnvironment().value(QStringLiteral("LAUNCHER_DISABLE_GLVULKAN")).isEmpty()) {
         return false;
     }
-#ifndef Q_OS_MACOS
-    QVulkanInstance inst;
-    if (!inst.create()) {
-        qWarning() << "Vulkan instance creation failed, VkResult:" << inst.errorCode();
-        out << "Couldn't get Vulkan device information";
-        return false;
-    }
-
-    QVulkanWindow window;
-    window.setVulkanInstance(&inst);
-
-    for (auto device : window.availablePhysicalDevices()) {
-        const auto supportedVulkanVersion = QVersionNumber(VK_API_VERSION_MAJOR(device.apiVersion), VK_API_VERSION_MINOR(device.apiVersion),
-                                                           VK_API_VERSION_PATCH(device.apiVersion));
-        out << QString("Found Vulkan device: %1 (API version %2)").arg(device.deviceName).arg(supportedVulkanVersion.toString());
-    }
-#endif
-
-    return true;
+    // Optional path: do not hard-depend on Vulkan headers/classes here.
+    // This keeps HardwareInfo portable across Qt builds without Vulkan support.
+    Q_UNUSED(out)
+    return false;
 }
 
 bool openGlInfo(QStringList& out)

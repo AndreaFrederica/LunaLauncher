@@ -19,6 +19,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <cstdint>
 
 namespace HardwareInfo {

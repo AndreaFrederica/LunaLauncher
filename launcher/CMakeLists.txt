@@ -78,9 +78,6 @@ set(CORE_SOURCES
     # RW lock protected map
     RWStorage.h
 
-    # A variable that has an implicit default value and keeps track of changes
-    DefaultVariable.h
-
     # a smart pointer wrapper intended for safer use with Qt signal/slot mechanisms
     QObjectPtr.h
 
@@ -270,8 +267,6 @@ set(MINECRAFT_SOURCES
     minecraft/auth/steps/MSAStep.h
     minecraft/auth/steps/XboxAuthorizationStep.cpp
     minecraft/auth/steps/XboxAuthorizationStep.h
-    minecraft/auth/steps/XboxProfileStep.cpp
-    minecraft/auth/steps/XboxProfileStep.h
     minecraft/auth/steps/XboxUserStep.cpp
     minecraft/auth/steps/XboxUserStep.h
     minecraft/auth/steps/YggdrasilAuthStep.cpp
@@ -287,8 +282,8 @@ set(MINECRAFT_SOURCES
 
     minecraft/update/AssetUpdateTask.h
     minecraft/update/AssetUpdateTask.cpp
-    minecraft/update/FMLLibrariesTask.cpp
-    minecraft/update/FMLLibrariesTask.h
+    minecraft/update/LegacyFMLLibrariesTask.cpp
+    minecraft/update/LegacyFMLLibrariesTask.h
     minecraft/update/FoldersTask.cpp
     minecraft/update/FoldersTask.h
     minecraft/update/LibrariesTask.cpp
@@ -582,6 +577,11 @@ set(API_SOURCES
 )
 
 set(FTB_SOURCES
+    modplatform/ftb/FTBPackInstallTask.h
+    modplatform/ftb/FTBPackInstallTask.cpp
+    modplatform/ftb/FTBPackManifest.h
+    modplatform/ftb/FTBPackManifest.cpp
+
     modplatform/legacy_ftb/PackFetchTask.h
     modplatform/legacy_ftb/PackFetchTask.cpp
     modplatform/legacy_ftb/PackInstallTask.h
@@ -898,6 +898,8 @@ SET(LAUNCHER_SOURCES
     ApplicationMessage.cpp
     SysInfo.h
     SysInfo.cpp
+    HardwareInfo.h
+    HardwareInfo.cpp
 
     # console utils
     console/Console.h
@@ -1136,6 +1138,13 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/atlauncher/AtlPage.h
     ui/pages/modplatform/atlauncher/AtlUserInteractionSupportImpl.cpp
     ui/pages/modplatform/atlauncher/AtlUserInteractionSupportImpl.h
+
+    ui/pages/modplatform/ftb/FtbPage.cpp
+    ui/pages/modplatform/ftb/FtbPage.h
+    ui/pages/modplatform/ftb/FtbListModel.cpp
+    ui/pages/modplatform/ftb/FtbListModel.h
+    ui/pages/modplatform/ftb/FtbFilterModel.cpp
+    ui/pages/modplatform/ftb/FtbFilterModel.h
 
     ui/pages/modplatform/legacy_ftb/Page.cpp
     ui/pages/modplatform/legacy_ftb/Page.h
@@ -1389,6 +1398,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/instance/ScreenshotsPage.ui
     ui/pages/modplatform/atlauncher/AtlOptionalModDialog.ui
     ui/pages/modplatform/atlauncher/AtlPage.ui
+    ui/pages/modplatform/ftb/FtbPage.ui
     ui/pages/modplatform/CustomPage.ui
     ui/pages/modplatform/ResourcePage.ui
     ui/pages/modplatform/flame/FlamePage.ui
@@ -1470,8 +1480,6 @@ if(WIN32)
     set(LAUNCHER_RCS ${CMAKE_CURRENT_BINARY_DIR}/../${Launcher_Branding_WindowsRC})
 endif()
 
-include(CompilerWarnings)
-
 ######## Precompiled Headers ###########
 
 set(PRECOMPILED_HEADERS
@@ -1484,15 +1492,11 @@ set(PRECOMPILED_HEADERS
 
 # Add executable
 add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_UI} ${LAUNCHER_RESOURCES})
-set_project_warnings(Launcher_logic
-    "${Launcher_MSVC_WARNINGS}"
-    "${Launcher_CLANG_WARNINGS}"
-    "${Launcher_GCC_WARNINGS}")
+
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
 target_link_libraries(Launcher_logic
-    systeminfo
     Launcher_murmur2
     nbt++
     ${ZLIB_LIBRARIES}
@@ -1616,7 +1620,6 @@ if(Launcher_BUILD_UPDATER)
     target_precompile_headers(prism_updater_logic PRIVATE ${PRECOMPILED_HEADERS})
     target_link_libraries(prism_updater_logic
         ${ZLIB_LIBRARIES}
-        systeminfo
         BuildConfig
         Qt${QT_VERSION_MAJOR}::Widgets
         Qt${QT_VERSION_MAJOR}::Core
@@ -1658,16 +1661,11 @@ endif()
 if(WIN32 OR (DEFINED Launcher_BUILD_FILELINKER AND Launcher_BUILD_FILELINKER))
     # File link
     add_library(filelink_logic STATIC ${LINKEXE_SOURCES})
-    set_project_warnings(filelink_logic
-    "${Launcher_MSVC_WARNINGS}"
-    "${Launcher_CLANG_WARNINGS}"
-    "${Launcher_GCC_WARNINGS}")
 
     target_include_directories(filelink_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
     target_precompile_headers(filelink_logic PRIVATE ${PRECOMPILED_HEADERS})
 
     target_link_libraries(filelink_logic
-        systeminfo
         BuildConfig
         Qt${QT_VERSION_MAJOR}::Widgets
         Qt${QT_VERSION_MAJOR}::Core

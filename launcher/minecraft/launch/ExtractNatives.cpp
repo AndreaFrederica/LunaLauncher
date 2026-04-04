@@ -57,19 +57,18 @@ static bool unzipNatives(QString source, QString targetFolder, bool applyJnilibH
             name = replaceSuffix(name, ".jnilib", ".dylib");
         }
         QString absFilePath = directory.absoluteFilePath(name);
-        return f->writeFile(ext, absFilePath);
+        return f->writeFile(ext, absFilePath, directory);
     });
 }
 
 void ExtractNatives::executeTask()
 {
-    auto instance = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
+    auto instance = dynamic_cast<MinecraftInstance*>(m_parent->instance());
     auto toExtract = instance->getNativeJars();
     if (toExtract.isEmpty()) {
         emitSucceeded();
         return;
     }
-    auto settings = instance->settings();
 
     auto outputPath = instance->getNativePath();
     FS::ensureFolderPathExists(outputPath);
@@ -80,6 +79,7 @@ void ExtractNatives::executeTask()
             const char* reason = QT_TR_NOOP("Couldn't extract native jar '%1' to destination '%2'");
             emit logLine(QString(reason).arg(source, outputPath), MessageLevel::Fatal);
             emitFailed(tr(reason).arg(source, outputPath));
+            return;
         }
     }
     emitSucceeded();

@@ -7,6 +7,7 @@
 #include <QVBoxLayout>
 #include <QFont>
 #include "Application.h"
+#include "settings/SettingsObject.h"
 
 ServerConsoleWidget::ServerConsoleWidget(QWidget *parent) : QWidget(parent)
 {

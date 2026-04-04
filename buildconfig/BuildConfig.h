@@ -62,6 +62,8 @@ class Config {
     int VERSION_MINOR;
     /// The patch version number.
     int VERSION_PATCH;
+    /// Optional prerelease suffix (for example: pre1, rc1).
+    QString VERSION_PRERELEASE;
 
     /**
      * The version channel
@@ -129,7 +131,12 @@ class Config {
     QString NEWS_OPEN_URL;
 
     /**
-     * URL (with arg %1 to be substituted with page-id) that gets opened when the user requests help
+     * URL that gets opened when the user clicks 'Launcher Help'
+     */
+    QString WIKI_URL;
+
+    /**
+     * URL (with arg %1 to be substituted with page-id) that gets opened when the user requests help in a dialog window
      */
     QString HELP_URL;
 
@@ -170,10 +177,10 @@ class Config {
     QString DEFAULT_RESOURCE_BASE = "https://resources.download.minecraft.net/";
     QString LIBRARY_BASE = "https://libraries.minecraft.net/";
     QString IMGUR_BASE_URL = "https://api.imgur.com/3/";
-    QString FMLLIBS_BASE_URL;
+    QString LEGACY_FMLLIBS_BASE_URL;
     QString TRANSLATION_FILES_URL;
 
-    QString MODPACKSCH_API_BASE_URL = "https://api.modpacks.ch/";
+    QString FTB_API_BASE_URL = "https://api.feed-the-beast.com/v1/modpacks/public";
 
     QString LEGACY_FTB_CDN_BASE_URL = "https://dist.creeper.host/FTB2/";
 

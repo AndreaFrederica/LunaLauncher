@@ -185,11 +185,15 @@ set(Launcher_LOGIN_CALLBACK_URL "https://lunalauncher.sirrus.cc/oauth-callback.h
 set(Launcher_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" CACHE STRING "URL for FML Libraries.")
 
 ######## Set version numbers ########
-set(Launcher_VERSION_MAJOR 10)
+set(Launcher_VERSION_MAJOR 11)
 set(Launcher_VERSION_MINOR 0)
-set(Launcher_VERSION_PATCH 1)
+set(Launcher_VERSION_PATCH 0)
+set(Launcher_VERSION_PRERELEASE "pre1")
 
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")
+if(NOT "${Launcher_VERSION_PRERELEASE}" STREQUAL "")
+    set(Launcher_VERSION_NAME "${Launcher_VERSION_NAME}-${Launcher_VERSION_PRERELEASE}")
+endif()
 set(Launcher_VERSION_NAME4 "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}.0")
 set(Launcher_VERSION_NAME4_COMMA "${Launcher_VERSION_MAJOR},${Launcher_VERSION_MINOR},${Launcher_VERSION_PATCH},0")
 
@@ -500,7 +504,6 @@ option(NBT_USE_ZLIB "Build NBT library with zlib support" OFF)
 option(NBT_BUILD_TESTS "Build NBT library tests" OFF) #FIXME: fix unit tests.
 add_subdirectory(libraries/libnbtplusplus)
 
-add_subdirectory(libraries/systeminfo) # system information library
 add_subdirectory(libraries/launcher) # java based launcher part for Minecraft
 add_subdirectory(libraries/javacheck) # java compatibility checker
 

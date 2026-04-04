@@ -51,7 +51,7 @@ QMap<QString, QString> PluginPage::urlHandlers() const
 
 void PluginPage::addResourceToPage(ModPlatform::IndexedPack::Ptr pack,
                                    ModPlatform::IndexedVersion& version,
-                                   std::shared_ptr<ResourceFolderModel> base_model)
+                                   ResourceFolderModel* base_model)
 {
     bool is_indexed = !APPLICATION->settings()->get("ModMetadataDisabled").toBool();
     m_model->addPack(pack, version, base_model, is_indexed);

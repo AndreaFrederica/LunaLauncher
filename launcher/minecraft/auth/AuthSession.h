@@ -3,6 +3,8 @@
 #include <QString>
 #include <memory>
 
+#include "LaunchMode.h"
+
 class MinecraftAccount;
 
 struct AuthSession {
@@ -47,6 +49,9 @@ struct AuthSession {
     // UnifiedPass / Nide8Auth specific fields
     bool unifiedPass = false;                 // Whether this is a UnifiedPass account
     QString unifiedPassServerId;              // 32-character server ID
+
+    // the actual launch mode for this session
+    LaunchMode launchMode = LaunchMode::Normal;
 };
 
 using AuthSessionPtr = std::shared_ptr<AuthSession>;

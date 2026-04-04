@@ -28,6 +28,9 @@ class CustomUIPanelPage : public QWidget, public BasePage {
 
    public:
     explicit CustomUIPanelPage(MinecraftInstancePtr instance, QWidget* parent = nullptr);
+    explicit CustomUIPanelPage(MinecraftInstance* instance, QWidget* parent = nullptr)
+        : CustomUIPanelPage(MinecraftInstancePtr(instance, [](MinecraftInstance*) {}), parent)
+    {}
     ~CustomUIPanelPage() override;
 
     QString displayName() const override { return m_panelDisplayName; }

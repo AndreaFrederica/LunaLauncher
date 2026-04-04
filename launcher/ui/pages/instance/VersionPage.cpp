@@ -146,12 +146,12 @@ VersionPage::VersionPage(MinecraftInstance* inst, QWidget* parent) : QMainWindow
 
     ui->toolBar->insertSpacer(ui->actionReload);
 
-    m_profile = m_inst->getPackProfile();
+    m_profile = m_inst->getPackProfile().get();
 
     reloadPackProfile();
 
     auto proxy = new IconProxy(ui->packageView);
-    proxy->setSourceModel(m_profile.get());
+    proxy->setSourceModel(m_profile);
 
     m_filterModel = new QSortFilterProxyModel(this);
     m_filterModel->setDynamicSortFilter(true);
@@ -168,7 +168,7 @@ VersionPage::VersionPage(MinecraftInstance* inst, QWidget* parent) : QMainWindow
     auto smodel = ui->packageView->selectionModel();
     connect(smodel, &QItemSelectionModel::currentChanged, this, &VersionPage::versionCurrent);
     connect(smodel, &QItemSelectionModel::currentChanged, this, &VersionPage::packageCurrent);
-    connect(m_profile.get(), &PackProfile::minecraftChanged, this, &VersionPage::updateVersionControls);
+    connect(m_profile, &PackProfile::minecraftChanged, this, &VersionPage::updateVersionControls);
     updateVersionControls();
     preselect(0);
     connect(ui->packageView, &ModListView::customContextMenuRequested, this, &VersionPage::showContextMenu);
@@ -449,7 +449,7 @@ void VersionPage::on_actionDownload_All_triggered()
 
 void VersionPage::on_actionInstall_Loader_triggered()
 {
-    InstallLoaderDialog dialog(m_inst->getPackProfile(), QString(), this);
+    InstallLoaderDialog dialog(m_inst->getPackProfile().get(), QString(), this);
     dialog.exec();
     m_container->refreshContainer();
 }

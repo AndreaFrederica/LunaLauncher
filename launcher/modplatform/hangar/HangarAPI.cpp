@@ -412,9 +412,8 @@ Task::Ptr HangarAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVect
     auto versions_url = versions_url_optional.value();
 
     auto netJob = makeShared<NetJob>(QString("%1::Versions").arg(args.pack->name), APPLICATION->network());
-    auto response = std::make_shared<QByteArray>();
-
-    netJob->addNetAction(Net::ApiDownload::makeByteArray(versions_url, response));
+    auto [action, response] = Net::ApiDownload::makeByteArray(QUrl(versions_url));
+    netJob->addNetAction(action);
 
     QObject::connect(netJob.get(), &NetJob::succeeded, [this, response, callbacks, args] {
         QJsonParseError parse_error{};

@@ -33,7 +33,7 @@
 #include "server/ServerInstance.h"
 
 PluginFolderPage::PluginFolderPage(BaseInstance* inst, std::shared_ptr<PluginFolderModel> model, QWidget* parent)
-    : ExternalResourcesPage(inst, model, parent), m_model(model)
+    : ExternalResourcesPage(inst, model.get(), parent), m_model(model)
 {
     setFilter(tr("Plugins (*.jar)"));
 

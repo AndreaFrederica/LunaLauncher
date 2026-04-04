@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 flowln <flowlnlnln@gmail.com>
@@ -25,11 +25,14 @@
 
 namespace ModPlatform {
 
-static const QMap<QString, IndexedVersionType> s_indexed_version_type_names = {
-    { "release", IndexedVersionType::Release },
-    { "beta", IndexedVersionType::Beta },
-    { "alpha", IndexedVersionType::Alpha }
-};
+ModLoaderType operator|(ModLoaderType lhs, ModLoaderType rhs)
+{
+    return static_cast<ModLoaderType>(static_cast<std::uint16_t>(lhs) | static_cast<std::uint16_t>(rhs));
+}
+
+static const QMap<QString, IndexedVersionType> s_indexed_version_type_names = { { "release", IndexedVersionType::Release },
+                                                                                { "beta", IndexedVersionType::Beta },
+                                                                                { "alpha", IndexedVersionType::Alpha } };
 
 static const QList<ModLoaderType> loaderList = { NeoForge, Forge, Cauldron,     LiteLoader, Quilt, Fabric,
                                                  Babric,   BTA,   LegacyFabric, Ornithe,    Rift };
@@ -45,11 +48,13 @@ QList<ModLoaderType> modLoaderTypesToList(ModLoaderTypes flags)
     return flagList;
 }
 
-QString IndexedVersionType::toString() const {
+QString IndexedVersionType::toString() const
+{
     return s_indexed_version_type_names.key(m_type, "unknown");
 }
 
-IndexedVersionType IndexedVersionType::fromString(const QString& type) {
+IndexedVersionType IndexedVersionType::fromString(const QString& type)
+{
     return s_indexed_version_type_names.value(type, IndexedVersionType::Unknown);
 }
 
@@ -190,5 +195,41 @@ Side SideUtils::fromString(QString side)
     if (side == "both")
         return Side::UniversalSide;
     return Side::UniversalSide;
+}
+
+QString DependencyTypeUtils::toString(DependencyType type)
+{
+    switch (type) {
+        case DependencyType::Required:
+            return "REQUIRED";
+        case DependencyType::Optional:
+            return "OPTIONAL";
+        case DependencyType::Incompatible:
+            return "INCOMPATIBLE";
+        case DependencyType::Embedded:
+            return "EMBEDDED";
+        case DependencyType::Tool:
+            return "TOOL";
+        case DependencyType::IncludeDep:
+            return "INCLUDE";
+        case DependencyType::Unknown:
+            return "UNKNOWN";
+    }
+    return "UNKNOWN";
+}
+
+DependencyType DependencyTypeUtils::fromString(const QString& str)
+{
+    static const QHash<QString, DependencyType> map = {
+        { "REQUIRED", DependencyType::Required },
+        { "OPTIONAL", DependencyType::Optional },
+        { "INCOMPATIBLE", DependencyType::Incompatible },
+        { "EMBEDDED", DependencyType::Embedded },
+        { "TOOL", DependencyType::Tool },
+        { "INCLUDE", DependencyType::IncludeDep },
+        { "UNKNOWN", DependencyType::Unknown },
+    };
+
+    return map.value(str.toUpper(), DependencyType::Unknown);
 }
 }  // namespace ModPlatform

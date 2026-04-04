@@ -50,6 +50,7 @@ class NetJob : public ConcurrentTask {
     Q_OBJECT
 
    public:
+    // TODO: delete
     using Ptr = shared_qobject_ptr<NetJob>;
 
     explicit NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> network, int max_concurrent = -1);

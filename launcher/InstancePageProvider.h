@@ -40,63 +40,63 @@
 class InstancePageProvider : protected QObject, public BasePageProvider {
     Q_OBJECT
    public:
-    explicit InstancePageProvider(InstancePtr parent) { inst = parent; }
+    explicit InstancePageProvider(BaseInstance* parent) { inst = parent; }
 
     virtual ~InstancePageProvider() = default;
     virtual QList<BasePage*> getPages() override
     {
         QList<BasePage*> values;
 
-        if (auto serverInst = std::dynamic_pointer_cast<ServerInstance>(inst)) {
-            values.append(new ServerConsolePage(serverInst.get()));
+        if (auto serverInst = dynamic_cast<ServerInstance*>(inst)) {
+            values.append(new ServerConsolePage(serverInst));
 
             // Mods page
-            auto modsPage = new ModFolderPage(serverInst.get(), serverInst->loaderModList());
+            auto modsPage = new ModFolderPage(serverInst, serverInst->loaderModList().get());
             modsPage->setFilter("%1 (*.jar *.zip)");
             values.append(modsPage);
 
             // Plugins page
-            auto pluginsPage = new PluginFolderPage(serverInst.get(), serverInst->pluginList());
+            auto pluginsPage = new PluginFolderPage(serverInst, serverInst->pluginList());
             pluginsPage->setFilter("%1 (*.jar)");
             values.append(pluginsPage);
 
-            values.append(new NotesPage(serverInst.get()));
-            values.append(new ServerModLoaderPage(serverInst.get()));
-            values.append(new ServerSettingsPage(serverInst.get()));
-            values.append(new ServerJavaPage(serverInst.get()));
-            values.append(new ServerEulaPage(serverInst.get()));
-            values.append(new ServerPropertyPage(serverInst.get()));
-            values.append(new ServerYamlEditorPage(serverInst.get(), ServerYamlEditorPage::Bukkit));
-            values.append(new ServerYamlEditorPage(serverInst.get(), ServerYamlEditorPage::Spigot));
-            values.append(new ServerOpsPage(serverInst.get()));
-            values.append(new ServerPlayerListPage(serverInst.get(), ServerPlayerListPage::Whitelist));
-            values.append(new ServerPlayerListPage(serverInst.get(), ServerPlayerListPage::BannedPlayers));
-            values.append(new ServerPlayerListPage(serverInst.get(), ServerPlayerListPage::BannedIPs));
+            values.append(new NotesPage(serverInst));
+            values.append(new ServerModLoaderPage(serverInst));
+            values.append(new ServerSettingsPage(serverInst));
+            values.append(new ServerJavaPage(serverInst));
+            values.append(new ServerEulaPage(serverInst));
+            values.append(new ServerPropertyPage(serverInst));
+            values.append(new ServerYamlEditorPage(serverInst, ServerYamlEditorPage::Bukkit));
+            values.append(new ServerYamlEditorPage(serverInst, ServerYamlEditorPage::Spigot));
+            values.append(new ServerOpsPage(serverInst));
+            values.append(new ServerPlayerListPage(serverInst, ServerPlayerListPage::Whitelist));
+            values.append(new ServerPlayerListPage(serverInst, ServerPlayerListPage::BannedPlayers));
+            values.append(new ServerPlayerListPage(serverInst, ServerPlayerListPage::BannedIPs));
             values.append(new OtherLogsPage("logs", tr("Logs"), "Other-Logs", inst));
             return values;
         }
 
         values.append(new LogPage(inst));
-        std::shared_ptr<MinecraftInstance> onesix = std::dynamic_pointer_cast<MinecraftInstance>(inst);
+        auto onesix = dynamic_cast<MinecraftInstance*>(inst);
         if (!onesix) {
             return values;
         }
-        values.append(new VersionPage(onesix.get()));
-        values.append(ManagedPackPage::createPage(onesix.get()));
-        auto modsPage = new ModFolderPage(onesix.get(), onesix->loaderModList());
+        values.append(new VersionPage(onesix));
+        values.append(ManagedPackPage::createPage(onesix));
+        auto modsPage = new ModFolderPage(onesix, onesix->loaderModList().get());
         modsPage->setFilter("%1 (*.zip *.jar *.litemod *.nilmod)");
         values.append(modsPage);
-        values.append(new CoreModFolderPage(onesix.get(), onesix->coreModList()));
-        values.append(new NilModFolderPage(onesix.get(), onesix->nilModList()));
-        values.append(new ResourcePackPage(onesix.get(), onesix->resourcePackList()));
-        values.append(new GlobalDataPackPage(onesix.get()));
-        values.append(new TexturePackPage(onesix.get(), onesix->texturePackList()));
-        values.append(new ShaderPackPage(onesix.get(), onesix->shaderPackList()));
-        values.append(new YesSteveModelPage(onesix.get(), onesix->yesSteveModelList()));
-        values.append(new CustomPlayerModelPage(onesix.get(), onesix->customPlayerModelList()));
-        values.append(new SchematicsPage(onesix.get(), onesix->schematicsList()));
-        values.append(new NotesPage(onesix.get()));
-        values.append(new WorldListPage(onesix, onesix->worldList()));
+        values.append(new CoreModFolderPage(onesix, onesix->coreModList().get()));
+        values.append(new NilModFolderPage(onesix, onesix->nilModList().get()));
+        values.append(new ResourcePackPage(onesix, onesix->resourcePackList().get()));
+        values.append(new GlobalDataPackPage(onesix));
+        values.append(new TexturePackPage(onesix, onesix->texturePackList().get()));
+        values.append(new ShaderPackPage(onesix, onesix->shaderPackList().get()));
+        values.append(new YesSteveModelPage(onesix, onesix->yesSteveModelList()));
+        values.append(new CustomPlayerModelPage(onesix, onesix->customPlayerModelList()));
+        values.append(new SchematicsPage(onesix, onesix->schematicsList()));
+        values.append(new NotesPage(onesix));
+        values.append(new WorldListPage(onesix, onesix->worldList().get()));
         values.append(new ServersPage(onesix));
         values.append(new ScreenshotsPage(FS::PathCombine(onesix->gameRoot(), "screenshots")));
         values.append(new CustomUIPanelPage(onesix));
@@ -108,5 +108,5 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
     virtual QString dialogTitle() override { return tr("Edit Instance (%1)").arg(inst->name()); }
 
    protected:
-    InstancePtr inst;
+    BaseInstance* inst;
 };

@@ -23,6 +23,7 @@
 #include "minecraft/MirrorDownload.h"
 #include "net/ChecksumValidator.h"
 #include "net/NetJob.h"
+#include "settings/SettingsObject.h"
 
 struct File {
     QString path;
@@ -40,7 +41,7 @@ void ManifestDownloadTask::executeTask()
 {
     setStatus(tr("Downloading Java"));
     auto download = makeShared<NetJob>(QString("JRE::DownloadJava"), APPLICATION->network());
-    auto files = std::make_shared<QByteArray>();
+    QByteArray* files = nullptr;
 
     // Rewrite URL for mirror support
     QUrl manifestUrl = m_url;
@@ -65,7 +66,8 @@ void ManifestDownloadTask::executeTask()
         manifestUrl = QUrl(urlString);
     }
 
-    auto action = Net::Download::makeByteArray(manifestUrl, files);
+    auto [action, response] = Net::Download::makeByteArray(manifestUrl);
+    files = response;
     if (!m_checksum_hash.isEmpty() && !m_checksum_type.isEmpty()) {
         auto hashType = QCryptographicHash::Algorithm::Sha1;
         if (m_checksum_type == "sha256") {

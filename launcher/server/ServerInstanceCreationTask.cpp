@@ -3,7 +3,9 @@
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
 */
 #include "ServerInstanceCreationTask.h"
+#include "server/ServerInstance.h"
 #include "settings/INIFile.h"
+#include "settings/INISettingsObject.h"
 #include "FileSystem.h"
 
 ServerInstanceCreationTask::ServerInstanceCreationTask(const QString &exePath, const QStringList &args)
@@ -11,13 +13,13 @@ ServerInstanceCreationTask::ServerInstanceCreationTask(const QString &exePath, c
 {
 }
 
-bool ServerInstanceCreationTask::createInstance()
+std::unique_ptr<BaseInstance> ServerInstanceCreationTask::createInstance()
 {
     QDir rootDir(m_stagingPath);
     if (!FS::ensureFolderPathExists(rootDir.absolutePath()))
     {
         setError("Failed to create instance directory");
-        return false;
+        return nullptr;
     }
 
     INIFile ini;
@@ -66,7 +68,7 @@ bool ServerInstanceCreationTask::createInstance()
     if (!ini.saveFile(FS::PathCombine(m_stagingPath, "instance.cfg")))
     {
         setError("Failed to save instance.cfg");
-        return false;
+        return nullptr;
     }
 
     // Create mmc-pack.json for valid instance identification
@@ -86,5 +88,6 @@ bool ServerInstanceCreationTask::createInstance()
         packFile.close();
     }
 
-    return true;
+    auto settings = std::make_unique<INISettingsObject>(FS::PathCombine(m_stagingPath, "instance.cfg"));
+    return std::make_unique<ServerInstance>(m_globalSettings, std::move(settings), m_stagingPath);
 }

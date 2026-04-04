@@ -275,7 +275,7 @@ void ServerEntryWidget::leaveEvent(QEvent *event)
 void ServerEntryWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (m_instance) {
-        APPLICATION->launch(m_instance, true, false, std::make_shared<MinecraftTarget>(m_target));
+        APPLICATION->launch(m_instance, LaunchMode::Normal, std::make_shared<MinecraftTarget>(m_target));
     }
     QWidget::mouseDoubleClickEvent(event);
 }

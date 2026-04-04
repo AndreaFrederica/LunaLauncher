@@ -45,7 +45,7 @@
 
 void ScanModFolders::executeTask()
 {
-    auto m_inst = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
+    auto m_inst = dynamic_cast<MinecraftInstance*>(m_parent->instance());
 
     auto loaders = m_inst->loaderModList();
     connect(loaders.get(), &ModFolderModel::updateFinished, this, &ScanModFolders::modsDone);

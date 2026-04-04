@@ -10,7 +10,7 @@ class ServerInstanceCreationTask : public InstanceCreationTask
     Q_OBJECT
 public:
     explicit ServerInstanceCreationTask(const QString &exePath, const QStringList &args);
-    bool createInstance() override;
+    std::unique_ptr<BaseInstance> createInstance() override;
 private:
     QString m_exePath;
     QStringList m_args;

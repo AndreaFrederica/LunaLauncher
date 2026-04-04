@@ -131,8 +131,9 @@ void UnifiedPassAuthStep::perform()
 
     auto headers = QList<Net::HeaderPair>{ { "Content-Type", "application/json" }, { "Accept", "application/json" } };
 
-    m_response.reset(new QByteArray());
-    m_request = Net::Upload::makeByteArray(url, m_response, requestBody);
+    auto [request, response] = Net::Upload::makeByteArray(url, requestBody);
+    m_request = request;
+    m_response = std::shared_ptr<QByteArray>(response, [](QByteArray*) {});
     m_request->addHeaderProxy(new Net::RawHeaderProxy(headers));
 
     m_task.reset(new NetJob("UnifiedPassAuthStep", APPLICATION->network()));

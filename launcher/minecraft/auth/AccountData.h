@@ -120,14 +120,12 @@ struct AccountData {
     QJsonObject saveState() const;
     bool resumeStateFromV3(QJsonObject data);
 
-    //! userName for Mojang accounts, gamertag for MSA
-    QString accountDisplayString() const;
-
     //! Yggdrasil access token, as passed to the game.
     QString accessToken() const;
 
     QString profileId() const;
     QString profileName() const;
+    QString accountDisplayString() const;
 
     QString lastError() const;
 

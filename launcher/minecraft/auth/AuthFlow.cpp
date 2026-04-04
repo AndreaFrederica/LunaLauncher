@@ -10,7 +10,6 @@
 #include "minecraft/auth/steps/MSAStep.h"
 #include "minecraft/auth/steps/MinecraftProfileStep.h"
 #include "minecraft/auth/steps/XboxAuthorizationStep.h"
-#include "minecraft/auth/steps/XboxProfileStep.h"
 #include "minecraft/auth/steps/XboxUserStep.h"
 #include "minecraft/auth/steps/YggdrasilAuthStep.h"
 #include "minecraft/auth/steps/YggdrasilProfileStep.h"
@@ -37,11 +36,9 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
             m_steps.append(oauthStep);
         }
         m_steps.append(makeShared<XboxUserStep>(m_data));
-        m_steps.append(makeShared<XboxAuthorizationStep>(m_data, &m_data->xboxApiToken, "http://xboxlive.com", "Xbox"));
         m_steps.append(
             makeShared<XboxAuthorizationStep>(m_data, &m_data->mojangservicesToken, "rp://api.minecraftservices.com/", "Mojang"));
         m_steps.append(makeShared<LauncherLoginStep>(m_data));
-        m_steps.append(makeShared<XboxProfileStep>(m_data));
         m_steps.append(makeShared<EntitlementsStep>(m_data));
         m_steps.append(makeShared<MinecraftProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
@@ -100,6 +97,7 @@ void AuthFlow::nextStep()
     }
     m_currentStep = m_steps.front();
     qDebug() << "AuthFlow:" << m_currentStep->describe();
+    setStatus(m_currentStep->describe());
     m_steps.pop_front();
     connect(m_currentStep.get(), &AuthStep::finished, this, &AuthFlow::stepFinished);
 
@@ -123,7 +121,9 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return true;
         }
         case AccountTaskState::STATE_WORKING: {
-            setStatus(m_currentStep ? m_currentStep->describe() : tr("Working..."));
+            if (!m_currentStep) {
+                setStatus(tr("Preparing to log in..."));
+            }
             m_data->accountState = AccountState::Working;
             return true;
         }
@@ -179,8 +179,8 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
 }
 bool AuthFlow::abort()
 {
-    emitAborted();
     if (m_currentStep)
         m_currentStep->abort();
+    emitAborted();
     return true;
 }

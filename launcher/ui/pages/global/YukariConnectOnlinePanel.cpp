@@ -48,6 +48,7 @@
 #include "Application.h"
 #include "DesktopServices.h"
 #include "minecraft/online/YukariConnect.h"
+#include "settings/SettingsObject.h"
 
 // Initialize static members
 int YukariConnectOnlinePanel::s_globalPollingInterval = 1000;

@@ -10,14 +10,14 @@ class ServerInstance : public BaseInstance
 {
     Q_OBJECT
 public:
-    explicit ServerInstance(SettingsObjectPtr globalSettings, SettingsObjectPtr settings, const QString &rootDir);
+    explicit ServerInstance(SettingsObject* globalSettings, std::unique_ptr<SettingsObject> settings, const QString& rootDir);
     virtual ~ServerInstance();
 
     void saveNow() override;
     QString id() const override;
 
     // Core Interface
-    shared_qobject_ptr<LaunchTask> createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin) override;
+    LaunchTask* createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin) override;
 
     // Unused/Stubbed
     QList<Task::Ptr> createUpdateTask() override { return {}; }
@@ -50,7 +50,7 @@ public:
     bool startServer();
     void stopServer();
 
-    Task::Ptr launchTask() const { return m_launchTask; }
+    LaunchTask* launchTask() { return getLaunchTask(); }
 
     std::shared_ptr<class ModFolderModel> loaderModList() const;
     std::shared_ptr<class PluginFolderModel> pluginList() const;
@@ -66,7 +66,6 @@ public:
     void setPluginLoaderTypes(ModPlatform::PluginLoaderTypes types);
 
 private:
-    Task::Ptr m_launchTask;
     mutable std::shared_ptr<class ModFolderModel> m_loaderModList;
     mutable std::shared_ptr<class PluginFolderModel> m_pluginList;
 };

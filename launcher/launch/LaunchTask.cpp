@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Luna Launcher - Minecraft Launcher
- *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
- *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *
@@ -54,14 +51,14 @@ void LaunchTask::init()
     m_instance->setRunning(true);
 }
 
-shared_qobject_ptr<LaunchTask> LaunchTask::create(InstancePtr inst)
+std::unique_ptr<LaunchTask> LaunchTask::create(BaseInstance* inst)
 {
-    shared_qobject_ptr<LaunchTask> proc(new LaunchTask(inst));
-    proc->init();
-    return proc;
+    auto task = std::unique_ptr<LaunchTask>(new LaunchTask(inst));
+    task->init();
+    return task;
 }
 
-LaunchTask::LaunchTask(InstancePtr instance) : m_instance(instance) {}
+LaunchTask::LaunchTask(BaseInstance* instance) : m_instance(instance) {}
 
 void LaunchTask::appendStep(shared_qobject_ptr<LaunchStep> step)
 {
@@ -79,6 +76,7 @@ void LaunchTask::executeTask()
     if (!m_steps.size()) {
         state = LaunchTask::Finished;
         emitSucceeded();
+        return;
     }
     state = LaunchTask::Running;
     onStepFinished();
@@ -182,7 +180,7 @@ bool LaunchTask::abort()
             return true;
         case LaunchTask::NotStarted: {
             state = LaunchTask::Aborted;
-            emitFailed("Aborted");
+            emitAborted();
             return true;
         }
         case LaunchTask::Running:

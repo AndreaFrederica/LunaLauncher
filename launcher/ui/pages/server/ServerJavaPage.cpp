@@ -11,7 +11,7 @@ ServerJavaPage::ServerJavaPage(ServerInstance *instance, QWidget *parent)
     : QWidget(parent), m_instance(instance)
 {
     auto layout = new QVBoxLayout(this);
-    m_javaWidget = new JavaSettingsWidget(instance->shared_from_this(), this);
+    m_javaWidget = new JavaSettingsWidget(instance, this);
     layout->addWidget(m_javaWidget);
     layout->setContentsMargins(0, 0, 0, 0);
 }

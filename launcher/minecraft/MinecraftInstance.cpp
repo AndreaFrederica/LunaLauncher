@@ -53,7 +53,7 @@
 #include "minecraft/launch/ExtractNatives.h"
 #include "minecraft/launch/PrintInstanceInfo.h"
 #include "minecraft/update/AssetUpdateTask.h"
-#include "minecraft/update/FMLLibrariesTask.h"
+#include "minecraft/update/LegacyFMLLibrariesTask.h"
 #include "minecraft/update/LibrariesTask.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
@@ -168,8 +168,8 @@ class OrSetting : public Setting {
     std::shared_ptr<Setting> m_b;
 };
 
-MinecraftInstance::MinecraftInstance(SettingsObjectPtr globalSettings, SettingsObjectPtr settings, const QString& rootDir)
-    : BaseInstance(globalSettings, settings, rootDir)
+MinecraftInstance::MinecraftInstance(SettingsObject* globalSettings, std::unique_ptr<SettingsObject> settings, const QString& rootDir)
+    : BaseInstance(globalSettings, std::move(settings), rootDir)
 {
     m_components.reset(new PackProfile(this));
 }
@@ -277,7 +277,7 @@ void MinecraftInstance::loadSpecificSettings()
 
 void MinecraftInstance::updateRuntimeContext()
 {
-    m_runtimeContext.updateFromInstanceSettings(m_settings);
+    m_runtimeContext.updateFromInstanceSettings(m_settings.get());
     m_components->invalidateLaunchProfile();
 }
 
@@ -316,9 +316,9 @@ void MinecraftInstance::populateLaunchMenu(QMenu* menu)
 
     normalLaunchDemo->setEnabled(supportsDemo());
 
-    connect(normalLaunch, &QAction::triggered, [this] { APPLICATION->launch(shared_from_this()); });
-    connect(normalLaunchOffline, &QAction::triggered, [this] { APPLICATION->launch(shared_from_this(), false, false); });
-    connect(normalLaunchDemo, &QAction::triggered, [this] { APPLICATION->launch(shared_from_this(), false, true); });
+    connect(normalLaunch, &QAction::triggered, [this] { APPLICATION->launch(this); });
+    connect(normalLaunchOffline, &QAction::triggered, [this] { APPLICATION->launch(this, LaunchMode::Offline); });
+    connect(normalLaunchDemo, &QAction::triggered, [this] { APPLICATION->launch(this, LaunchMode::Demo); });
 
     QString profilersTitle = tr("Profilers");
     menu->addSeparator()->setText(profilersTitle);
@@ -534,10 +534,10 @@ QStringList MinecraftInstance::extraArguments()
         }
     }
     auto agents = m_components->getProfile()->getAgents();
-    for (auto agent : agents) {
+    for (const auto& agent : agents) {
         QStringList jar, temp1, temp2, temp3;
-        agent->library()->getApplicableFiles(runtimeContext(), jar, temp1, temp2, temp3, getLocalLibraryPath());
-        list.append("-javaagent:" + jar[0] + (agent->argument().isEmpty() ? "" : "=" + agent->argument()));
+        agent.library->getApplicableFiles(runtimeContext(), jar, temp1, temp2, temp3, getLocalLibraryPath());
+        list.append("-javaagent:" + jar[0] + (agent.argument.isEmpty() ? "" : "=" + agent.argument));
     }
 
     {
@@ -1151,7 +1151,7 @@ QString MinecraftInstance::getStatusbarDescription()
     return description;
 }
 
-QList<LaunchStep::Ptr> MinecraftInstance::createUpdateTask()
+QList<Task::Ptr> MinecraftInstance::createUpdateTask()
 {
     return {
         // create folders
@@ -1159,17 +1159,16 @@ QList<LaunchStep::Ptr> MinecraftInstance::createUpdateTask()
         // libraries download
         makeShared<LibrariesTask>(this),
         // FML libraries download and copy into the instance
-        makeShared<FMLLibrariesTask>(this),
+        makeShared<LegacyFMLLibrariesTask>(this),
         // assets update
         makeShared<AssetUpdateTask>(this),
     };
 }
 
-shared_qobject_ptr<LaunchTask> MinecraftInstance::createLaunchTask(AuthSessionPtr session, MinecraftTarget::Ptr targetToJoin)
+LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, MinecraftTarget::Ptr targetToJoin)
 {
     updateRuntimeContext();
-    // FIXME: get rid of shared_from_this ...
-    auto process = LaunchTask::create(std::dynamic_pointer_cast<MinecraftInstance>(shared_from_this()));
+    auto process = LaunchTask::create(this);
     auto pptr = process.get();
 
     APPLICATION->icons()->saveIcon(iconKey(), FS::PathCombine(gameRoot(), "icon.png"), "PNG");
@@ -1294,9 +1293,9 @@ shared_qobject_ptr<LaunchTask> MinecraftInstance::createLaunchTask(AuthSessionPt
     if (m_settings->get("QuitAfterGameStop").toBool()) {
         process->appendStep(makeShared<QuitAfterGameStop>(pptr));
     }
-    m_launchProcess = process;
-    emit launchTaskChanged(m_launchProcess);
-    return m_launchProcess;
+    m_launchProcess = std::move(process);
+    emit launchTaskChanged(m_launchProcess.get());
+    return m_launchProcess.get();
 }
 
 JavaVersion MinecraftInstance::getJavaVersion()

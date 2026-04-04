@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Luna Launcher - Minecraft Launcher
- *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
- *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *
@@ -40,9 +37,8 @@
 
 #pragma once
 #include <QObjectPtr.h>
-#include <minecraft/MinecraftInstance.h>
-#include <QProcess>
 #include "BaseInstance.h"
+#include <QProcess>
 #include "LaunchStep.h"
 #include "LogModel.h"
 #include "MessageLevel.h"
@@ -51,21 +47,21 @@
 class LaunchTask : public Task {
     Q_OBJECT
    protected:
-    explicit LaunchTask(InstancePtr instance);
+    explicit LaunchTask(BaseInstance* instance);
     void init();
 
    public:
     enum State { NotStarted, Running, Waiting, Failed, Aborted, Finished };
 
    public: /* methods */
-    static shared_qobject_ptr<LaunchTask> create(InstancePtr inst);
+    static std::unique_ptr<LaunchTask> create(BaseInstance* inst);
     virtual ~LaunchTask() = default;
 
     void appendStep(shared_qobject_ptr<LaunchStep> step);
     void prependStep(shared_qobject_ptr<LaunchStep> step);
     void setCensorFilter(QMap<QString, QString> filter);
 
-    InstancePtr instance() { return m_instance; }
+    BaseInstance* instance() { return m_instance; }
 
     void setPid(qint64 pid) { m_pid = pid; }
 
@@ -122,7 +118,7 @@ class LaunchTask : public Task {
     bool parseXmlLogs(QString const& line, MessageLevel level);
 
    protected: /* data */
-    InstancePtr m_instance;
+    BaseInstance* m_instance;
     shared_qobject_ptr<LogModel> m_logModel;
     QList<shared_qobject_ptr<LaunchStep>> m_steps;
     QMap<QString, QString> m_censorFilter;

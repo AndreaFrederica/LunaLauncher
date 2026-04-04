@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Luna Launcher - Minecraft Launcher
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
@@ -23,8 +23,10 @@
 
 #include <QList>
 #include <QMetaType>
+#include <QStringList>
 #include <QString>
 #include <QVariant>
+#include <algorithm>
 #include <compare>
 #include <memory>
 
@@ -64,9 +66,9 @@ Q_DECLARE_FLAGS(PluginLoaderTypes, PluginLoaderType)
 
 enum class ResourceProvider { MODRINTH, FLAME, HANGAR };
 
-enum class DependencyType { REQUIRED, OPTIONAL, INCOMPATIBLE, EMBEDDED, TOOL, INCLUDE, UNKNOWN };
+enum class DependencyType { Required, Optional, Incompatible, Embedded, Tool, IncludeDep, Unknown };
 
-enum class Side { NoSide = 0, ClientSide = 1 << 0, ServerSide = 1 << 1, UniversalSide = ClientSide | ServerSide };
+enum class Side { NoSide = 0, ClientSide = 1 << 0, ServerSide = 1 << 1, UniversalSide = (1 << 0) | (1 << 1) };
 
 namespace SideUtils {
 QString toString(Side side);
@@ -78,6 +80,11 @@ const char* name(ResourceProvider);
 QString readableName(ResourceProvider);
 QStringList hashType(ResourceProvider);
 }  // namespace ProviderCapabilities
+
+namespace DependencyTypeUtils {
+QString toString(DependencyType type);
+DependencyType fromString(const QString& str);
+}  // namespace DependencyTypeUtils
 
 struct ModpackAuthor {
     QString name;
@@ -150,7 +157,7 @@ struct IndexedVersion {
                 gameVersion = QObject::tr(" for %1").arg(v);
             }
         }
-        return QString("%1%2 — %3%4").arg(version, gameVersion, versionStr, release_type);
+        return QString("%1%2 鈥?%3%4").arg(version, gameVersion, versionStr, release_type);
     }
 };
 
@@ -254,3 +261,5 @@ struct Category {
 Q_DECLARE_METATYPE(ModPlatform::IndexedPack)
 Q_DECLARE_METATYPE(ModPlatform::IndexedPack::Ptr)
 Q_DECLARE_METATYPE(ModPlatform::ResourceProvider)
+Q_DECLARE_OPERATORS_FOR_FLAGS(ModPlatform::ModLoaderTypes)
+Q_DECLARE_OPERATORS_FOR_FLAGS(ModPlatform::PluginLoaderTypes)

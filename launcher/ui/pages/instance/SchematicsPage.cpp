@@ -8,7 +8,7 @@
 #include "ui_ExternalResourcesPage.h"
 
 SchematicsPage::SchematicsPage(MinecraftInstance* instance, std::shared_ptr<SchematicsFolderModel> model, QWidget* parent)
-    : ExternalResourcesPage(instance, model, parent), m_model(model)
+    : ExternalResourcesPage(instance, model.get(), parent), m_model(model)
 {
     ui->actionEnableItem->setVisible(false);
     ui->actionDisableItem->setVisible(false);

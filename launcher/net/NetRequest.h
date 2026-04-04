@@ -39,6 +39,7 @@
 
 #pragma once
 
+#include <memory>
 #include <QNetworkReply>
 #include <QUrl>
 #include <chrono>
@@ -70,6 +71,8 @@ class NetRequest : public Task {
 
     void setNetwork(shared_qobject_ptr<QNetworkAccessManager> network) { m_network = network; }
     void addHeaderProxy(Net::HeaderProxy* proxy) { m_headerProxies.push_back(std::shared_ptr<Net::HeaderProxy>(proxy)); }
+    void addHeaderProxy(std::unique_ptr<Net::HeaderProxy> proxy) { m_headerProxies.push_back(std::move(proxy)); }
+    void enableAutoRetry([[maybe_unused]] bool enabled) {}
 
     QUrl url() const;
     void setUrl(QUrl url) { m_url = url; }

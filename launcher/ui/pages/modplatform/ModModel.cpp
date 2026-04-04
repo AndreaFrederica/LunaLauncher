@@ -11,6 +11,7 @@
 
 #include <QMessageBox>
 #include <algorithm>
+#include <list>
 
 namespace ResourceDownload {
 
@@ -33,7 +34,7 @@ ResourceAPI::SearchArgs ModModel::createSearchArguments()
 
     // Version filter
     if (!m_filter->versions.empty())
-        versions = m_filter->versions;
+        versions = std::list<Version>(m_filter->versions.begin(), m_filter->versions.end());
     if (m_filter->loaders)
         loaders = m_filter->loaders;
     if (!m_filter->categoryIds.empty())
@@ -58,7 +59,7 @@ ResourceAPI::VersionSearchArgs ModModel::createVersionsArguments(const QModelInd
     std::optional<std::list<Version>> versions{};
     auto loaders = profile->getSupportedModLoaders();
     if (!m_filter->versions.empty())
-        versions = m_filter->versions;
+        versions = std::list<Version>(m_filter->versions.begin(), m_filter->versions.end());
     if (m_filter->loaders)
         loaders = m_filter->loaders;
 
@@ -106,8 +107,8 @@ QVariant ModModel::getInstalledPackVersion(ModPlatform::IndexedPack::Ptr pack) c
 
 bool checkSide(ModPlatform::Side filter, ModPlatform::Side value)
 {
-    return filter == ModPlatform::Side::NoSide || value == ModPlatform::Side::NoSide || filter == ModPlatform::Side::UniversalSide ||
-           value == ModPlatform::Side::UniversalSide || filter == value;
+    return (filter != ModPlatform::Side::ClientSide && filter != ModPlatform::Side::ServerSide) ||
+           (value != ModPlatform::Side::ClientSide && value != ModPlatform::Side::ServerSide) || filter == value;
 }
 
 bool ModModel::checkFilters(ModPlatform::IndexedPack::Ptr pack)

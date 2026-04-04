@@ -416,9 +416,9 @@ void LaunchController::launchInstance()
     // Special handling for server instances
     if (m_instance->traits().contains("server")) {
         // For server instances, properly stop the old server first before starting a new one
-        qDebug() << "LaunchController::launchInstance() - server instance, m_launcher:" << m_launcher.get();
+        qDebug() << "LaunchController::launchInstance() - server instance, m_launcher:" << m_launcher;
         if (m_launcher) {
-            auto oldServerTask = m_launcher.dynamicCast<ServerLaunchTask>();
+            auto oldServerTask = dynamic_cast<ServerLaunchTask*>(m_launcher);
             qDebug() << "LaunchController: Old task is ServerLaunchTask:" << (bool)oldServerTask;
             if (oldServerTask) {
                 qDebug() << "LaunchController: canStop:" << oldServerTask->canStop();
@@ -427,12 +427,12 @@ void LaunchController::launchInstance()
                     oldServerTask->stop();
                 }
             }
-            m_launcher.reset();
+            m_launcher = nullptr;
         } else {
             qDebug() << "LaunchController: No old launcher to stop";
         }
 
-        auto serverTask = m_instance->createLaunchTask(m_session, m_targetToJoin).dynamicCast<ServerLaunchTask>();
+        auto serverTask = dynamic_cast<ServerLaunchTask*>(m_instance->createLaunchTask(m_session, m_targetToJoin));
         if (!serverTask) {
             emitFailed(tr("Couldn't create server launch task."));
             return;
@@ -447,8 +447,8 @@ void LaunchController::launchInstance()
         }
 
         // Connect to server task signals
-        connect(serverTask.get(), &ServerLaunchTask::succeeded, this, &LaunchController::onSucceeded);
-        connect(serverTask.get(), &ServerLaunchTask::failed, this, &LaunchController::onFailed);
+        connect(serverTask, &ServerLaunchTask::succeeded, this, &LaunchController::onSucceeded);
+        connect(serverTask, &ServerLaunchTask::failed, this, &LaunchController::onFailed);
 
         // Start the server using Task::start() to properly initialize the state machine
         serverTask->start();
@@ -466,10 +466,10 @@ void LaunchController::launchInstance()
     if (!console && showConsole) {
         APPLICATION->showInstanceWindow(m_instance);
     }
-    connect(m_launcher.get(), &LaunchTask::readyForLaunch, this, &LaunchController::readyForLaunch);
-    connect(m_launcher.get(), &LaunchTask::succeeded, this, &LaunchController::onSucceeded);
-    connect(m_launcher.get(), &LaunchTask::failed, this, &LaunchController::onFailed);
-    connect(m_launcher.get(), &LaunchTask::requestProgress, this, &LaunchController::onProgressRequested);
+    connect(m_launcher, &LaunchTask::readyForLaunch, this, &LaunchController::readyForLaunch);
+    connect(m_launcher, &LaunchTask::succeeded, this, &LaunchController::onSucceeded);
+    connect(m_launcher, &LaunchTask::failed, this, &LaunchController::onFailed);
+    connect(m_launcher, &LaunchTask::requestProgress, this, &LaunchController::onProgressRequested);
 
     // Prepend Online and Auth Status
     QString online_mode;
@@ -479,19 +479,19 @@ void LaunchController::launchInstance()
         // Prepend Server Status
         QStringList servers = { "login.microsoftonline.com", "session.minecraft.net", "textures.minecraft.net", "api.mojang.com" };
 
-        m_launcher->prependStep(makeShared<PrintServers>(m_launcher.get(), servers));
+        m_launcher->prependStep(makeShared<PrintServers>(m_launcher, servers));
     } else {
         online_mode = m_demo ? "demo" : "offline";
     }
 
     m_launcher->prependStep(
-        makeShared<TextPrint>(m_launcher.get(), "Launched instance in " + online_mode + " mode\n", MessageLevel::Launcher));
+        makeShared<TextPrint>(m_launcher, "Launched instance in " + online_mode + " mode\n", MessageLevel::Launcher));
 
     // Prepend Version
     {
         auto versionString = QString("%1 version: %2 (%3)")
                                  .arg(BuildConfig.LAUNCHER_DISPLAYNAME, BuildConfig.printableVersionString(), BuildConfig.BUILD_PLATFORM);
-        m_launcher->prependStep(makeShared<TextPrint>(m_launcher.get(), versionString + "\n\n", MessageLevel::Launcher));
+        m_launcher->prependStep(makeShared<TextPrint>(m_launcher, versionString + "\n\n", MessageLevel::Launcher));
     }
     m_launcher->start();
 }

@@ -11,35 +11,35 @@
 #include "Application.h"
 #include "modplatform/ModIndex.h"
 
-ServerInstance::ServerInstance(SettingsObjectPtr globalSettings, SettingsObjectPtr settings, const QString &rootDir)
-    : BaseInstance(globalSettings, settings, rootDir)
+ServerInstance::ServerInstance(SettingsObject* globalSettings, std::unique_ptr<SettingsObject> settings, const QString& rootDir)
+    : BaseInstance(globalSettings, std::move(settings), rootDir)
 {
     // Define settings with defaults
-    settings->registerSetting("ExecutablePath", "");
-    settings->registerSetting("Arguments", QStringList());
-    settings->registerSetting("WorkingDir", "");
+    m_settings->registerSetting("ExecutablePath", "");
+    m_settings->registerSetting("Arguments", QStringList());
+    m_settings->registerSetting("WorkingDir", "");
 
     // Java Settings
-    auto locationOverride = settings->registerSetting("OverrideJavaLocation", false);
-    settings->registerSetting("JavaPath", "");
-    settings->registerSetting("IgnoreJavaCompatibility", false);
+    auto locationOverride = m_settings->registerSetting("OverrideJavaLocation", false);
+    m_settings->registerSetting("JavaPath", "");
+    m_settings->registerSetting("IgnoreJavaCompatibility", false);
 
     // Memory Settings
-    auto memoryOverride = settings->registerSetting("OverrideMemory", false);
-    settings->registerSetting("MinMemAlloc", 512);
-    settings->registerSetting("MaxMemAlloc", 4096);
-    settings->registerSetting("PermGen", 128);
+    auto memoryOverride = m_settings->registerSetting("OverrideMemory", false);
+    m_settings->registerSetting("MinMemAlloc", 512);
+    m_settings->registerSetting("MaxMemAlloc", 4096);
+    m_settings->registerSetting("PermGen", 128);
 
     // Java Arguments (needed by JavaSettingsWidget)
-    settings->registerSetting("OverrideJavaArgs", false);
-    settings->registerSetting("JvmArgs", "");
+    m_settings->registerSetting("OverrideJavaArgs", false);
+    m_settings->registerSetting("JvmArgs", "");
 
     // ModLoader configuration for server
-    settings->registerSetting("ServerModLoaderType", 0);  // ModPlatform::ModLoaderTypes as int
-    settings->registerSetting("ServerMinecraftVersion", "");
+    m_settings->registerSetting("ServerModLoaderType", 0);  // ModPlatform::ModLoaderTypes as int
+    m_settings->registerSetting("ServerMinecraftVersion", "");
 
     // PluginLoader configuration for server (for future plugin download system)
-    settings->registerSetting("ServerPluginLoaderType", 0);  // ModPlatform::PluginLoaderTypes as int
+    m_settings->registerSetting("ServerPluginLoaderType", 0);  // ModPlatform::PluginLoaderTypes as int
 }
 
 ServerInstance::~ServerInstance()
@@ -59,16 +59,14 @@ QString ServerInstance::id() const
     return QFileInfo(instanceRoot()).fileName();
 }
 
-shared_qobject_ptr<LaunchTask> ServerInstance::createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin)
+LaunchTask* ServerInstance::createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin)
 {
     Q_UNUSED(account)
     Q_UNUSED(targetToJoin)
 
-    // Always create a fresh task
-    m_launchTask.reset();
-    shared_qobject_ptr<ServerLaunchTask> task(new ServerLaunchTask(this));
-    m_launchTask = task;
-    return task;
+    m_launchProcess = std::make_unique<ServerLaunchTask>(this);
+    emit launchTaskChanged(m_launchProcess.get());
+    return m_launchProcess.get();
 }
 
 QString ServerInstance::executablePath() const
@@ -110,7 +108,7 @@ bool ServerInstance::startServer()
 
     // Create and start new task
     auto task = createLaunchTask({}, {});
-    auto serverTask = task.dynamicCast<ServerLaunchTask>();
+    auto serverTask = dynamic_cast<ServerLaunchTask*>(task);
 
     if (!serverTask) {
         qWarning() << "ServerInstance::startServer() - Failed to cast to ServerLaunchTask";
@@ -128,8 +126,8 @@ void ServerInstance::stopServer()
     qDebug() << "ServerInstance::stopServer() - Stopping server";
 
     // Stop the current task if running
-    if (m_launchTask) {
-        auto serverTask = m_launchTask.dynamicCast<ServerLaunchTask>();
+    if (m_launchProcess) {
+        auto serverTask = dynamic_cast<ServerLaunchTask*>(m_launchProcess.get());
         if (serverTask && serverTask->canStop()) {
             serverTask->stop();
         }

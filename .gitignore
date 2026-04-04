@@ -80,3 +80,4 @@ vcpkg_installed/*
 aqtinstall.log
 *.pyc
 PrismLauncher-portable-noverify/*
+flatpak/

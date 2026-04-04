@@ -57,8 +57,9 @@ void UnifiedPassMetaStep::perform()
 
     auto headers = QList<Net::HeaderPair>{ { "Accept", "application/json" } };
 
-    m_response.reset(new QByteArray());
-    m_request = Net::Download::makeByteArray(url, m_response);
+    auto [request, response] = Net::Download::makeByteArray(url);
+    m_request = request;
+    m_response = std::shared_ptr<QByteArray>(response, [](QByteArray*) {});
     m_request->addHeaderProxy(new Net::RawHeaderProxy(headers));
 
     m_task.reset(new NetJob("UnifiedPassMetaStep", APPLICATION->network()));

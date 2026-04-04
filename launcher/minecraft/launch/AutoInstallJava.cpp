@@ -60,7 +60,7 @@
 #include "tasks/SequentialTask.h"
 
 AutoInstallJava::AutoInstallJava(LaunchTask* parent)
-    : LaunchStep(parent), m_instance(std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance())), m_supported_arch(SysInfo::getSupportedJavaArchitecture()) {};
+    : LaunchStep(parent), m_instance(dynamic_cast<MinecraftInstance*>(m_parent->instance())), m_supported_arch(SysInfo::getSupportedJavaArchitecture()) {};
 
 void AutoInstallJava::executeTask()
 {
@@ -178,8 +178,8 @@ void AutoInstallJava::downloadJava(Meta::Version::Ptr version, QString javaName)
                     m_current_task = makeShared<Java::ArchiveDownloadTask>(java->url, final_path, java->checksumType, java->checksumHash);
                     break;
                 case Java::DownloadType::Unknown:
-                    emitFailed(tr("Could not determine Java download type!"));
                     deletePath();
+                    emitFailed(tr("Could not determine Java download type!"));
                     return;
             }
 #if defined(Q_OS_MACOS)
@@ -247,7 +247,7 @@ bool AutoInstallJava::abort()
 {
     if (m_current_task && m_current_task->canAbort()) {
         auto status = m_current_task->abort();
-        emitFailed("Aborted.");
+        emitAborted();
         return status;
     }
     return Task::abort();

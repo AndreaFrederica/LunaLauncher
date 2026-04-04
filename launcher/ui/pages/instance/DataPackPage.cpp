@@ -25,7 +25,7 @@
 #include "ui/dialogs/ResourceDownloadDialog.h"
 #include "ui/dialogs/ResourceUpdateDialog.h"
 
-DataPackPage::DataPackPage(BaseInstance* instance, std::shared_ptr<DataPackFolderModel> model, QWidget* parent)
+DataPackPage::DataPackPage(BaseInstance* instance, DataPackFolderModel* model, QWidget* parent)
     : ExternalResourcesPage(instance, model, parent), m_model(model)
 {
     ui->actionDownloadItem->setText(tr("Download Packs"));
@@ -66,8 +66,6 @@ void DataPackPage::downloadDataPacks()
 {
     if (m_instance->typeName() != "Minecraft")
         return;  // this is a null instance or a legacy instance
-
-    auto profile = static_cast<MinecraftInstance*>(m_instance)->getPackProfile();
 
     m_downloadDialog = new ResourceDownload::DataPackDownloadDialog(this, m_model, m_instance);
     connect(this, &QObject::destroyed, m_downloadDialog, &QDialog::close);
@@ -119,7 +117,6 @@ void DataPackPage::updateDataPacks()
     if (m_instance->typeName() != "Minecraft")
         return;  // this is a null instance or a legacy instance
 
-    auto profile = static_cast<MinecraftInstance*>(m_instance)->getPackProfile();
     if (APPLICATION->settings()->get("ModMetadataDisabled").toBool()) {
         QMessageBox::critical(this, tr("Error"), tr("Data pack updates are unavailable when metadata is disabled!"));
         return;
@@ -343,7 +340,7 @@ void GlobalDataPackPage::updateContent()
     }
 
     if (shouldDisplay()) {
-        m_underlyingPage = new DataPackPage(m_instance, m_instance->dataPackList());
+        m_underlyingPage = new DataPackPage(m_instance, m_instance->dataPackList().get());
         m_underlyingPage->setParentContainer(m_container);
         m_underlyingPage->updateExtraInfo = [this](QString id, QString value) { updateExtraInfo(std::move(id), std::move(value)); };
 

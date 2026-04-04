@@ -69,11 +69,11 @@ void AssetUpdateTask::executeTask()
 
     connect(downloadJob.get(), &NetJob::succeeded, this, &AssetUpdateTask::assetIndexFinished);
     connect(downloadJob.get(), &NetJob::failed, this, &AssetUpdateTask::assetIndexFailed);
-    connect(downloadJob.get(), &NetJob::aborted, this, [this] { emitFailed(tr("Aborted")); });
+    connect(downloadJob.get(), &NetJob::aborted, this, &AssetUpdateTask::emitAborted);
     connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::progress);
     connect(downloadJob.get(), &NetJob::stepProgress, this, &AssetUpdateTask::propagateStepProgress);
 
-    qDebug() << m_inst->name() << ": Starting asset index download";
+    qDebug() << "Starting asset index download for" << m_inst->name();
     downloadJob->start();
 }
 
@@ -85,7 +85,7 @@ bool AssetUpdateTask::canAbort() const
 void AssetUpdateTask::assetIndexFinished()
 {
     AssetsIndex index;
-    qDebug() << m_inst->name() << ": Finished asset index download";
+    qDebug() << "Finished asset index download for" << m_inst->name();
 
     auto components = m_inst->getPackProfile();
     auto profile = components->getProfile();
@@ -98,11 +98,12 @@ void AssetUpdateTask::assetIndexFinished()
         auto entry = metacache->resolveEntry("asset_indexes", assets->id + ".json");
         metacache->evictEntry(entry);
         emitFailed(tr("Failed to read the assets index!"));
+        return;
     }
 
     auto job = index.getDownloadJob();
     if (job) {
-        QString resourceURL = APPLICATION->settings()->get("ResourceURL").toString();
+        QString resourceURL = resourceUrl();
         QString source = tr("Mojang");
         if (resourceURL != BuildConfig.DEFAULT_RESOURCE_BASE) {
             source = QUrl(resourceURL).host();
@@ -111,7 +112,7 @@ void AssetUpdateTask::assetIndexFinished()
         downloadJob = job;
         connect(downloadJob.get(), &NetJob::succeeded, this, &AssetUpdateTask::emitSucceeded);
         connect(downloadJob.get(), &NetJob::failed, this, &AssetUpdateTask::assetsFailed);
-        connect(downloadJob.get(), &NetJob::aborted, this, [this] { emitFailed(tr("Aborted")); });
+        connect(downloadJob.get(), &NetJob::aborted, this, &AssetUpdateTask::emitAborted);
         connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::progress);
         connect(downloadJob.get(), &NetJob::stepProgress, this, &AssetUpdateTask::propagateStepProgress);
         downloadJob->start();
@@ -139,4 +140,13 @@ bool AssetUpdateTask::abort()
         qWarning() << "Prematurely aborted AssetUpdateTask";
     }
     return true;
+}
+
+QString AssetUpdateTask::resourceUrl()
+{
+    if (const QString urlOverride = APPLICATION->settings()->get("ResourceURLOverride").toString(); !urlOverride.isEmpty()) {
+        return urlOverride;
+    }
+
+    return BuildConfig.DEFAULT_RESOURCE_BASE;
 }

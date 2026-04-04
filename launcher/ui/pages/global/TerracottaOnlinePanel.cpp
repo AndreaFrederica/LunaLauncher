@@ -53,6 +53,7 @@
 #include "Application.h"
 #include "DesktopServices.h"
 #include "minecraft/online/Terracotta.h"
+#include "settings/SettingsObject.h"
 
 // Initialize static members
 int TerracottaOnlinePanel::s_globalPollingInterval = 1000;

@@ -79,4 +79,4 @@ third_party/*
 vcpkg_installed/*
 aqtinstall.log
 *.pyc
-PrismLauncher-portable-noverify/*
+PrismLauncher-portable-noverify/*flatpak/

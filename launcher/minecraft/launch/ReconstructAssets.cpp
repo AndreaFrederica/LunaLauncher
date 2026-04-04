@@ -25,7 +25,7 @@
 
 void ReconstructAssets::executeTask()
 {
-    auto instance = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
+    auto instance = dynamic_cast<MinecraftInstance*>(m_parent->instance());
     auto components = instance->getPackProfile();
     auto profile = components->getProfile();
     auto assets = profile->getMinecraftAssets();

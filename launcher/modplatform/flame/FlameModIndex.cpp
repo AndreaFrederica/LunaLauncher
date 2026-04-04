@@ -1,4 +1,4 @@
-#include "FlameModIndex.h"
+﻿#include "FlameModIndex.h"
 
 #include "FileSystem.h"
 #include "Json.h"
@@ -179,25 +179,25 @@ auto FlameMod::loadIndexedPackVersion(QJsonObject& obj, bool load_changelog) -> 
         dependency.addonId = Json::requireInteger(dep, "modId");
         switch (Json::requireInteger(dep, "relationType")) {
             case 1:  // EmbeddedLibrary
-                dependency.type = ModPlatform::DependencyType::EMBEDDED;
+                dependency.type = ModPlatform::DependencyType::Embedded;
                 break;
             case 2:  // OptionalDependency
-                dependency.type = ModPlatform::DependencyType::OPTIONAL;
+                dependency.type = ModPlatform::DependencyType::Optional;
                 break;
             case 3:  // RequiredDependency
-                dependency.type = ModPlatform::DependencyType::REQUIRED;
+                dependency.type = ModPlatform::DependencyType::Required;
                 break;
             case 4:  // Tool
-                dependency.type = ModPlatform::DependencyType::TOOL;
+                dependency.type = ModPlatform::DependencyType::Tool;
                 break;
             case 5:  // Incompatible
-                dependency.type = ModPlatform::DependencyType::INCOMPATIBLE;
+                dependency.type = ModPlatform::DependencyType::Incompatible;
                 break;
             case 6:  // Include
-                dependency.type = ModPlatform::DependencyType::INCLUDE;
+                dependency.type = ModPlatform::DependencyType::IncludeDep;
                 break;
             default:
-                dependency.type = ModPlatform::DependencyType::UNKNOWN;
+                dependency.type = ModPlatform::DependencyType::Unknown;
                 break;
         }
         file.dependencies.append(dependency);

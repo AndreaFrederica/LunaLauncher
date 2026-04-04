@@ -124,6 +124,15 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::getProjects(QStringList addonIds) co
     return { netJob, response };
 }
 
+Task::Ptr FlameAPI::getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const
+{
+    auto [task, rawResponse] = getProjects(addonIds);
+    if (response && rawResponse) {
+        QObject::connect(task.get(), &Task::finished, [response, rawResponse] { *response = *rawResponse; });
+    }
+    return task;
+}
+
 std::pair<Task::Ptr, QByteArray*> FlameAPI::getFiles(const QStringList& fileIds) const
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetFiles"), APPLICATION->network());

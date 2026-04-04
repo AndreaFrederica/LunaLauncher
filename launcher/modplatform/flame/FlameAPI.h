@@ -23,7 +23,8 @@ class FlameAPI : public ResourceAPI {
                                                                 ModPlatform::ModLoaderTypes fallback,
                                                                 bool checkLoaders);
 
-    std::pair<Task::Ptr, QByteArray*> getProjects(QStringList addonIds) const override;
+    std::pair<Task::Ptr, QByteArray*> getProjects(QStringList addonIds) const;
+    Task::Ptr getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const override;
     std::pair<Task::Ptr, QByteArray*> matchFingerprints(const QList<uint>& fingerprints);
     std::pair<Task::Ptr, QByteArray*> getFiles(const QStringList& fileIds) const;
     std::pair<Task::Ptr, QByteArray*> getFile(const QString& addonId, const QString& fileId) const;

@@ -28,7 +28,8 @@ class ModrinthAPI : public ResourceAPI {
                                                      std::optional<std::vector<Version>> mcVersions,
                                                      std::optional<ModPlatform::ModLoaderTypes> loaders) const;
 
-    std::pair<Task::Ptr, QByteArray*> getProjects(QStringList addonIds) const override;
+    std::pair<Task::Ptr, QByteArray*> getProjects(QStringList addonIds) const;
+    Task::Ptr getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const override;
 
     static std::pair<Task::Ptr, QByteArray*> getModCategories();
     static QList<ModPlatform::Category> loadCategories(const QByteArray& response, const QString& projectType);
@@ -194,13 +195,13 @@ class ModrinthAPI : public ResourceAPI {
         if (args.loaders.has_value()) {
             get_arguments.append(QString("loaders=[\"%1\"]").arg(getModLoaderStrings(args.loaders.value()).join("\",\"")));
         }
-        get_arguments.append(QString("include_changelog=%1").arg(args.includeChangelog ? "true" : "false"));
+        get_arguments.append(QString("include_changelog=%1").arg("true"));
 
         return QString("%1/project/%2/version%3%4")
             .arg(BuildConfig.MODRINTH_PROD_URL, args.pack->addonId.toString(), get_arguments.isEmpty() ? "" : "?", get_arguments.join('&'));
     };
 
-    QString getGameVersionsArray(const std::vector<Version>& mcVersions) const
+    QString getGameVersionsArray(const std::list<Version>& mcVersions) const
     {
         QString s;
         for (const auto& ver : mcVersions) {
@@ -226,7 +227,7 @@ class ModrinthAPI : public ResourceAPI {
                          .arg(args.dependency.addonId.toString())
                          .arg(mapMCVersionToModrinth(args.mcVersion))
                          .arg(getModLoaderStrings(args.loader).join("\",\""))
-                         .arg(args.includeChangelog ? "true" : "false");
+                         .arg("true");
     };
 
     QJsonArray documentToArray(QJsonDocument& obj) const override { return obj.object().value("hits").toArray(); }

@@ -188,7 +188,7 @@ void ExportPackDialog::done(int result)
             options.version = m_ui->version->text();
             options.author = m_ui->author->text();
             options.optionalFiles = m_ui->optionalFiles->isChecked();
-            options.instance = m_instance;
+            options.instance = MinecraftInstancePtr(m_instance, [](MinecraftInstance*) {});
             options.output = output;
             options.filter = std::bind(&FileIgnoreProxy::filterFile, m_proxy, std::placeholders::_1);
             options.recommendedRAM = m_ui->recommendedMemoryCheckBox->isChecked() ? m_ui->recommendedMemory->value() : 0;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Luna Launcher - Minecraft Launcher
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
@@ -8,7 +8,7 @@
  *  the Free Software Foundation, version 3.
  */
 
-// QuickJS 使用 C99 复合字面量，在 C++ 中会产生 pedantic 警告
+// QuickJS 浣跨敤 C99 澶嶅悎瀛楅潰閲忥紝鍦?C++ 涓細浜х敓 pedantic 璀﹀憡
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
@@ -25,10 +25,10 @@
 #pragma GCC diagnostic pop
 
 // ============================================================================
-// JavaScript 绑定辅助函数
+// JavaScript 缁戝畾杈呭姪鍑芥暟
 // ============================================================================
 
-// HTTP GET 请求
+// HTTP GET 璇锋眰
 static JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     if (argc < 1)
@@ -38,15 +38,15 @@ static JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     if (!url)
         return JS_EXCEPTION;
 
-    // 创建一个 Promise (暂时返回空对象，实际应该异步处理)
-    // TODO: 实现真正的异步请求
+    // 鍒涘缓涓€涓?Promise (鏆傛椂杩斿洖绌哄璞★紝瀹為檯搴旇寮傛澶勭悊)
+    // TODO: 瀹炵幇鐪熸鐨勫紓姝ヨ姹?
     JSValue result = JS_NewObject(ctx);
     JS_FreeCString(ctx, url);
 
     return result;
 }
 
-// JSON 解析
+// JSON 瑙ｆ瀽
 static JSValue js_json_parse(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     if (argc < 1)
@@ -62,7 +62,7 @@ static JSValue js_json_parse(JSContext* ctx, JSValueConst this_val, int argc, JS
     return result;
 }
 
-// JSON 序列化
+// JSON 搴忓垪鍖?
 static JSValue js_json_stringify(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     if (argc < 1)
@@ -72,7 +72,7 @@ static JSValue js_json_stringify(JSContext* ctx, JSValueConst this_val, int argc
     return str;
 }
 
-// 日志输出
+// 鏃ュ織杈撳嚭
 static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     for (int i = 0; i < argc; i++) {
@@ -86,10 +86,10 @@ static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, J
 }
 
 // ============================================================================
-// JSResourceAPI 实现
+// JSResourceAPI 瀹炵幇
 // ============================================================================
 
-// 静态成员初始化
+// 闈欐€佹垚鍛樺垵濮嬪寲
 QList<std::shared_ptr<JSResourceAPI>> JSResourceAPI::s_registeredAPIs;
 
 JSResourceAPI::JSResourceAPI(const QString& apiName) : m_apiName(apiName)
@@ -126,13 +126,13 @@ std::shared_ptr<JSResourceAPI> JSResourceAPI::fromString(const QString& jsCode, 
         return nullptr;
     }
 
-    // 加载元数据
+    // 鍔犺浇鍏冩暟鎹?
     if (!api->loadMetadata()) {
         qWarning() << "[JSResourceAPI] Failed to load metadata for" << apiName;
         return nullptr;
     }
 
-    // 注册到全局列表
+    // 娉ㄥ唽鍒板叏灞€鍒楄〃
     auto sharedApi = std::shared_ptr<JSResourceAPI>(api.release());
     s_registeredAPIs.append(sharedApi);
 
@@ -145,7 +145,7 @@ std::shared_ptr<JSResourceAPI> JSResourceAPI::fromString(const QString& jsCode, 
 
 bool JSResourceAPI::initialize(const QString& jsCode)
 {
-    // 创建 QuickJS 运行时和上下文
+    // 鍒涘缓 QuickJS 杩愯鏃跺拰涓婁笅鏂?
     m_runtime = JS_NewRuntime();
     if (!m_runtime) {
         m_lastError = "Failed to create JS runtime";
@@ -160,10 +160,10 @@ bool JSResourceAPI::initialize(const QString& jsCode)
         return false;
     }
 
-    // 设置 JavaScript 绑定
+    // 璁剧疆 JavaScript 缁戝畾
     setupJSBindings();
 
-    // 执行 JavaScript 代码
+    // 鎵ц JavaScript 浠ｇ爜
     QByteArray codeUtf8 = jsCode.toUtf8();
     JSValue result = JS_Eval(m_context, codeUtf8.constData(), codeUtf8.size(),
                               m_apiName.toUtf8().constData(), JS_EVAL_TYPE_GLOBAL);
@@ -181,7 +181,7 @@ bool JSResourceAPI::initialize(const QString& jsCode)
 
     JS_FreeValue(m_context, result);
 
-    // 获取 API 对象 (期望 JS 代码导出 'api' 对象)
+    // 鑾峰彇 API 瀵硅薄 (鏈熸湜 JS 浠ｇ爜瀵煎嚭 'api' 瀵硅薄)
     JSValue global = JS_GetGlobalObject(m_context);
     m_apiObject = JS_GetPropertyStr(m_context, global, "api");
     JS_FreeValue(m_context, global);
@@ -203,7 +203,7 @@ bool JSResourceAPI::loadMetadata()
         return false;
     }
 
-    // 获取 metadata 对象
+    // 鑾峰彇 metadata 瀵硅薄
     JSValue metadataObj = JS_GetPropertyStr(m_context, m_apiObject, "metadata");
     if (JS_IsUndefined(metadataObj)) {
         m_lastError = "API object must have a 'metadata' property";
@@ -212,7 +212,7 @@ bool JSResourceAPI::loadMetadata()
         return false;
     }
 
-    // 读取各个字段
+    // 璇诲彇鍚勪釜瀛楁
     auto getStringProp = [this, &metadataObj](const char* key) -> QString {
         JSValue val = JS_GetPropertyStr(m_context, metadataObj, key);
         QString result;
@@ -260,7 +260,7 @@ bool JSResourceAPI::loadMetadata()
     m_metadata.enabled = getBoolProp("enabled", true);
     m_metadata.priority = getIntProp("priority", 0);
 
-    // 读取 supportedTypes 数组
+    // 璇诲彇 supportedTypes 鏁扮粍
     JSValue typesArray = JS_GetPropertyStr(m_context, metadataObj, "supportedTypes");
     if (JS_IsArray(typesArray)) {
         JSValue lengthVal = JS_GetPropertyStr(m_context, typesArray, "length");
@@ -280,7 +280,7 @@ bool JSResourceAPI::loadMetadata()
     JS_FreeValue(m_context, typesArray);
     JS_FreeValue(m_context, metadataObj);
 
-    // 验证必需字段
+    // 楠岃瘉蹇呴渶瀛楁
     if (m_metadata.id.isEmpty()) {
         m_lastError = "Metadata 'id' is required";
         qWarning() << "[JSResourceAPI]" << m_lastError;
@@ -294,17 +294,17 @@ void JSResourceAPI::setupJSBindings()
 {
     JSValue global = JS_GetGlobalObject(m_context);
 
-    // 创建 console 对象
+    // 鍒涘缓 console 瀵硅薄
     JSValue console = JS_NewObject(m_context);
     JS_SetPropertyStr(m_context, console, "log", JS_NewCFunction(m_context, js_console_log, "log", 0));
     JS_SetPropertyStr(m_context, global, "console", console);
 
-    // 创建 http 对象
+    // 鍒涘缓 http 瀵硅薄
     JSValue http = JS_NewObject(m_context);
     JS_SetPropertyStr(m_context, http, "get", JS_NewCFunction(m_context, js_http_get, "get", 1));
     JS_SetPropertyStr(m_context, global, "http", http);
 
-    // 增强 JSON 对象
+    // 澧炲己 JSON 瀵硅薄
     JSValue json = JS_GetPropertyStr(m_context, global, "JSON");
     if (JS_IsUndefined(json)) {
         json = JS_NewObject(m_context);
@@ -336,7 +336,7 @@ void JSResourceAPI::cleanup()
 }
 
 // ============================================================================
-// JavaScript 调用辅助函数
+// JavaScript 璋冪敤杈呭姪鍑芥暟
 // ============================================================================
 
 JSValue JSResourceAPI::callJSFunction(const char* funcName, int argc, JSValueConst* argv) const
@@ -419,12 +419,12 @@ JSValue JSResourceAPI::jsonArrayToJSValue(const QJsonArray& arr) const
 }
 
 // ============================================================================
-// ResourceAPI 接口实现
+// ResourceAPI 鎺ュ彛瀹炵幇
 // ============================================================================
 
 Task::Ptr JSResourceAPI::getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const
 {
-    // TODO: 调用 JS 的 getProjects 方法
+    // TODO: 璋冪敤 JS 鐨?getProjects 鏂规硶
     qWarning() << "[JSResourceAPI] getProjects not implemented yet";
     return Task::Ptr();
 }
@@ -438,7 +438,7 @@ void JSResourceAPI::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject&
     if (!JS_IsUndefined(result)) {
         QJsonObject resultObj = jsValueToJsonObject(result);
 
-        // 更新 pack 对象
+        // 鏇存柊 pack 瀵硅薄
         if (resultObj.contains("name"))
             pack.name = resultObj["name"].toString();
         if (resultObj.contains("slug"))
@@ -458,7 +458,7 @@ void JSResourceAPI::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject&
             pack.logoName = QString("%1.%2").arg(pack.slug, QFileInfo(QUrl(pack.logoUrl).fileName()).suffix());
         }
 
-        // 作者信息
+        // 浣滆€呬俊鎭?
         if (resultObj.contains("authors")) {
             QJsonArray authorsArr = resultObj["authors"].toArray();
             for (const auto& authorVal : authorsArr) {
@@ -485,13 +485,13 @@ void JSResourceAPI::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject&
             pack.side = ModPlatform::Side::ClientSide;
         }
 
-        // 标记需要加载额外数据
+        // 鏍囪闇€瑕佸姞杞介澶栨暟鎹?
         pack.extraDataLoaded = false;
 
-        // 下载量和关注数 (ExtraData)
-        // 注意: IndexedPack 结构体中没有直接存储 downloads/follows 的字段，
-        // 它们通常存储在 extraData 中或者作为 UI 显示的一部分。
-        // 这里我们假设 JS API 返回的对象结构与 IndexedPack 兼容。
+        // 涓嬭浇閲忓拰鍏虫敞鏁?(ExtraData)
+        // 娉ㄦ剰: IndexedPack 缁撴瀯浣撲腑娌℃湁鐩存帴瀛樺偍 downloads/follows 鐨勫瓧娈碉紝
+        // 瀹冧滑閫氬父瀛樺偍鍦?extraData 涓垨鑰呬綔涓?UI 鏄剧ず鐨勪竴閮ㄥ垎銆?
+        // 杩欓噷鎴戜滑鍋囪 JS API 杩斿洖鐨勫璞＄粨鏋勪笌 IndexedPack 鍏煎銆?
 
         JS_FreeValue(m_context, result);
     }
@@ -511,7 +511,7 @@ ModPlatform::IndexedVersion JSResourceAPI::loadIndexedPackVersion(QJsonObject& o
     if (!JS_IsUndefined(result)) {
         QJsonObject resultObj = jsValueToJsonObject(result);
 
-        // 解析版本信息
+        // 瑙ｆ瀽鐗堟湰淇℃伅
         if (resultObj.contains("version"))
             version.version = resultObj["version"].toString();
         if (resultObj.contains("versionId"))
@@ -566,11 +566,11 @@ ModPlatform::IndexedVersion JSResourceAPI::loadIndexedPackVersion(QJsonObject& o
                 if (depObj.contains("versionId")) dep.version = depObj["versionId"].toString();
 
                 QString typeStr = depObj["dependencyType"].toString();
-                if (typeStr == "required") dep.type = ModPlatform::DependencyType::REQUIRED;
-                else if (typeStr == "optional") dep.type = ModPlatform::DependencyType::OPTIONAL;
-                else if (typeStr == "incompatible") dep.type = ModPlatform::DependencyType::INCOMPATIBLE;
-                else if (typeStr == "embedded") dep.type = ModPlatform::DependencyType::EMBEDDED;
-                else dep.type = ModPlatform::DependencyType::UNKNOWN;
+                if (typeStr == "required") dep.type = ModPlatform::DependencyType::Required;
+                else if (typeStr == "optional") dep.type = ModPlatform::DependencyType::Optional;
+                else if (typeStr == "incompatible") dep.type = ModPlatform::DependencyType::Incompatible;
+                else if (typeStr == "embedded") dep.type = ModPlatform::DependencyType::Embedded;
+                else dep.type = ModPlatform::DependencyType::Unknown;
 
                 version.dependencies.append(dep);
             }
@@ -613,7 +613,7 @@ void JSResourceAPI::loadExtraPackInfo(ModPlatform::IndexedPack& pack, QJsonObjec
     if (!JS_IsUndefined(result)) {
         QJsonObject resultObj = jsValueToJsonObject(result);
 
-        // 更新额外信息
+        // 鏇存柊棰濆淇℃伅
         if (resultObj.contains("logoUrl"))
             pack.logoUrl = resultObj["logoUrl"].toString();
         if (resultObj.contains("body"))
@@ -657,8 +657,8 @@ auto JSResourceAPI::getSortingMethods() const -> QList<ResourceAPI::SortingMetho
 
     JSValue result = callJSFunction("getSortingMethods", 0, nullptr);
     if (!JS_IsUndefined(result) && JS_IsArray(result)) {
-        // 解析排序方法数组
-        // TODO: 实现完整的数组解析
+        // 瑙ｆ瀽鎺掑簭鏂规硶鏁扮粍
+        // TODO: 瀹炵幇瀹屾暣鐨勬暟缁勮В鏋?
         JS_FreeValue(m_context, result);
     }
 
@@ -667,7 +667,7 @@ auto JSResourceAPI::getSortingMethods() const -> QList<ResourceAPI::SortingMetho
 
 auto JSResourceAPI::getSearchURL(SearchArgs const& args) const -> std::optional<QString>
 {
-    // 将 SearchArgs 转换为 JS 对象
+    // 灏?SearchArgs 杞崲涓?JS 瀵硅薄
     JSValue jsArgs = JS_NewObject(m_context);
     JS_SetPropertyStr(m_context, jsArgs, "offset", JS_NewInt32(m_context, args.offset));
 
@@ -748,12 +748,12 @@ auto JSResourceAPI::getVersionsURL(VersionSearchArgs const& args) const -> std::
 
 auto JSResourceAPI::getDependencyURL(DependencySearchArgs const& args) const -> std::optional<QString>
 {
-    // Hangar 不需要单独的依赖 URL
+    // Hangar 涓嶉渶瑕佸崟鐙殑渚濊禆 URL
     return {};
 }
 
 // ============================================================================
-// 静态方法 - API 注册和查询
+// 闈欐€佹柟娉?- API 娉ㄥ唽鍜屾煡璇?
 // ============================================================================
 
 QList<std::shared_ptr<JSResourceAPI>> JSResourceAPI::getRegisteredAPIs()
@@ -772,7 +772,7 @@ QList<std::shared_ptr<JSResourceAPI>> JSResourceAPI::getAPIsForResourceType(ModP
         }
     }
 
-    // 按优先级排序（降序）
+    // 鎸変紭鍏堢骇鎺掑簭锛堥檷搴忥級
     std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
         return a->m_metadata.priority > b->m_metadata.priority;
     });

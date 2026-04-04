@@ -25,6 +25,7 @@
 #include "Application.h"
 #include "minecraft/online/Terracotta.h"
 #include "minecraft/online/TerracottaDownload.h"
+#include "settings/SettingsObject.h"
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/pages/global/TerracottaOnlinePanel.h"
 

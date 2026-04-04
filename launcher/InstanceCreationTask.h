@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseVersion.h"
+#include "BaseInstance.h"
 #include "InstanceTask.h"
-#include "minecraft/MinecraftInstance.h"
 
 class InstanceCreationTask : public InstanceTask {
     Q_OBJECT
@@ -32,7 +32,7 @@ class InstanceCreationTask : public InstanceTask {
      *
      * Returns the instance if it was created or nullptr otherwise.
      */
-    virtual std::unique_ptr<MinecraftInstance> createInstance() { return nullptr; }
+    virtual std::unique_ptr<BaseInstance> createInstance() { return nullptr; }
 
     QString getError() const { return m_error_message; }
 
@@ -48,6 +48,6 @@ class InstanceCreationTask : public InstanceTask {
 
    private:
     QString m_error_message;
-    std::unique_ptr<MinecraftInstance> m_instance;
+    std::unique_ptr<BaseInstance> m_instance;
     Task::Ptr m_gameFilesTask;
 };

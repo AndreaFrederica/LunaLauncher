@@ -147,7 +147,7 @@ class Application : public QApplication {
 
     void updateProxySettings(QString proxyTypeStr, QString addr, int port, QString user, QString password);
 
-    QNetworkAccessManager* network();
+    shared_qobject_ptr<QNetworkAccessManager> network();
 
     HttpMetaCache* metacache();
 

@@ -70,8 +70,8 @@ void FlamePackExportTask::collectFiles()
     setAbortable(false);
     QCoreApplication::processEvents();
 
-    m_files.clear();
-    if (!MMCZip::collectFileListRecursively(m_options.instance->gameRoot(), nullptr, &m_files, m_options.filter)) {
+    files.clear();
+    if (!MMCZip::collectFileListRecursively(m_options.instance->gameRoot(), nullptr, &files, m_options.filter)) {
         emitFailed(tr("Could not search for files"));
         return;
     }
@@ -81,7 +81,7 @@ void FlamePackExportTask::collectFiles()
     resolvedFiles.clear();
 
     m_options.instance->loaderModList()->update();
-    connect(m_options.instance->loaderModList(), &ModFolderModel::updateFinished, this, &FlamePackExportTask::collectHashes);
+    connect(m_options.instance->loaderModList().get(), &ModFolderModel::updateFinished, this, &FlamePackExportTask::collectHashes);
 }
 
 void FlamePackExportTask::collectLunaUiFiles()
@@ -120,7 +120,7 @@ void FlamePackExportTask::collectHashes()
     auto allMods = m_options.instance->loaderModList()->allMods();
     ConcurrentTask::Ptr hashingTask(new ConcurrentTask("MakeHashesTask", APPLICATION->settings()->get("NumberOfConcurrentTasks").toInt()));
     task.reset(hashingTask);
-    for (const QFileInfo& file : m_files) {
+    for (const QFileInfo& file : files) {
         const QString relative = m_gameRoot.relativeFilePath(file.absoluteFilePath());
         // require sensible file types
         if (!std::any_of(FILE_EXTENSIONS.begin(), FILE_EXTENSIONS.end(), [&relative](const QString& extension) {
@@ -351,7 +351,7 @@ void FlamePackExportTask::buildZip()
     setStatus(tr("Adding files..."));
     setProgress(4, 5);
 
-    auto zipTask = makeShared<MMCZip::ExportToZipTask>(m_options.output, m_gameRoot, m_files, "overrides/", true);
+    auto zipTask = makeShared<MMCZip::ExportToZipTask>(m_options.output, m_gameRoot, files, "overrides/", true);
     zipTask->addExtraFile("manifest.json", generateIndex());
     zipTask->addExtraFile("modlist.html", generateHTML());
     for (const auto& entry : rootExtraFiles) {

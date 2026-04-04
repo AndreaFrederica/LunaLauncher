@@ -11,6 +11,7 @@
 
 #include <QMessageBox>
 #include <algorithm>
+#include <list>
 
 namespace ResourceDownload {
 
@@ -27,13 +28,13 @@ ResourceAPI::SearchArgs ModModel::createSearchArguments()
     Q_ASSERT(profile);
     Q_ASSERT(m_filter);
 
-    std::optional<std::vector<Version>> versions{};
+    std::optional<std::list<Version>> versions{};
     std::optional<QStringList> categories{};
     auto loaders = profile->getSupportedModLoaders();
 
     // Version filter
     if (!m_filter->versions.empty())
-        versions = m_filter->versions;
+        versions = std::list<Version>(m_filter->versions.begin(), m_filter->versions.end());
     if (m_filter->loaders)
         loaders = m_filter->loaders;
     if (!m_filter->categoryIds.empty())
@@ -55,10 +56,10 @@ ResourceAPI::VersionSearchArgs ModModel::createVersionsArguments(const QModelInd
     Q_ASSERT(profile);
     Q_ASSERT(m_filter);
 
-    std::optional<std::vector<Version>> versions{};
+    std::optional<std::list<Version>> versions{};
     auto loaders = profile->getSupportedModLoaders();
     if (!m_filter->versions.empty())
-        versions = m_filter->versions;
+        versions = std::list<Version>(m_filter->versions.begin(), m_filter->versions.end());
     if (m_filter->loaders)
         loaders = m_filter->loaders;
 

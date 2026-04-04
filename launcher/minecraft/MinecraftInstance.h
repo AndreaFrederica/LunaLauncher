@@ -63,7 +63,7 @@ class PackProfile;
 class MinecraftInstance : public BaseInstance {
     Q_OBJECT
    public:
-    MinecraftInstance(SettingsObjectPtr globalSettings, SettingsObjectPtr settings, const QString& rootDir);
+    MinecraftInstance(SettingsObject* globalSettings, std::unique_ptr<SettingsObject> settings, const QString& rootDir);
     virtual ~MinecraftInstance() = default;
     virtual void saveNow() override;
 
@@ -134,7 +134,7 @@ class MinecraftInstance : public BaseInstance {
 
     //////  Launch stuff //////
     QList<Task::Ptr> createUpdateTask() override;
-    shared_qobject_ptr<LaunchTask> createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin) override;
+    LaunchTask* createLaunchTask(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin) override;
     QStringList extraArguments() override;
     QStringList verboseDescription(AuthSessionPtr session, MinecraftTarget::Ptr targetToJoin) override;
     QList<Mod*> getJarMods() const;

@@ -49,7 +49,7 @@ void PackFetchTask::fetch()
     publicPacks.clear();
     thirdPartyPacks.clear();
 
-    jobPtr.reset(new NetJob("LegacyFTB::ModpackFetch", m_network));
+    jobPtr = makeShared<NetJob>("LegacyFTB::ModpackFetch", APPLICATION->network());
 
     QUrl publicPacksUrl = QUrl(BuildConfig.LEGACY_FTB_CDN_BASE_URL + "static/modpacks.xml");
     qDebug() << "Downloading public version info from" << publicPacksUrl.toString();
@@ -76,31 +76,26 @@ void PackFetchTask::fetchPrivate(const QStringList& toFetch)
     QString privatePackBaseUrl = BuildConfig.LEGACY_FTB_CDN_BASE_URL + "static/%1.xml";
 
     for (auto& packCode : toFetch) {
-        NetJob* job = new NetJob("Fetching private pack", m_network);
+        auto job = makeShared<NetJob>("Fetching private pack", APPLICATION->network());
 
         auto [action, data] = Net::ApiDownload::makeByteArray(privatePackBaseUrl.arg(packCode));
         job->addNetAction(action);
         job->setAskRetry(false);
 
-        connect(job, &NetJob::succeeded, this, [this, job, data, packCode] {
+        connect(job.get(), &NetJob::succeeded, this, [this, job, data, packCode] {
             ModpackList packs;
             parseAndAddPacks(*data, PackType::Private, packs);
             for (auto& currentPack : packs) {
                 currentPack.packCode = packCode;
                 emit privateFileDownloadFinished(currentPack);
             }
-
-            job->deleteLater();
         });
 
-        connect(job, &NetJob::failed, this, [this, job, packCode](QString reason) {
+        connect(job.get(), &NetJob::failed, this, [this, job, packCode](QString reason) {
             emit privateFileDownloadFailed(reason, packCode);
-            job->deleteLater();
         });
 
-        connect(job, &NetJob::aborted, this, [this, job] {
-            job->deleteLater();
-
+        connect(job.get(), &NetJob::aborted, this, [this, job] {
             emit aborted();
         });
 

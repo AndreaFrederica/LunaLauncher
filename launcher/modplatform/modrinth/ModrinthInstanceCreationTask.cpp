@@ -154,7 +154,7 @@ bool ModrinthCreationTask::updateInstance()
 }
 
 // https://docs.modrinth.com/docs/modpacks/format_definition/
-std::unique_ptr<MinecraftInstance> ModrinthCreationTask::createInstance()
+std::unique_ptr<BaseInstance> ModrinthCreationTask::createInstance()
 {
     QEventLoop loop;
 

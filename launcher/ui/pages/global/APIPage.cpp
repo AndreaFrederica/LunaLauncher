@@ -94,7 +94,7 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
     ui->resourceURL->setPlaceholderText(BuildConfig.DEFAULT_RESOURCE_BASE);
     ui->libraryURL->setPlaceholderText(BuildConfig.LIBRARY_BASE);
-    ui->fmlLibsURL->setPlaceholderText(BuildConfig.FMLLIBS_BASE_URL);
+    ui->fmlLibsURL->setPlaceholderText(BuildConfig.LEGACY_FMLLIBS_BASE_URL);
     ui->userAgentLineEdit->setPlaceholderText(BuildConfig.USER_AGENT);
 
     // Connect mirror selection change
@@ -159,7 +159,7 @@ void APIPage::updateMirrorSelection()
             ui->libraryURL->setText("");
             ui->libraryURL->setPlaceholderText(BuildConfig.LIBRARY_BASE);
             ui->fmlLibsURL->setText("");
-            ui->fmlLibsURL->setPlaceholderText(BuildConfig.FMLLIBS_BASE_URL);
+            ui->fmlLibsURL->setPlaceholderText(BuildConfig.LEGACY_FMLLIBS_BASE_URL);
             ui->mojangDownloadsMirrorURL->setText("");
             ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("Use Default"));
         } else if (mirrorType == MirrorDownload::BMCLAPI) {
@@ -170,7 +170,7 @@ void APIPage::updateMirrorSelection()
             ui->resourceURL->setText(mirrorInfo.defaultAssetsUrl);
             ui->libraryURL->setText(mirrorInfo.defaultLibrariesUrl);
             ui->fmlLibsURL->setText("");
-            ui->fmlLibsURL->setPlaceholderText(BuildConfig.FMLLIBS_BASE_URL);
+            ui->fmlLibsURL->setPlaceholderText(BuildConfig.LEGACY_FMLLIBS_BASE_URL);
             ui->mojangDownloadsMirrorURL->setText("");
             ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("BMCLAPI (auto)"));
         }

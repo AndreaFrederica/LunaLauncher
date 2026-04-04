@@ -15,7 +15,7 @@ VanillaCreationTask::VanillaCreationTask(BaseVersion::Ptr version, QString loade
     , m_loader_version(std::move(loader_version))
 {}
 
-std::unique_ptr<MinecraftInstance> VanillaCreationTask::createInstance()
+std::unique_ptr<BaseInstance> VanillaCreationTask::createInstance()
 {
     setStatus(tr("Creating instance from version %1").arg(m_version->name()));
 

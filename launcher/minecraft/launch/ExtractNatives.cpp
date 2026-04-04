@@ -63,7 +63,7 @@ static bool unzipNatives(QString source, QString targetFolder, bool applyJnilibH
 
 void ExtractNatives::executeTask()
 {
-    auto instance = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
+    auto instance = dynamic_cast<MinecraftInstance*>(m_parent->instance());
     auto toExtract = instance->getNativeJars();
     if (toExtract.isEmpty()) {
         emitSucceeded();

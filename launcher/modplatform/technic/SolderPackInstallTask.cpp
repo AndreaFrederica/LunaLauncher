@@ -40,6 +40,7 @@
 #include <MMCZip.h>
 #include <QtConcurrentRun>
 
+#include "Application.h"
 #include "SolderPackManifest.h"
 #include "TechnicPackProcessor.h"
 #include "net/ApiDownload.h"
@@ -70,7 +71,7 @@ void Technic::SolderPackInstallTask::executeTask()
 {
     setStatus(tr("Resolving modpack files"));
 
-    m_filesNetJob.reset(new NetJob(tr("Resolving modpack files"), m_network));
+    m_filesNetJob = makeShared<NetJob>(tr("Resolving modpack files"), APPLICATION->network());
     auto sourceUrl = QString("%1/modpack/%2/%3").arg(m_solderUrl.toString(), m_pack, m_version);
     auto [action, response] = Net::ApiDownload::makeByteArray(sourceUrl);
     m_filesNetJob->addNetAction(action);
@@ -107,7 +108,7 @@ void Technic::SolderPackInstallTask::fileListSucceeded(QByteArray* response)
     if (!build.minecraft.isEmpty())
         m_minecraftVersion = build.minecraft;
 
-    m_filesNetJob.reset(new NetJob(tr("Downloading modpack"), m_network));
+    m_filesNetJob = makeShared<NetJob>(tr("Downloading modpack"), APPLICATION->network());
 
     int i = 0;
     for (const auto& mod : build.mods) {

@@ -68,7 +68,7 @@ class FlameCreationTask final : public InstanceCreationTask {
     bool abort() override;
 
     bool updateInstance() override;
-    std::unique_ptr<MinecraftInstance> createInstance() override;
+    std::unique_ptr<BaseInstance> createInstance() override;
 
    private slots:
     void idResolverSucceeded(QEventLoop&);

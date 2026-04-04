@@ -45,6 +45,7 @@
 #include "FileSystem.h"
 #include "MMCZip.h"
 #include "TerracottaReleaseUtils.h"
+#include "settings/SettingsObject.h"
 
 #include <QDateTime>
 #include <QDir>

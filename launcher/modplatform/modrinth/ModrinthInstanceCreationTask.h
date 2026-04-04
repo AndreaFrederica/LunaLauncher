@@ -41,7 +41,7 @@ class ModrinthCreationTask final : public InstanceCreationTask {
     bool abort() override;
 
     bool updateInstance() override;
-    std::unique_ptr<MinecraftInstance> createInstance() override;
+    std::unique_ptr<BaseInstance> createInstance() override;
 
    private:
     bool parseManifest(const QString&, std::vector<File>&, bool set_internal_data = true, bool show_optional_dialog = true);

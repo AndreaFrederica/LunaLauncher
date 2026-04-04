@@ -2,14 +2,13 @@
 
 #include <QButtonGroup>
 #include <QDialog>
-#include <cstdint>
 
 namespace Ui {
 class ChooseProviderDialog;
 }
 
 namespace ModPlatform {
-enum class ResourceProvider : std::uint8_t;
+enum class ResourceProvider;
 }
 
 class Mod;

@@ -4,6 +4,7 @@
 #include "FlameModIndex.h"
 
 #include <QHash>
+#include <list>
 #include <memory>
 
 #include "Json.h"
@@ -39,16 +40,22 @@ void FlameCheckUpdate::executeTask()
 {
     setStatus(tr("Preparing resources for CurseForge..."));
 
-    auto netJob = new NetJob("Get latest versions", APPLICATION->network());
-    connect(netJob, &Task::finished, this, &FlameCheckUpdate::collectBlockedMods);
+    auto netJob = makeShared<NetJob>("Get latest versions", APPLICATION->network());
+    connect(netJob.get(), &Task::finished, this, &FlameCheckUpdate::collectBlockedMods);
 
-    connect(netJob, &Task::progress, this, &FlameCheckUpdate::setProgress);
-    connect(netJob, &Task::stepProgress, this, &FlameCheckUpdate::propagateStepProgress);
-    connect(netJob, &Task::details, this, &FlameCheckUpdate::setDetails);
+    connect(netJob.get(), &Task::progress, this, &FlameCheckUpdate::setProgress);
+    connect(netJob.get(), &Task::stepProgress, this, &FlameCheckUpdate::propagateStepProgress);
+    connect(netJob.get(), &Task::details, this, &FlameCheckUpdate::setDetails);
     for (auto* resource : m_resources) {
         auto project = std::make_shared<ModPlatform::IndexedPack>();
         project->addonId = resource->metadata()->project_id.toString();
-        auto versionsUrlOptional = api.getVersionsURL({ project, m_gameVersions });
+        ResourceAPI::VersionSearchArgs args{};
+        args.pack = project;
+        args.resourceType = ModPlatform::ResourceType::Mod;
+        if (!m_gameVersions.empty()) {
+            args.mcVersions = std::list<Version>(m_gameVersions.begin(), m_gameVersions.end());
+        }
+        auto versionsUrlOptional = api.getVersionsURL(args);
         if (!versionsUrlOptional.has_value())
             continue;
 
@@ -57,7 +64,7 @@ void FlameCheckUpdate::executeTask()
         connect(task.get(), &Task::succeeded, this, [this, resource, response] { getLatestVersionCallback(resource, response); });
         netJob->addNetAction(task);
     }
-    m_task.reset(netJob);
+    m_task = netJob;
     m_task->start();
 }
 

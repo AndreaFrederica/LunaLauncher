@@ -8,6 +8,7 @@
 #include "modplatform/ModIndex.h"
 
 #include "net/ApiDownload.h"
+#include <memory>
 
 Task::Ptr ResourceAPI::searchProjects(SearchArgs&& args, Callback<QList<ModPlatform::IndexedPack::Ptr>>&& callbacks) const
 {
@@ -150,7 +151,8 @@ Task::Ptr ResourceAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVe
 
 Task::Ptr ResourceAPI::getProjectInfo(ProjectInfoArgs&& args, Callback<ModPlatform::IndexedPack::Ptr>&& callbacks) const
 {
-    auto [job, response] = getProject(args.pack->addonId.toString());
+    auto response = std::make_shared<QByteArray>();
+    auto job = getProject(args.pack->addonId.toString(), response);
 
     QObject::connect(job.get(), &NetJob::succeeded, [this, response, callbacks, args] {
         auto pack = args.pack;
@@ -262,7 +264,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(DependencySearchArgs&& args, Callbac
     return netJob;
 }
 
-QString ResourceAPI::getGameVersionsString(std::vector<Version> mcVersions) const
+QString ResourceAPI::getGameVersionsString(std::list<Version> mcVersions) const
 {
     QString s;
     for (auto& ver : mcVersions) {
@@ -298,4 +300,14 @@ std::pair<Task::Ptr, QByteArray*> ResourceAPI::getProject(QString addonId) const
     netJob->addNetAction(action);
 
     return { netJob, response };
+}
+
+Task::Ptr ResourceAPI::getProject(QString addonId, std::shared_ptr<QByteArray> response) const
+{
+    auto [task, rawResponse] = getProject(addonId);
+    if (!task || !response || !rawResponse) {
+        return task;
+    }
+    QObject::connect(task.get(), &Task::succeeded, [response, rawResponse] { *response = *rawResponse; });
+    return task;
 }

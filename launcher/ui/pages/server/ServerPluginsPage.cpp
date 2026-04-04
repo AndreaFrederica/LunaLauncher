@@ -7,7 +7,7 @@
 #include "minecraft/mod/PluginFolderModel.h"
 
 ServerPluginsPage::ServerPluginsPage(BaseInstance *inst, std::shared_ptr<PluginFolderModel> plugins, QWidget *parent)
-    : ExternalResourcesPage(inst, plugins, parent)
+    : ExternalResourcesPage(inst, plugins.get(), parent)
 {
     setFilter("%1 (*.jar)");
 }

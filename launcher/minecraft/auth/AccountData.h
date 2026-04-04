@@ -125,6 +125,7 @@ struct AccountData {
 
     QString profileId() const;
     QString profileName() const;
+    QString accountDisplayString() const;
 
     QString lastError() const;
 
@@ -139,6 +140,7 @@ struct AccountData {
     QString msaClientID;
     Token msaToken;
     Token userToken;
+    Token xboxApiToken;
     Token mojangservicesToken;
 
     Token yggdrasilToken;

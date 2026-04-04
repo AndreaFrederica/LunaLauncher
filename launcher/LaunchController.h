@@ -78,8 +78,8 @@ class LaunchController : public Task {
     void decideAccount();
     LaunchDecision decideLaunchMode();
     bool askPlayDemo();
-    QString askOfflineName(QString playerName, bool* ok = nullptr);
-    bool reauthenticateAccount(MinecraftAccountPtr account, QString reason);
+    QString askOfflineName(QString playerName, bool demo, bool* ok = nullptr);
+    bool reauthenticateAccount(MinecraftAccountPtr account);
 
    private slots:
     void readyForLaunch();
@@ -91,6 +91,8 @@ class LaunchController : public Task {
    private:
     LaunchMode m_wantedLaunchMode = LaunchMode::Normal;
     LaunchMode m_actualLaunchMode = LaunchMode::Normal;
+    bool m_online = true;
+    bool m_demo = false;
     BaseProfilerFactory* m_profiler = nullptr;
     QString m_offlineName;
     BaseInstance* m_instance;
@@ -98,6 +100,6 @@ class LaunchController : public Task {
     InstanceWindow* m_console = nullptr;
     MinecraftAccountPtr m_accountToUse = nullptr;
     AuthSessionPtr m_session;
-    LaunchTask* m_launcher;
+    LaunchTask* m_launcher = nullptr;
     MinecraftTarget::Ptr m_targetToJoin;
 };

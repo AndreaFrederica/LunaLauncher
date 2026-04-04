@@ -4,6 +4,8 @@
 #include <QFile>
 
 #include "InstanceTask.h"
+#include "BaseInstance.h"
+#include "minecraft/MinecraftInstance.h"
 #include "minecraft/MinecraftLoadAndCheck.h"
 #include "tasks/SequentialTask.h"
 
@@ -91,7 +93,9 @@ void InstanceCreationTask::executeTask()
             return;
         }
         auto task = makeShared<SequentialTask>();
-        task->addTask(makeShared<MinecraftLoadAndCheck>(m_instance.get(), Net::Mode::Online));
+        if (auto mc_instance = dynamic_cast<MinecraftInstance*>(m_instance.get())) {
+            task->addTask(makeShared<MinecraftLoadAndCheck>(mc_instance, Net::Mode::Online));
+        }
         for (const auto& t : updateTasks) {
             task->addTask(t);
         }

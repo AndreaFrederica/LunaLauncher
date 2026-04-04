@@ -82,14 +82,14 @@ void ServerConsolePage::onRunningStatusChanged(bool running)
 
     if (running) {
         // Connect to the current task
-        connectToTask(m_instance->launchTask().dynamicCast<ServerLaunchTask>());
+        connectToTask(dynamic_cast<ServerLaunchTask*>(m_instance->launchTask()));
     } else {
         // Disconnect from any task
         disconnectConsole();
     }
 }
 
-void ServerConsolePage::connectToTask(Ptr task)
+void ServerConsolePage::connectToTask(ServerLaunchTask* task)
 {
     if (!task) {
         qWarning() << "ServerConsolePage::connectToTask - task is null";
@@ -103,7 +103,7 @@ void ServerConsolePage::connectToTask(Ptr task)
     qDebug() << "ServerConsolePage::connectToTask - connected to task";
 
     // Connect to console output
-    connect(task.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
+    connect(task, &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
 
     // Immediately sync terminal size to prevent cursor positioning issues
     // This must happen BEFORE any output is displayed
@@ -117,8 +117,8 @@ void ServerConsolePage::disconnectConsole()
 {
     if (m_currentTask) {
         qDebug() << "ServerConsolePage::disconnectConsole - disconnecting from task";
-        disconnect(m_currentTask.get(), &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
-        m_currentTask.reset();
+        disconnect(m_currentTask, &ServerLaunchTask::readyRead, this, &ServerConsolePage::onReadyRead);
+        m_currentTask = nullptr;
     }
 }
 

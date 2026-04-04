@@ -5,6 +5,7 @@
 #include "TexturePackModel.h"
 
 #include <utility>
+#include <list>
 
 #include "Application.h"
 
@@ -71,7 +72,7 @@ ResourceAPI::SearchArgs TexturePackResourceModel::createSearchArguments()
 
     Q_ASSERT(!s_availableVersions.empty());
 
-    args.versions = s_availableVersions;
+    args.versions = std::list<Version>(s_availableVersions.begin(), s_availableVersions.end());
 
     return args;
 }
@@ -85,7 +86,7 @@ ResourceAPI::VersionSearchArgs TexturePackResourceModel::createVersionsArguments
         return args;
     }
 
-    args.mcVersions = s_availableVersions;
+    args.mcVersions = std::list<Version>(s_availableVersions.begin(), s_availableVersions.end());
     return args;
 }
 

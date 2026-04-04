@@ -17,7 +17,7 @@
 #endif
 
 ServerLaunchTask::ServerLaunchTask(ServerInstance *instance)
-    : LaunchTask(instance->shared_from_this()), m_instance(instance)
+    : LaunchTask(instance), m_instance(instance)
 {
 }
 
@@ -201,9 +201,9 @@ void ServerLaunchTask::cleanup()
     // Only clear running state if this task is still the active task for the instance
     // This prevents an old task from clearing the running state of a new task
     if (m_instance) {
-        auto currentTask = m_instance->launchTask().dynamicCast<ServerLaunchTask>();
-        qDebug() << "ServerLaunchTask::cleanup() - currentTask:" << currentTask.get() << "this:" << this;
-        if (currentTask.get() == this && m_instance->isRunning()) {
+        auto currentTask = dynamic_cast<ServerLaunchTask*>(m_instance->launchTask());
+        qDebug() << "ServerLaunchTask::cleanup() - currentTask:" << currentTask << "this:" << this;
+        if (currentTask == this && m_instance->isRunning()) {
             qDebug() << "ServerLaunchTask::cleanup() - Clearing running state";
             m_instance->setRunning(false);
         } else {

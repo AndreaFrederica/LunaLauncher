@@ -146,7 +146,7 @@ VersionPage::VersionPage(MinecraftInstance* inst, QWidget* parent) : QMainWindow
 
     ui->toolBar->insertSpacer(ui->actionReload);
 
-    m_profile = m_inst->getPackProfile();
+    m_profile = m_inst->getPackProfile().get();
 
     reloadPackProfile();
 
@@ -449,7 +449,7 @@ void VersionPage::on_actionDownload_All_triggered()
 
 void VersionPage::on_actionInstall_Loader_triggered()
 {
-    InstallLoaderDialog dialog(m_inst->getPackProfile(), QString(), this);
+    InstallLoaderDialog dialog(m_inst->getPackProfile().get(), QString(), this);
     dialog.exec();
     m_container->refreshContainer();
 }

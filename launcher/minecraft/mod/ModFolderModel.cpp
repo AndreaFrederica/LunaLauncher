@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 flowln <flowlnlnln@gmail.com>
@@ -294,7 +294,7 @@ void ModFolderModel::onParseFinished()
         }
         if (mod->metadata()) {
             for (auto dep : mod->metadata()->dependencies) {
-                if (dep.type == ModPlatform::DependencyType::REQUIRED) {
+                if (dep.type == ModPlatform::DependencyType::Required) {
                     auto d = findByProjectID(dep.addonId, mod->metadata()->provider);
                     if (d) {
                         m_requires[id] << d;

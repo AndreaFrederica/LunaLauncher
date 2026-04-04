@@ -29,6 +29,7 @@
 #include "DesktopServices.h"
 #include "minecraft/online/YukariConnect.h"
 #include "minecraft/online/YukariConnectDownload.h"
+#include "settings/SettingsObject.h"
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/pages/global/YukariConnectOnlinePanel.h"
 

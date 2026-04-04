@@ -90,7 +90,7 @@ void ModrinthPackExportTask::collectFiles()
 
     if (mcInstance) {
         mcInstance->loaderModList()->update();
-        connect(mcInstance->loaderModList(), &ModFolderModel::updateFinished, this, &ModrinthPackExportTask::collectHashes);
+        connect(mcInstance->loaderModList().get(), &ModFolderModel::updateFinished, this, &ModrinthPackExportTask::collectHashes);
     } else
         collectHashes();
 }

@@ -1,4 +1,4 @@
-#include "FMLLibrariesTask.h"
+#include "LegacyFMLLibrariesTask.h"
 
 #include "FileSystem.h"
 #include "minecraft/MinecraftInstance.h"
@@ -7,14 +7,15 @@
 
 #include "Application.h"
 #include "BuildConfig.h"
+#include "settings/SettingsObject.h"
 
 #include "net/ApiDownload.h"
 
-FMLLibrariesTask::FMLLibrariesTask(MinecraftInstance* inst)
+LegacyFMLLibrariesTask::LegacyFMLLibrariesTask(MinecraftInstance* inst)
 {
     m_inst = inst;
 }
-void FMLLibrariesTask::executeTask()
+void LegacyFMLLibrariesTask::executeTask()
 {
     // Get the mod list
     MinecraftInstance* inst = (MinecraftInstance*)m_inst;
@@ -65,7 +66,7 @@ void FMLLibrariesTask::executeTask()
     // Check for FMLLibsURL override setting
     auto fmlLibsUrl = APPLICATION->settings()->get("FMLLibsURL").toString();
     if (fmlLibsUrl.isEmpty()) {
-        fmlLibsUrl = BuildConfig.FMLLIBS_BASE_URL;
+        fmlLibsUrl = BuildConfig.LEGACY_FMLLIBS_BASE_URL;
     }
 
     for (auto& lib : fmlLibsToProcess) {
@@ -74,21 +75,21 @@ void FMLLibrariesTask::executeTask()
         dljob->addNetAction(Net::ApiDownload::makeCached(QUrl(urlString), entry, options));
     }
 
-    connect(dljob.get(), &NetJob::succeeded, this, &FMLLibrariesTask::fmllibsFinished);
-    connect(dljob.get(), &NetJob::failed, this, &FMLLibrariesTask::fmllibsFailed);
+    connect(dljob.get(), &NetJob::succeeded, this, &LegacyFMLLibrariesTask::fmllibsFinished);
+    connect(dljob.get(), &NetJob::failed, this, &LegacyFMLLibrariesTask::fmllibsFailed);
     connect(dljob.get(), &NetJob::aborted, this, [this] { emitFailed(tr("Aborted")); });
-    connect(dljob.get(), &NetJob::progress, this, &FMLLibrariesTask::progress);
-    connect(dljob.get(), &NetJob::stepProgress, this, &FMLLibrariesTask::propagateStepProgress);
+    connect(dljob.get(), &NetJob::progress, this, &LegacyFMLLibrariesTask::progress);
+    connect(dljob.get(), &NetJob::stepProgress, this, &LegacyFMLLibrariesTask::propagateStepProgress);
     downloadJob.reset(dljob);
     downloadJob->start();
 }
 
-bool FMLLibrariesTask::canAbort() const
+bool LegacyFMLLibrariesTask::canAbort() const
 {
     return true;
 }
 
-void FMLLibrariesTask::fmllibsFinished()
+void LegacyFMLLibrariesTask::fmllibsFinished()
 {
     downloadJob.reset();
     if (!fmlLibsToProcess.isEmpty()) {
@@ -114,14 +115,14 @@ void FMLLibrariesTask::fmllibsFinished()
     }
     emitSucceeded();
 }
-void FMLLibrariesTask::fmllibsFailed(QString reason)
+void LegacyFMLLibrariesTask::fmllibsFailed(QString reason)
 {
     QStringList failed = downloadJob->getFailedFiles();
     QString failed_all = failed.join("\n");
     emitFailed(tr("Failed to download the following files:\n%1\n\nReason:%2\nPlease try again.").arg(failed_all, reason));
 }
 
-bool FMLLibrariesTask::abort()
+bool LegacyFMLLibrariesTask::abort()
 {
     if (downloadJob) {
         return downloadJob->abort();

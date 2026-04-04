@@ -8,7 +8,7 @@
 #include "ui_ExternalResourcesPage.h"
 
 CustomPlayerModelPage::CustomPlayerModelPage(MinecraftInstance* instance, std::shared_ptr<CustomPlayerModelFolderModel> model, QWidget* parent)
-    : ExternalResourcesPage(instance, model, parent), m_model(model)
+    : ExternalResourcesPage(instance, model.get(), parent), m_model(model)
 {
     // Hide actions that are not relevant for CustomPlayerModel
     ui->actionEnableItem->setVisible(false);

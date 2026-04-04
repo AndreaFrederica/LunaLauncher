@@ -307,7 +307,7 @@ QString FlameCreationTask::getVersionForLoader(QString uid, QString loaderType, 
     return loaderVersion;
 }
 
-std::unique_ptr<MinecraftInstance> FlameCreationTask::createInstance()
+std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
 {
     QEventLoop loop;
 

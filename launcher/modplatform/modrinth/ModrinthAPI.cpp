@@ -113,6 +113,15 @@ std::pair<Task::Ptr, QByteArray*> ModrinthAPI::getProjects(QStringList addonIds)
     return { netJob, response };
 }
 
+Task::Ptr ModrinthAPI::getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const
+{
+    auto [task, rawResponse] = getProjects(addonIds);
+    if (response && rawResponse) {
+        QObject::connect(task.get(), &Task::finished, [response, rawResponse] { *response = *rawResponse; });
+    }
+    return task;
+}
+
 QList<ResourceAPI::SortingMethod> ModrinthAPI::getSortingMethods() const
 {
     // https://docs.modrinth.com/api-spec/#tag/projects/operation/searchProjects

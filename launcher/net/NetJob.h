@@ -53,7 +53,7 @@ class NetJob : public ConcurrentTask {
     // TODO: delete
     using Ptr = shared_qobject_ptr<NetJob>;
 
-    explicit NetJob(QString job_name, QNetworkAccessManager* network, int max_concurrent = -1);
+    explicit NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> network, int max_concurrent = -1);
     ~NetJob() override = default;
 
     auto size() const -> int;
@@ -79,7 +79,7 @@ class NetJob : public ConcurrentTask {
     bool isOnline();
 
    private:
-    QNetworkAccessManager* m_network;
+    shared_qobject_ptr<QNetworkAccessManager> m_network;
 
     int m_try = 1;
     bool m_ask_retry = true;

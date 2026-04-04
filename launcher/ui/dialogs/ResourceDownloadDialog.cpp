@@ -450,7 +450,7 @@ QList<BasePage*> DataPackDownloadDialog::getPages()
 PluginDownloadDialog::PluginDownloadDialog(QWidget* parent,
                                            const std::shared_ptr<PluginFolderModel>& plugins,
                                            BaseInstance* instance)
-    : ResourceDownloadDialog(parent, plugins), m_instance(instance)
+    : ResourceDownloadDialog(parent, plugins.get()), m_instance(instance)
 {
     setWindowTitle(dialogTitle());
 

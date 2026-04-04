@@ -998,7 +998,7 @@ void PackInstallTask::install()
         components->buildingFromScratch();
 
         // Use a component to add libraries BEFORE Minecraft
-        if (!createLibrariesComponent(instance.instanceRoot(), components)) {
+        if (!createLibrariesComponent(instance.instanceRoot(), components.get())) {
             emitFailed(tr("Failed to create libraries component"));
             return;
         }
@@ -1039,7 +1039,7 @@ void PackInstallTask::install()
 
         // Use a component to fill in the rest of the data
         // todo: use more detection
-        if (!createPackComponent(instance.instanceRoot(), components)) {
+        if (!createPackComponent(instance.instanceRoot(), components.get())) {
             emitFailed(tr("Failed to create pack component"));
             return;
         }

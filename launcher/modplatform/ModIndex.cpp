@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 flowln <flowlnlnln@gmail.com>
@@ -200,19 +200,19 @@ Side SideUtils::fromString(QString side)
 QString DependencyTypeUtils::toString(DependencyType type)
 {
     switch (type) {
-        case DependencyType::REQUIRED:
+        case DependencyType::Required:
             return "REQUIRED";
-        case DependencyType::OPTIONAL:
+        case DependencyType::Optional:
             return "OPTIONAL";
-        case DependencyType::INCOMPATIBLE:
+        case DependencyType::Incompatible:
             return "INCOMPATIBLE";
-        case DependencyType::EMBEDDED:
+        case DependencyType::Embedded:
             return "EMBEDDED";
-        case DependencyType::TOOL:
+        case DependencyType::Tool:
             return "TOOL";
-        case DependencyType::INCLUDE:
+        case DependencyType::IncludeDep:
             return "INCLUDE";
-        case DependencyType::UNKNOWN:
+        case DependencyType::Unknown:
             return "UNKNOWN";
     }
     return "UNKNOWN";
@@ -221,15 +221,15 @@ QString DependencyTypeUtils::toString(DependencyType type)
 DependencyType DependencyTypeUtils::fromString(const QString& str)
 {
     static const QHash<QString, DependencyType> map = {
-        { "REQUIRED", DependencyType::REQUIRED },
-        { "OPTIONAL", DependencyType::OPTIONAL },
-        { "INCOMPATIBLE", DependencyType::INCOMPATIBLE },
-        { "EMBEDDED", DependencyType::EMBEDDED },
-        { "TOOL", DependencyType::TOOL },
-        { "INCLUDE", DependencyType::INCLUDE },
-        { "UNKNOWN", DependencyType::UNKNOWN },
+        { "REQUIRED", DependencyType::Required },
+        { "OPTIONAL", DependencyType::Optional },
+        { "INCOMPATIBLE", DependencyType::Incompatible },
+        { "EMBEDDED", DependencyType::Embedded },
+        { "TOOL", DependencyType::Tool },
+        { "INCLUDE", DependencyType::IncludeDep },
+        { "UNKNOWN", DependencyType::Unknown },
     };
 
-    return map.value(str.toUpper(), DependencyType::UNKNOWN);
+    return map.value(str.toUpper(), DependencyType::Unknown);
 }
 }  // namespace ModPlatform

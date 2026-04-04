@@ -53,7 +53,7 @@
 
 LauncherPartLaunch::LauncherPartLaunch(LaunchTask* parent)
     : LaunchStep(parent)
-    , m_process(std::dynamic_pointer_cast<MinecraftInstance>(parent->instance())->getJavaVersion().defaultsToUtf8() ? QStringConverter::Utf8 : QStringConverter::System)
+    , m_process(dynamic_cast<MinecraftInstance*>(parent->instance())->getJavaVersion().defaultsToUtf8() ? QStringConverter::Utf8 : QStringConverter::System)
 {
     if (parent->instance()->settings()->get("CloseAfterLaunch").toBool()) {
         static const QRegularExpression s_settingUser(".*Setting user.+", QRegularExpression::CaseInsensitiveOption);
@@ -82,7 +82,7 @@ void LauncherPartLaunch::executeTask()
         return;
     }
 
-    auto instance = std::dynamic_pointer_cast<MinecraftInstance>(m_parent->instance());
+    auto instance = dynamic_cast<MinecraftInstance*>(m_parent->instance());
 
     QString legacyJarPath;
     if (instance->getLauncher() == "legacy" || instance->shouldApplyOnlineFixes()) {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 /*
  * Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2023 Trial97 <alexandru.tripon97@gmail.com>
@@ -91,7 +91,7 @@ QList<ModPlatform::Dependency> GetModDependenciesTask::getDependenciesForVersion
 {
     QList<ModPlatform::Dependency> c_dependencies;
     for (auto ver_dep : version.dependencies) {
-        if (ver_dep.type != ModPlatform::DependencyType::REQUIRED) {
+        if (ver_dep.type != ModPlatform::DependencyType::Required) {
             continue;
         }
         ver_dep = getOverride(ver_dep, providerName);
@@ -139,8 +139,9 @@ QList<ModPlatform::Dependency> GetModDependenciesTask::getDependenciesForVersion
 Task::Ptr GetModDependenciesTask::getProjectInfoTask(std::shared_ptr<PackDependency> pDep)
 {
     auto provider = pDep->pack->provider;
-    auto [info, responseInfo] = getAPI(provider)->getProject(pDep->pack->addonId.toString());
-    connect(info.get(), &NetJob::succeeded, [this, responseInfo, provider, pDep] {
+    auto responseInfo = std::make_shared<QByteArray>();
+    auto info = getAPI(provider)->getProject(pDep->pack->addonId.toString(), responseInfo);
+    connect(info.get(), &Task::succeeded, [this, responseInfo, provider, pDep] {
         QJsonParseError parse_error{};
         QJsonDocument doc = QJsonDocument::fromJson(*responseInfo, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
@@ -185,9 +186,7 @@ Task::Ptr GetModDependenciesTask::prepareDependencyTask(const ModPlatform::Depen
         tasks->addTask(getProjectInfoTask(pDep));
     }
 
-    ResourceAPI::DependencySearchArgs args = {
-        .dependency = dep, .mcVersion = m_version, .loader = m_loaderType, .includeChangelog = true
-    };
+    ResourceAPI::DependencySearchArgs args = { .dependency = dep, .mcVersion = m_version, .loader = m_loaderType };
     ResourceAPI::Callback<ModPlatform::IndexedVersion> callbacks;
     callbacks.on_fail = [](const QString& reason, int) {
         qCritical() << tr("A network error occurred. Could not load project dependencies:%1").arg(reason);
@@ -270,7 +269,7 @@ auto GetModDependenciesTask::getExtraInfo() -> QHash<QString, PackDependencyExtr
             auto deps = smod->version.dependencies;
             if (auto dep = std::find_if(deps.begin(), deps.end(),
                                         [addonId, provider, version](const ModPlatform::Dependency& d) {
-                                            return d.type == ModPlatform::DependencyType::REQUIRED &&
+                                            return d.type == ModPlatform::DependencyType::Required &&
                                                    (provider == ModPlatform::ResourceProvider::MODRINTH && d.addonId.toString().isEmpty()
                                                         ? version == d.version
                                                         : d.addonId == addonId);

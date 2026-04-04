@@ -138,7 +138,6 @@
 #include <LocalPeer.h>
 
 #include <stdlib.h>
-#include <sys.h>
 #include "SysInfo.h"
 
 #ifdef Q_OS_LINUX
@@ -183,6 +182,7 @@ static const QLatin1String liveCheckFile("live.check");
 PixmapCache* PixmapCache::s_instance = nullptr;
 
 static bool isANSIColorConsole;
+static bool consoleAttached = false;
 
 static QString defaultLogFormat = QStringLiteral(
     "%{time process}"
@@ -306,9 +306,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 {
 #if defined Q_OS_WIN32
     // attach the parent console if stdout not already captured
-    if (AttachWindowsConsole()) {
+    if (console::AttachWindowsConsole()) {
         consoleAttached = true;
-        if (auto err = EnableAnsiSupport(); !err) {
+        if (auto err = console::EnableAnsiSupport(); !err) {
             isANSIColorConsole = true;
         } else {
             std::cout << "Error setting up ansi console" << err.message() << std::endl;
@@ -359,7 +359,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_worldToJoin = parser.value("world");
     m_profileToUse = parser.value("profile");
     if (parser.isSet("offline")) {
-        m_offline = true;
+        m_launchOffline = true;
         m_offlineName = parser.value("offline");
     }
     m_liveCheck = parser.isSet("alive");
@@ -376,7 +376,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     }
 
     // error if --launch is missing with --server or --profile
-    if ((!m_serverToJoin.isEmpty() || !m_worldToJoin.isEmpty() || !m_profileToUse.isEmpty() || m_offline) &&
+    if ((!m_serverToJoin.isEmpty() || !m_worldToJoin.isEmpty() || !m_profileToUse.isEmpty() || m_launchOffline) &&
         m_instanceIdToLaunch.isEmpty()) {
         std::cerr << "--server, --profile and --offline can only be used in combination with --launch!" << std::endl;
         m_status = Application::Failed;
@@ -535,7 +535,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 if (!m_profileToUse.isEmpty()) {
                     launch.args["profile"] = m_profileToUse;
                 }
-                if (m_offline) {
+                if (m_launchOffline) {
                     launch.args["offline_enabled"] = "true";
                     launch.args["offline_name"] = m_offlineName;
                 }
@@ -806,7 +806,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         // Memory
         m_settings->registerSetting({ "MinMemAlloc", "MinMemoryAlloc" }, 512);
-        m_settings->registerSetting({ "MaxMemAlloc", "MaxMemoryAlloc" }, SysInfo::suitableMaxMem());
+        m_settings->registerSetting({ "MaxMemAlloc", "MaxMemoryAlloc" }, SysInfo::defaultMaxJvmMem());
         m_settings->registerSetting("PermGen", 128);
 
         // Java Settings
@@ -1015,7 +1015,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         // Init page provider
         {
-            m_globalSettingsProvider = std::make_shared<GenericPageProvider>(tr("Settings"));
+            m_globalSettingsProvider = std::make_unique<GenericPageProvider>(tr("Settings"));
             m_globalSettingsProvider->addPage<LauncherPage>();
             m_globalSettingsProvider->addPage<LanguagePage>();
             m_globalSettingsProvider->addPage<AppearancePage>();
@@ -1100,7 +1100,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         if (FS::checkProblemticPathJava(QDir(instDir))) {
             qWarning() << "Your instance path contains \'!\' and this is known to cause java problems!";
         }
-        m_instances.reset(new InstanceList(m_settings, instDir, this));
+        m_instances.reset(new InstanceList(m_settings.get(), instDir, this));
         connect(InstDirSetting.get(), &Setting::SettingChanged, m_instances.get(), &InstanceList::on_InstFolderChanged);
         qInfo() << "Loading Instances...";
         m_instances->loadList();
@@ -1147,12 +1147,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_profilers.insert("jvisualvm", std::shared_ptr<BaseProfilerFactory>(new JVisualVMFactory()));
     m_profilers.insert("generic", std::shared_ptr<BaseProfilerFactory>(new GenericProfilerFactory()));
     for (auto profiler : m_profilers.values()) {
-        profiler->registerSettings(m_settings);
+        profiler->registerSettings(m_settings.get());
     }
 
     // Create the MCEdit thing... why is this here?
     {
-        m_mcedit.reset(new MCEditTool(m_settings));
+        m_mcedit.reset(new MCEditTool(m_settings.get()));
     }
 
 #ifdef Q_OS_MACOS
@@ -1168,7 +1168,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 if (instance && instance->isRunning()) {
                     qDebug() << "Application::aboutToQuit - Stopping running instance:" << instance->id();
                     // Try to stop the server if it's a ServerInstance
-                    auto serverInstance = std::dynamic_pointer_cast<ServerInstance>(instance);
+                    auto serverInstance = dynamic_cast<ServerInstance*>(instance);
                     if (serverInstance) {
                         serverInstance->stopServer();
                     }
@@ -1483,7 +1483,7 @@ void Application::performMainStartupAction()
                 qDebug() << "   Launching with account" << m_profileToUse;
             }
 
-            launch(inst, !m_offline, false, targetToJoin, accountToUse, m_offlineName);
+            launch(inst, m_launchOffline ? LaunchMode::Offline : LaunchMode::Normal, targetToJoin, accountToUse, m_offlineName);
             return;
         }
     }
@@ -1616,23 +1616,23 @@ void Application::messageReceived(const QByteArray& message)
             }
         }
 
-        launch(instance, !offline, false, serverObject, accountObject, offlineName);
+        launch(instance, offline ? LaunchMode::Offline : LaunchMode::Normal, serverObject, accountObject, offlineName);
     } else {
         qWarning() << "Received invalid message" << message;
     }
 }
 
-std::shared_ptr<TranslationsModel> Application::translations()
+TranslationsModel* Application::translations()
 {
-    return m_translations;
+    return m_translations.get();
 }
 
-std::shared_ptr<JavaInstallList> Application::javalist()
+JavaInstallList* Application::javalist()
 {
     if (!m_javalist) {
         m_javalist.reset(new JavaInstallList());
     }
-    return m_javalist;
+    return m_javalist.get();
 }
 
 QIcon Application::logo()
@@ -1651,9 +1651,8 @@ bool Application::openJsonEditor(const QString& filename)
     }
 }
 
-bool Application::launch(InstancePtr instance,
-                         bool online,
-                         bool demo,
+bool Application::launch(BaseInstance* instance,
+                         LaunchMode mode,
                          MinecraftTarget::Ptr targetToJoin,
                          MinecraftAccountPtr accountToUse,
                          const QString& offlineName)
@@ -1672,8 +1671,7 @@ bool Application::launch(InstancePtr instance,
         auto& controller = extras.controller;
         controller.reset(new LaunchController());
         controller->setInstance(instance);
-        controller->setOnline(online);
-        controller->setDemo(demo);
+        controller->setLaunchMode(mode);
         controller->setProfiler(profilers().value(instance->settings()->get("Profiler").toString(), nullptr).get());
         controller->setTargetToJoin(targetToJoin);
         controller->setAccountToUse(accountToUse);
@@ -1683,9 +1681,7 @@ bool Application::launch(InstancePtr instance,
         } else if (m_mainWindow) {
             controller->setParentWidget(m_mainWindow);
         }
-        connect(controller.get(), &LaunchController::succeeded, this, &Application::controllerSucceeded);
-        connect(controller.get(), &LaunchController::failed, this, &Application::controllerFailed);
-        connect(controller.get(), &LaunchController::aborted, this, [this] { controllerFailed(tr("Aborted")); });
+        connect(controller.get(), &LaunchController::finished, this, &Application::controllerFinished);
         addRunningInstance();
         QMetaObject::invokeMethod(controller.get(), &Task::start, Qt::QueuedConnection);
         return true;
@@ -1699,7 +1695,7 @@ bool Application::launch(InstancePtr instance,
     return false;
 }
 
-bool Application::kill(InstancePtr instance)
+bool Application::kill(BaseInstance* instance)
 {
     if (!instance->isRunning()) {
         qWarning() << "Attempted to kill instance" << instance->id() << ", which isn't running.";
@@ -1707,8 +1703,7 @@ bool Application::kill(InstancePtr instance)
     }
     QMutexLocker locker(&m_instanceExtrasMutex);
     auto& extras = m_instanceExtras[instance->id()];
-    // NOTE: copy of the shared pointer keeps it alive
-    auto controller = extras.controller;
+    auto controller = extras.controller.get();
     locker.unlock();
     if (controller) {
         return controller->abort();
@@ -1757,20 +1752,19 @@ void Application::updateIsRunning(bool running)
     m_updateRunning = running;
 }
 
-void Application::controllerSucceeded()
+void Application::controllerFinished()
 {
-    qDebug() << "Application::controllerSucceeded() - Called";
-
     auto controller = qobject_cast<LaunchController*>(sender());
     if (!controller)
         return;
     auto id = controller->id();
 
     QMutexLocker locker(&m_instanceExtrasMutex);
-    auto& extras = m_instanceExtras[id];
+    auto& extras = m_instanceExtras.at(id);
 
+    const bool wasSuccessful = controller->wasSuccessful();
     // on success, do...
-    if (controller->instance()->settings()->get("AutoCloseConsole").toBool()) {
+    if (wasSuccessful && controller->instance()->settings()->get("AutoCloseConsole").toBool()) {
         if (extras.window) {
             QMetaObject::invokeMethod(extras.window, &QWidget::close, Qt::QueuedConnection);
         }
@@ -1780,29 +1774,8 @@ void Application::controllerSucceeded()
 
     // quit when there are no more windows.
     if (shouldExitNow()) {
-        m_status = Status::Succeeded;
-        exit(0);
-    }
-}
-
-void Application::controllerFailed(const QString& error)
-{
-    Q_UNUSED(error);
-    auto controller = qobject_cast<LaunchController*>(sender());
-    if (!controller)
-        return;
-    auto id = controller->id();
-    QMutexLocker locker(&m_instanceExtrasMutex);
-    auto& extras = m_instanceExtras[id];
-
-    // on failure, do... nothing
-    extras.controller.reset();
-    subRunningInstance();
-
-    // quit when there are no more windows.
-    if (shouldExitNow()) {
-        m_status = Status::Failed;
-        exit(1);
+        m_status = wasSuccessful ? Succeeded : Failed;
+        exit(wasSuccessful ? 0 : 1);
     }
 }
 
@@ -1861,7 +1834,7 @@ ViewLogWindow* Application::showLogWindow()
     return m_viewLogWindow;
 }
 
-InstanceWindow* Application::showInstanceWindow(InstancePtr instance, QString page)
+InstanceWindow* Application::showInstanceWindow(BaseInstance* instance, QString page)
 {
     if (!instance)
         return nullptr;
@@ -1977,22 +1950,22 @@ void Application::updateProxySettings(QString proxyTypeStr, QString addr, int po
     qDebug() << proxyDesc;
 }
 
-shared_qobject_ptr<HttpMetaCache> Application::metacache()
+HttpMetaCache* Application::metacache()
 {
-    return m_metacache;
+    return m_metacache.get();
 }
 
 shared_qobject_ptr<QNetworkAccessManager> Application::network()
 {
-    return m_network;
+    return shared_qobject_ptr<QNetworkAccessManager>(QSharedPointer<QNetworkAccessManager>(m_network.get(), [](QNetworkAccessManager*) {}));
 }
 
-shared_qobject_ptr<Meta::Index> Application::metadataIndex()
+Meta::Index* Application::metadataIndex()
 {
     if (!m_metadataIndex) {
         m_metadataIndex.reset(new Meta::Index());
     }
-    return m_metadataIndex;
+    return m_metadataIndex.get();
 }
 
 void Application::updateCapabilities()

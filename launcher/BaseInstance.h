@@ -324,6 +324,8 @@ class BaseInstance : public QObject {
     bool m_specific_settings_loaded = false;
 };
 
+using InstancePtr = BaseInstance*;
+
 Q_DECLARE_METATYPE(shared_qobject_ptr<BaseInstance>)
 // Q_DECLARE_METATYPE(BaseInstance::InstanceFlag)
 // Q_DECLARE_OPERATORS_FOR_FLAGS(BaseInstance::InstanceFlags)

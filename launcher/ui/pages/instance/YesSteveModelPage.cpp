@@ -8,7 +8,7 @@
 #include "ui_ExternalResourcesPage.h"
 
 YesSteveModelPage::YesSteveModelPage(MinecraftInstance* instance, std::shared_ptr<YesSteveModelFolderModel> model, QWidget* parent)
-    : ExternalResourcesPage(instance, model, parent), m_model(model)
+    : ExternalResourcesPage(instance, model.get(), parent), m_model(model)
 {
     ui->actionViewConfigs->setVisible(false);
     

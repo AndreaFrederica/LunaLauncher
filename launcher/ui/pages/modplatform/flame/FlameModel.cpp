@@ -11,6 +11,7 @@
 #include <Version.h>
 
 #include <QtMath>
+#include <list>
 #include <memory>
 
 namespace Flame {
@@ -197,8 +198,13 @@ void ListModel::performPaginatedSearch()
         searchRequestFailed("Aborted");
     };
 
+    std::optional<std::list<Version>> versions = std::nullopt;
+    if (!m_filter->versions.empty()) {
+        versions = std::list<Version>(m_filter->versions.begin(), m_filter->versions.end());
+    }
+
     auto netJob = api.searchProjects({ ModPlatform::ResourceType::Modpack, m_nextSearchOffset, m_currentSearchTerm, sort, m_filter->loaders,
-                                       m_filter->versions, ModPlatform::Side::NoSide, m_filter->categoryIds, m_filter->openSource },
+                                       versions, ModPlatform::Side::NoSide, m_filter->categoryIds, m_filter->openSource },
                                      std::move(callbacks));
 
     m_jobPtr = netJob;

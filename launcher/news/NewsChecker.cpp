@@ -41,7 +41,7 @@
 #include <QDebug>
 #include "Application.h"
 
-NewsChecker::NewsChecker(QNetworkAccessManager* network, const QString& feedUrl)
+NewsChecker::NewsChecker(shared_qobject_ptr<QNetworkAccessManager> network, const QString& feedUrl)
 {
     m_network = network;
     m_feedUrl = feedUrl;

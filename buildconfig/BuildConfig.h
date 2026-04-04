@@ -62,6 +62,8 @@ class Config {
     int VERSION_MINOR;
     /// The patch version number.
     int VERSION_PATCH;
+    /// Optional prerelease suffix (for example: pre1, rc1).
+    QString VERSION_PRERELEASE;
 
     /**
      * The version channel

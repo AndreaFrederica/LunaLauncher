@@ -142,7 +142,7 @@
 
 #ifdef Q_OS_LINUX
 #include <dlfcn.h>
-#include "MangoHud.h"
+#include "LibraryUtils.h"
 #include "gamemode_client.h"
 #endif
 
@@ -182,7 +182,7 @@ static const QLatin1String liveCheckFile("live.check");
 PixmapCache* PixmapCache::s_instance = nullptr;
 
 static bool isANSIColorConsole;
-static bool consoleAttached = false;
+[[maybe_unused]] static bool consoleAttached = false;
 
 static QString defaultLogFormat = QStringLiteral(
     "%{time process}"
@@ -569,12 +569,13 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         logFile = std::unique_ptr<QFile>(new QFile(logBase.arg(0)));
         if (!logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
             showFatalErrorMessage("The launcher data folder is not writable!",
-                                  QString("The launcher couldn't create a log file - the data folder is not writable.\n"
+                                  QString("The launcher couldn't create a log file - %1.\n"
                                           "\n"
                                           "Make sure you have write permissions to the data folder.\n"
-                                          "(%1)\n"
+                                          "(%2)\n"
                                           "\n"
                                           "The launcher cannot continue until you fix this problem.")
+                                      .arg(logFile->errorString())
                                       .arg(dataPath));
             return;
         }
@@ -689,11 +690,11 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             if (check.write(payload) == payload.size()) {
                 check.close();
             } else {
-                qWarning() << "Could not write into" << liveCheckFile << "!";
+                qWarning() << "Could not write into" << liveCheckFile << "error:" << check.errorString();
                 check.remove();  // also closes file!
             }
         } else {
-            qWarning() << "Could not open" << liveCheckFile << "for writing!";
+            qWarning() << "Could not open" << liveCheckFile << "for writing:" << check.errorString();
         }
     }
 
@@ -808,6 +809,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting({ "MinMemAlloc", "MinMemoryAlloc" }, 512);
         m_settings->registerSetting({ "MaxMemAlloc", "MaxMemoryAlloc" }, SysInfo::defaultMaxJvmMem());
         m_settings->registerSetting("PermGen", 128);
+        m_settings->registerSetting("LowMemWarning", true);
 
         // Java Settings
         m_settings->registerSetting("JavaPath", "");
@@ -1980,7 +1982,7 @@ void Application::updateCapabilities()
     if (gamemode_query_status() >= 0)
         m_capabilities |= SupportsGameMode;
 
-    if (!MangoHud::getLibraryString().isEmpty())
+    if (!LibraryUtils::findMangoHud().isEmpty())
         m_capabilities |= SupportsMangoHud;
 #endif
 }
@@ -1988,8 +1990,8 @@ void Application::updateCapabilities()
 void Application::detectLibraries()
 {
 #ifdef Q_OS_LINUX
-    m_detectedGLFWPath = MangoHud::findLibrary(BuildConfig.GLFW_LIBRARY_NAME);
-    m_detectedOpenALPath = MangoHud::findLibrary(BuildConfig.OPENAL_LIBRARY_NAME);
+    m_detectedGLFWPath = LibraryUtils::find(BuildConfig.GLFW_LIBRARY_NAME);
+    m_detectedOpenALPath = LibraryUtils::find(BuildConfig.OPENAL_LIBRARY_NAME);
     qDebug() << "Detected native libraries:" << m_detectedGLFWPath << m_detectedOpenALPath;
 #endif
 }
@@ -2096,7 +2098,7 @@ bool Application::handleDataMigration(const QString& currentData,
     auto setDoNotMigrate = [&nomigratePath] {
         QFile file(nomigratePath);
         if (!file.open(QIODevice::WriteOnly)) {
-            qWarning() << "setDoNotMigrate failed; Failed to open file '" << file.fileName() << "' for writing!";
+            qWarning() << "setDoNotMigrate failed; Failed to open file" << file.fileName() << "for writing:" << file.errorString();
         }
     };
 

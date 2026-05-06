@@ -1,6 +1,3 @@
-# Luna Launcher - Minecraft Launcher
-# Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
-
 project(application)
 
 ################################ FILES ################################
@@ -102,14 +99,17 @@ set(CORE_SOURCES
     MMCTime.cpp
 
     MTPixmapCache.h
+
+    # Assertion helper
+    AssertHelpers.h
 )
 if (UNIX AND NOT CYGWIN AND NOT APPLE)
     set(CORE_SOURCES
     ${CORE_SOURCES}
 
-    # MangoHud
-    MangoHud.h
-    MangoHud.cpp
+    # LibraryUtils
+    LibraryUtils.h
+    LibraryUtils.cpp
     )
 endif()
 
@@ -119,6 +119,7 @@ set(NET_SOURCES
     net/ChecksumValidator.h
     net/Download.cpp
     net/Download.h
+    net/DummySink.h
     net/FileSink.cpp
     net/FileSink.h
     net/HttpMetaCache.cpp
@@ -225,30 +226,6 @@ set(MINECRAFT_SOURCES
     minecraft/auth/MinecraftAccount.h
     minecraft/auth/Parsers.cpp
     minecraft/auth/Parsers.h
-    minecraft/auth/YggdrasilPresets.cpp
-    minecraft/auth/YggdrasilPresets.h
-    minecraft/auth/AuthlibInjector.cpp
-    minecraft/auth/AuthlibInjector.h
-    minecraft/auth/AuthlibInjectorDownload.cpp
-    minecraft/auth/AuthlibInjectorDownload.h
-    minecraft/auth/AuthlibInjectorDownloadTask.cpp
-    minecraft/auth/AuthlibInjectorDownloadTask.h
-    minecraft/auth/Nide8Auth.cpp
-    minecraft/auth/Nide8Auth.h
-    minecraft/auth/Nide8AuthDownload.cpp
-    minecraft/online/Terracotta.cpp
-    minecraft/online/Terracotta.h
-    minecraft/online/TerracottaDownload.cpp
-    minecraft/online/TerracottaDownload.h
-    minecraft/online/TerracottaReleaseUtils.cpp
-    minecraft/online/TerracottaReleaseUtils.h
-    minecraft/online/YukariConnect.cpp
-    minecraft/online/YukariConnect.h
-    minecraft/online/YukariConnectDownload.cpp
-    minecraft/online/YukariConnectDownload.h
-    minecraft/auth/Nide8AuthDownload.h
-    minecraft/auth/Nide8AuthDownloadTask.cpp
-    minecraft/auth/Nide8AuthDownloadTask.h
 
     minecraft/auth/AuthFlow.cpp
     minecraft/auth/AuthFlow.h
@@ -269,16 +246,6 @@ set(MINECRAFT_SOURCES
     minecraft/auth/steps/XboxAuthorizationStep.h
     minecraft/auth/steps/XboxUserStep.cpp
     minecraft/auth/steps/XboxUserStep.h
-    minecraft/auth/steps/YggdrasilAuthStep.cpp
-    minecraft/auth/steps/YggdrasilAuthStep.h
-    minecraft/auth/steps/YggdrasilProfileStep.cpp
-    minecraft/auth/steps/YggdrasilProfileStep.h
-    minecraft/auth/steps/YggdrasilProfileSelectStep.cpp
-    minecraft/auth/steps/YggdrasilProfileSelectStep.h
-    minecraft/auth/steps/UnifiedPassAuthStep.cpp
-    minecraft/auth/steps/UnifiedPassAuthStep.h
-    minecraft/auth/steps/UnifiedPassMetaStep.cpp
-    minecraft/auth/steps/UnifiedPassMetaStep.h
 
     minecraft/update/AssetUpdateTask.h
     minecraft/update/AssetUpdateTask.cpp
@@ -293,6 +260,10 @@ set(MINECRAFT_SOURCES
     minecraft/launch/ClaimAccount.h
     minecraft/launch/CreateGameFolders.cpp
     minecraft/launch/CreateGameFolders.h
+    minecraft/launch/EnsureAvailableMemory.cpp
+    minecraft/launch/EnsureAvailableMemory.h
+    minecraft/launch/EnsureOfflineLibraries.cpp
+    minecraft/launch/EnsureOfflineLibraries.h
     minecraft/launch/ModMinecraftJar.cpp
     minecraft/launch/ModMinecraftJar.h
     minecraft/launch/ExtractNatives.cpp
@@ -339,8 +310,6 @@ set(MINECRAFT_SOURCES
     minecraft/ShortcutUtils.h
     minecraft/Library.cpp
     minecraft/Library.h
-    minecraft/MirrorDownload.cpp
-    minecraft/MirrorDownload.h
     minecraft/MojangDownloadInfo.h
     minecraft/VanillaInstanceCreationTask.cpp
     minecraft/VanillaInstanceCreationTask.h
@@ -359,26 +328,10 @@ set(MINECRAFT_SOURCES
     minecraft/mod/ModDetails.h
     minecraft/mod/ModFolderModel.h
     minecraft/mod/ModFolderModel.cpp
-    minecraft/mod/Plugin.h
-    minecraft/mod/Plugin.cpp
-    minecraft/mod/PluginFolderModel.h
-    minecraft/mod/PluginFolderModel.cpp
     minecraft/mod/Resource.h
     minecraft/mod/Resource.cpp
     minecraft/mod/ResourceFolderModel.h
     minecraft/mod/ResourceFolderModel.cpp
-    minecraft/mod/CustomPlayerModel.h
-    minecraft/mod/CustomPlayerModel.cpp
-    minecraft/mod/CustomPlayerModelFolderModel.h
-    minecraft/mod/CustomPlayerModelFolderModel.cpp
-    minecraft/mod/YesSteveModel.h
-    minecraft/mod/YesSteveModel.cpp
-    minecraft/mod/YesSteveModelFolderModel.h
-    minecraft/mod/YesSteveModelFolderModel.cpp
-    minecraft/mod/SchematicResource.h
-    minecraft/mod/SchematicResource.cpp
-    minecraft/mod/SchematicsFolderModel.h
-    minecraft/mod/SchematicsFolderModel.cpp
     minecraft/mod/DataPack.h
     minecraft/mod/DataPack.cpp
     minecraft/mod/DataPackFolderModel.h
@@ -553,20 +506,6 @@ set(API_SOURCES
     modplatform/flame/FlameAPI.cpp
     modplatform/modrinth/ModrinthAPI.h
     modplatform/modrinth/ModrinthAPI.cpp
-    modplatform/hangar/HangarAPI.h
-    modplatform/hangar/HangarAPI.cpp
-    modplatform/hangar/HangarPackIndex.h
-    modplatform/hangar/HangarPackIndex.cpp
-
-    # JavaScript API 桥接层
-    modplatform/jsapi/JSResourceAPI.h
-    modplatform/jsapi/JSResourceAPI.cpp
-    modplatform/jsapi/JSAPIManager.h
-    modplatform/jsapi/JSAPIManager.cpp
-
-    # JavaScript API 资源文件
-    modplatform/jsapi/jsapi.qrc
-
     modplatform/helpers/HashUtils.h
     modplatform/helpers/HashUtils.cpp
     modplatform/helpers/OverrideUtils.h
@@ -577,11 +516,6 @@ set(API_SOURCES
 )
 
 set(FTB_SOURCES
-    modplatform/ftb/FTBPackInstallTask.h
-    modplatform/ftb/FTBPackInstallTask.cpp
-    modplatform/ftb/FTBPackManifest.h
-    modplatform/ftb/FTBPackManifest.cpp
-
     modplatform/legacy_ftb/PackFetchTask.h
     modplatform/legacy_ftb/PackFetchTask.cpp
     modplatform/legacy_ftb/PackInstallTask.h
@@ -595,6 +529,11 @@ set(FTB_SOURCES
     modplatform/import_ftb/PackInstallTask.cpp
     modplatform/import_ftb/PackHelpers.h
     modplatform/import_ftb/PackHelpers.cpp
+
+    modplatform/ftb/FTBPackInstallTask.h
+    modplatform/ftb/FTBPackInstallTask.cpp
+    modplatform/ftb/FTBPackManifest.h
+    modplatform/ftb/FTBPackManifest.cpp
 )
 
 set(FLAME_SOURCES
@@ -820,15 +759,151 @@ endif()
 
 ################################ COMPILE ################################
 
-set(SERVER_SOURCES
+set(LOGIC_SOURCES
+    ${CORE_SOURCES}
+    ${NET_SOURCES}
+    ${LAUNCH_SOURCES}
+    ${UPDATE_SOURCES}
+    ${NEWS_SOURCES}
+    ${MINECRAFT_SOURCES}
+    ${SCREENSHOTS_SOURCES}
+    ${TASKS_SOURCES}
+    ${SETTINGS_SOURCES}
+    ${JAVA_SOURCES}
+    ${TRANSLATIONS_SOURCES}
+    ${TOOLS_SOURCES}
+    ${META_SOURCES}
+    ${ICONS_SOURCES}
+    ${API_SOURCES}
+    ${FTB_SOURCES}
+    ${FLAME_SOURCES}
+    ${MODRINTH_SOURCES}
+    ${PACKWIZ_SOURCES}
+    ${TECHNIC_SOURCES}
+    ${ATLAUNCHER_SOURCES}
+)
+
+set(LUNA_FEATURE_SOURCES
+    minecraft/MirrorDownload.cpp
+    minecraft/MirrorDownload.h
+
+    minecraft/auth/AuthlibInjector.cpp
+    minecraft/auth/AuthlibInjector.h
+    minecraft/auth/AuthlibInjectorDownload.cpp
+    minecraft/auth/AuthlibInjectorDownload.h
+    minecraft/auth/AuthlibInjectorDownloadTask.cpp
+    minecraft/auth/AuthlibInjectorDownloadTask.h
+    minecraft/auth/Nide8Auth.cpp
+    minecraft/auth/Nide8Auth.h
+    minecraft/auth/Nide8AuthDownload.cpp
+    minecraft/auth/Nide8AuthDownload.h
+    minecraft/auth/Nide8AuthDownloadTask.cpp
+    minecraft/auth/Nide8AuthDownloadTask.h
+    minecraft/auth/steps/YggdrasilAuthStep.cpp
+    minecraft/auth/steps/YggdrasilAuthStep.h
+    minecraft/auth/steps/YggdrasilProfileStep.cpp
+    minecraft/auth/steps/YggdrasilProfileStep.h
+    minecraft/auth/steps/YggdrasilProfileSelectStep.cpp
+    minecraft/auth/steps/YggdrasilProfileSelectStep.h
+    minecraft/auth/steps/UnifiedPassAuthStep.cpp
+    minecraft/auth/steps/UnifiedPassAuthStep.h
+    minecraft/auth/steps/UnifiedPassMetaStep.cpp
+    minecraft/auth/steps/UnifiedPassMetaStep.h
+    minecraft/auth/YggdrasilPresets.cpp
+    minecraft/auth/YggdrasilPresets.h
+
+    minecraft/mod/Plugin.cpp
+    minecraft/mod/Plugin.h
+    minecraft/mod/PluginFolderModel.cpp
+    minecraft/mod/PluginFolderModel.h
+    minecraft/mod/CustomPlayerModel.cpp
+    minecraft/mod/CustomPlayerModel.h
+    minecraft/mod/CustomPlayerModelFolderModel.cpp
+    minecraft/mod/CustomPlayerModelFolderModel.h
+    minecraft/mod/YesSteveModel.cpp
+    minecraft/mod/YesSteveModel.h
+    minecraft/mod/YesSteveModelFolderModel.cpp
+    minecraft/mod/YesSteveModelFolderModel.h
+    minecraft/mod/SchematicResource.cpp
+    minecraft/mod/SchematicResource.h
+    minecraft/mod/SchematicsFolderModel.cpp
+    minecraft/mod/SchematicsFolderModel.h
+
+    minecraft/online/Terracotta.cpp
+    minecraft/online/Terracotta.h
+    minecraft/online/TerracottaDownload.cpp
+    minecraft/online/TerracottaDownload.h
+    minecraft/online/TerracottaReleaseUtils.cpp
+    minecraft/online/TerracottaReleaseUtils.h
+    minecraft/online/YukariConnect.cpp
+    minecraft/online/YukariConnect.h
+    minecraft/online/YukariConnectDownload.cpp
+    minecraft/online/YukariConnectDownload.h
+
+    modplatform/jsapi/JSResourceAPI.cpp
+    modplatform/jsapi/JSResourceAPI.h
+    modplatform/jsapi/JSAPIManager.cpp
+    modplatform/jsapi/JSAPIManager.h
+    modplatform/hangar/HangarAPI.cpp
+    modplatform/hangar/HangarAPI.h
+    modplatform/hangar/HangarPackIndex.cpp
+    modplatform/hangar/HangarPackIndex.h
+
     server/ServerInstance.cpp
     server/ServerInstance.h
-    server/ServerLaunchTask.cpp
-    server/ServerLaunchTask.h
     server/ServerInstanceCreationTask.cpp
     server/ServerInstanceCreationTask.h
+    server/ServerLaunchTask.cpp
+    server/ServerLaunchTask.h
     server/PropertiesFile.cpp
     server/PropertiesFile.h
+
+    ui/dialogs/YggdrasilLoginDialog.cpp
+    ui/dialogs/YggdrasilLoginDialog.h
+    ui/dialogs/YggdrasilPresetEditDialog.cpp
+    ui/dialogs/YggdrasilPresetEditDialog.h
+    ui/dialogs/YggdrasilProfileSelectDialog.cpp
+    ui/dialogs/YggdrasilProfileSelectDialog.h
+    ui/dialogs/YggdrasilPresetsDialog.cpp
+    ui/dialogs/YggdrasilPresetsDialog.h
+    ui/dialogs/UnifiedPassLoginDialog.cpp
+    ui/dialogs/UnifiedPassLoginDialog.h
+
+    ui/pages/global/AuthlibInjectorPage.cpp
+    ui/pages/global/AuthlibInjectorPage.h
+    ui/pages/global/Nide8AuthPage.cpp
+    ui/pages/global/Nide8AuthPage.h
+    ui/pages/global/TerracottaPage.cpp
+    ui/pages/global/TerracottaPage.h
+    ui/pages/global/TerracottaOnlinePanel.cpp
+    ui/pages/global/TerracottaOnlinePanel.h
+    ui/pages/global/YukariConnectPage.cpp
+    ui/pages/global/YukariConnectPage.h
+    ui/pages/global/YukariConnectOnlinePanel.cpp
+    ui/pages/global/YukariConnectOnlinePanel.h
+
+    ui/pages/instance/CustomPlayerModelPage.cpp
+    ui/pages/instance/CustomPlayerModelPage.h
+    ui/pages/instance/CustomUIPanelPage.cpp
+    ui/pages/instance/CustomUIPanelPage.h
+    ui/pages/instance/PluginFolderPage.cpp
+    ui/pages/instance/PluginFolderPage.h
+    ui/pages/instance/SchematicsPage.cpp
+    ui/pages/instance/SchematicsPage.h
+    ui/pages/instance/YesSteveModelPage.cpp
+    ui/pages/instance/YesSteveModelPage.h
+
+    ui/pages/modplatform/PluginPage.cpp
+    ui/pages/modplatform/PluginPage.h
+    ui/pages/modplatform/PluginModel.cpp
+    ui/pages/modplatform/PluginModel.h
+    ui/pages/modplatform/JSApiPluginPage.cpp
+    ui/pages/modplatform/JSApiPluginPage.h
+    ui/pages/modplatform/hangar/HangarResourcePages.cpp
+    ui/pages/modplatform/hangar/HangarResourcePages.h
+    ui/pages/modplatform/hangar/HangarResourceModels.cpp
+    ui/pages/modplatform/hangar/HangarResourceModels.h
+
     ui/pages/server/ServerConsolePage.cpp
     ui/pages/server/ServerConsolePage.h
     ui/pages/server/ServerConsoleWidget.cpp
@@ -853,34 +928,21 @@ set(SERVER_SOURCES
     ui/pages/server/ServerJavaPage.h
     ui/pages/server/ServerModLoaderPage.cpp
     ui/pages/server/ServerModLoaderPage.h
+
+    ui/themes/ModernDarkTheme.cpp
+    ui/themes/ModernDarkTheme.h
+
+    ui/widgets/MotdRenderer.cpp
+    ui/widgets/MotdRenderer.h
+    ui/widgets/UserHeaderWidget.cpp
+    ui/widgets/UserHeaderWidget.h
+    ui/widgets/ServerPreviewWidget.cpp
+    ui/widgets/ServerPreviewWidget.h
 )
+
+set(LOGIC_SOURCES ${LOGIC_SOURCES} ${LUNA_FEATURE_SOURCES})
 
 set_source_files_properties(ui/pages/server/ServerConsoleWidget.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
-
-set(LOGIC_SOURCES
-    ${CORE_SOURCES}
-    ${NET_SOURCES}
-    ${LAUNCH_SOURCES}
-    ${UPDATE_SOURCES}
-    ${NEWS_SOURCES}
-    ${MINECRAFT_SOURCES}
-    ${SERVER_SOURCES}
-    ${SCREENSHOTS_SOURCES}
-    ${TASKS_SOURCES}
-    ${SETTINGS_SOURCES}
-    ${JAVA_SOURCES}
-    ${TRANSLATIONS_SOURCES}
-    ${TOOLS_SOURCES}
-    ${META_SOURCES}
-    ${ICONS_SOURCES}
-    ${API_SOURCES}
-    ${FTB_SOURCES}
-    ${FLAME_SOURCES}
-    ${MODRINTH_SOURCES}
-    ${PACKWIZ_SOURCES}
-    ${TECHNIC_SOURCES}
-    ${ATLAUNCHER_SOURCES}
-)
 
 if(APPLE AND Launcher_ENABLE_UPDATER)
     set (LOGIC_SOURCES ${LOGIC_SOURCES} ${MAC_UPDATE_SOURCES})
@@ -898,8 +960,8 @@ SET(LAUNCHER_SOURCES
     ApplicationMessage.cpp
     SysInfo.h
     SysInfo.cpp
-    HardwareInfo.h
     HardwareInfo.cpp
+    HardwareInfo.h
 
     # console utils
     console/Console.h
@@ -915,23 +977,6 @@ SET(LAUNCHER_SOURCES
     # Super secret!
     KonamiCode.h
     KonamiCode.cpp
-
-    # Bundled resources
-    resources/backgrounds/backgrounds.qrc
-    resources/multimc/multimc.qrc
-    resources/pe_dark/pe_dark.qrc
-    resources/pe_light/pe_light.qrc
-    resources/pe_colored/pe_colored.qrc
-    resources/pe_blue/pe_blue.qrc
-    resources/breeze_dark/breeze_dark.qrc
-    resources/breeze_light/breeze_light.qrc
-    resources/OSX/OSX.qrc
-    resources/iOS/iOS.qrc
-    resources/flat/flat.qrc
-    resources/flat_white/flat_white.qrc
-    resources/documents/documents.qrc
-    resources/shaders/shaders.qrc
-    "${CMAKE_CURRENT_BINARY_DIR}/../${Launcher_Branding_LogoQRC}"
 
     # Icons
     icons/MMCIcon.h
@@ -952,6 +997,8 @@ SET(LAUNCHER_SOURCES
     ui/InstanceWindow.cpp
     ui/ViewLogWindow.h
     ui/ViewLogWindow.cpp
+    ui/ToolTipFilter.h
+    ui/ToolTipFilter.cpp
 
     # FIXME: maybe find a better home for this.
     FileIgnoreProxy.cpp
@@ -976,8 +1023,6 @@ SET(LAUNCHER_SOURCES
     ui/setupwizard/LoginWizardPage.h
 
     # GUI - themes
-    ui/themes/ModernDarkTheme.cpp
-    ui/themes/ModernDarkTheme.h
     ui/themes/FusionTheme.cpp
     ui/themes/FusionTheme.h
     ui/themes/BrightTheme.cpp
@@ -1002,6 +1047,7 @@ SET(LAUNCHER_SOURCES
     ui/themes/CatPainter.h
 
     # Processes
+    LaunchMode.h
     LaunchController.h
     LaunchController.cpp
 
@@ -1030,20 +1076,10 @@ SET(LAUNCHER_SOURCES
     ui/pages/instance/TexturePackPage.cpp
     ui/pages/instance/ResourcePackPage.h
     ui/pages/instance/ResourcePackPage.cpp
-    ui/pages/instance/YesSteveModelPage.h
-    ui/pages/instance/YesSteveModelPage.cpp
-    ui/pages/instance/CustomPlayerModelPage.h
-    ui/pages/instance/CustomPlayerModelPage.cpp
-    ui/pages/instance/CustomUIPanelPage.h
-    ui/pages/instance/CustomUIPanelPage.cpp
-    ui/pages/instance/SchematicsPage.h
-    ui/pages/instance/SchematicsPage.cpp
     ui/pages/instance/ShaderPackPage.h
     ui/pages/instance/ShaderPackPage.cpp
     ui/pages/instance/ModFolderPage.cpp
     ui/pages/instance/ModFolderPage.h
-    ui/pages/instance/PluginFolderPage.cpp
-    ui/pages/instance/PluginFolderPage.h
     ui/pages/instance/NotesPage.cpp
     ui/pages/instance/NotesPage.h
     ui/pages/instance/LogPage.cpp
@@ -1081,18 +1117,6 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/ProxyPage.h
     ui/pages/global/APIPage.cpp
     ui/pages/global/APIPage.h
-    ui/pages/global/AuthlibInjectorPage.cpp
-    ui/pages/global/AuthlibInjectorPage.h
-    ui/pages/global/Nide8AuthPage.cpp
-    ui/pages/global/Nide8AuthPage.h
-    ui/pages/global/TerracottaPage.cpp
-    ui/pages/global/TerracottaPage.h
-    ui/pages/global/TerracottaOnlinePanel.cpp
-    ui/pages/global/TerracottaOnlinePanel.h
-    ui/pages/global/YukariConnectPage.cpp
-    ui/pages/global/YukariConnectPage.h
-    ui/pages/global/YukariConnectOnlinePanel.cpp
-    ui/pages/global/YukariConnectOnlinePanel.h
 
     # GUI - platform pages
     ui/pages/modplatform/CustomPage.cpp
@@ -1107,11 +1131,6 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/ModPage.h
     ui/pages/modplatform/ModModel.cpp
     ui/pages/modplatform/ModModel.h
-
-    ui/pages/modplatform/PluginPage.cpp
-    ui/pages/modplatform/PluginPage.h
-    ui/pages/modplatform/PluginModel.cpp
-    ui/pages/modplatform/PluginModel.h
 
     ui/pages/modplatform/ResourcePackPage.cpp
     ui/pages/modplatform/ResourcePackModel.cpp
@@ -1139,12 +1158,12 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/atlauncher/AtlUserInteractionSupportImpl.cpp
     ui/pages/modplatform/atlauncher/AtlUserInteractionSupportImpl.h
 
-    ui/pages/modplatform/ftb/FtbPage.cpp
-    ui/pages/modplatform/ftb/FtbPage.h
-    ui/pages/modplatform/ftb/FtbListModel.cpp
-    ui/pages/modplatform/ftb/FtbListModel.h
     ui/pages/modplatform/ftb/FtbFilterModel.cpp
     ui/pages/modplatform/ftb/FtbFilterModel.h
+    ui/pages/modplatform/ftb/FtbListModel.cpp
+    ui/pages/modplatform/ftb/FtbListModel.h
+    ui/pages/modplatform/ftb/FtbPage.cpp
+    ui/pages/modplatform/ftb/FtbPage.h
 
     ui/pages/modplatform/legacy_ftb/Page.cpp
     ui/pages/modplatform/legacy_ftb/Page.h
@@ -1184,14 +1203,6 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/modrinth/ModrinthResourcePages.cpp
     ui/pages/modplatform/modrinth/ModrinthResourcePages.h
 
-    ui/pages/modplatform/hangar/HangarResourcePages.cpp
-    ui/pages/modplatform/hangar/HangarResourcePages.h
-    ui/pages/modplatform/hangar/HangarResourceModels.cpp
-    ui/pages/modplatform/hangar/HangarResourceModels.h
-
-    ui/pages/modplatform/JSApiPluginPage.cpp
-    ui/pages/modplatform/JSApiPluginPage.h
-
     # GUI - dialogs
     ui/dialogs/AboutDialog.cpp
     ui/dialogs/AboutDialog.h
@@ -1217,22 +1228,14 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/ImportResourceDialog.h
     ui/dialogs/MSALoginDialog.cpp
     ui/dialogs/MSALoginDialog.h
+    ui/dialogs/NetworkJobFailedDialog.cpp
+    ui/dialogs/NetworkJobFailedDialog.h
     ui/dialogs/NewComponentDialog.cpp
     ui/dialogs/NewComponentDialog.h
     ui/dialogs/NewInstanceDialog.cpp
     ui/dialogs/NewInstanceDialog.h
     ui/dialogs/NewsDialog.cpp
     ui/dialogs/NewsDialog.h
-    ui/dialogs/YggdrasilLoginDialog.cpp
-    ui/dialogs/YggdrasilLoginDialog.h
-    ui/dialogs/YggdrasilProfileSelectDialog.cpp
-    ui/dialogs/YggdrasilProfileSelectDialog.h
-    ui/dialogs/YggdrasilPresetEditDialog.cpp
-    ui/dialogs/YggdrasilPresetEditDialog.h
-    ui/dialogs/YggdrasilPresetsDialog.cpp
-    ui/dialogs/YggdrasilPresetsDialog.h
-    ui/dialogs/UnifiedPassLoginDialog.cpp
-    ui/dialogs/UnifiedPassLoginDialog.h
     ui/pagedialog/PageDialog.cpp
     ui/pagedialog/PageDialog.h
     ui/dialogs/ProgressDialog.cpp
@@ -1305,23 +1308,17 @@ SET(LAUNCHER_SOURCES
     ui/widgets/VersionListView.cpp
     ui/widgets/VersionListView.h
     ui/widgets/VersionSelectWidget.cpp
-    ui/widgets/VersionSelectWidget.cpp
+    ui/widgets/VersionSelectWidget.h
     ui/widgets/ProgressWidget.h
     ui/widgets/ProgressWidget.cpp
     ui/widgets/WideBar.h
     ui/widgets/WideBar.cpp
-    ui/widgets/UserHeaderWidget.h
-    ui/widgets/UserHeaderWidget.cpp
     ui/widgets/AppearanceWidget.h
     ui/widgets/AppearanceWidget.cpp
     ui/widgets/MinecraftSettingsWidget.h
     ui/widgets/MinecraftSettingsWidget.cpp
     ui/widgets/JavaSettingsWidget.h
     ui/widgets/JavaSettingsWidget.cpp
-    ui/widgets/ServerPreviewWidget.h
-    ui/widgets/ServerPreviewWidget.cpp
-    ui/widgets/MotdRenderer.h
-    ui/widgets/MotdRenderer.cpp
 
     # GUI - instance group view
     ui/instanceview/InstanceProxyModel.cpp
@@ -1398,7 +1395,6 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/instance/ScreenshotsPage.ui
     ui/pages/modplatform/atlauncher/AtlOptionalModDialog.ui
     ui/pages/modplatform/atlauncher/AtlPage.ui
-    ui/pages/modplatform/ftb/FtbPage.ui
     ui/pages/modplatform/CustomPage.ui
     ui/pages/modplatform/ResourcePage.ui
     ui/pages/modplatform/flame/FlamePage.ui
@@ -1406,6 +1402,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/modplatform/import_ftb/ImportFTBPage.ui
     ui/pages/modplatform/ImportPage.ui
     ui/pages/modplatform/OptionalModDialog.ui
+    ui/pages/modplatform/ftb/FtbPage.ui
     ui/pages/modplatform/modrinth/ModrinthPage.ui
     ui/pages/modplatform/technic/TechnicPage.ui
     ui/widgets/CustomCommands.ui
@@ -1417,15 +1414,16 @@ qt_wrap_ui(LAUNCHER_UI
     ui/widgets/MinecraftSettingsWidget.ui
     ui/widgets/JavaSettingsWidget.ui
     ui/dialogs/CopyInstanceDialog.ui
-    ui/dialogs/YggdrasilLoginDialog.ui
-    ui/dialogs/YggdrasilProfileSelectDialog.ui
-    ui/dialogs/YggdrasilPresetEditDialog.ui
-    ui/dialogs/YggdrasilPresetsDialog.ui
-    ui/dialogs/UnifiedPassLoginDialog.ui
     ui/dialogs/CreateShortcutDialog.ui
     ui/dialogs/ProfileSetupDialog.ui
     ui/dialogs/ProgressDialog.ui
+    ui/dialogs/YggdrasilLoginDialog.ui
+    ui/dialogs/YggdrasilPresetEditDialog.ui
+    ui/dialogs/YggdrasilProfileSelectDialog.ui
+    ui/dialogs/YggdrasilPresetsDialog.ui
+    ui/dialogs/UnifiedPassLoginDialog.ui
     ui/dialogs/NewInstanceDialog.ui
+    ui/dialogs/NetworkJobFailedDialog.ui
     ui/dialogs/NewComponentDialog.ui
     ui/dialogs/NewsDialog.ui
     ui/dialogs/ProfileSelectDialog.ui
@@ -1464,6 +1462,7 @@ qt_add_resources(LAUNCHER_RESOURCES
     resources/OSX/OSX.qrc
     resources/iOS/iOS.qrc
     resources/flat/flat.qrc
+    resources/flat_white/flat_white.qrc
     resources/documents/documents.qrc
     resources/shaders/shaders.qrc
     "${CMAKE_CURRENT_BINARY_DIR}/../${Launcher_Branding_LogoQRC}"
@@ -1482,20 +1481,31 @@ endif()
 
 ######## Precompiled Headers ###########
 
-set(PRECOMPILED_HEADERS
-    include/base.pch.hpp
-    include/qtcore.pch.hpp
-    include/qtgui.pch.hpp
-)
+if(${Launcher_USE_PCH})
+    message(STATUS "Using precompiled headers for applicable launcher targets")
+    set(PRECOMPILED_HEADERS
+        include/base.pch.hpp
+        include/qtcore.pch.hpp
+        include/qtgui.pch.hpp
+    )
+endif()
 
 ####### Targets ########
 
 # Add executable
 add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_UI} ${LAUNCHER_RESOURCES})
-
-target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(Launcher_logic PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/libraries/quickjs-ng
+    ${CMAKE_SOURCE_DIR}/libraries/qtermwidget/lib
+    ${CMAKE_SOURCE_DIR}/libraries/simplewebp
+)
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
-target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
+
+if(${Launcher_USE_PCH})
+    target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
+endif()
+
 target_link_libraries(Launcher_logic
     Launcher_murmur2
     nbt++
@@ -1577,15 +1587,12 @@ if(APPLE)
     endif()
 endif()
 
-# Windows-specific libraries for crash dump generation
-if(WIN32)
-    target_link_libraries(Launcher_logic dbghelp)
+add_executable(${Launcher_Name} MACOSX_BUNDLE WIN32 main.cpp ${LAUNCHER_RCS})
+
+if(${Launcher_USE_PCH})
+    target_precompile_headers(${Launcher_Name} REUSE_FROM Launcher_logic)
 endif()
 
-target_link_libraries(Launcher_logic)
-
-add_executable(${Launcher_Name} MACOSX_BUNDLE WIN32 main.cpp ${LAUNCHER_RCS})
-target_precompile_headers(${Launcher_Name} REUSE_FROM Launcher_logic)
 target_link_libraries(${Launcher_Name} Launcher_logic)
 
 if(DEFINED Launcher_APP_BINARY_NAME)
@@ -1617,7 +1624,11 @@ if(Launcher_BUILD_UPDATER)
     # Updater
     add_library(prism_updater_logic STATIC ${PRISMUPDATER_SOURCES} ${TASKS_SOURCES} ${PRISMUPDATER_UI})
     target_include_directories(prism_updater_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-    target_precompile_headers(prism_updater_logic PRIVATE ${PRECOMPILED_HEADERS})
+
+    if(${Launcher_USE_PCH})
+        target_precompile_headers(prism_updater_logic PRIVATE ${PRECOMPILED_HEADERS})
+    endif()
+
     target_link_libraries(prism_updater_logic
         ${ZLIB_LIBRARIES}
         BuildConfig
@@ -1636,7 +1647,10 @@ if(Launcher_BUILD_UPDATER)
     add_executable("${Launcher_Name}_updater" WIN32 updater/prismupdater/updater_main.cpp)
     target_sources("${Launcher_Name}_updater" PRIVATE updater/prismupdater/updater.exe.manifest)
     target_link_libraries("${Launcher_Name}_updater" prism_updater_logic)
-    target_precompile_headers("${Launcher_Name}_updater" REUSE_FROM prism_updater_logic)
+
+    if(${Launcher_USE_PCH})
+        target_precompile_headers("${Launcher_Name}_updater" REUSE_FROM prism_updater_logic)
+    endif()
 
     if(DEFINED Launcher_APP_BINARY_NAME)
         set_target_properties("${Launcher_Name}_updater" PROPERTIES OUTPUT_NAME "${Launcher_APP_BINARY_NAME}_updater")
@@ -1663,7 +1677,10 @@ if(WIN32 OR (DEFINED Launcher_BUILD_FILELINKER AND Launcher_BUILD_FILELINKER))
     add_library(filelink_logic STATIC ${LINKEXE_SOURCES})
 
     target_include_directories(filelink_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-    target_precompile_headers(filelink_logic PRIVATE ${PRECOMPILED_HEADERS})
+
+    if(${Launcher_USE_PCH})
+        target_precompile_headers(filelink_logic PRIVATE ${PRECOMPILED_HEADERS})
+    endif()
 
     target_link_libraries(filelink_logic
         BuildConfig
@@ -1675,9 +1692,11 @@ if(WIN32 OR (DEFINED Launcher_BUILD_FILELINKER AND Launcher_BUILD_FILELINKER))
     )
 
     add_executable("${Launcher_Name}_filelink" WIN32 filelink/filelink_main.cpp)
-
     target_sources("${Launcher_Name}_filelink" PRIVATE filelink/filelink.exe.manifest)
-    target_precompile_headers("${Launcher_Name}_filelink" REUSE_FROM filelink_logic)
+
+    if(${Launcher_USE_PCH})
+        target_precompile_headers("${Launcher_Name}_filelink" REUSE_FROM filelink_logic)
+    endif()
 
     # HACK: Fix manifest issues with Ninja in release mode (and only release mode) and MSVC
     # I have no idea why this works or why it's needed. UPDATE THIS IF YOU EDIT THE MANIFEST!!! -@getchoo
@@ -1715,6 +1734,26 @@ if (UNIX AND APPLE AND Launcher_ENABLE_UPDATER)
     install(DIRECTORY ${MACOSX_SPARKLE_DIR}/Sparkle.framework DESTINATION ${FRAMEWORK_DEST_DIR} USE_SOURCE_PERMISSIONS)
 endif()
 
+# Set basic compiler warning/error flags for all targets
+get_property(Launcher_TARGETS DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
+foreach(target ${Launcher_TARGETS})
+    message(STATUS "Enabling all warnings as errors for target '${target}'")
+    if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        target_compile_options(${target} PRIVATE /W4 /WX /permissive-)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+endforeach()
+
+# Disable some warnings in main launcher target due to being present in a lot of places. TODO: Fix them.
+if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    target_compile_options(Launcher_logic PRIVATE /wd4100) # C4100 - unused parameter
+    target_compile_options(${Launcher_Name} PRIVATE /wd4100) # C4100 - unused parameter
+else()
+    target_compile_options(Launcher_logic PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-sfinae-incomplete)
+    target_compile_options(${Launcher_Name} PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-sfinae-incomplete)
+endif()
+
 #### The bundle mess! ####
 # Bundle utilities are used to complete packages for different platforms - they add all the libraries that would otherwise be missing on the target system.
 # NOTE: it seems that this absolutely has to be here, and nowhere else.
@@ -1741,25 +1780,13 @@ if(WIN32 OR (UNIX AND APPLE))
     )
 
     # Bundle our linked dependencies
-    set(LAUNCHER_BUNDLE_DIRECTORIES
-        ${QT_BINS_DIR}
-        ${QT_LIBS_DIR}
-        ${QT_LIBEXECS_DIR}
-    )
-    if(WIN32 AND NOT MSVC)
-        cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH LAUNCHER_TOOLCHAIN_BIN_DIR)
-        if(LAUNCHER_TOOLCHAIN_BIN_DIR)
-            list(PREPEND LAUNCHER_BUNDLE_DIRECTORIES ${LAUNCHER_TOOLCHAIN_BIN_DIR})
-        endif()
-    endif()
-    if(NOT WIN32 OR MSVC OR Launcher_BUNDLE_INCLUDE_SYSTEM_LIBRARY_PATH)
-        list(PREPEND LAUNCHER_BUNDLE_DIRECTORIES ${CMAKE_SYSTEM_LIBRARY_PATH})
-    endif()
     install(
         RUNTIME_DEPENDENCY_SET LAUNCHER_DEPENDENCY_SET
         COMPONENT bundle
         DIRECTORIES
-            ${LAUNCHER_BUNDLE_DIRECTORIES}
+            ${CMAKE_SYSTEM_LIBRARY_PATH}
+            ${QT_LIBS_DIR}
+            ${QT_LIBEXECS_DIR}
         PRE_EXCLUDE_REGEXES
             "^(api-ms-win|ext-ms)-.*\\.dll$"
             # FIXME: Why aren't these caught by the below regex???
@@ -1776,6 +1803,49 @@ if(WIN32 OR (UNIX AND APPLE))
         SCRIPT ${QT_DEPLOY_SCRIPT}
         COMPONENT bundle
     )
+    # FIXME: remove this crap once we stop using msys2
+    if(MINGW)
+        # i've not found a solution better than injecting the config vars like this...
+        # with install(CODE" for everything everything just breaks
+        install(CODE "
+            set(QT_PLUGINS_DIR \"${QT_PLUGINS_DIR}\")
+            set(QT_LIBS_DIR \"${QT_LIBS_DIR}\")
+            set(QT_LIBEXECS_DIR \"${QT_LIBEXECS_DIR}\")
+            set(CMAKE_SYSTEM_LIBRARY_PATH \"${CMAKE_SYSTEM_LIBRARY_PATH}\")
+            set(CMAKE_INSTALL_PREFIX \"${CMAKE_INSTALL_PREFIX}\")
+            "
+            COMPONENT bundle)
+
+        install(CODE [[
+            file(GLOB QT_IMAGEFORMAT_DLLS "${QT_PLUGINS_DIR}/imageformats/*.dll")
+            set(CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL objdump)
+            file(GET_RUNTIME_DEPENDENCIES
+                RESOLVED_DEPENDENCIES_VAR imageformatdeps
+                LIBRARIES ${QT_IMAGEFORMAT_DLLS}
+                DIRECTORIES
+                    ${CMAKE_SYSTEM_LIBRARY_PATH}
+                    ${QT_PLUGINS_DIR}
+                    ${QT_LIBS_DIR}
+                    ${QT_LIBEXECS_DIR}
+                PRE_EXCLUDE_REGEXES
+                    "^(api-ms-win|ext-ms)-.*\\.dll$"
+                    # FIXME: Why aren't these caught by the below regex???
+                    "^azure.*\\.dll$"
+                    "^vcruntime.*\\.dll$"
+                POST_EXCLUDE_REGEXES
+                    "system32"
+            )
+            foreach(_lib ${imageformatdeps})
+                file(INSTALL
+                    DESTINATION ${CMAKE_INSTALL_PREFIX}
+                    TYPE SHARED_LIBRARY
+                    FOLLOW_SYMLINK_CHAIN
+                    FILES ${_lib}
+                )
+            endforeach()
+        ]]
+        COMPONENT bundle)
+    endif()
 
     # Add qt.conf - this makes Qt stop looking for things outside the bundle
     install(
@@ -1790,49 +1860,14 @@ if(WIN32 OR (UNIX AND APPLE))
     )
 endif()
 
-# Install Luna Launcher PO translation files
-# These are additional translations for Luna-specific features
-# Note: Using 'zh' as the language code to match Prism's zh_CN (simplified Chinese)
-install(
-    FILES
-        translations/zh.po
-    DESTINATION ${RESOURCES_DEST_DIR}/translations
-    COMPONENT Runtime
-)
-
-# Install exresources - extra runtime resources that match user data directory structure
-# These files are copied as-is and can be overridden by user's custom files
-# On Windows: install to "resource" subdirectory
-# On macOS: install to Resources directory inside .app bundle
-# On Linux: install to resources subdirectory
-if(WIN32)
-    set(EXRESOURCE_DEST_DIR "resource")
-elseif(APPLE)
-    set(EXRESOURCE_DEST_DIR "${RESOURCES_DEST_DIR}")
+find_program(CLANG_FORMAT clang-format OPTIONAL)
+if(CLANG_FORMAT)
+    message(STATUS "Creating clang-format target")
+    add_custom_target(
+        clang-format
+        COMMAND ${CLANG_FORMAT} -i --style=file:${CMAKE_SOURCE_DIR}/.clang-format ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${PRISMUPDATER_SOURCES} ${LINKEXE_SOURCES} ${PRECOMPILED_HEADERS}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
 else()
-    set(EXRESOURCE_DEST_DIR "${RESOURCES_DEST_DIR}/resources")
+    message(WARNING "Unable to find `clang-format`. Not creating custom target")
 endif()
-
-install(
-    DIRECTORY
-        exresources/themes
-        exresources/iconthemes
-        exresources/translations
-        exresources/catpacks
-        exresources/icons
-        exresources/fonts
-    DESTINATION ${EXRESOURCE_DEST_DIR}
-    USE_SOURCE_PERMISSIONS
-    COMPONENT Runtime
-)
-
-# Install JavaScript API files for dynamic loading
-install(
-    FILES
-        modplatform/jsapi/modrinth_plugin_api.js
-        modplatform/jsapi/resource-api.d.ts
-        modplatform/jsapi/README.md
-        modplatform/jsapi/DEPLOYMENT.md
-    DESTINATION ${EXRESOURCE_DEST_DIR}/jsapi
-    COMPONENT Runtime
-)

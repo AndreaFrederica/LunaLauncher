@@ -9,10 +9,10 @@
 	url = https://github.com/AndreaFrederica/Msys2Manager.git
 [submodule "libraries/qtermwidget"]
 	path = libraries/qtermwidget
-	url = https://github.com/AndreaFrederica/-qtermwidget.git
+	url = https://gitlab.com/andreafrederica/qtermwidget.git
 [submodule "website"]
 	path = website
 	url = https://github.com/AndreaFrederica/LunaLauncher_webpage.git
 [submodule "libraries/quickjs-ng"]
 	path = libraries/quickjs-ng
-	url = https://github.com/AndreaFrederica/quickjs-ng.git
+	url = https://gitlab.com/andreafrederica/quickjs-ng.git

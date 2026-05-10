@@ -62,6 +62,10 @@ flatbuild
 
 # Snap
 *.snap
+
+# RPM packages
+*.rpm
+
 # pixi environments
 .pixi/*
 !.pixi/config.toml

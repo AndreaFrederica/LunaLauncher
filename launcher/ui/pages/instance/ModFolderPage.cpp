@@ -63,6 +63,8 @@
 #include "minecraft/mod/Mod.h"
 #include "minecraft/mod/ModFolderModel.h"
 
+#include "server/ServerInstance.h"
+
 #include "tasks/ConcurrentTask.h"
 #include "tasks/Task.h"
 #include "ui/dialogs/ProgressDialog.h"
@@ -161,6 +163,34 @@ void ModFolderPage::removeItems(const QItemSelection& selection)
 
 void ModFolderPage::downloadMods()
 {
+    // Luna feature: server instances can download server-side mods after their loader is configured.
+    if (m_instance->traits().contains("server")) {
+        auto serverInst = dynamic_cast<ServerInstance*>(m_instance);
+        if (!serverInst) {
+            return;
+        }
+
+        if (serverInst->getModLoaderTypes() == 0) {
+            auto response = QMessageBox::warning(this, tr("Mod Loader Not Configured"),
+                                                 tr("You need to configure the mod loader type before downloading mods.\n"
+                                                    "Would you like to open the Mod Loader configuration page?"),
+                                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+
+            if (response == QMessageBox::Yes) {
+                QMessageBox::information(this, tr("Info"),
+                                         tr("Please go to the 'Mod Loader' page in the settings to configure your server's mod loader."));
+            }
+            return;
+        }
+
+        m_downloadDialog = new ResourceDownload::ModDownloadDialog(this, m_model, m_instance);
+        connect(this, &QObject::destroyed, m_downloadDialog, &QDialog::close);
+        connect(m_downloadDialog, &QDialog::finished, this, &ModFolderPage::downloadDialogFinished);
+
+        m_downloadDialog->open();
+        return;
+    }
+
     if (m_instance->typeName() != "Minecraft")
         return;  // this is a null instance or a legacy instance
 

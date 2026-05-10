@@ -74,7 +74,9 @@
 #include "minecraft/update/LegacyFMLLibrariesTask.h"
 #include "minecraft/update/LibrariesTask.h"
 #include "minecraft/auth/AuthlibInjector.h"
+#include "minecraft/auth/AuthlibInjectorDownloadTask.h"
 #include "minecraft/auth/Nide8Auth.h"
+#include "minecraft/auth/Nide8AuthDownloadTask.h"
 
 #include "java/JavaUtils.h"
 
@@ -1202,6 +1204,14 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
         process->appendStep(makeShared<CheckJava>(pptr));
         // verify that minimum Java requirements are met
         process->appendStep(makeShared<VerifyJavaInstall>(pptr));
+    }
+
+    // Luna feature: third-party auth agents are needed before JVM args add -javaagent.
+    if (session->yggdrasil) {
+        process->appendStep(makeShared<AuthlibInjectorDownloadTask>(pptr));
+    }
+    if (session->unifiedPass) {
+        process->appendStep(makeShared<Nide8AuthDownloadTask>(pptr));
     }
 
     // run pre-launch command if that's needed

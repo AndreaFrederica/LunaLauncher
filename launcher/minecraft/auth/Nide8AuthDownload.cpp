@@ -23,11 +23,12 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "minecraft/auth/Nide8Auth.h"
 
 Nide8AuthDownload::Nide8AuthDownload(QObject* parent) : Task(parent)
 {
     m_network = new QNetworkAccessManager(this);
-    m_jarPath = FS::PathCombine(APPLICATION->root(), "nide8auth.jar");
+    m_jarPath = Nide8Auth::instance().getLocalPath();
 }
 
 bool Nide8AuthDownload::abort()
@@ -46,9 +47,7 @@ void Nide8AuthDownload::executeTask()
     // Ensure parent directory exists
     QDir().mkpath(QFileInfo(m_jarPath).absolutePath());
 
-    // TODO: This is a non-official mirror link. Replace with official source when available.
-    // Current source: https://gitee.com/LostCityTeam/LostCity-Server-Resources/raw/master/nide8auth.jar
-    QString jarUrl = "https://gitee.com/LostCityTeam/LostCity-Server-Resources/raw/master/nide8auth.jar";
+    QString jarUrl = "https://login.mc-user.com:233/index/jar";
 
     QNetworkRequest request((QUrl(jarUrl)));
     request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());

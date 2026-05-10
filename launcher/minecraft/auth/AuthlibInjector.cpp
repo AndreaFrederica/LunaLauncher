@@ -42,12 +42,12 @@ AuthlibInjector& AuthlibInjector::instance()
 
 QString AuthlibInjector::getLocalPath() const
 {
-    return FS::PathCombine(APPLICATION->root(), "authlib-injector.jar");
+    return FS::PathCombine(APPLICATION->dataRoot(), "authlib-injector.jar");
 }
 
 QString AuthlibInjector::getMetadataPath() const
 {
-    return FS::PathCombine(APPLICATION->root(), "authlib-injector.json");
+    return FS::PathCombine(APPLICATION->dataRoot(), "authlib-injector.json");
 }
 
 QString AuthlibInjector::getVersion() const
@@ -119,6 +119,7 @@ QString AuthlibInjector::downloadLatest()
         // Try official source
         downloadUrl = "https://authlib-injector.yushi.moe/artifact/latest.json";
         request.setUrl(QUrl(downloadUrl));
+        reply->deleteLater();
         reply = manager.get(request);
         QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
         loop.exec();

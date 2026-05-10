@@ -101,7 +101,7 @@ void McClient::writeVarInt(QByteArray& data, int value)
 {
     while ((value & ~g_varIntValueMask) != 0) {  // check if the value is too big to fit in 7 bits
         // Write 7 bits
-        data.append(static_cast<uint8_t>((value & ~g_varIntValueMask) | g_varIntContinue)); // NOLINT(*-narrowing-conversions)
+        data.append(static_cast<uint8_t>((value & g_varIntValueMask) | g_varIntContinue)); // NOLINT(*-narrowing-conversions)
 
         // Erase theses 7 bits from the value to write
         // Note: >>> means that the sign bit is shifted with the rest of the number rather than being left alone
@@ -156,8 +156,9 @@ void McClient::writeUInt16(QByteArray& data, const uint16_t value)
 
 void McClient::writeString(QByteArray& data, const QString& value)
 {
-    writeVarInt(data, static_cast<int32_t>(value.size()));
-    data.append(value.toUtf8());
+    const QByteArray utf8 = value.toUtf8();
+    writeVarInt(data, static_cast<int32_t>(utf8.size()));
+    data.append(utf8);
 }
 
 void McClient::writePacketToSocket(QByteArray& data)

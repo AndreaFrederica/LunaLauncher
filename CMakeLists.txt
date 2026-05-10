@@ -236,6 +236,14 @@ endif()
 # Java downloader
 option(Launcher_ENABLE_JAVA_DOWNLOADER "Build the java downloader feature" ${Launcher_ENABLE_JAVA_DOWNLOADER_DEFAULT})
 
+# Ownership check
+# WARNING: This option is for TESTING PURPOSES ONLY. Do NOT use this in normal builds.
+# Luna feature support: third-party auth testing can opt out of requiring an owning MSA account.
+option(Launcher_DISABLE_OWNERSHIP_CHECK "Disable Minecraft ownership check. FOR TESTING ONLY - Do NOT use in production builds." OFF)
+if(Launcher_DISABLE_OWNERSHIP_CHECK)
+    add_compile_definitions(LAUNCHER_DISABLE_OWNERSHIP_CHECK)
+endif()
+
 # Native libraries
 if(UNIX AND APPLE)
     set(Launcher_GLFW_LIBRARY_NAME "libglfw.dylib" CACHE STRING "Name of native glfw library")
@@ -342,7 +350,7 @@ include(ECMQtDeclareLoggingCategory)
 
 ####################################### Program Info #######################################
 
-set(Launcher_APP_BINARY_NAME "prismlauncher" CACHE STRING "Name of the Launcher binary")
+set(Launcher_APP_BINARY_NAME "lunalauncher" CACHE STRING "Name of the Launcher binary")
 add_subdirectory(program_info)
 
 ####################################### Install layout #######################################
@@ -496,6 +504,7 @@ add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
 add_subdirectory(libraries/murmur2) # Hash for usage with the CurseForge API
 add_subdirectory(libraries/qdcss) # css parser
 add_subdirectory(libraries/simplewebp) # WebP image decoder
+set(QJS_INSTALL OFF CACHE BOOL "Install QuickJS-NG development files and tools" FORCE)
 add_subdirectory(libraries/quickjs-ng) # JavaScript engine
 add_subdirectory(libraries/qtermwidget)
 
@@ -508,3 +517,51 @@ if(BUILD_TESTING)
 endif()
 # NOTE: this must always be last to appease the CMake deity of quirky install command evaluation order.
 add_subdirectory(launcher)
+
+####################################### Packaging #######################################
+
+set(CPACK_PACKAGE_NAME "lunalauncher")
+set(CPACK_PACKAGE_VENDOR "LunaLauncher")
+set(CPACK_PACKAGE_CONTACT "https://github.com/AndreaFrederica/LunaLauncher/issues")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A custom Minecraft launcher based on Prism Launcher")
+set(CPACK_PACKAGE_DESCRIPTION
+    "Luna Launcher is an enhanced Prism Launcher fork with additional multiplayer, authentication, mirror, theme, server, and customization features.")
+set(CPACK_PACKAGE_VERSION_MAJOR "${Launcher_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${Launcher_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${Launcher_VERSION_PATCH}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_RELOCATABLE OFF)
+
+if(UNIX AND NOT APPLE)
+    set(CPACK_GENERATOR "RPM")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    set(CPACK_RPM_PACKAGE_NAME "lunalauncher")
+    set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-only")
+    set(CPACK_RPM_PACKAGE_GROUP "Amusements/Games")
+    set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
+    set(CPACK_RPM_PACKAGE_RELEASE "1")
+    set(CPACK_RPM_PACKAGE_ARCHITECTURE "${CMAKE_SYSTEM_PROCESSOR}")
+    set(CPACK_RPM_PACKAGE_RELOCATABLE OFF)
+    set(CPACK_RPM_NO_INSTALL_PREFIX_RELOCATION ON)
+    set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
+    set(CPACK_RPM_PACKAGE_AUTOREQ ON)
+    set(CPACK_RPM_PACKAGE_AUTOPROV ON)
+    set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+        /usr
+        /usr/bin
+        /usr/share
+        /usr/share/applications
+        /usr/share/icons
+        /usr/share/icons/hicolor
+        /usr/share/icons/hicolor/scalable
+        /usr/share/icons/hicolor/scalable/apps
+        /usr/share/icons/hicolor/256x256
+        /usr/share/icons/hicolor/256x256/apps
+        /usr/share/metainfo
+        /usr/share/mime
+        /usr/share/mime/packages
+        /usr/share/qlogging-categories6
+    )
+endif()
+
+include(CPack)

@@ -151,10 +151,14 @@ LaunchDecision LaunchController::decideLaunchMode()
     }
 
     const auto* accounts = APPLICATION->accounts();
-    MinecraftAccountPtr accountToCheck = nullptr;
 
-    if (m_accountToUse->accountType() != AccountType::Offline) {
-        accountToCheck = m_accountToUse->ownsMinecraft() ? m_accountToUse : nullptr;
+#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+    // Luna feature support: allow third-party auth accounts to launch directly in explicit test builds.
+    MinecraftAccountPtr accountToCheck = m_accountToUse;
+#else
+    MinecraftAccountPtr accountToCheck;
+    if (m_accountToUse->ownsMinecraft()) {
+        accountToCheck = m_accountToUse;
     } else if (const auto defaultAccount = accounts->defaultAccount(); defaultAccount && defaultAccount->ownsMinecraft()) {
         accountToCheck = defaultAccount;
     } else {
@@ -165,6 +169,7 @@ LaunchDecision LaunchController::decideLaunchMode()
             }
         }
     }
+#endif
 
     if (!accountToCheck) {
         m_actualLaunchMode = LaunchMode::Demo;

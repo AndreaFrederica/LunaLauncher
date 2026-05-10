@@ -26,12 +26,13 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "minecraft/auth/AuthlibInjector.h"
 
 AuthlibInjectorDownloadTask::AuthlibInjectorDownloadTask(LaunchTask* parent) : LaunchStep(parent)
 {
     m_network.reset(new QNetworkAccessManager(this));
-    m_jarPath = FS::PathCombine(APPLICATION->root(), "authlib-injector.jar");
-    m_metadataPath = FS::PathCombine(APPLICATION->root(), "authlib-injector.json");
+    m_jarPath = AuthlibInjector::instance().getLocalPath();
+    m_metadataPath = AuthlibInjector::instance().getMetadataPath();
 }
 
 bool AuthlibInjectorDownloadTask::abort()
@@ -83,6 +84,7 @@ void AuthlibInjectorDownloadTask::downloadInfoFinished()
         QNetworkRequest request((QUrl(infoUrl)));
         request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
 
+        m_infoReply->deleteLater();
         m_infoReply = m_network->get(request);
         connect(m_infoReply, &QNetworkReply::finished, this, &AuthlibInjectorDownloadTask::downloadInfoFinished);
         connect(m_infoReply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {

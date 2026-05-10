@@ -38,7 +38,7 @@ Nide8Auth& Nide8Auth::instance()
 
 QString Nide8Auth::getLocalPath() const
 {
-    return FS::PathCombine(APPLICATION->root(), "nide8auth.jar");
+    return FS::PathCombine(APPLICATION->dataRoot(), "nide8auth.jar");
 }
 
 bool Nide8Auth::checkCache() const
@@ -71,9 +71,7 @@ QString Nide8Auth::download()
     // Ensure cache directory exists
     QDir().mkpath(QFileInfo(cachePath).absolutePath());
 
-    // TODO: This is a non-official mirror link. Replace with official source when available.
-    // Current source: https://gitee.com/LostCityTeam/LostCity-Server-Resources/raw/master/nide8auth.jar
-    QString downloadUrl = "https://gitee.com/LostCityTeam/LostCity-Server-Resources/raw/master/nide8auth.jar";
+    QString downloadUrl = "https://login.mc-user.com:233/index/jar";
 
     QNetworkAccessManager manager;
     QNetworkRequest request((QUrl(downloadUrl)));

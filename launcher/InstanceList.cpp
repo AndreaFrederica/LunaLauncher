@@ -56,6 +56,7 @@
 #include "NullInstance.h"
 #include "WatchLock.h"
 #include "minecraft/MinecraftInstance.h"
+#include "server/ServerInstance.h"
 #include "settings/INISettingsObject.h"
 
 #ifdef Q_OS_WIN32
@@ -675,6 +676,9 @@ std::unique_ptr<BaseInstance> InstanceList::loadInstance(const InstanceId& id)
     // OneSix instance
     if (inst_type == "OneSix" || inst_type.isEmpty()) {
         inst.reset(new MinecraftInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
+    } else if (inst_type == "Server") {
+        // Luna feature: keep server instances loadable after upstream syncs.
+        inst.reset(new ServerInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
     } else {
         inst.reset(new NullInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
     }

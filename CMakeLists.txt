@@ -188,7 +188,11 @@ set(Launcher_VERSION_NAME4 "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.
 set(Launcher_VERSION_NAME4_COMMA "${Launcher_VERSION_MAJOR},${Launcher_VERSION_MINOR},${Launcher_VERSION_PATCH},0")
 
 # Build platform.
-set(Launcher_BUILD_PLATFORM "unknown" CACHE STRING "A short string identifying the platform that this build was built for. Only used to display in the about dialog.")
+if(NOT DEFINED Launcher_BUILD_PLATFORM OR Launcher_BUILD_PLATFORM STREQUAL "" OR Launcher_BUILD_PLATFORM STREQUAL "unknown")
+    set(Launcher_BUILD_PLATFORM "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" CACHE STRING "A short string identifying the platform that this build was built for. Only used to display in the about dialog." FORCE)
+else()
+    set(Launcher_BUILD_PLATFORM "${Launcher_BUILD_PLATFORM}" CACHE STRING "A short string identifying the platform that this build was built for. Only used to display in the about dialog.")
+endif()
 
 # Github repo URL with releases for updater
 set(Launcher_UPDATER_GITHUB_REPO "https://github.com/AndreaFrederica/LunaLauncher" CACHE STRING "Base github URL for the updater.")
@@ -265,7 +269,7 @@ endif()
 
 # By using this key in your builds you accept the terms of use laid down in
 # https://docs.microsoft.com/en-us/legal/microsoft-identity-platform/terms-of-use
-set(Launcher_MSA_CLIENT_ID "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb" CACHE STRING "Client ID you can get from Microsoft Identity Platform when you register an application")
+set(Launcher_MSA_CLIENT_ID "a60a8e54-8c3c-4b25-9fe4-8ec4e616c410" CACHE STRING "Client ID you can get from Microsoft Identity Platform when you register an application")
 
 # By using this key in your builds you accept the terms and conditions laid down in
 # https://support.curseforge.com/en/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions

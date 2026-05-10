@@ -71,6 +71,22 @@ QString getLicenseHtml()
     }
 }
 
+QString aboutVersionString()
+{
+    if (BuildConfig.GIT_COMMIT.isEmpty()) {
+        return BuildConfig.versionString();
+    }
+    return QStringLiteral("%1-%2").arg(BuildConfig.versionString(), BuildConfig.GIT_COMMIT.left(8));
+}
+
+QString aboutPlatformString()
+{
+    if (!BuildConfig.BUILD_PLATFORM.isEmpty() && BuildConfig.BUILD_PLATFORM != QStringLiteral("unknown")) {
+        return BuildConfig.BUILD_PLATFORM;
+    }
+    return BuildConfig.systemID().simplified();
+}
+
 }  // namespace
 
 AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent), ui(new Ui::AboutDialog)
@@ -92,10 +108,11 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent), ui(new Ui::AboutDia
     ui->icon->setPixmap(APPLICATION->logo().pixmap(64));
     ui->title->setText(launcherName);
 
-    ui->versionLabel->setText(BuildConfig.printableVersionString());
+    ui->versionLabel->setText(aboutVersionString());
 
-    if (!BuildConfig.BUILD_PLATFORM.isEmpty())
-        ui->platformLabel->setText(tr("Platform") + ": " + BuildConfig.BUILD_PLATFORM);
+    const auto platform = aboutPlatformString();
+    if (!platform.isEmpty())
+        ui->platformLabel->setText(tr("Platform") + ": " + platform);
     else
         ui->platformLabel->setVisible(false);
 

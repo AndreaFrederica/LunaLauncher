@@ -243,15 +243,15 @@ YukariConnect::~YukariConnect()
 QString YukariConnect::getLocalPath() const
 {
 #ifdef Q_OS_WIN32
-    return FS::PathCombine(APPLICATION->root(), "yukari-connect.exe");
+    return FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect.exe");
 #else
-    return FS::PathCombine(APPLICATION->root(), "yukari-connect");
+    return FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect");
 #endif
 }
 
 QString YukariConnect::getMetadataPath() const
 {
-    return FS::PathCombine(APPLICATION->root(), "yukari-connect.json");
+    return FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect.json");
 }
 
 QString YukariConnect::getConfigPath() const
@@ -1007,8 +1007,8 @@ bool YukariConnect::startProcess()
     // Create process
     m_process = new QProcess(this);
 
-    // Set working directory to APPLICATION->root() so YukariConnect can find yukari.json
-    m_process->setWorkingDirectory(APPLICATION->root());
+    // Run beside the downloaded executable so YukariConnect can find yukari.json.
+    m_process->setWorkingDirectory(QFileInfo(exePath).absolutePath());
 
     // Setup process to run in background
     m_process->setProcessChannelMode(QProcess::MergedChannels);

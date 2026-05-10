@@ -45,11 +45,11 @@ TerracottaDownload::TerracottaDownload(bool useMirror, QObject* parent) : Task(p
 {
     m_network = new QNetworkAccessManager(this);
 #ifdef Q_OS_WIN32
-    m_exePath = FS::PathCombine(APPLICATION->root(), "terracotta.exe");
+    m_exePath = FS::PathCombine(APPLICATION->dataRoot(), "terracotta.exe");
 #else
-    m_exePath = FS::PathCombine(APPLICATION->root(), "terracotta");
+    m_exePath = FS::PathCombine(APPLICATION->dataRoot(), "terracotta");
 #endif
-    m_metadataPath = FS::PathCombine(APPLICATION->root(), "terracotta.json");
+    m_metadataPath = FS::PathCombine(APPLICATION->dataRoot(), "terracotta.json");
 }
 
 bool TerracottaDownload::abort()

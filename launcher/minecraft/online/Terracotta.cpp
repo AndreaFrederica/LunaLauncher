@@ -234,15 +234,15 @@ Terracotta::Terracotta(QObject* parent) : QObject(parent), m_baseUrl("http://loc
 QString Terracotta::getLocalPath() const
 {
 #ifdef Q_OS_WIN32
-    return FS::PathCombine(APPLICATION->root(), "terracotta.exe");
+    return FS::PathCombine(APPLICATION->dataRoot(), "terracotta.exe");
 #else
-    return FS::PathCombine(APPLICATION->root(), "terracotta");
+    return FS::PathCombine(APPLICATION->dataRoot(), "terracotta");
 #endif
 }
 
 QString Terracotta::getMetadataPath() const
 {
-    return FS::PathCombine(APPLICATION->root(), "terracotta.json");
+    return FS::PathCombine(APPLICATION->dataRoot(), "terracotta.json");
 }
 
 QString Terracotta::getVersion() const

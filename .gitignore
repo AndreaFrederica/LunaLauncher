@@ -66,6 +66,12 @@ flatbuild
 # RPM packages
 *.rpm
 
+# Arch Linux packages
+/pkg/
+/src/
+*.pkg.tar.*
+*.src.tar.*
+
 # pixi environments
 .pixi/*
 !.pixi/config.toml

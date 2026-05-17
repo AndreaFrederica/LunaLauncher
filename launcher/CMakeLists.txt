@@ -1860,6 +1860,53 @@ if(WIN32 OR (UNIX AND APPLE))
     )
 endif()
 
+# Install exresources - extra runtime resources that match user data directory structure
+# These files are copied as-is and can be overridden by user's custom files
+# On Windows: install to "resource" subdirectory
+# On macOS: install to Resources directory inside .app bundle
+# On Linux: install to share/${Launcher_Name}/resources
+if(WIN32)
+    set(EXRESOURCE_DEST_DIR "resource")
+elseif(APPLE)
+    set(EXRESOURCE_DEST_DIR "${RESOURCES_DEST_DIR}")
+else()
+    set(EXRESOURCE_DEST_DIR "share/${Launcher_Name}/resources")
+endif()
+
+# Install Luna Launcher PO translation files
+# These are additional translations for Luna-specific features
+# Note: Using 'zh' as the language code to match Prism's zh_CN (simplified Chinese)
+install(
+    FILES
+        translations/zh.po
+    DESTINATION ${EXRESOURCE_DEST_DIR}/translations
+    COMPONENT Runtime
+)
+
+install(
+    DIRECTORY
+        exresources/themes
+        exresources/iconthemes
+        exresources/translations
+        exresources/catpacks
+        exresources/icons
+        exresources/fonts
+    DESTINATION ${EXRESOURCE_DEST_DIR}
+    USE_SOURCE_PERMISSIONS
+    COMPONENT Runtime
+)
+
+# Install JavaScript API files for dynamic loading
+install(
+    FILES
+        modplatform/jsapi/modrinth_plugin_api.js
+        modplatform/jsapi/resource-api.d.ts
+        modplatform/jsapi/README.md
+        modplatform/jsapi/DEPLOYMENT.md
+    DESTINATION ${EXRESOURCE_DEST_DIR}/jsapi
+    COMPONENT Runtime
+)
+
 find_program(CLANG_FORMAT clang-format OPTIONAL)
 if(CLANG_FORMAT)
     message(STATUS "Creating clang-format target")

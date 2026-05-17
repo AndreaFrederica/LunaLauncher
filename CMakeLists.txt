@@ -510,6 +510,14 @@ add_subdirectory(libraries/qdcss) # css parser
 add_subdirectory(libraries/simplewebp) # WebP image decoder
 set(QJS_INSTALL OFF CACHE BOOL "Install QuickJS-NG development files and tools" FORCE)
 add_subdirectory(libraries/quickjs-ng) # JavaScript engine
+if(TARGET qjs AND CMAKE_C_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)
+    # QuickJS-NG currently trips GCC 16 diagnostics on Fedora 44. Keep our own
+    # targets strict, but avoid failing RPM builds on third-party code here.
+    target_compile_options(qjs PRIVATE
+        -Wno-error=discarded-qualifiers
+        -Wno-error=maybe-uninitialized
+    )
+endif()
 add_subdirectory(libraries/qtermwidget)
 
 ############################### Built Artifacts ###############################

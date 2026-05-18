@@ -1,0 +1,70 @@
+diff --git a/libraries/quickjs-ng/CMakeLists.txt b/libraries/quickjs-ng/CMakeLists.txt
+index 6fd7d9c..085d3a6 100644
+--- a/libraries/quickjs-ng/CMakeLists.txt
++++ b/libraries/quickjs-ng/CMakeLists.txt
+@@ -56,7 +56,7 @@ endmacro()
+ 
+ xcheck_add_c_compiler_flag(-Wall)
+ if(NOT MSVC AND NOT IOS AND NOT TVOS AND NOT WATCHOS)
+-    xcheck_add_c_compiler_flag(-Werror)
++    xcheck_add_c_compiler_flag(-Wno-error)
+     xcheck_add_c_compiler_flag(-Wextra)
+ endif()
+ xcheck_add_c_compiler_flag(-Wformat=2)
+@@ -120,6 +120,13 @@ if(APPLE AND CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VER
+     xcheck_add_c_compiler_flag(-Wno-maybe-uninitialized)
+ endif()
+ 
++# Fedora 44 currently builds QuickJS-NG with GCC 16, which triggers stricter
++# diagnostics on third-party code that are not actionable in LunaLauncher.
++if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
++    xcheck_add_c_compiler_flag(-Wno-error=discarded-qualifiers)
++    xcheck_add_c_compiler_flag(-Wno-error=maybe-uninitialized)
++endif()
++
+ if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+     add_compile_definitions(
+         _WASI_EMULATED_PROCESS_CLOCKS
+@@ -168,6 +175,7 @@ xoption(QJS_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
+ xoption(QJS_ENABLE_MSAN "Enable MemorySanitizer (MSan)" OFF)
+ xoption(QJS_ENABLE_TSAN "Enable ThreadSanitizer (TSan)" OFF)
+ xoption(QJS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan)" OFF)
++option(QJS_INSTALL "Install QuickJS-NG development files and tools" ON)
+ 
+ if(QJS_ENABLE_ASAN)
+ message(STATUS "Building with ASan")
+@@ -459,18 +467,20 @@ set_target_properties(qjs PROPERTIES
+     VERSION ${QJS_VERSION_MAJOR}.${QJS_VERSION_MINOR}.${QJS_VERSION_PATCH}
+     SOVERSION ${QJS_VERSION_MAJOR}
+ )
+-install(FILES quickjs.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+-if(QJS_BUILD_LIBC)
+-    install(FILES quickjs-libc.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+-endif()
+-if(NOT IOS AND NOT TVOS AND NOT WATCHOS)
+-    install(TARGETS qjs_exe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+-    install(TARGETS qjsc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
++if(QJS_INSTALL)
++    install(FILES quickjs.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
++    if(QJS_BUILD_LIBC)
++        install(FILES quickjs-libc.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
++    endif()
++    if(NOT IOS AND NOT TVOS AND NOT WATCHOS)
++        install(TARGETS qjs_exe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
++        install(TARGETS qjsc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
++    endif()
++    install(TARGETS qjs EXPORT qjsConfig
++            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
++            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
++    install(EXPORT qjsConfig DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/quickjs)
++    install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
++    install(DIRECTORY examples DESTINATION ${CMAKE_INSTALL_DOCDIR})
+ endif()
+-install(TARGETS qjs EXPORT qjsConfig
+-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+-install(EXPORT qjsConfig DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/quickjs)
+-install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+-install(DIRECTORY examples DESTINATION ${CMAKE_INSTALL_DOCDIR})

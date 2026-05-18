@@ -518,6 +518,13 @@ if(TARGET qjs AND CMAKE_C_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)
         -Wno-error=maybe-uninitialized
     )
 endif()
+if(TARGET qjs AND BUILD_SHARED_LIBS)
+    install(TARGETS qjs
+        LIBRARY DESTINATION ${LIBRARY_DEST_DIR}
+        NAMELINK_SKIP
+        COMPONENT Runtime
+    )
+endif()
 add_subdirectory(libraries/qtermwidget)
 
 ############################### Built Artifacts ###############################

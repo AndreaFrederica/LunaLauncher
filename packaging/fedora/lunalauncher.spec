@@ -1,6 +1,11 @@
 %global forgeurl https://github.com/W-874/LunaLauncher
 %global datadir_name LunaLauncher
 %bcond_with tests
+%if %{with tests}
+%global cmake_build_testing ON
+%else
+%global cmake_build_testing OFF
+%endif
 
 Name:           lunalauncher
 Version:        11.0.2
@@ -50,7 +55,8 @@ customization features.
     -DLauncher_BUILD_PLATFORM:STRING=fedora44 \
     -DLauncher_BUILD_ARTIFACT:STRING= \
     -DLauncher_UPDATER_GITHUB_REPO:STRING= \
-    -DLauncher_ENABLE_JAVA_DOWNLOADER:BOOL=ON
+    -DLauncher_ENABLE_JAVA_DOWNLOADER:BOOL=ON \
+    -DBUILD_TESTING:BOOL=%{cmake_build_testing}
 %cmake_build
 
 %install
@@ -62,19 +68,32 @@ customization features.
 %endif
 
 %post
-%desktop_database_post
-%icon_theme_cache_post
-%mime_database_post
+if [ -x %{_bindir}/update-desktop-database ]; then
+    %{_bindir}/update-desktop-database -q %{_datadir}/applications || :
+fi
+if [ -x %{_bindir}/gtk-update-icon-cache ]; then
+    %{_bindir}/gtk-update-icon-cache -q %{_datadir}/icons/hicolor || :
+fi
+if [ -x %{_bindir}/update-mime-database ]; then
+    %{_bindir}/update-mime-database %{_datadir}/mime || :
+fi
 
 %postun
-%desktop_database_postun
-%icon_theme_cache_postun
-%mime_database_postun
+if [ -x %{_bindir}/update-desktop-database ]; then
+    %{_bindir}/update-desktop-database -q %{_datadir}/applications || :
+fi
+if [ -x %{_bindir}/gtk-update-icon-cache ]; then
+    %{_bindir}/gtk-update-icon-cache -q %{_datadir}/icons/hicolor || :
+fi
+if [ -x %{_bindir}/update-mime-database ]; then
+    %{_bindir}/update-mime-database %{_datadir}/mime || :
+fi
 
 %files
 %license LICENSE
 %doc README.md
 %{_bindir}/lunalauncher
+%{_libdir}/libqjs.so.0*
 %{_datadir}/applications/org.lunalauncher.LunaLauncher.desktop
 %{_datadir}/icons/hicolor/256x256/apps/org.lunalauncher.LunaLauncher.png
 %{_datadir}/icons/hicolor/scalable/apps/org.lunalauncher.LunaLauncher.svg

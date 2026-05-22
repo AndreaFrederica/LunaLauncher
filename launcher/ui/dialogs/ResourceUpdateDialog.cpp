@@ -1,5 +1,6 @@
 #include "ResourceUpdateDialog.h"
 #include "Application.h"
+#include "BuildConfig.h"
 #include "ChooseProviderDialog.h"
 #include "CustomMessageBox.h"
 #include "ProgressDialog.h"
@@ -98,12 +99,31 @@ void ResourceUpdateDialog::checkCandidates()
         check_task.addTask(m_modrinthCheckTask);
     }
 
+    if (!m_modrinthMirrorToUpdate.empty()) {
+        m_modrinthMirrorCheckTask.reset(new ModrinthCheckUpdate(m_modrinthMirrorToUpdate, versions, m_loadersList, m_resourceModel,
+                                                               ModPlatform::ResourceProvider::MODRINTH_MIRROR));
+        connect(m_modrinthMirrorCheckTask.get(), &CheckUpdateTask::checkFailed, this,
+                [this](Resource* resource, QString reason, QUrl recover_url) {
+                    m_failedCheckUpdate.append({ resource, reason, recover_url });
+                });
+        check_task.addTask(m_modrinthMirrorCheckTask);
+    }
+
     if (!m_flameToUpdate.empty()) {
         m_flameCheckTask.reset(new FlameCheckUpdate(m_flameToUpdate, versions, m_loadersList, m_resourceModel));
         connect(m_flameCheckTask.get(), &CheckUpdateTask::checkFailed, this, [this](Resource* resource, QString reason, QUrl recover_url) {
             m_failedCheckUpdate.append({ resource, reason, recover_url });
         });
         check_task.addTask(m_flameCheckTask);
+    }
+
+    if (!m_flameMirrorToUpdate.empty()) {
+        m_flameMirrorCheckTask.reset(new FlameCheckUpdate(m_flameMirrorToUpdate, versions, m_loadersList, m_resourceModel,
+                                                          ModPlatform::ResourceProvider::FLAME_MIRROR));
+        connect(m_flameMirrorCheckTask.get(), &CheckUpdateTask::checkFailed, this, [this](Resource* resource, QString reason, QUrl recover_url) {
+            m_failedCheckUpdate.append({ resource, reason, recover_url });
+        });
+        check_task.addTask(m_flameMirrorCheckTask);
     }
 
     connect(&check_task, &Task::failed, this,
@@ -143,6 +163,17 @@ void ResourceUpdateDialog::checkCandidates()
         selectedVers.append(m_modrinthCheckTask->getDependencies());
     }
 
+    if (m_modrinthMirrorCheckTask) {
+        auto modrinth_updates = m_modrinthMirrorCheckTask->getUpdates();
+        for (auto& updatable : modrinth_updates) {
+            qDebug() << QString("Mod %1 has an update available!").arg(updatable.name);
+
+            appendResource(updatable);
+            m_tasks.insert(updatable.name, updatable.download);
+        }
+        selectedVers.append(m_modrinthMirrorCheckTask->getDependencies());
+    }
+
     // Add found updated for Flame
     if (m_flameCheckTask) {
         auto flame_updates = m_flameCheckTask->getUpdates();
@@ -153,6 +184,17 @@ void ResourceUpdateDialog::checkCandidates()
             m_tasks.insert(updatable.name, updatable.download);
         }
         selectedVers.append(m_flameCheckTask->getDependencies());
+    }
+
+    if (m_flameMirrorCheckTask) {
+        auto flame_updates = m_flameMirrorCheckTask->getUpdates();
+        for (auto& updatable : flame_updates) {
+            qDebug() << QString("Mod %1 has an update available!").arg(updatable.name);
+
+            appendResource(updatable);
+            m_tasks.insert(updatable.name, updatable.download);
+        }
+        selectedVers.append(m_flameMirrorCheckTask->getDependencies());
     }
 
     // Report failed update checking
@@ -227,13 +269,17 @@ void ResourceUpdateDialog::checkCandidates()
                 return;
             }
             static FlameAPI api;
+            static FlameAPI mirror_api(BuildConfig.FLAME_MIRROR_BASE_URL, ModPlatform::ResourceProvider::FLAME_MIRROR,
+                                       BuildConfig.MCIMIRROR_BASE_URL);
 
             auto dependencyExtraInfo = depTask->getExtraInfo();
 
             for (const auto& dep : depTask->getDependecies()) {
                 auto changelog = dep->version.changelog;
-                if (dep->pack->provider == ModPlatform::ResourceProvider::FLAME)
-                    changelog = api.getModFileChangelog(dep->version.addonId.toInt(), dep->version.fileId.toInt());
+                if (ModPlatform::ProviderCapabilities::isFlame(dep->pack->provider)) {
+                    auto& flame_api = dep->pack->provider == ModPlatform::ResourceProvider::FLAME_MIRROR ? mirror_api : api;
+                    changelog = flame_api.getModFileChangelog(dep->version.addonId.toInt(), dep->version.fileId.toInt());
+                }
                 auto download_task = makeShared<ResourceDownloadTask>(dep->pack, dep->version, m_resourceModel);
                 auto extraInfo = dependencyExtraInfo.value(dep->version.addonId.toString());
                 CheckUpdateTask::Update updatable = {
@@ -279,6 +325,8 @@ auto ResourceUpdateDialog::ensureMetadata() -> bool
     QHash<QString, bool> should_try_others;
     QList<Resource*> modrinth_tmp;
     QList<Resource*> flame_tmp;
+    QList<Resource*> modrinth_mirror_tmp;
+    QList<Resource*> flame_mirror_tmp;
 
     bool confirm_rest = false;
     bool try_others_rest = false;
@@ -286,13 +334,19 @@ auto ResourceUpdateDialog::ensureMetadata() -> bool
     ModPlatform::ResourceProvider provider_rest = ModPlatform::ResourceProvider::MODRINTH;
 
     // adds resource to list based on provider
-    auto addToTmp = [&modrinth_tmp, &flame_tmp](Resource* resource, ModPlatform::ResourceProvider p) {
+    auto addToTmp = [&modrinth_tmp, &flame_tmp, &modrinth_mirror_tmp, &flame_mirror_tmp](Resource* resource, ModPlatform::ResourceProvider p) {
         switch (p) {
             case ModPlatform::ResourceProvider::MODRINTH:
                 modrinth_tmp.push_back(resource);
                 break;
             case ModPlatform::ResourceProvider::FLAME:
                 flame_tmp.push_back(resource);
+                break;
+            case ModPlatform::ResourceProvider::MODRINTH_MIRROR:
+                modrinth_mirror_tmp.push_back(resource);
+                break;
+            case ModPlatform::ResourceProvider::FLAME_MIRROR:
+                flame_mirror_tmp.push_back(resource);
                 break;
             case ModPlatform::ResourceProvider::HANGAR:
                 // Updates are currently implemented for Modrinth/Flame only.
@@ -360,12 +414,43 @@ auto ResourceUpdateDialog::ensureMetadata() -> bool
         seq.addTask(modrinth_task);
     }
 
+    if (!modrinth_mirror_tmp.empty()) {
+        auto modrinth_task = makeShared<EnsureMetadataTask>(modrinth_mirror_tmp, index_dir, ModPlatform::ResourceProvider::MODRINTH_MIRROR);
+        connect(modrinth_task.get(), &EnsureMetadataTask::metadataReady, [this](Resource* candidate) { onMetadataEnsured(candidate); });
+        connect(modrinth_task.get(), &EnsureMetadataTask::metadataFailed, [this, &should_try_others](Resource* candidate) {
+            onMetadataFailed(candidate, should_try_others.find(candidate->internal_id()).value(),
+                             ModPlatform::ResourceProvider::MODRINTH_MIRROR);
+        });
+        connect(modrinth_task.get(), &EnsureMetadataTask::failed,
+                [this](QString reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
+
+        if (modrinth_task->getHashingTask())
+            seq.addTask(modrinth_task->getHashingTask());
+
+        seq.addTask(modrinth_task);
+    }
+
     // prepare task for the flame mods
     if (!flame_tmp.empty()) {
         auto flame_task = makeShared<EnsureMetadataTask>(flame_tmp, index_dir, ModPlatform::ResourceProvider::FLAME);
         connect(flame_task.get(), &EnsureMetadataTask::metadataReady, [this](Resource* candidate) { onMetadataEnsured(candidate); });
         connect(flame_task.get(), &EnsureMetadataTask::metadataFailed, [this, &should_try_others](Resource* candidate) {
             onMetadataFailed(candidate, should_try_others.find(candidate->internal_id()).value(), ModPlatform::ResourceProvider::FLAME);
+        });
+        connect(flame_task.get(), &EnsureMetadataTask::failed,
+                [this](QString reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
+
+        if (flame_task->getHashingTask())
+            seq.addTask(flame_task->getHashingTask());
+
+        seq.addTask(flame_task);
+    }
+
+    if (!flame_mirror_tmp.empty()) {
+        auto flame_task = makeShared<EnsureMetadataTask>(flame_mirror_tmp, index_dir, ModPlatform::ResourceProvider::FLAME_MIRROR);
+        connect(flame_task.get(), &EnsureMetadataTask::metadataReady, [this](Resource* candidate) { onMetadataEnsured(candidate); });
+        connect(flame_task.get(), &EnsureMetadataTask::metadataFailed, [this, &should_try_others](Resource* candidate) {
+            onMetadataFailed(candidate, should_try_others.find(candidate->internal_id()).value(), ModPlatform::ResourceProvider::FLAME_MIRROR);
         });
         connect(flame_task.get(), &EnsureMetadataTask::failed,
                 [this](QString reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->exec(); });
@@ -400,6 +485,12 @@ void ResourceUpdateDialog::onMetadataEnsured(Resource* resource)
         case ModPlatform::ResourceProvider::FLAME:
             m_flameToUpdate.push_back(resource);
             break;
+        case ModPlatform::ResourceProvider::MODRINTH_MIRROR:
+            m_modrinthMirrorToUpdate.push_back(resource);
+            break;
+        case ModPlatform::ResourceProvider::FLAME_MIRROR:
+            m_flameMirrorToUpdate.push_back(resource);
+            break;
         case ModPlatform::ResourceProvider::HANGAR:
             // Update checking not supported in this dialog yet.
             break;
@@ -413,6 +504,10 @@ ModPlatform::ResourceProvider next(ModPlatform::ResourceProvider p)
             return ModPlatform::ResourceProvider::FLAME;
         case ModPlatform::ResourceProvider::FLAME:
             return ModPlatform::ResourceProvider::MODRINTH;
+        case ModPlatform::ResourceProvider::MODRINTH_MIRROR:
+            return ModPlatform::ResourceProvider::FLAME_MIRROR;
+        case ModPlatform::ResourceProvider::FLAME_MIRROR:
+            return ModPlatform::ResourceProvider::MODRINTH_MIRROR;
         case ModPlatform::ResourceProvider::HANGAR:
             return ModPlatform::ResourceProvider::MODRINTH;
     }
@@ -499,7 +594,7 @@ void ResourceUpdateDialog::appendResource(CheckUpdateTask::Update const& info, Q
 
     QString text = info.changelog;
     changelog->setData(0, Qt::UserRole, text);
-    if (info.provider == ModPlatform::ResourceProvider::MODRINTH) {
+    if (ModPlatform::ProviderCapabilities::isModrinth(info.provider)) {
         text = markdownToHTML(info.changelog.toUtf8());
     }
 

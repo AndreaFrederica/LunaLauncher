@@ -13,9 +13,11 @@ Hasher::Ptr createHasher(QString file_path, ModPlatform::ResourceProvider provid
 {
     switch (provider) {
         case ModPlatform::ResourceProvider::MODRINTH:
+        case ModPlatform::ResourceProvider::MODRINTH_MIRROR:
             return makeShared<Hasher>(file_path,
-                                      ModPlatform::ProviderCapabilities::hashType(ModPlatform::ResourceProvider::MODRINTH).first());
+                                      ModPlatform::ProviderCapabilities::hashType(provider).first());
         case ModPlatform::ResourceProvider::FLAME:
+        case ModPlatform::ResourceProvider::FLAME_MIRROR:
             return makeShared<Hasher>(file_path, Algorithm::Murmur2);
         default:
             qCritical() << "[Hashing]" << "Unrecognized mod platform!";

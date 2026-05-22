@@ -62,7 +62,7 @@ enum PluginLoaderType {
 };
 Q_DECLARE_FLAGS(PluginLoaderTypes, PluginLoaderType)
 
-enum class ResourceProvider { MODRINTH, FLAME, HANGAR };
+enum class ResourceProvider { MODRINTH = 0, FLAME = 1, HANGAR = 2, MODRINTH_MIRROR = 3, FLAME_MIRROR = 4 };
 
 enum class DependencyType { REQUIRED, OPTIONAL, INCOMPATIBLE, EMBEDDED, TOOL, INCLUDE, UNKNOWN };
 
@@ -77,6 +77,9 @@ namespace ProviderCapabilities {
 const char* name(ResourceProvider);
 QString readableName(ResourceProvider);
 QStringList hashType(ResourceProvider);
+ResourceProvider canonicalProvider(ResourceProvider);
+bool isModrinth(ResourceProvider);
+bool isFlame(ResourceProvider);
 }  // namespace ProviderCapabilities
 
 struct ModpackAuthor {
@@ -225,10 +228,14 @@ struct OverrideDep {
 inline auto getOverrideDeps() -> QList<OverrideDep>
 {
     return { { "634179", "306612", "API", ModPlatform::ResourceProvider::FLAME },
-             { "720410", "308769", "KotlinLibraries", ModPlatform::ResourceProvider::FLAME },
+              { "720410", "308769", "KotlinLibraries", ModPlatform::ResourceProvider::FLAME },
+              { "634179", "306612", "API", ModPlatform::ResourceProvider::FLAME_MIRROR },
+              { "720410", "308769", "KotlinLibraries", ModPlatform::ResourceProvider::FLAME_MIRROR },
 
-             { "qvIfYCYJ", "P7dR8mSH", "API", ModPlatform::ResourceProvider::MODRINTH },
-             { "lwVhp9o5", "Ha28R6CL", "KotlinLibraries", ModPlatform::ResourceProvider::MODRINTH } };
+              { "qvIfYCYJ", "P7dR8mSH", "API", ModPlatform::ResourceProvider::MODRINTH },
+              { "lwVhp9o5", "Ha28R6CL", "KotlinLibraries", ModPlatform::ResourceProvider::MODRINTH },
+              { "qvIfYCYJ", "P7dR8mSH", "API", ModPlatform::ResourceProvider::MODRINTH_MIRROR },
+              { "lwVhp9o5", "Ha28R6CL", "KotlinLibraries", ModPlatform::ResourceProvider::MODRINTH_MIRROR } };
 }
 
 QString getMetaURL(ResourceProvider provider, QVariant projectID);

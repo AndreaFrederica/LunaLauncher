@@ -64,10 +64,9 @@ class GetModDependenciesTask : public SequentialTask {
    private:
     inline ResourceAPI* getAPI(ModPlatform::ResourceProvider provider)
     {
-        if (provider == ModPlatform::ResourceProvider::FLAME)
-            return &m_flameAPI;
-        else
-            return &m_modrinthAPI;
+        if (ModPlatform::ProviderCapabilities::isFlame(provider))
+            return provider == ModPlatform::ResourceProvider::FLAME_MIRROR ? &m_flameMirrorAPI : &m_flameAPI;
+        return provider == ModPlatform::ResourceProvider::MODRINTH_MIRROR ? &m_modrinthMirrorAPI : &m_modrinthAPI;
     }
 
    protected slots:
@@ -93,4 +92,6 @@ class GetModDependenciesTask : public SequentialTask {
 
     ModrinthAPI m_modrinthAPI;
     FlameAPI m_flameAPI;
+    ModrinthAPI m_modrinthMirrorAPI;
+    FlameAPI m_flameMirrorAPI;
 };

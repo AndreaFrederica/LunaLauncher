@@ -38,8 +38,10 @@
  */
 
 #include "FlameResourcePages.h"
+#include "BuildConfig.h"
 #include <QList>
 #include <memory>
+#include <optional>
 #include "modplatform/flame/FlameAPI.h"
 #include "ui_ResourcePage.h"
 
@@ -47,6 +49,25 @@
 #include "ui/dialogs/ResourceDownloadDialog.h"
 
 namespace ResourceDownload {
+
+static FlameAPI* makeFlameMirrorAPI()
+{
+    return new FlameAPI(BuildConfig.FLAME_MIRROR_BASE_URL, ModPlatform::ResourceProvider::FLAME_MIRROR, BuildConfig.MCIMIRROR_BASE_URL);
+}
+
+static std::optional<QUrl> resolveFlameWarningUrl(const QUrl& url)
+{
+    if (url.scheme().isEmpty()) {
+        QString query = url.query(QUrl::FullyDecoded);
+
+        if (query.startsWith("remoteUrl=")) {
+            query.remove(0, 10);
+            return QUrl::fromPercentEncoding(query.toUtf8());
+        }
+    }
+
+    return {};
+}
 
 FlameModPage::FlameModPage(ModDownloadDialog* dialog, BaseInstance& instance) : ModPage(dialog, instance)
 {
@@ -65,6 +86,21 @@ FlameModPage::FlameModPage(ModDownloadDialog* dialog, BaseInstance& instance) : 
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+FlameMirrorModPage::FlameMirrorModPage(ModDownloadDialog* dialog, BaseInstance& instance) : ModPage(dialog, instance)
+{
+    m_model = new ModModel(instance, makeFlameMirrorAPI(), FlameMirror::debugName(), FlameMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &FlameMirrorModPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &FlameMirrorModPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &FlameMirrorModPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &FlameMirrorModPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 void FlameModPage::openUrl(const QUrl& url)
 {
     if (url.scheme().isEmpty()) {
@@ -76,6 +112,16 @@ void FlameModPage::openUrl(const QUrl& url)
             ModPage::openUrl({ QUrl::fromPercentEncoding(query.toUtf8()) });  // double decoding is necessary
             return;
         }
+    }
+
+    ModPage::openUrl(url);
+}
+
+void FlameMirrorModPage::openUrl(const QUrl& url)
+{
+    if (auto resolved = resolveFlameWarningUrl(url); resolved.has_value()) {
+        ModPage::openUrl(resolved.value());
+        return;
     }
 
     ModPage::openUrl(url);
@@ -99,6 +145,22 @@ FlameResourcePackPage::FlameResourcePackPage(ResourcePackDownloadDialog* dialog,
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+FlameMirrorResourcePackPage::FlameMirrorResourcePackPage(ResourcePackDownloadDialog* dialog, BaseInstance& instance)
+    : ResourcePackResourcePage(dialog, instance)
+{
+    m_model = new ResourcePackResourceModel(instance, makeFlameMirrorAPI(), FlameMirror::debugName(), FlameMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &FlameMirrorResourcePackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &FlameMirrorResourcePackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &FlameMirrorResourcePackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &FlameMirrorResourcePackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 void FlameResourcePackPage::openUrl(const QUrl& url)
 {
     if (url.scheme().isEmpty()) {
@@ -110,6 +172,16 @@ void FlameResourcePackPage::openUrl(const QUrl& url)
             ResourcePackResourcePage::openUrl({ QUrl::fromPercentEncoding(query.toUtf8()) });  // double decoding is necessary
             return;
         }
+    }
+
+    ResourcePackResourcePage::openUrl(url);
+}
+
+void FlameMirrorResourcePackPage::openUrl(const QUrl& url)
+{
+    if (auto resolved = resolveFlameWarningUrl(url); resolved.has_value()) {
+        ResourcePackResourcePage::openUrl(resolved.value());
+        return;
     }
 
     ResourcePackResourcePage::openUrl(url);
@@ -133,6 +205,22 @@ FlameTexturePackPage::FlameTexturePackPage(TexturePackDownloadDialog* dialog, Ba
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+FlameMirrorTexturePackPage::FlameMirrorTexturePackPage(TexturePackDownloadDialog* dialog, BaseInstance& instance)
+    : TexturePackResourcePage(dialog, instance)
+{
+    m_model = new FlameTexturePackModel(instance, makeFlameMirrorAPI(), FlameMirror::debugName(), FlameMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &FlameMirrorTexturePackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &FlameMirrorTexturePackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &FlameMirrorTexturePackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &FlameMirrorTexturePackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 void FlameTexturePackPage::openUrl(const QUrl& url)
 {
     if (url.scheme().isEmpty()) {
@@ -149,6 +237,16 @@ void FlameTexturePackPage::openUrl(const QUrl& url)
     TexturePackResourcePage::openUrl(url);
 }
 
+void FlameMirrorTexturePackPage::openUrl(const QUrl& url)
+{
+    if (auto resolved = resolveFlameWarningUrl(url); resolved.has_value()) {
+        ResourcePackResourcePage::openUrl(resolved.value());
+        return;
+    }
+
+    TexturePackResourcePage::openUrl(url);
+}
+
 void FlameDataPackPage::openUrl(const QUrl& url)
 {
     if (url.scheme().isEmpty()) {
@@ -160,6 +258,16 @@ void FlameDataPackPage::openUrl(const QUrl& url)
             DataPackResourcePage::openUrl({ QUrl::fromPercentEncoding(query.toUtf8()) });  // double decoding is necessary
             return;
         }
+    }
+
+    DataPackResourcePage::openUrl(url);
+}
+
+void FlameMirrorDataPackPage::openUrl(const QUrl& url)
+{
+    if (auto resolved = resolveFlameWarningUrl(url); resolved.has_value()) {
+        DataPackResourcePage::openUrl(resolved.value());
+        return;
     }
 
     DataPackResourcePage::openUrl(url);
@@ -183,6 +291,22 @@ FlameShaderPackPage::FlameShaderPackPage(ShaderPackDownloadDialog* dialog, BaseI
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+FlameMirrorShaderPackPage::FlameMirrorShaderPackPage(ShaderPackDownloadDialog* dialog, BaseInstance& instance)
+    : ShaderPackResourcePage(dialog, instance)
+{
+    m_model = new ShaderPackResourceModel(instance, makeFlameMirrorAPI(), FlameMirror::debugName(), FlameMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &FlameMirrorShaderPackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &FlameMirrorShaderPackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &FlameMirrorShaderPackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &FlameMirrorShaderPackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 FlameDataPackPage::FlameDataPackPage(DataPackDownloadDialog* dialog, BaseInstance& instance) : DataPackResourcePage(dialog, instance)
 {
     m_model = new DataPackResourceModel(instance, new FlameAPI(), Flame::debugName(), Flame::metaEntryBase());
@@ -200,6 +324,21 @@ FlameDataPackPage::FlameDataPackPage(DataPackDownloadDialog* dialog, BaseInstanc
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+FlameMirrorDataPackPage::FlameMirrorDataPackPage(DataPackDownloadDialog* dialog, BaseInstance& instance) : DataPackResourcePage(dialog, instance)
+{
+    m_model = new DataPackResourceModel(instance, makeFlameMirrorAPI(), FlameMirror::debugName(), FlameMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &FlameMirrorDataPackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &FlameMirrorDataPackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &FlameMirrorDataPackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &FlameMirrorDataPackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 void FlameShaderPackPage::openUrl(const QUrl& url)
 {
     if (url.scheme().isEmpty()) {
@@ -211,6 +350,16 @@ void FlameShaderPackPage::openUrl(const QUrl& url)
             ShaderPackResourcePage::openUrl({ QUrl::fromPercentEncoding(query.toUtf8()) });  // double decoding is necessary
             return;
         }
+    }
+
+    ShaderPackResourcePage::openUrl(url);
+}
+
+void FlameMirrorShaderPackPage::openUrl(const QUrl& url)
+{
+    if (auto resolved = resolveFlameWarningUrl(url); resolved.has_value()) {
+        ShaderPackResourcePage::openUrl(resolved.value());
+        return;
     }
 
     ShaderPackResourcePage::openUrl(url);
@@ -239,8 +388,33 @@ auto FlameDataPackPage::shouldDisplay() const -> bool
 {
     return true;
 }
+auto FlameMirrorModPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto FlameMirrorResourcePackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto FlameMirrorTexturePackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto FlameMirrorShaderPackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto FlameMirrorDataPackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
 
 std::unique_ptr<ModFilterWidget> FlameModPage::createFilterWidget()
+{
+    return ModFilterWidget::create(&static_cast<MinecraftInstance&>(m_baseInstance), false);
+}
+
+std::unique_ptr<ModFilterWidget> FlameMirrorModPage::createFilterWidget()
 {
     return ModFilterWidget::create(&static_cast<MinecraftInstance&>(m_baseInstance), false);
 }
@@ -249,6 +423,17 @@ void FlameModPage::prepareProviderCategories()
 {
     auto response = std::make_shared<QByteArray>();
     m_categoriesTask = FlameAPI::getModCategories(response);
+    connect(m_categoriesTask.get(), &Task::succeeded, [this, response]() {
+        auto categories = FlameAPI::loadModCategories(response);
+        m_filter_widget->setCategories(categories);
+    });
+    m_categoriesTask->start();
+};
+
+void FlameMirrorModPage::prepareProviderCategories()
+{
+    auto response = std::make_shared<QByteArray>();
+    m_categoriesTask = FlameAPI::getModCategories(response, BuildConfig.FLAME_MIRROR_BASE_URL);
     connect(m_categoriesTask.get(), &Task::succeeded, [this, response]() {
         auto categories = FlameAPI::loadModCategories(response);
         m_filter_widget->setCategories(categories);

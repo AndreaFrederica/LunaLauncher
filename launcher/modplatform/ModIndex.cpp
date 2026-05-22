@@ -62,6 +62,10 @@ const char* ProviderCapabilities::name(ResourceProvider p)
             return "curseforge";
         case ResourceProvider::HANGAR:
             return "hangar";
+        case ResourceProvider::MODRINTH_MIRROR:
+            return "modrinth-mirror";
+        case ResourceProvider::FLAME_MIRROR:
+            return "curseforge-mirror";
     }
     return {};
 }
@@ -75,6 +79,10 @@ QString ProviderCapabilities::readableName(ResourceProvider p)
             return "CurseForge";
         case ResourceProvider::HANGAR:
             return "Hangar";
+        case ResourceProvider::MODRINTH_MIRROR:
+            return "Modrinth (Mirror)";
+        case ResourceProvider::FLAME_MIRROR:
+            return "CurseForge (Mirror)";
     }
     return {};
 }
@@ -83,8 +91,10 @@ QStringList ProviderCapabilities::hashType(ResourceProvider p)
 {
     switch (p) {
         case ResourceProvider::MODRINTH:
+        case ResourceProvider::MODRINTH_MIRROR:
             return { "sha512", "sha1" };
         case ResourceProvider::FLAME:
+        case ResourceProvider::FLAME_MIRROR:
             // Try newer formats first, fall back to old format
             return { "sha1", "md5", "murmur2" };
         case ResourceProvider::HANGAR:
@@ -93,12 +103,36 @@ QStringList ProviderCapabilities::hashType(ResourceProvider p)
     return {};
 }
 
+ResourceProvider ProviderCapabilities::canonicalProvider(ResourceProvider p)
+{
+    switch (p) {
+        case ResourceProvider::MODRINTH_MIRROR:
+            return ResourceProvider::MODRINTH;
+        case ResourceProvider::FLAME_MIRROR:
+            return ResourceProvider::FLAME;
+        default:
+            return p;
+    }
+}
+
+bool ProviderCapabilities::isModrinth(ResourceProvider p)
+{
+    return canonicalProvider(p) == ResourceProvider::MODRINTH;
+}
+
+bool ProviderCapabilities::isFlame(ResourceProvider p)
+{
+    return canonicalProvider(p) == ResourceProvider::FLAME;
+}
+
 QString getMetaURL(ResourceProvider provider, QVariant projectID)
 {
     switch (provider) {
         case ModPlatform::ResourceProvider::FLAME:
+        case ModPlatform::ResourceProvider::FLAME_MIRROR:
             return "https://www.curseforge.com/projects/" + projectID.toString();
         case ModPlatform::ResourceProvider::MODRINTH:
+        case ModPlatform::ResourceProvider::MODRINTH_MIRROR:
             return "https://modrinth.com/mod/" + projectID.toString();
         case ModPlatform::ResourceProvider::HANGAR:
             return "https://hangar.papermc.io/" + projectID.toString();

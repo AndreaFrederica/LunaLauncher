@@ -18,7 +18,13 @@ static bool isOptedOut(const ModPlatform::IndexedVersion& ver)
 }
 
 FlameTexturePackModel::FlameTexturePackModel(const BaseInstance& base)
-    : TexturePackResourceModel(base, new FlameAPI, Flame::debugName(), Flame::metaEntryBase())
+    : FlameTexturePackModel(base, new FlameAPI, Flame::debugName(), Flame::metaEntryBase())
+{}
+
+FlameTexturePackModel::FlameTexturePackModel(const BaseInstance& base, ResourceAPI* api, QString debugName, QString metaEntryBase)
+    : TexturePackResourceModel(base, api, debugName, metaEntryBase)
+    , m_debugName(debugName + " (Model)")
+    , m_metaEntryBase(metaEntryBase)
 {}
 
 ResourceAPI::SearchArgs FlameTexturePackModel::createSearchArguments()

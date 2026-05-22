@@ -15,8 +15,12 @@
 
 class FlameAPI : public ResourceAPI {
    public:
-    QString getModFileChangelog(int modId, int fileId);
-    QString getModDescription(int modId);
+     explicit FlameAPI(QString baseUrl = BuildConfig.FLAME_BASE_URL,
+                       ModPlatform::ResourceProvider provider = ModPlatform::ResourceProvider::FLAME,
+                       QString cdnBaseUrl = {});
+
+     QString getModFileChangelog(int modId, int fileId) const;
+     QString getModDescription(int modId) const;
 
     std::optional<ModPlatform::IndexedVersion> getLatestVersion(QList<ModPlatform::IndexedVersion> versions,
                                                                 QList<ModPlatform::ModLoaderType> instanceLoaders,
@@ -28,8 +32,10 @@ class FlameAPI : public ResourceAPI {
     Task::Ptr getFiles(const QStringList& fileIds, std::shared_ptr<QByteArray> response) const;
     Task::Ptr getFile(const QString& addonId, const QString& fileId, std::shared_ptr<QByteArray> response) const;
 
-    static Task::Ptr getCategories(std::shared_ptr<QByteArray> response, ModPlatform::ResourceType type);
-    static Task::Ptr getModCategories(std::shared_ptr<QByteArray> response);
+    static Task::Ptr getCategories(std::shared_ptr<QByteArray> response,
+                                   ModPlatform::ResourceType type,
+                                   QString baseUrl = BuildConfig.FLAME_BASE_URL);
+    static Task::Ptr getModCategories(std::shared_ptr<QByteArray> response, QString baseUrl = BuildConfig.FLAME_BASE_URL);
     static QList<ModPlatform::Category> loadModCategories(std::shared_ptr<QByteArray> response);
 
     QList<ResourceAPI::SortingMethod> getSortingMethods() const override;
@@ -40,7 +46,15 @@ class FlameAPI : public ResourceAPI {
     }
 
    private:
-    static int getClassId(ModPlatform::ResourceType type)
+    QString maybeRewriteUrl(QString url) const;
+    void applyProvider(ModPlatform::IndexedPack& pack) const;
+    void applyProvider(ModPlatform::IndexedVersion& version) const;
+
+    QString m_baseUrl;
+    ModPlatform::ResourceProvider m_provider;
+    QString m_cdnBaseUrl;
+
+     static int getClassId(ModPlatform::ResourceType type)
     {
         switch (type) {
             default:
@@ -121,13 +135,13 @@ class FlameAPI : public ResourceAPI {
         if (args.versions.has_value() && !args.versions.value().empty())
             get_arguments.append(QString("gameVersion=%1").arg(args.versions.value().front().toString()));
 
-        return BuildConfig.FLAME_BASE_URL + "/mods/search?gameId=432&" + get_arguments.join('&');
+        return m_baseUrl + "/mods/search?gameId=432&" + get_arguments.join('&');
     }
 
     std::optional<QString> getVersionsURL(VersionSearchArgs const& args) const override
     {
         auto addonId = args.pack->addonId.toString();
-        QString url = QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files?pageSize=10000").arg(addonId);
+        QString url = QString(m_baseUrl + "/mods/%1/files?pageSize=10000").arg(addonId);
 
         if (args.mcVersions.has_value())
             url += QString("&gameVersion=%1").arg(args.mcVersions.value().front().toString());
@@ -141,10 +155,15 @@ class FlameAPI : public ResourceAPI {
     }
 
     QJsonArray documentToArray(QJsonDocument& obj) const override { return obj.object()["data"].toArray(); }
-    void loadIndexedPack(ModPlatform::IndexedPack& m, QJsonObject& obj) const override { FlameMod::loadIndexedPack(m, obj); }
+    void loadIndexedPack(ModPlatform::IndexedPack& m, QJsonObject& obj) const override
+    {
+        FlameMod::loadIndexedPack(m, obj);
+        applyProvider(m);
+    }
     ModPlatform::IndexedVersion loadIndexedPackVersion(QJsonObject& obj, ModPlatform::ResourceType resourceType) const override
     {
         auto arr = FlameMod::loadIndexedPackVersion(obj);
+        applyProvider(arr);
         if (resourceType != ModPlatform::ResourceType::TexturePack) {
             return arr;
         }
@@ -157,15 +176,20 @@ class FlameAPI : public ResourceAPI {
         }
         return {};
     };
-    void loadExtraPackInfo(ModPlatform::IndexedPack& m, [[maybe_unused]] QJsonObject&) const override { FlameMod::loadBody(m); }
+    void loadExtraPackInfo(ModPlatform::IndexedPack& m, [[maybe_unused]] QJsonObject&) const override
+    {
+        m.extraData.body = getModDescription(m.addonId.toInt());
+
+        if (!m.extraData.issuesUrl.isEmpty() || !m.extraData.sourceUrl.isEmpty() || !m.extraData.wikiUrl.isEmpty())
+            m.extraDataLoaded = true;
+    }
 
    private:
-    std::optional<QString> getInfoURL(QString const& id) const override { return QString(BuildConfig.FLAME_BASE_URL + "/mods/%1").arg(id); }
+    std::optional<QString> getInfoURL(QString const& id) const override { return QString(m_baseUrl + "/mods/%1").arg(id); }
     std::optional<QString> getDependencyURL(DependencySearchArgs const& args) const override
     {
         auto addonId = args.dependency.addonId.toString();
-        auto url =
-            QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files?pageSize=10000&gameVersion=%2").arg(addonId, args.mcVersion.toString());
+        auto url = QString(m_baseUrl + "/mods/%1/files?pageSize=10000&gameVersion=%2").arg(addonId, args.mcVersion.toString());
         if (args.loader && ModPlatform::hasSingleModLoaderSelected(args.loader)) {
             int mappedModLoader = getMappedModLoader(static_cast<ModPlatform::ModLoaderType>(static_cast<int>(args.loader)));
             url += QString("&modLoaderType=%1").arg(mappedModLoader);

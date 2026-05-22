@@ -155,6 +155,7 @@ void V1::updateModIndex(const QDir& index_dir, Mod& mod)
     toml::table update;
     switch (mod.provider) {
         case (ModPlatform::ResourceProvider::FLAME):
+        case (ModPlatform::ResourceProvider::FLAME_MIRROR):
             if (mod.file_id.toInt() == 0 || mod.project_id.toInt() == 0) {
                 qCritical() << QString("Did not write file %1 because missing information!").arg(normalized_fname);
                 return;
@@ -165,6 +166,7 @@ void V1::updateModIndex(const QDir& index_dir, Mod& mod)
             };
             break;
         case (ModPlatform::ResourceProvider::MODRINTH):
+        case (ModPlatform::ResourceProvider::MODRINTH_MIRROR):
             if (mod.mod_id().toString().isEmpty() || mod.version().toString().isEmpty()) {
                 qCritical() << QString("Did not write file %1 because missing information!").arg(normalized_fname);
                 return;
@@ -325,8 +327,16 @@ auto V1::getIndexForMod(const QDir& index_dir, QString slug) -> Mod
             mod.provider = Provider::FLAME;
             mod.file_id = intEntry(*mod_provider_table, "file-id");
             mod.project_id = intEntry(*mod_provider_table, "project-id");
+        } else if ((mod_provider_table = update_table[ModPlatform::ProviderCapabilities::name(Provider::FLAME_MIRROR)].as_table())) {
+            mod.provider = Provider::FLAME_MIRROR;
+            mod.file_id = intEntry(*mod_provider_table, "file-id");
+            mod.project_id = intEntry(*mod_provider_table, "project-id");
         } else if ((mod_provider_table = update_table[ModPlatform::ProviderCapabilities::name(Provider::MODRINTH)].as_table())) {
             mod.provider = Provider::MODRINTH;
+            mod.mod_id() = stringEntry(*mod_provider_table, "mod-id");
+            mod.version() = stringEntry(*mod_provider_table, "version");
+        } else if ((mod_provider_table = update_table[ModPlatform::ProviderCapabilities::name(Provider::MODRINTH_MIRROR)].as_table())) {
+            mod.provider = Provider::MODRINTH_MIRROR;
             mod.mod_id() = stringEntry(*mod_provider_table, "mod-id");
             mod.version() = stringEntry(*mod_provider_table, "version");
         } else {

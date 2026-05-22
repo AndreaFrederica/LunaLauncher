@@ -302,8 +302,12 @@ QList<BasePage*> ModDownloadDialog::getPages()
 
             if (ModrinthAPI::validateModLoaders(loaders))
                 pages.append(ModrinthModPage::create(this, *m_instance));
+            if (ModrinthAPI::validateModLoaders(loaders))
+                pages.append(ModrinthMirrorModPage::create(this, *m_instance));
             if (APPLICATION->capabilities() & Application::SupportsFlame && FlameAPI::validateModLoaders(loaders))
                 pages.append(FlameModPage::create(this, *m_instance));
+            if (FlameAPI::validateModLoaders(loaders))
+                pages.append(FlameMirrorModPage::create(this, *m_instance));
         }
         return pages;
     }
@@ -313,8 +317,12 @@ QList<BasePage*> ModDownloadDialog::getPages()
 
     if (ModrinthAPI::validateModLoaders(loaders))
         pages.append(ModrinthModPage::create(this, *m_instance));
+    if (ModrinthAPI::validateModLoaders(loaders))
+        pages.append(ModrinthMirrorModPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame && FlameAPI::validateModLoaders(loaders))
         pages.append(FlameModPage::create(this, *m_instance));
+    if (FlameAPI::validateModLoaders(loaders))
+        pages.append(FlameMirrorModPage::create(this, *m_instance));
 
     return pages;
 }
@@ -353,8 +361,10 @@ QList<BasePage*> ResourcePackDownloadDialog::getPages()
     QList<BasePage*> pages;
 
     pages.append(ModrinthResourcePackPage::create(this, *m_instance));
+    pages.append(ModrinthMirrorResourcePackPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame)
         pages.append(FlameResourcePackPage::create(this, *m_instance));
+    pages.append(FlameMirrorResourcePackPage::create(this, *m_instance));
 
     return pages;
 }
@@ -378,8 +388,10 @@ QList<BasePage*> TexturePackDownloadDialog::getPages()
     QList<BasePage*> pages;
 
     pages.append(ModrinthTexturePackPage::create(this, *m_instance));
+    pages.append(ModrinthMirrorTexturePackPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame)
         pages.append(FlameTexturePackPage::create(this, *m_instance));
+    pages.append(FlameMirrorTexturePackPage::create(this, *m_instance));
 
     return pages;
 }
@@ -402,8 +414,10 @@ QList<BasePage*> ShaderPackDownloadDialog::getPages()
 {
     QList<BasePage*> pages;
     pages.append(ModrinthShaderPackPage::create(this, *m_instance));
+    pages.append(ModrinthMirrorShaderPackPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame)
         pages.append(FlameShaderPackPage::create(this, *m_instance));
+    pages.append(FlameMirrorShaderPackPage::create(this, *m_instance));
     return pages;
 }
 
@@ -415,6 +429,12 @@ void ResourceDownloadDialog::setResourceMetadata(const std::shared_ptr<Metadata:
             break;
         case ModPlatform::ResourceProvider::FLAME:
             selectPage(Flame::id());
+            break;
+        case ModPlatform::ResourceProvider::MODRINTH_MIRROR:
+            selectPage(ModrinthMirror::id());
+            break;
+        case ModPlatform::ResourceProvider::FLAME_MIRROR:
+            selectPage(FlameMirror::id());
             break;
         case ModPlatform::ResourceProvider::HANGAR:
             selectPage(Hangar::id());
@@ -445,8 +465,10 @@ QList<BasePage*> DataPackDownloadDialog::getPages()
 {
     QList<BasePage*> pages;
     pages.append(ModrinthDataPackPage::create(this, *m_instance));
+    pages.append(ModrinthMirrorDataPackPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame)
         pages.append(FlameDataPackPage::create(this, *m_instance));
+    pages.append(FlameMirrorDataPackPage::create(this, *m_instance));
     return pages;
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "modplatform/CheckUpdateTask.h"
+#include "modplatform/flame/FlameAPI.h"
 
 class FlameCheckUpdate : public CheckUpdateTask {
     Q_OBJECT
@@ -9,9 +10,8 @@ class FlameCheckUpdate : public CheckUpdateTask {
     FlameCheckUpdate(QList<Resource*>& resources,
                      std::list<Version>& mcVersions,
                      QList<ModPlatform::ModLoaderType> loadersList,
-                     std::shared_ptr<ResourceFolderModel> resourceModel)
-        : CheckUpdateTask(resources, mcVersions, std::move(loadersList), std::move(resourceModel))
-    {}
+                     std::shared_ptr<ResourceFolderModel> resourceModel,
+                     ModPlatform::ResourceProvider provider = ModPlatform::ResourceProvider::FLAME);
 
    public slots:
     bool abort() override;
@@ -24,6 +24,8 @@ class FlameCheckUpdate : public CheckUpdateTask {
 
    private:
     Task::Ptr m_task = nullptr;
+    ModPlatform::ResourceProvider m_provider;
+    FlameAPI m_api;
 
     QHash<Resource*, QString> m_blocked;
 };

@@ -47,12 +47,16 @@ class ResourceUpdateDialog final : public ReviewMessageBox {
 
     shared_qobject_ptr<ModrinthCheckUpdate> m_modrinthCheckTask;
     shared_qobject_ptr<FlameCheckUpdate> m_flameCheckTask;
+    shared_qobject_ptr<ModrinthCheckUpdate> m_modrinthMirrorCheckTask;
+    shared_qobject_ptr<FlameCheckUpdate> m_flameMirrorCheckTask;
 
     const std::shared_ptr<ResourceFolderModel> m_resourceModel;
 
     QList<Resource*>& m_candidates;
     QList<Resource*> m_modrinthToUpdate;
     QList<Resource*> m_flameToUpdate;
+    QList<Resource*> m_modrinthMirrorToUpdate;
+    QList<Resource*> m_flameMirrorToUpdate;
 
     ConcurrentTask::Ptr m_secondTryMetadata;
     QList<std::tuple<Resource*, QString>> m_failedMetadata;

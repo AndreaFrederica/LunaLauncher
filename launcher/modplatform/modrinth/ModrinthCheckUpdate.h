@@ -1,6 +1,7 @@
 #pragma once
 
 #include "modplatform/CheckUpdateTask.h"
+#include "modplatform/modrinth/ModrinthAPI.h"
 
 class ModrinthCheckUpdate : public CheckUpdateTask {
     Q_OBJECT
@@ -9,7 +10,8 @@ class ModrinthCheckUpdate : public CheckUpdateTask {
     ModrinthCheckUpdate(QList<Resource*>& resources,
                         std::list<Version>& mcVersions,
                         QList<ModPlatform::ModLoaderType> loadersList,
-                        std::shared_ptr<ResourceFolderModel> resourceModel);
+                        std::shared_ptr<ResourceFolderModel> resourceModel,
+                        ModPlatform::ResourceProvider provider = ModPlatform::ResourceProvider::MODRINTH);
 
    public slots:
     bool abort() override;
@@ -23,7 +25,9 @@ class ModrinthCheckUpdate : public CheckUpdateTask {
    private:
     Task::Ptr m_job = nullptr;
     QHash<QString, Resource*> m_mappings;
+    ModPlatform::ResourceProvider m_provider;
     QString m_hashType;
+    ModrinthAPI m_api;
     int m_loaderIdx = 0;
     int m_initialSize = 0;
 };

@@ -71,6 +71,29 @@ static inline QString metaEntryBase()
 }
 }  // namespace Modrinth
 
+namespace ModrinthMirror {
+static inline QString displayName()
+{
+    return "Modrinth (Mirror)";
+}
+static inline QIcon icon()
+{
+    return QIcon::fromTheme("modrinth");
+}
+static inline QString id()
+{
+    return "modrinth-mirror";
+}
+static inline QString debugName()
+{
+    return "Modrinth Mirror";
+}
+static inline QString metaEntryBase()
+{
+    return "ModrinthMirrorPacks";
+}
+}  // namespace ModrinthMirror
+
 class ModrinthModPage : public ModPage {
     Q_OBJECT
 
@@ -188,6 +211,127 @@ class ModrinthDataPackPage : public DataPackResourcePage {
     inline auto id() const -> QString override { return Modrinth::id(); }
     inline auto debugName() const -> QString override { return Modrinth::debugName(); }
     inline auto metaEntryBase() const -> QString override { return Modrinth::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+};
+
+class ModrinthMirrorModPage : public ModPage {
+    Q_OBJECT
+
+   public:
+    static ModrinthMirrorModPage* create(ModDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return ModPage::create<ModrinthMirrorModPage>(dialog, instance);
+    }
+
+    ModrinthMirrorModPage(ModDownloadDialog* dialog, BaseInstance& instance);
+    ~ModrinthMirrorModPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return ModrinthMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return ModrinthMirror::icon(); }
+    inline auto id() const -> QString override { return ModrinthMirror::id(); }
+    inline auto debugName() const -> QString override { return ModrinthMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return ModrinthMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return "Mod-platform"; }
+
+    std::unique_ptr<ModFilterWidget> createFilterWidget() override;
+
+   protected:
+    virtual void prepareProviderCategories() override;
+    Task::Ptr m_categoriesTask;
+};
+
+class ModrinthMirrorResourcePackPage : public ResourcePackResourcePage {
+    Q_OBJECT
+
+   public:
+    static ModrinthMirrorResourcePackPage* create(ResourcePackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return ResourcePackResourcePage::create<ModrinthMirrorResourcePackPage>(dialog, instance);
+    }
+
+    ModrinthMirrorResourcePackPage(ResourcePackDownloadDialog* dialog, BaseInstance& instance);
+    ~ModrinthMirrorResourcePackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return ModrinthMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return ModrinthMirror::icon(); }
+    inline auto id() const -> QString override { return ModrinthMirror::id(); }
+    inline auto debugName() const -> QString override { return ModrinthMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return ModrinthMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+};
+
+class ModrinthMirrorTexturePackPage : public TexturePackResourcePage {
+    Q_OBJECT
+
+   public:
+    static ModrinthMirrorTexturePackPage* create(TexturePackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return TexturePackResourcePage::create<ModrinthMirrorTexturePackPage>(dialog, instance);
+    }
+
+    ModrinthMirrorTexturePackPage(TexturePackDownloadDialog* dialog, BaseInstance& instance);
+    ~ModrinthMirrorTexturePackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return ModrinthMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return ModrinthMirror::icon(); }
+    inline auto id() const -> QString override { return ModrinthMirror::id(); }
+    inline auto debugName() const -> QString override { return ModrinthMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return ModrinthMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+};
+
+class ModrinthMirrorShaderPackPage : public ShaderPackResourcePage {
+    Q_OBJECT
+
+   public:
+    static ModrinthMirrorShaderPackPage* create(ShaderPackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return ShaderPackResourcePage::create<ModrinthMirrorShaderPackPage>(dialog, instance);
+    }
+
+    ModrinthMirrorShaderPackPage(ShaderPackDownloadDialog* dialog, BaseInstance& instance);
+    ~ModrinthMirrorShaderPackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return ModrinthMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return ModrinthMirror::icon(); }
+    inline auto id() const -> QString override { return ModrinthMirror::id(); }
+    inline auto debugName() const -> QString override { return ModrinthMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return ModrinthMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+};
+
+class ModrinthMirrorDataPackPage : public DataPackResourcePage {
+    Q_OBJECT
+
+   public:
+    static ModrinthMirrorDataPackPage* create(DataPackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return DataPackResourcePage::create<ModrinthMirrorDataPackPage>(dialog, instance);
+    }
+
+    ModrinthMirrorDataPackPage(DataPackDownloadDialog* dialog, BaseInstance& instance);
+    ~ModrinthMirrorDataPackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return ModrinthMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return ModrinthMirror::icon(); }
+    inline auto id() const -> QString override { return ModrinthMirror::id(); }
+    inline auto debugName() const -> QString override { return ModrinthMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return ModrinthMirror::metaEntryBase(); }
 
     inline auto helpPage() const -> QString override { return ""; }
 };

@@ -37,6 +37,7 @@
  */
 
 #include "ModrinthResourcePages.h"
+#include "BuildConfig.h"
 #include "ui/pages/modplatform/DataPackModel.h"
 #include "ui_ResourcePage.h"
 
@@ -45,6 +46,12 @@
 #include "ui/dialogs/ResourceDownloadDialog.h"
 
 namespace ResourceDownload {
+
+static ModrinthAPI* makeModrinthMirrorAPI()
+{
+    return new ModrinthAPI(BuildConfig.MODRINTH_MIRROR_URL, ModPlatform::ResourceProvider::MODRINTH_MIRROR,
+                           BuildConfig.MCIMIRROR_BASE_URL);
+}
 
 ModrinthModPage::ModrinthModPage(ModDownloadDialog* dialog, BaseInstance& instance) : ModPage(dialog, instance)
 {
@@ -59,6 +66,21 @@ ModrinthModPage::ModrinthModPage(ModDownloadDialog* dialog, BaseInstance& instan
     connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthModPage::onSelectionChanged);
     connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthModPage::onVersionSelectionChanged);
     connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthModPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
+ModrinthMirrorModPage::ModrinthMirrorModPage(ModDownloadDialog* dialog, BaseInstance& instance) : ModPage(dialog, instance)
+{
+    m_model = new ModModel(instance, makeModrinthMirrorAPI(), ModrinthMirror::debugName(), ModrinthMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorModPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthMirrorModPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorModPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthMirrorModPage::onResourceSelected);
 
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
@@ -81,6 +103,22 @@ ModrinthResourcePackPage::ModrinthResourcePackPage(ResourcePackDownloadDialog* d
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+ModrinthMirrorResourcePackPage::ModrinthMirrorResourcePackPage(ResourcePackDownloadDialog* dialog, BaseInstance& instance)
+    : ResourcePackResourcePage(dialog, instance)
+{
+    m_model = new ResourcePackResourceModel(instance, makeModrinthMirrorAPI(), ModrinthMirror::debugName(), ModrinthMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorResourcePackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthMirrorResourcePackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorResourcePackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthMirrorResourcePackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 ModrinthTexturePackPage::ModrinthTexturePackPage(TexturePackDownloadDialog* dialog, BaseInstance& instance)
     : TexturePackResourcePage(dialog, instance)
 {
@@ -95,6 +133,22 @@ ModrinthTexturePackPage::ModrinthTexturePackPage(TexturePackDownloadDialog* dial
     connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthTexturePackPage::onSelectionChanged);
     connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthTexturePackPage::onVersionSelectionChanged);
     connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthTexturePackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
+ModrinthMirrorTexturePackPage::ModrinthMirrorTexturePackPage(TexturePackDownloadDialog* dialog, BaseInstance& instance)
+    : TexturePackResourcePage(dialog, instance)
+{
+    m_model = new TexturePackResourceModel(instance, makeModrinthMirrorAPI(), ModrinthMirror::debugName(), ModrinthMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorTexturePackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthMirrorTexturePackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorTexturePackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthMirrorTexturePackPage::onResourceSelected);
 
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
@@ -117,6 +171,22 @@ ModrinthShaderPackPage::ModrinthShaderPackPage(ShaderPackDownloadDialog* dialog,
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
 
+ModrinthMirrorShaderPackPage::ModrinthMirrorShaderPackPage(ShaderPackDownloadDialog* dialog, BaseInstance& instance)
+    : ShaderPackResourcePage(dialog, instance)
+{
+    m_model = new ShaderPackResourceModel(instance, makeModrinthMirrorAPI(), ModrinthMirror::debugName(), ModrinthMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorShaderPackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthMirrorShaderPackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorShaderPackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthMirrorShaderPackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
 ModrinthDataPackPage::ModrinthDataPackPage(DataPackDownloadDialog* dialog, BaseInstance& instance) : DataPackResourcePage(dialog, instance)
 {
     m_model = new DataPackResourceModel(instance, new ModrinthAPI(), Modrinth::debugName(), Modrinth::metaEntryBase());
@@ -130,6 +200,21 @@ ModrinthDataPackPage::ModrinthDataPackPage(DataPackDownloadDialog* dialog, BaseI
     connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthDataPackPage::onSelectionChanged);
     connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthDataPackPage::onVersionSelectionChanged);
     connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthDataPackPage::onResourceSelected);
+
+    m_ui->packDescription->setMetaEntry(metaEntryBase());
+}
+
+ModrinthMirrorDataPackPage::ModrinthMirrorDataPackPage(DataPackDownloadDialog* dialog, BaseInstance& instance) : DataPackResourcePage(dialog, instance)
+{
+    m_model = new DataPackResourceModel(instance, makeModrinthMirrorAPI(), ModrinthMirror::debugName(), ModrinthMirror::metaEntryBase());
+    m_ui->packView->setModel(m_model);
+
+    addSortings();
+
+    connect(m_ui->sortByBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorDataPackPage::triggerSearch);
+    connect(m_ui->packView->selectionModel(), &QItemSelectionModel::currentChanged, this, &ModrinthMirrorDataPackPage::onSelectionChanged);
+    connect(m_ui->versionSelectionBox, &QComboBox::currentIndexChanged, this, &ModrinthMirrorDataPackPage::onVersionSelectionChanged);
+    connect(m_ui->resourceSelectionButton, &QPushButton::clicked, this, &ModrinthMirrorDataPackPage::onResourceSelected);
 
     m_ui->packDescription->setMetaEntry(metaEntryBase());
 }
@@ -157,8 +242,33 @@ auto ModrinthDataPackPage::shouldDisplay() const -> bool
 {
     return true;
 }
+auto ModrinthMirrorModPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto ModrinthMirrorResourcePackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto ModrinthMirrorTexturePackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto ModrinthMirrorShaderPackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
+auto ModrinthMirrorDataPackPage::shouldDisplay() const -> bool
+{
+    return true;
+}
 
 std::unique_ptr<ModFilterWidget> ModrinthModPage::createFilterWidget()
+{
+    return ModFilterWidget::create(&static_cast<MinecraftInstance&>(m_baseInstance), true);
+}
+
+std::unique_ptr<ModFilterWidget> ModrinthMirrorModPage::createFilterWidget()
 {
     return ModFilterWidget::create(&static_cast<MinecraftInstance&>(m_baseInstance), true);
 }
@@ -167,6 +277,17 @@ void ModrinthModPage::prepareProviderCategories()
 {
     auto response = std::make_shared<QByteArray>();
     m_categoriesTask = ModrinthAPI::getModCategories(response);
+    connect(m_categoriesTask.get(), &Task::succeeded, [this, response]() {
+        auto categories = ModrinthAPI::loadModCategories(response);
+        m_filter_widget->setCategories(categories);
+    });
+    m_categoriesTask->start();
+};
+
+void ModrinthMirrorModPage::prepareProviderCategories()
+{
+    auto response = std::make_shared<QByteArray>();
+    m_categoriesTask = ModrinthAPI::getModCategories(response, BuildConfig.MODRINTH_MIRROR_URL);
     connect(m_categoriesTask.get(), &Task::succeeded, [this, response]() {
         auto categories = ModrinthAPI::loadModCategories(response);
         m_filter_widget->setCategories(categories);

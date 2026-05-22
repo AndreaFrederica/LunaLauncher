@@ -188,9 +188,12 @@ class Config {
 
     QString MODRINTH_STAGING_URL = "https://staging-api.modrinth.com/v2";
     QString MODRINTH_PROD_URL = "https://api.modrinth.com/v2";
+    QString MCIMIRROR_BASE_URL = "https://mod.mcimirror.top";
+    QString MODRINTH_MIRROR_URL = "https://mod.mcimirror.top/modrinth/v2";
     QStringList MODRINTH_MRPACK_HOSTS{ "cdn.modrinth.com", "github.com", "raw.githubusercontent.com", "gitlab.com" };
 
     QString FLAME_BASE_URL = "https://api.curseforge.com/v1";
+    QString FLAME_MIRROR_BASE_URL = "https://mod.mcimirror.top/curseforge/v1";
 
     QString versionString() const;
     /**

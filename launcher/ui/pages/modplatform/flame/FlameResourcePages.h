@@ -73,6 +73,29 @@ static inline QString metaEntryBase()
 }
 }  // namespace Flame
 
+namespace FlameMirror {
+static inline QString displayName()
+{
+    return "CurseForge (Mirror)";
+}
+static inline QIcon icon()
+{
+    return QIcon::fromTheme("flame");
+}
+static inline QString id()
+{
+    return "curseforge-mirror";
+}
+static inline QString debugName()
+{
+    return "Flame Mirror";
+}
+static inline QString metaEntryBase()
+{
+    return "FlameMirrorMods";
+}
+}  // namespace FlameMirror
+
 class FlameModPage : public ModPage {
     Q_OBJECT
 
@@ -199,6 +222,138 @@ class FlameDataPackPage : public DataPackResourcePage {
     inline auto id() const -> QString override { return Flame::id(); }
     inline auto debugName() const -> QString override { return Flame::debugName(); }
     inline auto metaEntryBase() const -> QString override { return Flame::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+
+    void openUrl(const QUrl& url) override;
+};
+
+class FlameMirrorModPage : public ModPage {
+    Q_OBJECT
+
+   public:
+    static FlameMirrorModPage* create(ModDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return ModPage::create<FlameMirrorModPage>(dialog, instance);
+    }
+
+    FlameMirrorModPage(ModDownloadDialog* dialog, BaseInstance& instance);
+    ~FlameMirrorModPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return FlameMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return FlameMirror::icon(); }
+    inline auto id() const -> QString override { return FlameMirror::id(); }
+    inline auto debugName() const -> QString override { return FlameMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return FlameMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return "Mod-platform"; }
+
+    void openUrl(const QUrl& url) override;
+    std::unique_ptr<ModFilterWidget> createFilterWidget() override;
+
+   protected:
+    virtual void prepareProviderCategories() override;
+
+   private:
+    Task::Ptr m_categoriesTask;
+};
+
+class FlameMirrorResourcePackPage : public ResourcePackResourcePage {
+    Q_OBJECT
+
+   public:
+    static FlameMirrorResourcePackPage* create(ResourcePackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return ResourcePackResourcePage::create<FlameMirrorResourcePackPage>(dialog, instance);
+    }
+
+    FlameMirrorResourcePackPage(ResourcePackDownloadDialog* dialog, BaseInstance& instance);
+    ~FlameMirrorResourcePackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return FlameMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return FlameMirror::icon(); }
+    inline auto id() const -> QString override { return FlameMirror::id(); }
+    inline auto debugName() const -> QString override { return FlameMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return FlameMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+
+    void openUrl(const QUrl& url) override;
+};
+
+class FlameMirrorTexturePackPage : public TexturePackResourcePage {
+    Q_OBJECT
+
+   public:
+    static FlameMirrorTexturePackPage* create(TexturePackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return TexturePackResourcePage::create<FlameMirrorTexturePackPage>(dialog, instance);
+    }
+
+    FlameMirrorTexturePackPage(TexturePackDownloadDialog* dialog, BaseInstance& instance);
+    ~FlameMirrorTexturePackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return FlameMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return FlameMirror::icon(); }
+    inline auto id() const -> QString override { return FlameMirror::id(); }
+    inline auto debugName() const -> QString override { return FlameMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return FlameMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+
+    void openUrl(const QUrl& url) override;
+};
+
+class FlameMirrorShaderPackPage : public ShaderPackResourcePage {
+    Q_OBJECT
+
+   public:
+    static FlameMirrorShaderPackPage* create(ShaderPackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return ShaderPackResourcePage::create<FlameMirrorShaderPackPage>(dialog, instance);
+    }
+
+    FlameMirrorShaderPackPage(ShaderPackDownloadDialog* dialog, BaseInstance& instance);
+    ~FlameMirrorShaderPackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return FlameMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return FlameMirror::icon(); }
+    inline auto id() const -> QString override { return FlameMirror::id(); }
+    inline auto debugName() const -> QString override { return FlameMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return FlameMirror::metaEntryBase(); }
+
+    inline auto helpPage() const -> QString override { return ""; }
+
+    void openUrl(const QUrl& url) override;
+};
+
+class FlameMirrorDataPackPage : public DataPackResourcePage {
+    Q_OBJECT
+
+   public:
+    static FlameMirrorDataPackPage* create(DataPackDownloadDialog* dialog, BaseInstance& instance)
+    {
+        return DataPackResourcePage::create<FlameMirrorDataPackPage>(dialog, instance);
+    }
+
+    FlameMirrorDataPackPage(DataPackDownloadDialog* dialog, BaseInstance& instance);
+    ~FlameMirrorDataPackPage() override = default;
+
+    bool shouldDisplay() const override;
+
+    inline auto displayName() const -> QString override { return FlameMirror::displayName(); }
+    inline auto icon() const -> QIcon override { return FlameMirror::icon(); }
+    inline auto id() const -> QString override { return FlameMirror::id(); }
+    inline auto debugName() const -> QString override { return FlameMirror::debugName(); }
+    inline auto metaEntryBase() const -> QString override { return FlameMirror::metaEntryBase(); }
 
     inline auto helpPage() const -> QString override { return ""; }
 

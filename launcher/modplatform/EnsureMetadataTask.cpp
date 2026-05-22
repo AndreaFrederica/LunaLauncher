@@ -4,6 +4,7 @@
 #include <QDebug>
 
 #include "Application.h"
+#include "BuildConfig.h"
 #include "Json.h"
 
 #include "QObjectPtr.h"
@@ -16,8 +17,21 @@
 #include "modplatform/modrinth/ModrinthAPI.h"
 #include "modplatform/modrinth/ModrinthPackIndex.h"
 
-static ModrinthAPI modrinth_api;
-static FlameAPI flame_api;
+static ModrinthAPI& modrinthAPIFor(ModPlatform::ResourceProvider provider)
+{
+    static ModrinthAPI modrinth_api;
+    static ModrinthAPI modrinth_mirror_api(BuildConfig.MODRINTH_MIRROR_URL, ModPlatform::ResourceProvider::MODRINTH_MIRROR,
+                                          BuildConfig.MCIMIRROR_BASE_URL);
+    return provider == ModPlatform::ResourceProvider::MODRINTH_MIRROR ? modrinth_mirror_api : modrinth_api;
+}
+
+static FlameAPI& flameAPIFor(ModPlatform::ResourceProvider provider)
+{
+    static FlameAPI flame_api;
+    static FlameAPI flame_mirror_api(BuildConfig.FLAME_MIRROR_BASE_URL, ModPlatform::ResourceProvider::FLAME_MIRROR,
+                                     BuildConfig.MCIMIRROR_BASE_URL);
+    return provider == ModPlatform::ResourceProvider::FLAME_MIRROR ? flame_mirror_api : flame_api;
+}
 
 EnsureMetadataTask::EnsureMetadataTask(Resource* resource, QDir dir, ModPlatform::ResourceProvider prov)
     : Task(), m_indexDir(dir), m_provider(prov), m_hashingTask(nullptr), m_currentTask(nullptr)
@@ -115,9 +129,11 @@ void EnsureMetadataTask::executeTask()
 
     switch (m_provider) {
         case (ModPlatform::ResourceProvider::MODRINTH):
+        case (ModPlatform::ResourceProvider::MODRINTH_MIRROR):
             version_task = modrinthVersionsTask();
             break;
         case (ModPlatform::ResourceProvider::FLAME):
+        case (ModPlatform::ResourceProvider::FLAME_MIRROR):
             version_task = flameVersionsTask();
             break;
         case (ModPlatform::ResourceProvider::HANGAR):
@@ -139,9 +155,11 @@ void EnsureMetadataTask::executeTask()
 
         switch (m_provider) {
             case (ModPlatform::ResourceProvider::MODRINTH):
+            case (ModPlatform::ResourceProvider::MODRINTH_MIRROR):
                 project_task = modrinthProjectsTask();
                 break;
             case (ModPlatform::ResourceProvider::FLAME):
+            case (ModPlatform::ResourceProvider::FLAME_MIRROR):
                 project_task = flameProjectsTask();
                 break;
             case (ModPlatform::ResourceProvider::HANGAR):
@@ -220,10 +238,10 @@ void EnsureMetadataTask::emitFail(Resource* resource, QString key, RemoveFromLis
 
 Task::Ptr EnsureMetadataTask::modrinthVersionsTask()
 {
-    auto hash_type = ModPlatform::ProviderCapabilities::hashType(ModPlatform::ResourceProvider::MODRINTH).first();
+    auto hash_type = ModPlatform::ProviderCapabilities::hashType(m_provider).first();
 
     auto response = std::make_shared<QByteArray>();
-    auto ver_task = modrinth_api.currentVersions(m_resources.keys(), hash_type, response);
+    auto ver_task = modrinthAPIFor(m_provider).currentVersions(m_resources.keys(), hash_type, response);
 
     // Prevents unfortunate timings when aborting the task
     if (!ver_task)
@@ -251,7 +269,7 @@ Task::Ptr EnsureMetadataTask::modrinthVersionsTask()
                     setStatus(tr("Parsing API response from Modrinth for '%1'...").arg(resource->name()));
                     qDebug() << "Getting version for" << resource->name() << "from Modrinth";
 
-                    m_tempVersions.insert(hash, Modrinth::loadIndexedPackVersion(entry));
+                    m_tempVersions.insert(hash, modrinthAPIFor(m_provider).loadIndexedPackVersion(entry, ModPlatform::ResourceType::Mod));
                 } catch (Json::JsonException& e) {
                     qDebug() << e.cause();
                     qDebug() << entries;
@@ -280,9 +298,9 @@ Task::Ptr EnsureMetadataTask::modrinthProjectsTask()
     if (addonIds.isEmpty()) {
         qWarning() << "No addonId found!";
     } else if (addonIds.size() == 1) {
-        proj_task = modrinth_api.getProject(*addonIds.keyBegin(), response);
+        proj_task = modrinthAPIFor(m_provider).getProject(*addonIds.keyBegin(), response);
     } else {
-        proj_task = modrinth_api.getProjects(addonIds.keys(), response);
+        proj_task = modrinthAPIFor(m_provider).getProjects(addonIds.keys(), response);
     }
 
     // Prevents unfortunate timings when aborting the task
@@ -317,7 +335,7 @@ Task::Ptr EnsureMetadataTask::modrinthProjectsTask()
             try {
                 auto entry_obj = Json::requireObject(entry);
 
-                Modrinth::loadIndexedPack(pack, entry_obj);
+                modrinthAPIFor(m_provider).loadIndexedPack(pack, entry_obj);
             } catch (Json::JsonException& e) {
                 qDebug() << e.cause();
                 qDebug() << doc;
@@ -355,7 +373,7 @@ Task::Ptr EnsureMetadataTask::flameVersionsTask()
         fingerprints.push_back(murmur.toUInt());
     }
 
-    auto ver_task = flame_api.matchFingerprints(fingerprints, response);
+    auto ver_task = flameAPIFor(m_provider).matchFingerprints(fingerprints, response);
 
     connect(ver_task.get(), &Task::succeeded, this, [this, response] {
         QJsonParseError parse_error{};
@@ -399,7 +417,7 @@ Task::Ptr EnsureMetadataTask::flameVersionsTask()
 
                 setStatus(tr("Parsing API response from CurseForge for '%1'...").arg((*resource)->name()));
 
-                m_tempVersions.insert(fingerprint, FlameMod::loadIndexedPackVersion(file_obj));
+                m_tempVersions.insert(fingerprint, flameAPIFor(m_provider).loadIndexedPackVersion(file_obj, ModPlatform::ResourceType::Mod));
             }
 
         } catch (Json::JsonException& e) {
@@ -430,9 +448,9 @@ Task::Ptr EnsureMetadataTask::flameProjectsTask()
     if (addonIds.isEmpty()) {
         qWarning() << "No addonId found!";
     } else if (addonIds.size() == 1) {
-        proj_task = flame_api.getProject(*addonIds.keyBegin(), response);
+        proj_task = flameAPIFor(m_provider).getProject(*addonIds.keyBegin(), response);
     } else {
-        proj_task = flame_api.getProjects(addonIds.keys(), response);
+        proj_task = flameAPIFor(m_provider).getProjects(addonIds.keys(), response);
     }
 
     // Prevents unfortunate timings when aborting the task
@@ -467,7 +485,7 @@ Task::Ptr EnsureMetadataTask::flameProjectsTask()
                 try {
                     setStatus(tr("Parsing API response from CurseForge for '%1'...").arg(resource->name()));
 
-                    FlameMod::loadIndexedPack(pack, entry_obj);
+                    flameAPIFor(m_provider).loadIndexedPack(pack, entry_obj);
 
                 } catch (Json::JsonException& e) {
                     qDebug() << e.cause();

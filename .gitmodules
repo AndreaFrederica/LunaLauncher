@@ -1,3 +1,27 @@
 [submodule "libraries/libnbtplusplus"]
 	path = libraries/libnbtplusplus
 	url = https://github.com/PrismLauncher/libnbtplusplus.git
+
+[submodule "flatpak/shared-modules"]
+	path = flatpak/shared-modules
+	url = https://github.com/flathub/shared-modules.git
+
+[submodule "tools/Msys2Manager"]
+	path = tools/Msys2Manager
+	url = https://github.com/AndreaFrederica/Msys2Manager.git
+
+[submodule "libraries/qtermwidget"]
+	path = libraries/qtermwidget
+	url = https://github.com/AndreaFrederica/-qtermwidget.git
+
+[submodule "website"]
+	path = website
+	url = https://github.com/AndreaFrederica/LunaLauncher_webpage.git
+
+[submodule "libraries/quickjs-ng"]
+	path = libraries/quickjs-ng
+	url = https://github.com/AndreaFrederica/quickjs-ng.git
+
+[submodule "libraries/qt-qrcodegenerator/QR-Code-generator"]
+	path = libraries/qt-qrcodegenerator/QR-Code-generator
+	url = https://github.com/nayuki/QR-Code-generator.git

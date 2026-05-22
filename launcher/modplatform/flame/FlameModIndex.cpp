@@ -7,7 +7,20 @@
 #include "modplatform/ModIndex.h"
 #include "modplatform/flame/FlameAPI.h"
 
+#include <QUrl>
+
 static FlameAPI api;
+
+static QString inferForgeCdnFileUrl(int fileId, const QString& fileName)
+{
+    if (fileId <= 0 || fileName.isEmpty())
+        return {};
+
+    return QString("https://edge.forgecdn.net/files/%1/%2/%3")
+        .arg(fileId / 1000)
+        .arg(fileId % 1000)
+        .arg(QString::fromLatin1(QUrl::toPercentEncoding(fileName)));
+}
 
 void FlameMod::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject& obj)
 {
@@ -140,8 +153,10 @@ auto FlameMod::loadIndexedPackVersion(QJsonObject& obj, bool load_changelog) -> 
     file.date = Json::requireString(obj, "fileDate");
     file.version = Json::requireString(obj, "displayName");
     file.downloadUrl = obj["downloadUrl"].toString();
-    file.fileName = Json::requireString(obj, "fileName");
-    file.fileName = FS::RemoveInvalidPathChars(file.fileName);
+    const auto originalFileName = Json::requireString(obj, "fileName");
+    if (file.downloadUrl.isEmpty() && obj["isAvailable"].toBool(true))
+        file.downloadUrl = inferForgeCdnFileUrl(file.fileId.toInt(), originalFileName);
+    file.fileName = FS::RemoveInvalidPathChars(originalFileName);
 
     ModPlatform::IndexedVersionType ver_type;
     switch (Json::requireInteger(obj, "releaseType")) {

@@ -15,8 +15,8 @@ index 6fd7d9c..085d3a6 100644
      xcheck_add_c_compiler_flag(-Wno-maybe-uninitialized)
  endif()
  
-+# Fedora 44 currently builds QuickJS-NG with GCC 16, which triggers stricter
-+# diagnostics on third-party code that are not actionable in LunaLauncher.
++# Recent Fedora toolchains can trigger stricter diagnostics on third-party
++# QuickJS-NG code that are not actionable in LunaLauncher packaging.
 +if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
 +    xcheck_add_c_compiler_flag(-Wno-error=discarded-qualifiers)
 +    xcheck_add_c_compiler_flag(-Wno-error=maybe-uninitialized)

@@ -3,7 +3,6 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 spec_file="$repo_root/packaging/fedora/lunalauncher.spec"
-patches_dir="$repo_root/packaging/fedora/patches"
 version="$(awk '/^Version:/ { print $2; exit }' "$spec_file")"
 archive_name="lunalauncher-${version}"
 output_dir="${1:-$repo_root/dist/fedora}"
@@ -29,8 +28,15 @@ fi
 
 mkdir -p "$staging_dir/$archive_name"
 if [[ "$source_mode" == "worktree" ]]; then
-    git -C "$repo_root" ls-files -z --cached --modified | \
-        rsync -a --from0 --files-from=- "$repo_root"/ "$staging_dir/$archive_name"/
+    git -C "$repo_root" ls-files -z --cached --modified --others --exclude-standard | \
+        while IFS= read -r -d '' path; do
+            if [[ ! -e "$repo_root/$path" ]]; then
+                continue
+            fi
+
+            mkdir -p "$staging_dir/$archive_name/$(dirname "$path")"
+            cp -a "$repo_root/$path" "$staging_dir/$archive_name/$path"
+        done
 
     git -C "$repo_root" submodule status --cached | while read -r _ path _rest; do
         if [[ -z "$path" ]]; then
@@ -41,9 +47,15 @@ if [[ "$source_mode" == "worktree" ]]; then
             continue
         fi
 
-        mkdir -p "$staging_dir/$archive_name/$path"
-        git -C "$repo_root/$path" ls-files -z --cached --modified | \
-            rsync -a --from0 --files-from=- "$repo_root/$path"/ "$staging_dir/$archive_name/$path"/
+        git -C "$repo_root/$path" ls-files -z --cached --modified --others --exclude-standard | \
+            while IFS= read -r -d '' subpath; do
+                if [[ ! -e "$repo_root/$path/$subpath" ]]; then
+                    continue
+                fi
+
+                mkdir -p "$staging_dir/$archive_name/$path/$(dirname "$subpath")"
+                cp -a "$repo_root/$path/$subpath" "$staging_dir/$archive_name/$path/$subpath"
+            done
     done
 else
     git -C "$repo_root" archive HEAD | tar -x -C "$staging_dir/$archive_name"
@@ -70,15 +82,13 @@ else
         git -C "$repo_root/$path" archive "$sha" | tar -x -C "$staging_dir/$archive_name/$path"
     done
 
-    if [[ -d "$patches_dir" ]]; then
-        while IFS= read -r -d '' patch_file; do
-            patch -d "$staging_dir/$archive_name" -p1 < "$patch_file"
-        done < <(find "$patches_dir" -maxdepth 1 -type f -name '*.patch' -print0 | sort -z)
-    fi
 fi
 
 tar -C "$staging_dir" -czf "$topdir/SOURCES/${archive_name}.tar.gz" "$archive_name"
 cp "$spec_file" "$topdir/SPECS/"
+if [[ -d "$repo_root/packaging/fedora/patches" ]]; then
+    cp -a "$repo_root"/packaging/fedora/patches/*.patch "$topdir/SOURCES/"
+fi
 
 rpmbuild -bs "$topdir/SPECS/lunalauncher.spec" --define "_topdir $topdir"
 

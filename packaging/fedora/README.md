@@ -1,6 +1,6 @@
 # Fedora Packaging
 
-This directory provides a Fedora 44 baseline for building Luna Launcher as a
+This directory provides a Fedora/COPR baseline for building Luna Launcher as a
 COPR-friendly RPM without relying on the in-tree `CPack RPM` path.
 
 For distributable Fedora packages, use `CMAKE_INSTALL_PREFIX=/usr`.
@@ -9,9 +9,9 @@ administrator-managed local software, while packaged files belong under `/usr`.
 
 ## What is included
 
-- `lunalauncher.spec`: RPM spec intended for Fedora 44 first.
-- `make-srpm.sh`: helper to create a source tarball from `HEAD` and build an
-  SRPM locally.
+- `lunalauncher.spec`: RPM spec intended for Fedora 42 through Rawhide.
+- `make-srpm.sh`: helper to create a source tarball from `HEAD`, stage Fedora
+  patches into `SOURCES/`, and build an SRPM locally.
 
 ## Why use this instead of `CPack`
 
@@ -22,12 +22,12 @@ normal RPM spec because:
 - Scriptlets for desktop, icon, and MIME cache updates are under RPM control.
 - Future Fedora-version-specific dependency changes can be made in one place.
 
-## Fedora 44 baseline
+## Fedora baseline
 
-The spec currently assumes Fedora 44 and sets:
+The spec currently targets Fedora 42 through Rawhide and sets:
 
 - `CMAKE_INSTALL_PREFIX=/usr`
-- `Launcher_BUILD_PLATFORM=fedora44`
+- `Launcher_BUILD_PLATFORM=fedora${fedora}`
 - system Qt 6 packages
 - standard RPM scriptlets for desktop, icon, and MIME caches
 
@@ -48,7 +48,7 @@ If you want a local packaging-oriented CMake configure outside `rpmbuild`, the
 repository now includes the preset:
 
 ```bash
-cmake --preset linux_fedora44_packaging
+cmake --preset linux_fedora_packaging
 ```
 
 Use that preset only for packaging workflows. For normal local development,
@@ -63,13 +63,15 @@ Two straightforward options:
 
 1. Upload the generated SRPM to COPR.
 2. Point COPR SCM builds at this repository and use `packaging/fedora/lunalauncher.spec`.
+   Also make sure the SCM build method copies `packaging/fedora/patches/quickjs-ng-rpm.patch`
+   into the RPM `SOURCES` area, because the spec applies `Patch0` during `%prep`.
 
-For the current baseline, target Fedora 44 only.
+For COPR, use Fedora 42, Fedora 43, Fedora 44, and Rawhide targets.
 
-## Extending to other Fedora versions later
+## Extending later
 
-When you need Fedora 41-43 or Rawhide later, keep the spec as the single point
-of change:
+If dependency or toolchain behavior diverges again between Fedora releases, keep
+the spec as the single point of change:
 
 - add `%if 0%{?fedora}` conditionals around dependency differences
 - adjust `Launcher_BUILD_PLATFORM` if you want release-specific branding in the

@@ -1,5 +1,6 @@
 %global forgeurl https://github.com/W-874/LunaLauncher
 %global datadir_name LunaLauncher
+%global build_platform %(if [ -n "%{?fedora}" ]; then printf "fedora%s" "%{fedora}"; else printf "fedora"; fi)
 %bcond_with tests
 %if %{with tests}
 %global cmake_build_testing ON
@@ -15,17 +16,18 @@ Summary:        Custom Minecraft launcher based on Prism Launcher
 License:        GPL-3.0-only AND CC-BY-SA-4.0
 URL:            %{forgeurl}
 Source0:        %{name}-%{version}.tar.gz
+Patch0:         quickjs-ng-rpm.patch
 
-# Fedora 44 baseline.
-# Keep Fedora-version-specific dependency adjustments grouped here so future
-# COPR targets (for example Fedora 41-43 or Rawhide) can be added cleanly.
+# Fedora/COPR baseline.
+# Keep Fedora-version-specific dependency adjustments grouped here so targets
+# like Fedora 42-rawhide can be carried in one spec.
 BuildRequires:  cmake >= 3.28
 BuildRequires:  desktop-file-utils
 BuildRequires:  extra-cmake-modules
 BuildRequires:  gcc-c++
-BuildRequires:  java-17-openjdk-devel
+BuildRequires:  java-devel
 BuildRequires:  ninja-build
-BuildRequires:  qt6-qt5compat-devel
+BuildRequires:  pkgconf-pkg-config
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtmultimedia-devel
 BuildRequires:  qt6-qtnetworkauth-devel
@@ -34,13 +36,13 @@ BuildRequires:  qt6-qtwebsockets-devel
 BuildRequires:  scdoc
 BuildRequires:  shared-mime-info
 BuildRequires:  cmark-devel
-BuildRequires:  gamemode-devel
-BuildRequires:  libarchive-devel
-BuildRequires:  qrencode-devel
-BuildRequires:  tomlplusplus-devel >= 3.2.0
+BuildRequires:  pkgconfig(gamemode)
+BuildRequires:  pkgconfig(libarchive)
+BuildRequires:  pkgconfig(libqrencode)
+BuildRequires:  pkgconfig(tomlplusplus) >= 3.2.0
 BuildRequires:  zlib-devel
 
-Recommends:     java-17-openjdk
+Recommends:     java-headless
 
 %description
 Luna Launcher is a custom Minecraft launcher based on Prism Launcher with
@@ -52,7 +54,7 @@ customization features.
 
 %build
 %cmake \
-    -DLauncher_BUILD_PLATFORM:STRING=fedora44 \
+    -DLauncher_BUILD_PLATFORM:STRING=%{build_platform} \
     -DLauncher_BUILD_ARTIFACT:STRING= \
     -DLauncher_UPDATER_GITHUB_REPO:STRING= \
     -DLauncher_ENABLE_JAVA_DOWNLOADER:BOOL=ON \
@@ -104,5 +106,8 @@ fi
 %{_mandir}/man6/lunalauncher.6*
 
 %changelog
+* Sun May 24 2026 W-874 <1317825684@qq.com> - 11.0.2-1
+- Generalize Fedora packaging for COPR targets Fedora 42 through Rawhide
+
 * Mon May 18 2026 W-874 <1317825684@qq.com> - 11.0.2-1
 - Add Fedora 44 COPR-friendly RPM packaging baseline

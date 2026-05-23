@@ -510,13 +510,17 @@ add_subdirectory(libraries/qdcss) # css parser
 add_subdirectory(libraries/simplewebp) # WebP image decoder
 set(QJS_INSTALL OFF CACHE BOOL "Install QuickJS-NG development files and tools" FORCE)
 add_subdirectory(libraries/quickjs-ng) # JavaScript engine
-if(TARGET qjs AND CMAKE_C_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)
-    # QuickJS-NG currently trips newer Fedora GCC diagnostics. Keep our own
-    # targets strict, but avoid failing RPM builds on third-party code here.
-    target_compile_options(qjs PRIVATE
-        -Wno-error=discarded-qualifiers
-        -Wno-error=maybe-uninitialized
-    )
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)
+    # Recent Fedora GCC versions are stricter on QuickJS-NG's upstream C code.
+    # Keep launcher targets strict, but relax these specific third-party targets.
+    foreach(qjs_target IN ITEMS qjs qjsc qjs_exe run-test262 api-test function_source)
+        if(TARGET ${qjs_target})
+            target_compile_options(${qjs_target} PRIVATE
+                -Wno-error=discarded-qualifiers
+                -Wno-error=maybe-uninitialized
+            )
+        endif()
+    endforeach()
 endif()
 if(TARGET qjs AND BUILD_SHARED_LIBS)
     install(TARGETS qjs

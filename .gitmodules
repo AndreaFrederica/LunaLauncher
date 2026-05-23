@@ -15,4 +15,4 @@
 	url = https://github.com/AndreaFrederica/LunaLauncher_webpage.git
 [submodule "libraries/quickjs-ng"]
 	path = libraries/quickjs-ng
-	url = https://gitlab.com/andreafrederica/quickjs-ng.git
+	url = git@github.com:W-874/quickjs-ng.git

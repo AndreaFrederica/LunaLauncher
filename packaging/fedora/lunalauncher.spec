@@ -16,7 +16,6 @@ Summary:        Custom Minecraft launcher based on Prism Launcher
 License:        GPL-3.0-only AND CC-BY-SA-4.0
 URL:            %{forgeurl}
 Source0:        %{name}-%{version}.tar.gz
-Patch0:         quickjs-ng-rpm.patch
 
 # Fedora/COPR baseline.
 # Keep Fedora-version-specific dependency adjustments grouped here so targets
@@ -63,6 +62,11 @@ customization features.
 
 %install
 %cmake_install
+rm -f %{buildroot}%{_bindir}/qjs %{buildroot}%{_bindir}/qjsc
+rm -rf %{buildroot}%{_includedir}/quickjs*.h \
+       %{buildroot}%{_libdir}/libqjs.so \
+       %{buildroot}%{_libdir}/cmake/quickjs \
+       %{buildroot}%{_datadir}/doc/quickjs
 
 %check
 %if %{with tests}

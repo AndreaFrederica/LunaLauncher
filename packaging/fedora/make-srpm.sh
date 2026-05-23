@@ -86,9 +86,6 @@ fi
 
 tar -C "$staging_dir" -czf "$topdir/SOURCES/${archive_name}.tar.gz" "$archive_name"
 cp "$spec_file" "$topdir/SPECS/"
-if [[ -d "$repo_root/packaging/fedora/patches" ]]; then
-    cp -a "$repo_root"/packaging/fedora/patches/*.patch "$topdir/SOURCES/"
-fi
 
 rpmbuild -bs "$topdir/SPECS/lunalauncher.spec" --define "_topdir $topdir"
 

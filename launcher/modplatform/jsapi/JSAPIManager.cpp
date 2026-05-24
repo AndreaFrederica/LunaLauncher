@@ -196,8 +196,11 @@ QStringList JSAPIManager::getDefaultAPIDirectories()
     dirs << APPLICATION->applicationDirPath() + "/../Resources/jsapi";
 #else
     // Linux/Unix
+    dirs << APPLICATION->applicationDirPath() + "/../share/" + BuildConfig.LAUNCHER_NAME + "/resources/jsapi";
     dirs << APPLICATION->applicationDirPath() + "/../share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/jsapi";
+    dirs << "/usr/share/" + BuildConfig.LAUNCHER_NAME + "/resources/jsapi";
     dirs << "/usr/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/jsapi";
+    dirs << "/usr/local/share/" + BuildConfig.LAUNCHER_NAME + "/resources/jsapi";
     dirs << "/usr/local/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/jsapi";
 #endif
 

@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Luna Launcher - Minecraft Launcher
- *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
- *
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
  *  Copyright (C) 2023 TheKodeToad <TheKodeToad@proton.me>
@@ -37,38 +34,33 @@
  *      limitations under the License.
  */
 
+#include "InstanceList.h"
+
 #include <QDebug>
-#include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
-#include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMimeData>
-#include <QPair>
 #include <QSet>
 #include <QStack>
-#include <QTextStream>
-#include <QThread>
 #include <QTimer>
 #include <QUuid>
-#include <QXmlStreamReader>
 
 #include "BaseInstance.h"
 #include "ExponentialSeries.h"
 #include "FileSystem.h"
-#include "InstanceList.h"
+
 #include "InstanceTask.h"
 #include "NullInstance.h"
 #include "WatchLock.h"
 #include "minecraft/MinecraftInstance.h"
 #include "server/ServerInstance.h"
-#include "minecraft/ShortcutUtils.h"
 #include "settings/INISettingsObject.h"
 
 #ifdef Q_OS_WIN32
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 const static int GROUP_FILE_FORMAT_VERSION = 1;
@@ -147,7 +139,7 @@ QMimeData* InstanceList::mimeData(const QModelIndexList& indexes) const
 QStringList InstanceList::getLinkedInstancesById(const QString& id) const
 {
     QStringList linkedInstances;
-    for (const auto& inst : m_instances) {
+    for (auto& inst : m_instances) {
         if (inst->isLinkedToInstanceId(id))
             linkedInstances.append(inst->id());
     }
@@ -157,15 +149,15 @@ QStringList InstanceList::getLinkedInstancesById(const QString& id) const
 int InstanceList::rowCount(const QModelIndex& parent) const
 {
     Q_UNUSED(parent);
-    return static_cast<int>(m_instances.size());
+    return count();
 }
 
 QModelIndex InstanceList::index(int row, int column, const QModelIndex& parent) const
 {
     Q_UNUSED(parent);
-    if (row < 0 || row >= m_instances.size())
+    if (row < 0 || row >= count())
         return QModelIndex();
-    return createIndex(row, column, (void*)m_instances.at(row).get());
+    return createIndex(row, column, m_instances.at(row).get());
 }
 
 QVariant InstanceList::data(const QModelIndex& index, int role) const
@@ -512,7 +504,6 @@ InstanceList::InstListError InstanceList::loadList()
 
     for (auto& id : discoverInstances()) {
         if (existingIds.contains(id)) {
-            auto instPair = existingIds[id];
             existingIds.remove(id);
             qInfo() << "Should keep and soft-reload" << id;
         } else {
@@ -559,7 +550,7 @@ InstanceList::InstListError InstanceList::loadList()
             removeNow();
         }
     }
-    if (!newList.empty()) {
+    if (newList.size()) {
         add(newList);
     }
     m_dirty = false;
@@ -570,8 +561,8 @@ InstanceList::InstListError InstanceList::loadList()
 void InstanceList::updateTotalPlayTime()
 {
     totalPlayTime = 0;
-    for (auto const& itr : m_instances) {
-        totalPlayTime += itr.get()->totalTimePlayed();
+    for (const auto& itr : m_instances) {
+        totalPlayTime += itr->totalTimePlayed();
     }
 }
 
@@ -584,10 +575,10 @@ void InstanceList::saveNow()
 
 void InstanceList::add(std::vector<std::unique_ptr<BaseInstance>>& t)
 {
-    beginInsertRows(QModelIndex(), static_cast<int>(m_instances.size()), static_cast<int>(m_instances.size() + t.size() - 1));
+    beginInsertRows(QModelIndex(), count(), static_cast<int>(count() + t.size() - 1));
     for (auto& ptr : t) {
-        connect(ptr.get(), &BaseInstance::propertiesChanged, this, &InstanceList::propertiesChanged);
         m_instances.push_back(std::move(ptr));
+        connect(m_instances.back().get(), &BaseInstance::propertiesChanged, this, &InstanceList::propertiesChanged);
     }
     endInsertRows();
 }
@@ -632,14 +623,14 @@ BaseInstance* InstanceList::getInstanceById(QString instId) const
 BaseInstance* InstanceList::getInstanceByManagedName(const QString& managed_name) const
 {
     if (managed_name.isEmpty())
-        return nullptr;
+        return {};
 
     for (auto& instance : m_instances) {
         if (instance->getManagedPackName() == managed_name)
             return instance.get();
     }
 
-    return nullptr;
+    return {};
 }
 
 QModelIndex InstanceList::getInstanceIndexById(const QString& id) const
@@ -649,9 +640,9 @@ QModelIndex InstanceList::getInstanceIndexById(const QString& id) const
 
 int InstanceList::getInstIndex(BaseInstance* inst) const
 {
-    int count = static_cast<int>(m_instances.size());
+    int count = this->count();
     for (int i = 0; i < count; i++) {
-        if (inst == m_instances[i].get()) {
+        if (inst == m_instances.at(i).get()) {
             return i;
         }
     }
@@ -684,11 +675,12 @@ std::unique_ptr<BaseInstance> InstanceList::loadInstance(const InstanceId& id)
     // NOTE: Some launcher versions didn't save the InstanceType properly. We will just bank on the probability that this is probably a
     // OneSix instance
     if (inst_type == "OneSix" || inst_type.isEmpty()) {
-        inst = std::make_unique<MinecraftInstance>(m_globalSettings, std::move(instanceSettings), instanceRoot);
+        inst.reset(new MinecraftInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
     } else if (inst_type == "Server") {
-        inst = std::make_unique<ServerInstance>(m_globalSettings, std::move(instanceSettings), instanceRoot);
+        // Luna feature: keep server instances loadable after upstream syncs.
+        inst.reset(new ServerInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
     } else {
-        inst = std::make_unique<NullInstance>(m_globalSettings, std::move(instanceSettings), instanceRoot);
+        inst.reset(new NullInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
     }
     qDebug() << "Loaded instance" << inst->name() << "from" << inst->instanceRoot();
 
@@ -917,8 +909,7 @@ class InstanceStaging : public Task {
     const unsigned maxBackoff = 16;
 
    public:
-    InstanceStaging(InstanceList* parent, InstanceTask* child, SettingsObject* settings)
-        : m_parent(parent), backoff(minBackoff, maxBackoff)
+    InstanceStaging(InstanceList* parent, InstanceTask* child, SettingsObject* settings) : m_parent(parent), backoff(minBackoff, maxBackoff)
     {
         m_stagingPath = parent->getStagedInstancePath();
 
@@ -931,6 +922,7 @@ class InstanceStaging : public Task {
         connect(child, &Task::failed, this, &InstanceStaging::childFailed);
         connect(child, &Task::aborted, this, &InstanceStaging::childAborted);
         connect(child, &Task::abortStatusChanged, this, &InstanceStaging::setAbortable);
+        connect(child, &Task::abortButtonTextChanged, this, &InstanceStaging::setAbortButtonText);
         connect(child, &Task::status, this, &InstanceStaging::setStatus);
         connect(child, &Task::details, this, &InstanceStaging::setDetails);
         connect(child, &Task::progress, this, &InstanceStaging::setProgress);
@@ -938,22 +930,21 @@ class InstanceStaging : public Task {
         connect(&m_backoffTimer, &QTimer::timeout, this, &InstanceStaging::childSucceeded);
     }
 
-    virtual ~InstanceStaging() {}
+    ~InstanceStaging() override = default;
 
     // FIXME/TODO: add ability to abort during instance commit retries
     bool abort() override
     {
-        if (!canAbort())
+        if (!canAbort()) {
             return false;
+        }
 
-        m_child->abort();
-
-        return Task::abort();
+        return m_child->abort();
     }
     bool canAbort() const override { return (m_child && m_child->canAbort()); }
 
    protected:
-    virtual void executeTask() override
+    void executeTask() override
     {
         if (m_stagingPath.isNull()) {
             emitFailed(tr("Could not create staging folder"));
@@ -968,12 +959,14 @@ class InstanceStaging : public Task {
     void childSucceeded()
     {
         unsigned sleepTime = backoff();
-        if (m_parent->commitStagedInstance(m_stagingPath, *m_child.get(), m_child->group(), *m_child.get())) {
+        if (m_parent->commitStagedInstance(m_stagingPath, *m_child, m_child->group(), *m_child)) {
+            m_backoffTimer.stop();
             emitSucceeded();
             return;
         }
         // we actually failed, retry?
         if (sleepTime == maxBackoff) {
+            m_backoffTimer.stop();
             emitFailed(tr("Failed to commit instance, even after multiple retries. It is being blocked by something."));
             return;
         }
@@ -982,12 +975,14 @@ class InstanceStaging : public Task {
     }
     void childFailed(const QString& reason)
     {
+        m_backoffTimer.stop();
         m_parent->destroyStagingPath(m_stagingPath);
         emitFailed(reason);
     }
 
     void childAborted()
     {
+        m_backoffTimer.stop();
         m_parent->destroyStagingPath(m_stagingPath);
         emitAborted();
     }
@@ -1001,7 +996,7 @@ class InstanceStaging : public Task {
      */
     ExponentialSeries backoff;
     QString m_stagingPath;
-    unique_qobject_ptr<InstanceTask> m_child;
+    std::unique_ptr<InstanceTask> m_child;
     QTimer m_backoffTimer;
 };
 
@@ -1034,14 +1029,15 @@ QString InstanceList::getStagedInstancePath()
 }
 
 bool InstanceList::commitStagedInstance(const QString& path,
-                                        InstanceName const& instanceName,
+                                        const InstanceName& instanceName,
                                         QString groupName,
-                                        InstanceTask const& commiting)
+                                        const InstanceTask& commiting)
 {
     if (groupName.isEmpty() && !groupName.isNull())
         groupName = QString();
 
     QString instID;
+
     auto should_override = commiting.shouldOverride();
 
     if (should_override) {

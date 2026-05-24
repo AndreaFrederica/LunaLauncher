@@ -32,11 +32,11 @@ YukariConnectDownload::YukariConnectDownload(bool useMirror, QObject* parent) : 
 {
     m_network = new QNetworkAccessManager(this);
 #ifdef Q_OS_WIN32
-    m_exePath = FS::PathCombine(APPLICATION->root(), "yukari-connect.exe");
+    m_exePath = FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect.exe");
 #else
-    m_exePath = FS::PathCombine(APPLICATION->root(), "yukari-connect");
+    m_exePath = FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect");
 #endif
-    m_metadataPath = FS::PathCombine(APPLICATION->root(), "yukari-connect.json");
+    m_metadataPath = FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect.json");
 }
 
 bool YukariConnectDownload::abort()

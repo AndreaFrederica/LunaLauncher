@@ -95,6 +95,7 @@ class ResourceAPI {
         std::optional<std::list<Version>> mcVersions;
         std::optional<ModPlatform::ModLoaderTypes> loaders;
         ModPlatform::ResourceType resourceType;
+        bool includeChangelog = false;
         std::optional<ModPlatform::PluginLoaderTypes> pluginLoaders;  // For server plugins (Hangar)
     };
 

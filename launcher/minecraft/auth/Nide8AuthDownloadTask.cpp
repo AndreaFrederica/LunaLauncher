@@ -23,11 +23,12 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "minecraft/auth/Nide8Auth.h"
 
 Nide8AuthDownloadTask::Nide8AuthDownloadTask(LaunchTask* parent) : LaunchStep(parent)
 {
     m_network.reset(new QNetworkAccessManager(this));
-    m_jarPath = FS::PathCombine(APPLICATION->root(), "nide8auth.jar");
+    m_jarPath = Nide8Auth::instance().getLocalPath();
 }
 
 bool Nide8AuthDownloadTask::abort()
@@ -52,7 +53,7 @@ void Nide8AuthDownloadTask::executeTask()
     }
 
     // Need to download
-    QString jarUrl = "https://login.mc-user.com:233/nide8auth.jar";
+    QString jarUrl = "https://login.mc-user.com:233/index/jar";
 
     QNetworkRequest request((QUrl(jarUrl)));
     request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());

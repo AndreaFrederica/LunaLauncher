@@ -449,6 +449,9 @@ If you make code changes (rather than only packaging):
 - Go through [CMakeLists.txt](CMakeLists.txt) and change any upstream API keys to your own, or set them to empty strings (`""`) to disable the related functionality.
 
 If you are building this software for a distribution, please set `Launcher_BUILD_PLATFORM` to an appropriate identifier (for example: `archlinux`, `fedora`, `nixpkgs`).
+For packaged system builds, set `CMAKE_INSTALL_PREFIX=/usr`. Avoid `/usr/local` for distro-managed packages.
+
+For Fedora/COPR packaging, see [packaging/fedora/README.md](packaging/fedora/README.md).
 
 ---
 

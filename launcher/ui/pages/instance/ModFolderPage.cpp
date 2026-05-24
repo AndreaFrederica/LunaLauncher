@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- *  Luna Launcher - Minecraft Launcher
- *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 Jamie Mansfield <jmansfield@cadixdev.org>
  *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
@@ -39,6 +37,7 @@
  */
 
 #include "ModFolderPage.h"
+#include "minecraft/mod/Resource.h"
 #include "ui/dialogs/ExportToModListDialog.h"
 #include "ui/dialogs/InstallLoaderDialog.h"
 #include "ui_ExternalResourcesPage.h"
@@ -64,11 +63,11 @@
 #include "minecraft/mod/Mod.h"
 #include "minecraft/mod/ModFolderModel.h"
 
+#include "server/ServerInstance.h"
+
 #include "tasks/ConcurrentTask.h"
 #include "tasks/Task.h"
 #include "ui/dialogs/ProgressDialog.h"
-
-#include "server/ServerInstance.h"
 
 ModFolderPage::ModFolderPage(BaseInstance* inst, ModFolderModel* model, QWidget* parent)
     : ExternalResourcesPage(inst, model, parent), m_model(model)
@@ -95,7 +94,7 @@ ModFolderPage::ModFolderPage(BaseInstance* inst, ModFolderModel* model, QWidget*
     auto depsDisabled = APPLICATION->settings()->getSetting("ModDependenciesDisabled");
     ui->actionVerifyItemDependencies->setVisible(!depsDisabled->get().toBool());
     connect(depsDisabled.get(), &Setting::SettingChanged, this,
-            [this](const Setting& setting, const QVariant& value) { ui->actionVerifyItemDependencies->setVisible(!value.toBool()); });
+            [this](const Setting&, const QVariant& value) { ui->actionVerifyItemDependencies->setVisible(!value.toBool()); });
 
     updateMenu->addAction(ui->actionResetItemMetadata);
     connect(ui->actionResetItemMetadata, &QAction::triggered, this, &ModFolderPage::deleteModMetadata);
@@ -140,39 +139,50 @@ void ModFolderPage::removeItems(const QItemSelection& selection)
         if (response != QMessageBox::Yes)
             return;
     }
-    m_model->deleteResources(selection.indexes());
+
+    auto indexes = selection.indexes();
+    auto affected = m_model->getAffectedMods(indexes, EnableAction::DISABLE);
+    if (!affected.isEmpty()) {
+        auto response = CustomMessageBox::selectable(this, tr("Confirm Disable"),
+                                                     tr("The mods you are trying to delete are required by %1 mods.\n"
+                                                        "Do you want to disable them?")
+                                                         .arg(affected.length()),
+                                                     QMessageBox::Warning, QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+                                                     QMessageBox::Cancel)
+                            ->exec();
+
+        if (response == QMessageBox::Cancel) {
+            return;
+        }
+        if (response == QMessageBox::Yes) {
+            m_model->setResourceEnabled(affected, EnableAction::DISABLE);
+        }
+    }
+    m_model->deleteResources(indexes);
 }
 
 void ModFolderPage::downloadMods()
 {
-    // Check if it's a server instance
+    // Luna feature: server instances can download server-side mods after their loader is configured.
     if (m_instance->traits().contains("server")) {
         auto serverInst = dynamic_cast<ServerInstance*>(m_instance);
         if (!serverInst) {
             return;
         }
 
-        // Check if mod loaders are configured
-        auto loaders = serverInst->getModLoaderTypes();
-        if (loaders == 0) {
-            auto response = QMessageBox::warning(
-                this,
-                tr("Mod Loader Not Configured"),
-                tr("You need to configure the mod loader type before downloading mods.\n"
-                   "Would you like to open the Mod Loader configuration page?"),
-                QMessageBox::Yes | QMessageBox::No,
-                QMessageBox::Yes
-            );
+        if (serverInst->getModLoaderTypes() == 0) {
+            auto response = QMessageBox::warning(this, tr("Mod Loader Not Configured"),
+                                                 tr("You need to configure the mod loader type before downloading mods.\n"
+                                                    "Would you like to open the Mod Loader configuration page?"),
+                                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
 
             if (response == QMessageBox::Yes) {
-                // TODO: Switch to ModLoader page
                 QMessageBox::information(this, tr("Info"),
-                    tr("Please go to the 'Mod Loader' page in the settings to configure your server's mod loader."));
+                                         tr("Please go to the 'Mod Loader' page in the settings to configure your server's mod loader."));
             }
             return;
         }
 
-        // Create download dialog for server
         m_downloadDialog = new ResourceDownload::ModDownloadDialog(this, m_model, m_instance);
         connect(this, &QObject::destroyed, m_downloadDialog, &QDialog::close);
         connect(m_downloadDialog, &QDialog::finished, this, &ModFolderPage::downloadDialogFinished);
@@ -181,7 +191,6 @@ void ModFolderPage::downloadMods()
         return;
     }
 
-    // Original Minecraft instance logic
     if (m_instance->typeName() != "Minecraft")
         return;  // this is a null instance or a legacy instance
 
@@ -382,8 +391,7 @@ void ModFolderPage::exportModMetadata()
     dlg.exec();
 }
 
-CoreModFolderPage::CoreModFolderPage(BaseInstance* inst, ModFolderModel* mods, QWidget* parent)
-    : ModFolderPage(inst, mods, parent)
+CoreModFolderPage::CoreModFolderPage(BaseInstance* inst, ModFolderModel* mods, QWidget* parent) : ModFolderPage(inst, mods, parent)
 {
     auto mcInst = dynamic_cast<MinecraftInstance*>(m_instance);
     if (mcInst) {
@@ -399,7 +407,9 @@ CoreModFolderPage::CoreModFolderPage(BaseInstance* inst, ModFolderModel* mods, Q
                             m_container->refreshContainer();
                         }
                     });
-                    update->start();
+                    if (!update->isRunning()) {
+                        update->start();
+                    }
                 }
             }
         }
@@ -422,9 +432,7 @@ bool CoreModFolderPage::shouldDisplay() const
     return false;
 }
 
-NilModFolderPage::NilModFolderPage(BaseInstance* inst, ModFolderModel* mods, QWidget* parent)
-    : ModFolderPage(inst, mods, parent)
-{}
+NilModFolderPage::NilModFolderPage(BaseInstance* inst, ModFolderModel* mods, QWidget* parent) : ModFolderPage(inst, mods, parent) {}
 
 bool NilModFolderPage::shouldDisplay() const
 {
@@ -434,9 +442,10 @@ bool NilModFolderPage::shouldDisplay() const
 // Helper function so this doesn't need to be duplicated 3 times
 inline bool ModFolderPage::handleNoModLoader()
 {
-    int resp = QMessageBox::question(this, this->tr("Missing Mod Loader"),
-                                     this->tr("You need to install a compatible mod loader before installing mods. Would you like to do so?"),
-                                     QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    int resp =
+        QMessageBox::question(this, this->tr("Missing Mod Loader"),
+                              this->tr("You need to install a compatible mod loader before installing mods. Would you like to do so?"),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
     switch (resp) {
         case QMessageBox::Yes: {
             // Should be safe

@@ -188,15 +188,31 @@ TranslationsModel::TranslationsModel(QString path, QObject* parent) : QAbstractL
 
     // Set install translations directory
     QString appDir = QCoreApplication::applicationDirPath();
-    QString installPath;
-#ifdef Q_OS_MACOS
+    QStringList installPaths;
+#if defined(Q_OS_WIN32)
+    installPaths << FS::PathCombine(appDir, "resource", "translations");
+#elif defined(Q_OS_MACOS)
     // On macOS, appDir is .app/Contents/MacOS, resources are in Resources
-    installPath = FS::PathCombine(appDir, "..", "Resources", "translations");
+    installPaths << FS::PathCombine(appDir, "..", "Resources", "translations");
 #else
-    // On Windows/Linux, resources are in resource subdirectory
-    installPath = FS::PathCombine(appDir, "resource", "translations");
+    // On Linux, packaged resources live under share/<launcher>/resources.
+    installPaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_NAME, "resources", "translations");
+    installPaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_APP_BINARY_NAME, "resources", "translations");
+    installPaths << "/usr/share/" + BuildConfig.LAUNCHER_NAME + "/resources/translations";
+    installPaths << "/usr/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/translations";
 #endif
-    d->m_install_dir.setPath(installPath);
+
+    for (const auto& installPath : installPaths) {
+        QDir dir(installPath);
+        if (dir.exists()) {
+            d->m_install_dir = dir;
+            break;
+        }
+    }
+
+    if (d->m_install_dir.path().isEmpty() && !installPaths.isEmpty()) {
+        d->m_install_dir.setPath(installPaths.front());
+    }
 
     reloadLocalFiles();
 

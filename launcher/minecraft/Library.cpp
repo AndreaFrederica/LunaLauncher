@@ -132,7 +132,11 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
 
     // Lambda function to rewrite Mojang URLs to mirror URLs
     auto rewrite_url = [settings](QString url) -> QString {
-        auto s = settings ? settings.get() : APPLICATION->settings();
+        auto app = APPLICATION_DYN;
+        auto s = settings ? settings.get() : (app ? app->settings() : nullptr);
+        if (!s) {
+            return url;
+        }
         int mirrorType = s->get("DownloadMirrorType").toInt();
         QString replacementUrl;
 
@@ -257,8 +261,9 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
 
             if (m_repositoryURL.isEmpty()) {
                 // Check for LibrariesURL override setting
-                auto s = settings ? settings.get() : APPLICATION->settings();
-                auto librariesUrl = s->get("LibrariesURL").toString();
+                auto app = APPLICATION_DYN;
+                auto s = settings ? settings.get() : (app ? app->settings() : nullptr);
+                auto librariesUrl = s ? s->get("LibrariesURL").toString() : QString();
                 if (!librariesUrl.isEmpty()) {
                     return librariesUrl + raw_storage;
                 }

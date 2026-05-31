@@ -45,8 +45,8 @@
 #include "Application.h"
 #include "BuildConfig.h"
 
-#include <QFontDatabase>
 #include <QDirIterator>
+#include <QFontDatabase>
 
 #include "DataMigrationTask.h"
 #include "java/JavaInstallList.h"
@@ -65,6 +65,7 @@
 #include "ui/pages/global/APIPage.h"
 #include "ui/pages/global/AccountListPage.h"
 #include "ui/pages/global/AppearancePage.h"
+#include "ui/pages/global/Aria2Page.h"
 #include "ui/pages/global/AuthlibInjectorPage.h"
 #include "ui/pages/global/ExternalToolsPage.h"
 #include "ui/pages/global/JavaPage.h"
@@ -637,8 +638,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         if (!migrated)
             migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"), "PrismLauncher",
-                "prismlauncher.cfg");
+                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
+                "PrismLauncher", "prismlauncher.cfg");
         if (!migrated)
             migrated = handleDataMigration(
                 dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
@@ -727,6 +728,25 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("NumberOfConcurrentDownloads", 6);
         m_settings->registerSetting("NumberOfManualRetries", 1);
         m_settings->registerSetting("RequestTimeout", 60);
+        m_settings->registerSetting("Aria2Enabled", false);
+        m_settings->registerSetting("Aria2ExecutablePath", "");
+        m_settings->registerSetting("Aria2FallbackToQt", true);
+        m_settings->registerSetting("Aria2FollowLauncherDownloadLimits", true);
+        m_settings->registerSetting("Aria2MaxConcurrentDownloads", 6);
+        m_settings->registerSetting("Aria2MaxConnectionPerServer", 8);
+        m_settings->registerSetting("Aria2Split", 8);
+        m_settings->registerSetting("Aria2MinSplitSize", "1M");
+        m_settings->registerSetting("Aria2FileAllocation", "none");
+        m_settings->registerSetting("Aria2Continue", true);
+        m_settings->registerSetting("Aria2RpcPort", 0);
+        m_settings->registerSetting("Aria2PollInterval", 500);
+        m_settings->registerSetting("Aria2ExtraArgs", "");
+        m_settings->registerSetting("Aria2UseLauncherProxy", true);
+        m_settings->registerSetting("Aria2ProxyType", "None");
+        m_settings->registerSetting("Aria2ProxyAddr", "127.0.0.1");
+        m_settings->registerSetting("Aria2ProxyPort", 8080);
+        m_settings->registerSetting("Aria2ProxyUser", "");
+        m_settings->registerSetting("Aria2ProxyPass", "");
 
         QString defaultMonospace;
         int defaultSize = 11;
@@ -961,15 +981,15 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
             QUrl fmlLibsUrl(m_settings->get("FMLLibsURL").toString());
             // get rid of invalid fml libs urls
-            if (!fmlLibsUrl.isEmpty() &&
-                (!fmlLibsUrl.isValid() || (fmlLibsUrl.scheme() != "http" && fmlLibsUrl.scheme() != "https"))) {
+            if (!fmlLibsUrl.isEmpty() && (!fmlLibsUrl.isValid() || (fmlLibsUrl.scheme() != "http" && fmlLibsUrl.scheme() != "https"))) {
                 m_settings->reset("FMLLibsURL");
             }
 
             QUrl mojangDownloadsMirrorUrl(m_settings->get("MojangDownloadsMirrorURL").toString());
             // get rid of invalid mojang downloads mirror urls
             if (!mojangDownloadsMirrorUrl.isEmpty() &&
-                (!mojangDownloadsMirrorUrl.isValid() || (mojangDownloadsMirrorUrl.scheme() != "http" && mojangDownloadsMirrorUrl.scheme() != "https"))) {
+                (!mojangDownloadsMirrorUrl.isValid() ||
+                 (mojangDownloadsMirrorUrl.scheme() != "http" && mojangDownloadsMirrorUrl.scheme() != "https"))) {
                 m_settings->reset("MojangDownloadsMirrorURL");
             }
         }
@@ -1025,6 +1045,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
             m_globalSettingsProvider->addPage<APIPage>();
+            m_globalSettingsProvider->addPage<Aria2Page>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<Nide8AuthPage>();
             m_globalSettingsProvider->addPage<TerracottaPage>();
@@ -2152,7 +2173,7 @@ void Application::triggerUpdateCheck()
     }
 }
 
-QUrl Application::normalizeImportUrl(QString const& url)
+QUrl Application::normalizeImportUrl(const QString& url)
 {
     auto local_file = QFileInfo(url);
     if (local_file.exists()) {

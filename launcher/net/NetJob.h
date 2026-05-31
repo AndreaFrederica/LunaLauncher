@@ -79,6 +79,9 @@ class NetJob : public ConcurrentTask {
     bool isOnline();
 
    private:
+    bool canDelegateWholeQueueToAria2() const;
+
+   private:
     shared_qobject_ptr<QNetworkAccessManager> m_network;
 
     int m_try = 1;

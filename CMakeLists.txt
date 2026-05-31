@@ -260,6 +260,9 @@ elseif(WIN32)
     set(Launcher_OPENAL_LIBRARY_NAME "OpenAL.dll" CACHE STRING "Name of native openal library")
 endif()
 
+set(Launcher_ARIA2C_PATH "" CACHE FILEPATH "Optional aria2c executable to bundle with the launcher")
+option(Launcher_BUNDLE_ARIA2C "Install the aria2c executable into the launcher bundle" OFF)
+
 # API Keys
 # NOTE: These API keys are here for convenience. If you rebrand this software or intend to break the terms of service
 # of these platforms, please change these API keys beforehand.

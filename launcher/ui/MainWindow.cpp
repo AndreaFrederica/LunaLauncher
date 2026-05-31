@@ -60,7 +60,6 @@
 #include <QButtonGroup>
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QVBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -74,6 +73,7 @@
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
+#include <QVBoxLayout>
 #include <QWidget>
 #include <QWidgetAction>
 #include <memory>
@@ -96,10 +96,9 @@
 #include <updater/ExternalUpdater.h>
 #include "InstanceWindow.h"
 
+#include "settings/Setting.h"
 #include "ui/GuiUtil.h"
 #include "ui/ViewLogWindow.h"
-#include "ui/pages/global/TerracottaOnlinePanel.h"
-#include "ui/pages/global/YukariConnectOnlinePanel.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/CopyInstanceDialog.h"
 #include "ui/dialogs/CreateShortcutDialog.h"
@@ -114,13 +113,15 @@
 #include "ui/instanceview/InstanceDelegate.h"
 #include "ui/instanceview/InstanceProxyModel.h"
 #include "ui/instanceview/InstanceView.h"
+#include "ui/pages/global/Aria2MonitorPanel.h"
+#include "ui/pages/global/TerracottaOnlinePanel.h"
+#include "ui/pages/global/YukariConnectOnlinePanel.h"
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 #include "ui/widgets/LabeledToolButton.h"
+#include "ui/widgets/ServerPreviewWidget.h"
 #include "ui/widgets/UserHeaderWidget.h"
 #include "ui/widgets/WideBar.h"
-#include "ui/widgets/ServerPreviewWidget.h"
-#include "settings/Setting.h"
 
 #include "minecraft/PackProfile.h"
 #include "minecraft/VersionFile.h"
@@ -190,7 +191,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->instanceToolBar->insertSeparator(ui->actionLaunchInstance);
 
         // restore the instance toolbar settings
-        auto const setting_name = QString("WideBarVisibility_%1").arg(ui->instanceToolBar->objectName());
+        const auto setting_name = QString("WideBarVisibility_%1").arg(ui->instanceToolBar->objectName());
         instanceToolbarSetting = APPLICATION->settings()->getOrRegisterSetting(setting_name);
 
         ui->instanceToolBar->setVisibilityState(QByteArray::fromBase64(instanceToolbarSetting->get().toString().toUtf8()));
@@ -254,6 +255,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         connect(ui->actionViewLog, &QAction::triggered, this, [] { APPLICATION->showLogWindow(); });
     }
 
+    m_aria2MonitorAction = new QAction(QIcon::fromTheme("download"), tr("aria2 Monitor..."), this);
+    m_aria2MonitorAction->setToolTip(tr("Open the aria2 download monitor."));
+    connect(m_aria2MonitorAction, &QAction::triggered, this, &MainWindow::on_actionAria2Monitor_triggered);
+    ui->viewMenu->addAction(m_aria2MonitorAction);
+
     // add the toolbar toggles to the view menu
     ui->viewMenu->addAction(ui->instanceToolBar->toggleViewAction());
     ui->viewMenu->addAction(ui->newsToolBar->toggleViewAction());
@@ -300,9 +306,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         bool showNews = APPLICATION->settings()->get("ShowNewsBar").toBool();
         ui->newsToolBar->setVisible(showNews);
-        connect(ui->newsToolBar, &QToolBar::visibilityChanged, this, [](bool visible) {
-            APPLICATION->settings()->set("ShowNewsBar", visible);
-        });
+        connect(ui->newsToolBar, &QToolBar::visibilityChanged, this,
+                [](bool visible) { APPLICATION->settings()->set("ShowNewsBar", visible); });
     }
 
     // Create the instance list widget
@@ -412,9 +417,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     statusBar()->addPermanentWidget(m_statusYukariConnect, 0);
 
     // Connect to Terracotta state changes to update status bar
-    connect(&Terracotta::instance(), &Terracotta::stateChanged, this, [this](const TerracottaTypes::StateResponse& state) {
-        updateTerracottaStatus(state);
-    });
+    connect(&Terracotta::instance(), &Terracotta::stateChanged, this,
+            [this](const TerracottaTypes::StateResponse& state) { updateTerracottaStatus(state); });
     connect(&Terracotta::instance(), &Terracotta::availabilityChanged, this, [this](bool available) {
         if (!available) {
             m_statusTerracotta->setText(tr("Terracotta: Not available"));
@@ -425,9 +429,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     updateTerracottaStatus(TerracottaTypes::StateResponse{});
 
     // Connect to YukariConnect state changes to update status bar
-    connect(&YukariConnect::instance(), &YukariConnect::stateChanged, this, [this](const YukariConnectTypes::StateResponse& state) {
-        updateYukariConnectStatus(state);
-    });
+    connect(&YukariConnect::instance(), &YukariConnect::stateChanged, this,
+            [this](const YukariConnectTypes::StateResponse& state) { updateYukariConnectStatus(state); });
     connect(&YukariConnect::instance(), &YukariConnect::availabilityChanged, this, [this](bool available) {
         if (!available) {
             m_statusYukariConnect->setText(tr("Yukari: Not available"));
@@ -1426,6 +1429,17 @@ void MainWindow::on_actionYukariConnectOnline_triggered()
     panel->activateWindow();
 }
 
+void MainWindow::on_actionAria2Monitor_triggered()
+{
+    static Aria2MonitorPanel* panel = nullptr;
+    if (!panel) {
+        panel = new Aria2MonitorPanel(nullptr);
+    }
+    panel->show();
+    panel->raise();
+    panel->activateWindow();
+}
+
 void MainWindow::on_actionReportBug_triggered()
 {
     DesktopServices::openUrl(QUrl(BuildConfig.BUG_TRACKER_URL));
@@ -1961,7 +1975,7 @@ void MainWindow::setupNewLayout()
     if (!m_serverToolBar) {
         m_serverToolBar = new WideBar(this);
         m_serverToolBar->setOrientation(Qt::Vertical);
-        auto const setting_name = QString("WideBarVisibility_ServerToolBar");
+        const auto setting_name = QString("WideBarVisibility_ServerToolBar");
         serverToolbarSetting = APPLICATION->settings()->getOrRegisterSetting(setting_name);
         m_serverToolBar->setVisibilityState(QByteArray::fromBase64(serverToolbarSetting->get().toString().toUtf8()));
         if (!m_serverPreviewWidget) {
@@ -1987,7 +2001,8 @@ void MainWindow::setupNewLayout()
 
     if (!m_userHeaderWidget) {
         m_userHeaderWidget = new UserHeaderWidget(this);
-        m_userHeaderAction = ui->mainToolBar->insertWidget(ui->mainToolBar->actions().isEmpty() ? nullptr : ui->mainToolBar->actions().first(), m_userHeaderWidget);
+        m_userHeaderAction = ui->mainToolBar->insertWidget(
+            ui->mainToolBar->actions().isEmpty() ? nullptr : ui->mainToolBar->actions().first(), m_userHeaderWidget);
         auto icon = ui->actionAccountsButton->icon();
         m_userHeaderWidget->setAvatar(icon);
         m_userHeaderWidget->setName(ui->actionAccountsButton->text());

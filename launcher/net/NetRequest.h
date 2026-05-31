@@ -39,10 +39,10 @@
 
 #pragma once
 
-#include <memory>
 #include <QNetworkReply>
 #include <QUrl>
 #include <chrono>
+#include <memory>
 
 #include "HeaderProxy.h"
 #include "Sink.h"
@@ -76,9 +76,9 @@ class NetRequest : public Task {
 
     QUrl url() const;
     void setUrl(QUrl url) { m_url = url; }
-    int replyStatusCode() const;
-    QNetworkReply::NetworkError error() const;
-    QString errorString() const;
+    virtual int replyStatusCode() const;
+    virtual QNetworkReply::NetworkError error() const;
+    virtual QString errorString() const;
 
    private:
     auto handleRedirect() -> bool;

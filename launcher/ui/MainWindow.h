@@ -147,6 +147,7 @@ class MainWindow : public QMainWindow {
     void on_actionTerracottaOnline_triggered();
 
     void on_actionYukariConnectOnline_triggered();
+    void on_actionAria2Monitor_triggered();
 
     void on_actionReportBug_triggered();
 
@@ -283,6 +284,7 @@ class MainWindow : public QMainWindow {
     QAction* m_userHeaderAction = nullptr;
     QWidget* m_bottomQuickWidget = nullptr;
     QAction* m_bottomQuickAction = nullptr;
+    QAction* m_aria2MonitorAction = nullptr;
     // no extra toolbar, reuse mainToolBar docked vertically for new UI
     WideBar* m_serverToolBar = nullptr;
     ServerPreviewWidget* m_serverPreviewWidget = nullptr;

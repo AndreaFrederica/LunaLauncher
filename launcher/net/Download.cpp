@@ -46,12 +46,18 @@
 #include "ByteArraySink.h"
 #include "ChecksumValidator.h"
 #include "MetaCacheSink.h"
+#if defined(LAUNCHER_APPLICATION)
+#include "net/Aria2Download.h"
+#endif
 
 namespace Net {
 
 #if defined(LAUNCHER_APPLICATION)
 auto Download::makeCached(QUrl url, MetaEntryPtr entry, Options options) -> Download::Ptr
 {
+    if (Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+        return Aria2Download::makeCached(std::move(url), entry, options);
+    }
     auto dl = makeShared<Download>();
     dl->m_url = url;
     dl->setObjectName(QString("CACHE:") + url.toString());
@@ -79,11 +85,16 @@ auto Download::makeByteArray(QUrl url, Options options) -> std::pair<Download::P
 
 auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Ptr
 {
+#if defined(LAUNCHER_APPLICATION)
+    if (Aria2Download::shouldUseFor(url)) {
+        return Aria2Download::makeFile(std::move(url), std::move(path), options);
+    }
+#endif
     auto dl = makeShared<Download>();
-    dl->m_url = url;
     dl->setObjectName(QString("FILE:") + url.toString());
+    dl->m_url = std::move(url);
     dl->m_options = options;
-    dl->m_sink.reset(new FileSink(path));
+    dl->m_sink.reset(new FileSink(std::move(path)));
     return dl;
 }
 

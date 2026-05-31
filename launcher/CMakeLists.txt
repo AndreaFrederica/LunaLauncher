@@ -142,6 +142,10 @@ set(NET_SOURCES
     net/ApiHeaderProxy.h
     net/ApiDownload.h
     net/ApiDownload.cpp
+    net/Aria2Download.h
+    net/Aria2Download.cpp
+    net/Aria2Manager.h
+    net/Aria2Manager.cpp
     net/ApiUpload.cpp
     net/ApiUpload.h
     net/NetRequest.cpp
@@ -1117,6 +1121,10 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/ProxyPage.h
     ui/pages/global/APIPage.cpp
     ui/pages/global/APIPage.h
+    ui/pages/global/Aria2Page.cpp
+    ui/pages/global/Aria2Page.h
+    ui/pages/global/Aria2MonitorPanel.cpp
+    ui/pages/global/Aria2MonitorPanel.h
 
     # GUI - platform pages
     ui/pages/modplatform/CustomPage.cpp
@@ -1614,6 +1622,13 @@ install(TARGETS ${Launcher_Name}
     RUNTIME DESTINATION ${BINARY_DEST_DIR} COMPONENT Runtime
     FRAMEWORK DESTINATION ${FRAMEWORK_DEST_DIR} COMPONENT Runtime
 )
+
+if(Launcher_BUNDLE_ARIA2C AND Launcher_ARIA2C_PATH)
+    install(PROGRAMS "${Launcher_ARIA2C_PATH}"
+        DESTINATION "${BINARY_DEST_DIR}/tools/aria2"
+        COMPONENT Runtime
+    )
+endif()
 
 # Deploy PDBs
 if(CMAKE_CXX_LINKER_SUPPORTS_PDB)

@@ -37,6 +37,7 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QMap>
 #include <QProcess>
 
@@ -47,6 +48,21 @@
 JavaChecker::JavaChecker(QString path, QString args, int minMem, int maxMem, int permGen, int id)
     : Task(), m_path(path), m_args(args), m_minMem(minMem), m_maxMem(maxMem), m_permGen(permGen), m_id(id)
 {}
+
+static QString javaCheckerExecutable(QString path)
+{
+#ifdef Q_OS_WIN
+    if (path.endsWith("javaw.exe", Qt::CaseInsensitive)) {
+        QString consoleJava = path;
+        consoleJava.chop(9);
+        consoleJava.append("java.exe");
+        if (QFileInfo(consoleJava).isExecutable()) {
+            return consoleJava;
+        }
+    }
+#endif
+    return path;
+}
 
 void JavaChecker::executeTask()
 {
@@ -79,10 +95,11 @@ void JavaChecker::executeTask()
 
     args.append({ "-jar", checkerJar });
     process->setArguments(args);
-    process->setProgram(m_path);
+    const QString checkerExecutable = javaCheckerExecutable(m_path);
+    process->setProgram(checkerExecutable);
     process->setProcessChannelMode(QProcess::SeparateChannels);
     process->setProcessEnvironment(CleanEnviroment());
-    qDebug() << "Running java checker:" << m_path << args.join(" ");
+    qDebug() << "Running java checker:" << checkerExecutable << args.join(" ");
 
     connect(process.get(), &QProcess::finished, this, &JavaChecker::finished);
     connect(process.get(), &QProcess::errorOccurred, this, &JavaChecker::error);
@@ -163,7 +180,8 @@ void JavaChecker::finished(int exitcode, QProcess::ExitStatus status)
     auto os_arch = results["os.arch"];
     auto java_version = results["java.version"];
     auto java_vendor = results["java.vendor"];
-    bool is_64 = os_arch == "x86_64" || os_arch == "amd64" || os_arch == "aarch64" || os_arch == "arm64" || os_arch == "riscv64" || os_arch == "ppc64le" || os_arch == "ppc64";
+    bool is_64 = os_arch == "x86_64" || os_arch == "amd64" || os_arch == "aarch64" || os_arch == "arm64" || os_arch == "riscv64" ||
+                 os_arch == "ppc64le" || os_arch == "ppc64";
 
     result.validity = Result::Validity::Valid;
     result.is_64bit = is_64;

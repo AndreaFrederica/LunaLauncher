@@ -43,6 +43,8 @@
 #if defined(LAUNCHER_APPLICATION)
 #include "Application.h"
 #include "minecraft/MirrorDownload.h"
+#include "net/Aria2Download.h"
+#include "net/Aria2Manager.h"
 #include "settings/SettingsObject.h"
 #include "ui/dialogs/NetworkJobFailedDialog.h"
 #endif
@@ -77,6 +79,12 @@ auto NetJob::addNetAction(Net::NetRequest::Ptr action) -> bool
 
 void NetJob::executeTask()
 {
+    if (canDelegateWholeQueueToAria2()) {
+        setMaxConcurrent(static_cast<int>(totalSize()));
+        ConcurrentTask::executeTask();
+        return;
+    }
+
     // For BMCLAPI, start only 1 task at a time to avoid 429 errors
     if (m_is_bmclapi) {
         QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection);
@@ -89,10 +97,31 @@ void NetJob::executeNextSubTask()
 {
     // For BMCLAPI with active rate limiting, add delay between requests
     if (m_is_bmclapi && m_bmclapi_delay_ms > 0 && !m_queue.isEmpty()) {
-        QTimer::singleShot(m_bmclapi_delay_ms, this, [this]() { QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection); });
+        QTimer::singleShot(m_bmclapi_delay_ms, this,
+                           [this]() { QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection); });
     } else {
         ConcurrentTask::executeNextSubTask();
     }
+}
+
+bool NetJob::canDelegateWholeQueueToAria2() const
+{
+#if defined(LAUNCHER_APPLICATION)
+    if (!APPLICATION_DYN || !Net::Aria2Manager::instance()->isEnabledBySettings()) {
+        return false;
+    }
+    if (m_queue.isEmpty() || !m_doing.isEmpty() || !m_done.isEmpty()) {
+        return false;
+    }
+    for (const auto& task : m_queue) {
+        if (!dynamic_cast<Net::Aria2Download*>(task.get())) {
+            return false;
+        }
+    }
+    return true;
+#else
+    return false;
+#endif
 }
 
 auto NetJob::size() const -> int

@@ -51,6 +51,7 @@
 #include "DataMigrationTask.h"
 #include "java/JavaInstallList.h"
 #include "minecraft/MirrorDownload.h"
+#include "net/Aria2Manager.h"
 #include "net/PasteUpload.h"
 #include "tasks/Task.h"
 #include "tools/GenericProfiler.h"
@@ -1200,6 +1201,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             // save any remaining instance state
             m_instances->saveNow();
         }
+        Net::Aria2Manager::instance()->shutdown();
+
         if (logFile) {
             logFile->flush();
             logFile->close();

@@ -34,6 +34,18 @@ Aria2Manager::Aria2Manager(QObject* parent) : QObject(parent)
     connect(&m_webSocket, &QWebSocket::textMessageReceived, this, &Aria2Manager::handleWebSocketTextMessage);
 }
 
+Aria2Manager::~Aria2Manager()
+{
+    if (m_process && m_process->state() != QProcess::NotRunning) {
+        m_shutdownRequested = true;
+        m_process->terminate();
+        if (!m_process->waitForFinished(3000)) {
+            m_process->kill();
+            m_process->waitForFinished(1000);
+        }
+    }
+}
+
 bool Aria2Manager::isEnabledBySettings() const
 {
     return APPLICATION_DYN && APPLICATION->settings()->get("Aria2Enabled").toBool();

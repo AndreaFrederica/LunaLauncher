@@ -36,6 +36,7 @@ class Aria2Manager : public QObject {
     using AddCallback = std::function<void(bool, const QString&, const QString&)>;
 
     static Aria2Manager* instance();
+    ~Aria2Manager();
 
     bool isEnabledBySettings() const;
     bool fallbackToQtEnabled() const;

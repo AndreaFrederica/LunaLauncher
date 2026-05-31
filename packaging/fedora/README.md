@@ -66,6 +66,39 @@ Two straightforward options:
 
 For COPR, use Fedora 42, Fedora 43, Fedora 44, and Rawhide targets.
 
+### Build directly from GitHub in COPR
+
+Yes, but use a COPR `SCM` package pointed at the GitHub repository rather than
+the GitHub auto-generated source archive.
+
+Why:
+
+- this project builds with required git submodules under `libraries/`
+- GitHub release/source archives do not vendor submodule contents
+- the local `make-srpm.sh` workflow already handles creating a complete source
+  tarball that includes checked out submodules
+
+The repository now includes `.copr/Makefile` with an `srpm` target for COPR.
+That target:
+
+- rewrites the `libraries/quickjs-ng` submodule URL to HTTPS for builder access
+- initializes submodules with `git submodule update --init --recursive`
+- runs `packaging/fedora/make-srpm.sh`
+- copies the resulting `*.src.rpm` into COPR's expected output directory
+
+Recommended COPR package settings:
+
+- Source Type: `SCM`
+- SCM Type: `git`
+- Clone URL: `https://github.com/W-874/LunaLauncher.git`
+- Committish: your target branch or tag
+- Spec File: `packaging/fedora/lunalauncher.spec`
+- SRPM Build Method: `make srpm`
+
+This lets COPR build directly from GitHub without you manually uploading SRPMs.
+The remaining requirement is that the referenced submodules are reachable from
+the COPR builders.
+
 ## Extending later
 
 If dependency or toolchain behavior diverges again between Fedora releases, keep

@@ -217,15 +217,24 @@ void ThemeManager::initializeWidgets()
 
     // Add themes from launcher installation directory
     QString appDir = QCoreApplication::applicationDirPath();
-    QString installThemePath;
-#ifdef Q_OS_MACOS
-    installThemePath = FS::PathCombine(appDir, "..", "Resources", "themes");
+    QStringList installThemePaths;
+#ifdef Q_OS_WIN
+    installThemePaths << FS::PathCombine(appDir, "resource", "themes");
+#elif defined(Q_OS_MACOS)
+    installThemePaths << FS::PathCombine(appDir, "..", "Resources", "themes");
 #else
-    installThemePath = FS::PathCombine(appDir, "resource", "themes");
+    installThemePaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_NAME, "resources", "themes");
+    installThemePaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_APP_BINARY_NAME, "resources", "themes");
+    installThemePaths << "/usr/share/" + BuildConfig.LAUNCHER_NAME + "/resources/themes";
+    installThemePaths << "/usr/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/themes";
+    installThemePaths << "/usr/local/share/" + BuildConfig.LAUNCHER_NAME + "/resources/themes";
+    installThemePaths << "/usr/local/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/themes";
 #endif
-    QDir installThemeDir(installThemePath);
-    if (installThemeDir.exists()) {
-        themeFolders.append(installThemeDir);
+    for (const auto& installThemePath : installThemePaths) {
+        QDir installThemeDir(installThemePath);
+        if (installThemeDir.exists()) {
+            themeFolders.append(installThemeDir);
+        }
     }
 
     // Load themes from all collected folders (user themes take precedence)

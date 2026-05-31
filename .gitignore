@@ -81,3 +81,4 @@ aqtinstall.log
 *.pyc
 PrismLauncher-portable-noverify/*
 flatpak/
+dist/

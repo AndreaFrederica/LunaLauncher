@@ -434,6 +434,7 @@ Luna Launcher 离不开早期项目及其贡献者的工作。
 - 检查 [CMakeLists.txt](CMakeLists.txt) 并将所有上游 API 密钥更改为你自己的，或将它们设置为空字符串 (`""`) 以禁用相关功能。
 
 如果你正在为发行版构建此软件，请将 `Launcher_BUILD_PLATFORM` 设置为适当的标识符（例如：`archlinux`、`fedora`、`nixpkgs`）。
+如果你是在构建由发行版包管理器分发的软件包，请将 `CMAKE_INSTALL_PREFIX` 设为 `/usr`，不要用 `/usr/local`。
 
 ---
 

@@ -38,6 +38,7 @@
 #include "ui/themes/SystemTheme.h"
 
 #include "Application.h"
+#include "BuildConfig.h"
 #include "settings/SettingsObject.h"
 
 ThemeManager::ThemeManager()
@@ -128,17 +129,23 @@ void ThemeManager::initializeIcons()
 
     // Add icon themes from launcher installation directory
     QString appDir = QCoreApplication::applicationDirPath();
-    QString installIconPath;
-#ifdef Q_OS_MACOS
+    QStringList installIconPaths;
+#if defined(Q_OS_WIN32)
+    installIconPaths << FS::PathCombine(appDir, "resource", "iconthemes");
+#elif defined(Q_OS_MACOS)
     // On macOS, appDir is .app/Contents/MacOS, resources are in Resources
-    installIconPath = FS::PathCombine(appDir, "..", "Resources", "iconthemes");
+    installIconPaths << FS::PathCombine(appDir, "..", "Resources", "iconthemes");
 #else
-    // On Windows/Linux, resources are in resource subdirectory
-    installIconPath = FS::PathCombine(appDir, "resource", "iconthemes");
+    installIconPaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_NAME, "resources", "iconthemes");
+    installIconPaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_APP_BINARY_NAME, "resources", "iconthemes");
+    installIconPaths << "/usr/share/" + BuildConfig.LAUNCHER_NAME + "/resources/iconthemes";
+    installIconPaths << "/usr/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/iconthemes";
 #endif
-    QDir installIconDir(installIconPath);
-    if (installIconDir.exists()) {
-        iconThemeFolders.append(installIconDir);
+    for (const auto& installIconPath : installIconPaths) {
+        QDir installIconDir(installIconPath);
+        if (installIconDir.exists()) {
+            iconThemeFolders.append(installIconDir);
+        }
     }
 
     // Load icon themes from all collected folders (user themes take precedence)
@@ -406,15 +413,22 @@ void ThemeManager::initializeCatPacks()
 
     // Add catpacks from launcher installation directory
     QString appDir = QCoreApplication::applicationDirPath();
-    QString installCatPath;
-#ifdef Q_OS_MACOS
-    installCatPath = FS::PathCombine(appDir, "..", "Resources", "catpacks");
+    QStringList installCatPaths;
+#if defined(Q_OS_WIN32)
+    installCatPaths << FS::PathCombine(appDir, "resource", "catpacks");
+#elif defined(Q_OS_MACOS)
+    installCatPaths << FS::PathCombine(appDir, "..", "Resources", "catpacks");
 #else
-    installCatPath = FS::PathCombine(appDir, "resource", "catpacks");
+    installCatPaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_NAME, "resources", "catpacks");
+    installCatPaths << FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_APP_BINARY_NAME, "resources", "catpacks");
+    installCatPaths << "/usr/share/" + BuildConfig.LAUNCHER_NAME + "/resources/catpacks";
+    installCatPaths << "/usr/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/catpacks";
 #endif
-    QDir installCatDir(installCatPath);
-    if (installCatDir.exists()) {
-        catPackFolders.append(installCatDir);
+    for (const auto& installCatPath : installCatPaths) {
+        QDir installCatDir(installCatPath);
+        if (installCatDir.exists()) {
+            catPackFolders.append(installCatDir);
+        }
     }
 
     auto loadFiles = [this, supportedImageFormats](QDir dir) {

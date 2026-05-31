@@ -52,12 +52,9 @@
 bool isSchemeHandlerRegistered()
 {
 #ifdef Q_OS_LINUX
-    QProcess process;
-    process.start("xdg-mime", { "query", "default", "x-scheme-handler/" + BuildConfig.LAUNCHER_APP_BINARY_NAME });
-    process.waitForFinished();
-    QString output = process.readAllStandardOutput().trimmed();
-
-    return output.contains(APPLICATION->desktopFileName());
+    // Microsoft rejects lunalauncher://oauth/microsoft for the Luna app
+    // registration. Use the local HTTP callback for system-browser auth on Linux.
+    return false;
 
 #elif defined(Q_OS_WIN)
     QString regPath = QString("HKEY_CURRENT_USER\\Software\\Classes\\%1").arg(BuildConfig.LAUNCHER_APP_BINARY_NAME);

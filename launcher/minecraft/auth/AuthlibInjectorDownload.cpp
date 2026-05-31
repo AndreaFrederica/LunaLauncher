@@ -26,12 +26,13 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "minecraft/auth/AuthlibInjector.h"
 
 AuthlibInjectorDownload::AuthlibInjectorDownload(QObject* parent) : Task(parent)
 {
     m_network = new QNetworkAccessManager(this);
-    m_jarPath = FS::PathCombine(APPLICATION->root(), "authlib-injector.jar");
-    m_metadataPath = FS::PathCombine(APPLICATION->root(), "authlib-injector.json");
+    m_jarPath = AuthlibInjector::instance().getLocalPath();
+    m_metadataPath = AuthlibInjector::instance().getMetadataPath();
 }
 
 bool AuthlibInjectorDownload::abort()

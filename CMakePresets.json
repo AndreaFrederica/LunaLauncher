@@ -32,6 +32,21 @@
             }
         },
         {
+            "name": "linux_fedora_packaging",
+            "displayName": "Linux Fedora Packaging",
+            "inherits": [
+                "linux"
+            ],
+            "binaryDir": "build-fedora",
+            "installDir": "/usr",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "/usr",
+                "Launcher_BUILD_PLATFORM": "fedora",
+                "Launcher_BUILD_ARTIFACT": "",
+                "Launcher_UPDATER_GITHUB_REPO": ""
+            }
+        },
+        {
             "name": "macos",
             "displayName": "macOS",
             "inherits": [
@@ -121,6 +136,16 @@
                 "rhs": "Linux"
             },
             "configurePreset": "linux"
+        },
+        {
+            "name": "linux_fedora_packaging",
+            "displayName": "Linux Fedora Packaging",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "configurePreset": "linux_fedora_packaging"
         },
         {
             "name": "macos",

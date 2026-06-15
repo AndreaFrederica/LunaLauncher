@@ -129,6 +129,7 @@
 #include "minecraft/mod/ModFolderModel.h"
 #include "minecraft/mod/ResourcePackFolderModel.h"
 #include "minecraft/mod/ShaderPackFolderModel.h"
+#include "minecraft/update/AssetUpdateTask.h"
 #include "minecraft/mod/TexturePackFolderModel.h"
 #include "minecraft/mod/tasks/LocalResourceParse.h"
 
@@ -622,6 +623,14 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         QAction* actionVoid = new QAction(m_selectedInstance->name(), this);
         actionVoid->setEnabled(false);
         actions.prepend(actionVoid);
+
+        // Add verify assets action
+        QAction* actionSep2 = new QAction("", this);
+        actionSep2->setSeparator(true);
+        QAction* actionVerifyAssets = new QAction(tr("校验资源文件完整性..."), this);
+        connect(actionVerifyAssets, &QAction::triggered, this, &MainWindow::on_actionVerifyAssets_triggered);
+        actions.append(actionSep2);
+        actions.append(actionVerifyAssets);
     } else {
         auto group = view->groupNameAt(pos);
 
@@ -1397,6 +1406,42 @@ void MainWindow::on_actionEditInstance_triggered()
                                      tr("This instance is not editable. It may be broken, invalid, or too old. Check logs for details."),
                                      QMessageBox::Critical)
             ->show();
+    }
+}
+
+void MainWindow::on_actionVerifyAssets_triggered()
+{
+    if (!m_selectedInstance)
+        return;
+
+    auto* mcInst = dynamic_cast<MinecraftInstance*>(m_selectedInstance);
+    if (!mcInst) {
+        CustomMessageBox::selectable(this, tr("不支持"), tr("此实例不支持资源文件校验。"), QMessageBox::Warning)->show();
+        return;
+    }
+
+    // Temporarily force AlwaysVerify for this manual check
+    auto* instSettings = mcInst->settings();
+    bool hadOverride = instSettings->get("OverrideAssetVerification").toBool();
+    int savedMode = instSettings->get("AssetVerificationMode").toInt();
+
+    instSettings->set("OverrideAssetVerification", true);
+    instSettings->set("AssetVerificationMode", static_cast<int>(AssetVerificationMode::AlwaysVerify));
+
+    unique_qobject_ptr<Task> task(new AssetUpdateTask(mcInst));
+    ProgressDialog dlg(this);
+    dlg.setSkipButton(true, tr("中止"));
+    int result = dlg.execWithTask(task.get());
+
+    // Restore original settings
+    instSettings->set("OverrideAssetVerification", hadOverride);
+    if (hadOverride)
+        instSettings->set("AssetVerificationMode", savedMode);
+    else
+        instSettings->reset("AssetVerificationMode");
+
+    if (result == QDialog::Accepted) {
+        QMessageBox::information(this, tr("校验完成"), tr("资源文件校验完成，所有缺失或损坏的文件已修复。"));
     }
 }
 

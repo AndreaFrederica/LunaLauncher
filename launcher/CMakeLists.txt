@@ -1121,6 +1121,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/ProxyPage.h
     ui/pages/global/APIPage.cpp
     ui/pages/global/APIPage.h
+    ui/pages/global/AssetsPage.cpp
+    ui/pages/global/AssetsPage.h
     ui/pages/global/Aria2Page.cpp
     ui/pages/global/Aria2Page.h
     ui/pages/global/Aria2MonitorPanel.cpp
@@ -1384,6 +1386,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/pages/global/JavaPage.ui
     ui/pages/global/LauncherPage.ui
     ui/pages/global/APIPage.ui
+    ui/pages/global/AssetsPage.ui
     ui/pages/global/AuthlibInjectorPage.ui
     ui/pages/global/Nide8AuthPage.ui
     ui/pages/global/TerracottaPage.ui

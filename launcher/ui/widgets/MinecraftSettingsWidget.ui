@@ -786,6 +786,99 @@ It is most likely you will need to change the path - please refer to the mod's w
             </widget>
            </item>
            <item>
+            <widget class="QGroupBox" name="assetVerificationGroupBox">
+             <property name="title">
+              <string>覆盖资源缓存策略</string>
+             </property>
+             <property name="checkable">
+              <bool>false</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_assetVerif">
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_assetMode">
+                <item>
+                 <widget class="QLabel" name="assetModeLabelInst">
+                  <property name="text">
+                   <string>缓存策略：</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="assetVerificationModeComboBox">
+                  <property name="toolTip">
+                   <string>选择此实例的资源文件校验方式（覆盖全局设置）</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_assetMode">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_assetExpiry">
+                <item>
+                 <widget class="QLabel" name="assetExpiryLabelInst">
+                  <property name="text">
+                   <string>缓存有效期（天）：</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="assetExpiryDaysSpinBox">
+                  <property name="toolTip">
+                   <string>资源索引缓存有效天数（仅在"按过期时间缓存"策略下生效）</string>
+                  </property>
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>365</number>
+                  </property>
+                  <property name="value">
+                   <number>7</number>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_assetExpiry">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QPushButton" name="verifyAssetsButton">
+                <property name="text">
+                 <string>立即校验资源文件完整性</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
             <spacer name="verticalSpacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>

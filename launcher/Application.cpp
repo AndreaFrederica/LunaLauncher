@@ -64,6 +64,7 @@
 
 #include "ui/pages/BasePageProvider.h"
 #include "ui/pages/global/APIPage.h"
+#include "ui/pages/global/AssetsPage.h"
 #include "ui/pages/global/AccountListPage.h"
 #include "ui/pages/global/AppearancePage.h"
 #include "ui/pages/global/Aria2Page.h"
@@ -1000,6 +1001,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("Env", "{}");
 
+        // Asset verification settings
+        m_settings->registerSetting("AssetVerificationMode", 1);  // Default: CheckExistence
+        m_settings->registerSetting("AssetCacheExpiryDays", 7);
+
         // Custom Microsoft Authentication Client ID
         m_settings->registerSetting("MSAClientIDOverride", "");
 
@@ -1046,6 +1051,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
             m_globalSettingsProvider->addPage<APIPage>();
+            m_globalSettingsProvider->addPage<AssetsPage>();
             m_globalSettingsProvider->addPage<Aria2Page>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<Nide8AuthPage>();

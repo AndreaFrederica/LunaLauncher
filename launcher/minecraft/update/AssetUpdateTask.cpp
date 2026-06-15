@@ -11,6 +11,9 @@
 #include "Application.h"
 
 #include "net/ApiDownload.h"
+#include "settings/SettingsObject.h"
+
+#include <QFile>
 
 AssetUpdateTask::AssetUpdateTask(MinecraftInstance* inst)
 {
@@ -58,7 +61,44 @@ void AssetUpdateTask::executeTask()
 
     auto metacache = APPLICATION->metacache();
     auto entry = metacache->resolveEntry("asset_indexes", localPath);
-    entry->setStale(true);
+
+    // Determine effective verification mode: instance override takes priority over global
+    int mode = AssetVerificationMode::CheckExistence;
+    {
+        SettingsObject* instSettings = m_inst->settings();
+        if (instSettings->get("OverrideAssetVerification").toBool()) {
+            mode = instSettings->get("AssetVerificationMode").toInt();
+        } else {
+            mode = APPLICATION->settings()->get("AssetVerificationMode").toInt();
+        }
+    }
+
+    if (mode == AssetVerificationMode::AlwaysVerify) {
+        // Original behavior: force re-download every time
+        entry->setStale(true);
+    } else if (mode == AssetVerificationMode::CacheWithExpiry) {
+        // Use HttpMetaCache expiry mechanism
+        SettingsObject* instSettings = m_inst->settings();
+        int expiryDays;
+        if (instSettings->get("OverrideAssetVerification").toBool()) {
+            expiryDays = instSettings->get("AssetCacheExpiryDays").toInt();
+        } else {
+            expiryDays = APPLICATION->settings()->get("AssetCacheExpiryDays").toInt();
+        }
+        entry->setMaximumAge(static_cast<qint64>(expiryDays) * 86400LL);
+        // Do not call setStale – let HttpMetaCache decide based on max_age
+    } else if (mode == AssetVerificationMode::SkipVerification) {
+        // If the index file already exists locally, skip downloading it
+        if (QFile::exists(entry->getFullPath())) {
+            qDebug() << "SkipVerification: asset index already exists, skipping download for" << m_inst->name();
+            // Schedule assetIndexFinished directly without network download
+            QMetaObject::invokeMethod(this, "assetIndexFinished", Qt::QueuedConnection);
+            return;
+        }
+        // If the file does not exist, fall back to CheckExistence behavior (no setStale)
+    }
+    // mode == CheckExistence (default): do not call setStale, let HttpMetaCache use cached file
+
     auto hexSha1 = assets->sha1.toLatin1();
     qDebug() << "Asset index SHA1:" << hexSha1;
     auto dl = Net::ApiDownload::makeCached(indexUrl, entry);

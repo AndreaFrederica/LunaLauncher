@@ -184,6 +184,8 @@ class MainWindow : public QMainWindow {
 
     void on_actionCreateInstanceShortcut_triggered();
 
+    void on_actionVerifyAssets_triggered();
+
     void taskEnd();
 
     /**

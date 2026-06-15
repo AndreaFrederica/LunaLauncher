@@ -247,6 +247,11 @@ void MinecraftInstance::loadSpecificSettings()
     m_settings->registerSetting("JoinServerOnLaunchAddress", "");
     m_settings->registerSetting("JoinWorldOnLaunch", "");
 
+    // Asset verification override (manual check in AssetUpdateTask, no registerOverride needed)
+    m_settings->registerSetting("OverrideAssetVerification", false);
+    m_settings->registerSetting("AssetVerificationMode", 1);
+    m_settings->registerSetting("AssetCacheExpiryDays", 7);
+
     // Use account for instance, this does not have a global override
     m_settings->registerSetting("UseAccountForInstance", false);
     m_settings->registerSetting("InstanceAccountId", "");

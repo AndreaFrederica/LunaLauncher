@@ -52,6 +52,8 @@ class MinecraftSettingsWidget : public QWidget {
     void loadSettings();
     void saveSettings();
 
+    void triggerVerifyAssets();
+
    private:
     void openGlobalSettings();
     void updateAccountsMenu(SettingsObject& settings);
@@ -60,6 +62,7 @@ class MinecraftSettingsWidget : public QWidget {
     void saveSelectedLoaders();
     void saveDataPacksPath();
     void selectDataPacksFolder();
+    void onAssetModeChanged(int index);
 
     MinecraftInstance* m_instance;
     Ui::MinecraftSettingsWidget* m_ui;

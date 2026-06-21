@@ -19,6 +19,7 @@
 #include <algorithm>
 
 #include "Application.h"
+#include "CleanroomMeta.h"
 #include "Index.h"
 #include "JsonFormat.h"
 #include "Version.h"
@@ -34,6 +35,10 @@ VersionList::VersionList(const QString& uid, QObject* parent) : BaseVersionList(
 
 Task::Ptr VersionList::getLoadTask()
 {
+    if (Cleanroom::isUid(m_uid)) {
+        return Cleanroom::loadVersionListTask(this, Net::Mode::Online);
+    }
+
     auto loadTask = makeShared<SequentialTask>(tr("Load meta for %1", "This is for the task name that loads the meta index.").arg(m_uid));
     loadTask->addTask(APPLICATION->metadataIndex()->loadTask(Net::Mode::Online));
     loadTask->addTask(this->loadTask(Net::Mode::Online));

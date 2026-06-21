@@ -104,6 +104,11 @@ void BaseEntity::setSha256(QString sha256)
     m_sha256 = sha256;
 }
 
+void BaseEntity::setLoadStatus(LoadStatus status)
+{
+    m_load_status = status;
+}
+
 BaseEntity::LoadStatus BaseEntity::status() const
 {
     return m_load_status;

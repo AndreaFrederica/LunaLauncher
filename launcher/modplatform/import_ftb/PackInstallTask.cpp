@@ -102,6 +102,8 @@ void PackInstallTask::copySettings()
                     break;
                 case ModPlatform::Rift:
                     break;
+                case ModPlatform::Cleanroom:
+                    break;
             }
         components->saveNow();
 

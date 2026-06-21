@@ -41,6 +41,7 @@ class BaseEntity {
 
     /* for parsers */
     void setSha256(QString sha256);
+    void setLoadStatus(LoadStatus status);
 
     virtual void parse(const QJsonObject& obj) = 0;
     [[nodiscard]] Task::Ptr loadTask(Net::Mode loadType = Net::Mode::Online);

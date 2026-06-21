@@ -40,8 +40,10 @@
 
 #include "Application.h"
 #include "Filter.h"
+#include "InstanceImportTask.h"
 #include "Version.h"
 #include "meta/Index.h"
+#include "meta/CleanroomMeta.h"
 #include "meta/VersionList.h"
 #include "minecraft/VanillaInstanceCreationTask.h"
 #include "ui/dialogs/NewInstanceDialog.h"
@@ -61,6 +63,7 @@ CustomPage::CustomPage(NewInstanceDialog* dialog, QWidget* parent) : QWidget(par
     connect(ui->loaderVersionList, &VersionSelectWidget::selectedVersionChanged, this, &CustomPage::setSelectedLoaderVersion);
     connect(ui->noneFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->forgeFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
+    connect(ui->cleanroomFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->fabricFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->quiltFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->liteLoaderFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
@@ -129,6 +132,9 @@ void CustomPage::loaderFilterChanged()
     } else if (ui->forgeFilter->isChecked()) {
         ui->loaderVersionList->setExactFilter(BaseVersionList::ParentVersionRole, minecraftVersion);
         m_selectedLoader = "net.minecraftforge";
+    } else if (ui->cleanroomFilter->isChecked()) {
+        ui->loaderVersionList->setExactFilter(BaseVersionList::ParentVersionRole, minecraftVersion);
+        m_selectedLoader = "com.cleanroommc.cleanroom";
     } else if (ui->fabricFilter->isChecked()) {
         // FIXME: dirty hack because the launcher is unaware of Fabric's dependencies
         if (Version(minecraftVersion) >= Version("1.14"))  // Fabric/Quilt supported
@@ -198,6 +204,11 @@ void CustomPage::suggestCurrent()
     // There isn't a selected version if the version list is empty
     if (ui->loaderVersionList->selectedVersion() == nullptr)
         dialog->setSuggestedPack(m_selectedVersion->descriptor(), new VanillaCreationTask(m_selectedVersion));
+    else if (Meta::Cleanroom::isUid(m_selectedLoader)) {
+        const auto cleanroomVersion = m_selectedLoaderVersion->descriptor();
+        dialog->setSuggestedPack("Cleanroom", cleanroomVersion,
+                                 new InstanceImportTask(QUrl(Meta::Cleanroom::packageUrl(cleanroomVersion)), this));
+    }
     else {
         dialog->setSuggestedPack(m_selectedVersion->descriptor(),
                                  new VanillaCreationTask(m_selectedVersion, m_selectedLoader, m_selectedLoaderVersion));

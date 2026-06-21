@@ -15,6 +15,7 @@
 
 #include "Index.h"
 
+#include "CleanroomMeta.h"
 #include "JsonFormat.h"
 #include "QObjectPtr.h"
 #include "VersionList.h"
@@ -135,6 +136,14 @@ void Index::connectVersionList(const int row, const VersionList::Ptr& list)
 
 Task::Ptr Index::loadVersion(const QString& uid, const QString& version, Net::Mode mode, bool force)
 {
+    if (Cleanroom::isUid(uid)) {
+        auto loadTask =
+            makeShared<SequentialTask>(tr("Load meta for %1:%2", "This is for the task name that loads the meta index.").arg(uid, version));
+        loadTask->addTask(Cleanroom::loadVersionListTask(get(uid).get(), mode));
+        loadTask->addTask(Cleanroom::loadVersionTask(get(uid, version).get(), mode));
+        return loadTask;
+    }
+
     if (mode == Net::Mode::Offline) {
         return get(uid, version)->loadTask(mode);
     }

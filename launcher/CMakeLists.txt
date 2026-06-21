@@ -482,6 +482,8 @@ set(META_SOURCES
     # Metadata sources
     meta/JsonFormat.cpp
     meta/JsonFormat.h
+    meta/CleanroomMeta.cpp
+    meta/CleanroomMeta.h
     meta/BaseEntity.cpp
     meta/BaseEntity.h
     meta/VersionList.cpp

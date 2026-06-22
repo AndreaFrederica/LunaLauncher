@@ -40,6 +40,8 @@ class Aria2Download : public Download {
     QString m_targetPath;
     QString m_tempPath;
     QString m_gid;
+    MetaEntryPtr m_cacheEntry;
+    bool m_isEternal = false;
     bool m_finished = false;
     int m_statusCode = -1;
     QNetworkReply::NetworkError m_error = QNetworkReply::NoError;

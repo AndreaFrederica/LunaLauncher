@@ -62,11 +62,13 @@
 #include "minecraft/VersionFilterData.h"
 #include "minecraft/mod/Mod.h"
 #include "minecraft/mod/ModFolderModel.h"
+#include "minecraft/mod/tasks/ModPreflightTask.h"
 
 #include "server/ServerInstance.h"
 
 #include "tasks/ConcurrentTask.h"
 #include "tasks/Task.h"
+#include "ui/dialogs/ModPreflightDialog.h"
 #include "ui/dialogs/ProgressDialog.h"
 
 ModFolderPage::ModFolderPage(BaseInstance* inst, ModFolderModel* model, QWidget* parent)
@@ -104,6 +106,13 @@ ModFolderPage::ModFolderPage(BaseInstance* inst, ModFolderModel* model, QWidget*
     ui->actionChangeVersion->setToolTip(tr("Change a mod's version."));
     connect(ui->actionChangeVersion, &QAction::triggered, this, &ModFolderPage::changeModVersion);
     ui->actionsToolbar->insertActionAfter(ui->actionUpdateItem, ui->actionChangeVersion);
+
+    // Mod preflight: statically check installed mods for conflicts / missing /
+    // mismatched dependencies before launching, and show the dependency tree.
+    ui->actionValidateMods->setText(tr("Validate Mods"));
+    ui->actionValidateMods->setToolTip(tr("Check installed mods for conflicts, missing dependencies and version mismatches"));
+    connect(ui->actionValidateMods, &QAction::triggered, this, &ModFolderPage::validateMods);
+    ui->actionsToolbar->insertActionAfter(ui->actionUpdateItem, ui->actionValidateMods);
 
     ui->actionViewHomepage->setToolTip(tr("View the homepages of all selected mods."));
 
@@ -328,6 +337,36 @@ void ModFolderPage::updateMods(bool includeDeps)
 
         m_model->update();
     }
+}
+
+void ModFolderPage::validateMods()
+{
+    auto mods = m_model->allMods();
+    if (mods.isEmpty()) {
+        CustomMessageBox::selectable(this, tr("Validate Mods"), tr("There are no mods to validate."), QMessageBox::Information)->exec();
+        return;
+    }
+
+    auto mcInst = dynamic_cast<MinecraftInstance*>(m_instance);
+    if (!mcInst) {
+        CustomMessageBox::selectable(this, tr("Validate Mods"), tr("This instance type does not support mod validation."),
+                                     QMessageBox::Warning)->exec();
+        return;
+    }
+
+    auto task = makeShared<ModPreflightTask>(mcInst, mods);
+    ProgressDialog loadDialog(this);
+    loadDialog.setSkipButton(true, tr("Abort"));
+    loadDialog.execWithTask(task.get());
+
+    if (!task->wasSuccessful()) {
+        CustomMessageBox::selectable(this, tr("Validate Mods"), task->failReason().isEmpty() ? tr("Validation failed.") : task->failReason(),
+                                     QMessageBox::Critical)->exec();
+        return;
+    }
+
+    ModPreflightDialog dialog(this, task->result());
+    dialog.exec();
 }
 
 void ModFolderPage::deleteModMetadata()

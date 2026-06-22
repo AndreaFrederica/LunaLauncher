@@ -5,11 +5,13 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -18,6 +20,7 @@
 #include "Application.h"
 #include "net/Aria2Manager.h"
 #include "settings/SettingsObject.h"
+#include "ui/dialogs/ProgressDialog.h"
 
 Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
 {
@@ -26,6 +29,7 @@ Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
     auto general = new QGroupBox(tr("Download Backend"), this);
     auto generalLayout = new QFormLayout(general);
     m_enabled = new QCheckBox(tr("Use aria2 for direct file downloads"), general);
+    m_autoInstall = new QCheckBox(tr("Automatically download aria2 when it is missing"), general);
     m_fallbackToQt = new QCheckBox(tr("Fall back to the built-in downloader when aria2 is unavailable"), general);
     m_executablePath = new QLineEdit(general);
     auto pathRow = new QWidget(general);
@@ -36,13 +40,31 @@ Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
     pathLayout->addWidget(m_executablePath, 1);
     pathLayout->addWidget(browse);
     pathLayout->addWidget(detect);
+    auto manageRow = new QWidget(general);
+    auto manageLayout = new QHBoxLayout(manageRow);
+    manageLayout->setContentsMargins(0, 0, 0, 0);
+    auto autoSetup = new QPushButton(tr("Auto Setup"), manageRow);
+    auto download = new QPushButton(tr("Download"), manageRow);
+    auto remove = new QPushButton(tr("Remove Downloaded"), manageRow);
+    manageLayout->addWidget(autoSetup);
+    manageLayout->addWidget(download);
+    manageLayout->addWidget(remove);
+    manageLayout->addStretch();
     m_detectedPath = new QLabel(general);
     m_detectedPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_systemPath = new QLabel(general);
+    m_systemPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_managedPath = new QLabel(general);
+    m_managedPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     generalLayout->addRow(m_enabled);
+    generalLayout->addRow(m_autoInstall);
     generalLayout->addRow(m_fallbackToQt);
     generalLayout->addRow(tr("aria2c path:"), pathRow);
-    generalLayout->addRow(tr("Detected:"), m_detectedPath);
+    generalLayout->addRow(tr("Manage:"), manageRow);
+    generalLayout->addRow(tr("System:"), m_systemPath);
+    generalLayout->addRow(tr("Downloaded:"), m_managedPath);
+    generalLayout->addRow(tr("Using:"), m_detectedPath);
     root->addWidget(general);
 
     auto transfers = new QGroupBox(tr("Transfer Options"), this);
@@ -108,6 +130,10 @@ Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
 
     connect(browse, &QPushButton::clicked, this, &Aria2Page::browseExecutable);
     connect(detect, &QPushButton::clicked, this, &Aria2Page::detectExecutable);
+    connect(autoSetup, &QPushButton::clicked, this, &Aria2Page::autoSetupExecutable);
+    connect(download, &QPushButton::clicked, this, &Aria2Page::installManagedExecutable);
+    connect(remove, &QPushButton::clicked, this, &Aria2Page::removeManagedExecutable);
+    connect(m_executablePath, &QLineEdit::textChanged, this, &Aria2Page::detectExecutable);
     connect(m_useLauncherProxy, &QCheckBox::toggled, this, &Aria2Page::updateProxyWidgets);
     connect(m_proxyType, &QComboBox::currentIndexChanged, this, &Aria2Page::updateProxyWidgets);
     connect(m_followLauncherDownloadLimits, &QCheckBox::toggled, this, &Aria2Page::updateTransferWidgets);
@@ -121,7 +147,7 @@ Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
 bool Aria2Page::apply()
 {
     applySettings();
-    return true;
+    return ensureExecutableAvailable();
 }
 
 void Aria2Page::browseExecutable()
@@ -134,7 +160,59 @@ void Aria2Page::browseExecutable()
 
 void Aria2Page::detectExecutable()
 {
-    m_detectedPath->setText(Net::Aria2Manager::instance()->findExecutable());
+    auto manager = Net::Aria2Manager::instance();
+    const auto systemPath = manager->findSystemExecutable();
+    const auto managedPath = manager->managedExecutablePath();
+    const auto effectivePath = effectiveExecutablePath();
+
+    m_systemPath->setText(systemPath.isEmpty() ? tr("Not found") : systemPath);
+    if (managedPath.isEmpty()) {
+        m_managedPath->setText(tr("Not available"));
+    } else if (QFileInfo(managedPath).isExecutable()) {
+        m_managedPath->setText(managedPath);
+    } else {
+        m_managedPath->setText(tr("Not installed (%1)").arg(managedPath));
+    }
+    m_detectedPath->setText(effectivePath.isEmpty() ? tr("Not found") : effectivePath);
+}
+
+void Aria2Page::autoSetupExecutable()
+{
+    if (!Net::Aria2Manager::instance()->findSystemExecutable().isEmpty() || !effectiveExecutablePath().isEmpty()) {
+        detectExecutable();
+        QMessageBox::information(this, tr("aria2"), tr("A usable aria2c executable was found."));
+        return;
+    }
+    installManagedExecutable();
+}
+
+void Aria2Page::installManagedExecutable()
+{
+    QString reason;
+    auto manager = Net::Aria2Manager::instance();
+    if (!manager->canInstallManagedExecutable(&reason)) {
+        QMessageBox::warning(this, tr("aria2"), reason);
+        return;
+    }
+
+    auto task = manager->createInstallTask();
+    ProgressDialog progress(this);
+    if (progress.execWithTask(task.get()) != QDialog::Accepted) {
+        QMessageBox::warning(this, tr("aria2"), task->failReason());
+        return;
+    }
+    detectExecutable();
+    QMessageBox::information(this, tr("aria2"), tr("aria2 was downloaded successfully."));
+}
+
+void Aria2Page::removeManagedExecutable()
+{
+    QString reason;
+    if (!Net::Aria2Manager::instance()->removeManagedExecutable(&reason)) {
+        QMessageBox::warning(this, tr("aria2"), reason);
+        return;
+    }
+    detectExecutable();
 }
 
 void Aria2Page::updateProxyWidgets()
@@ -158,6 +236,7 @@ void Aria2Page::loadSettings()
 {
     auto s = APPLICATION->settings();
     m_enabled->setChecked(s->get("Aria2Enabled").toBool());
+    m_autoInstall->setChecked(s->get("Aria2AutoInstall").toBool());
     m_executablePath->setText(s->get("Aria2ExecutablePath").toString());
     m_fallbackToQt->setChecked(s->get("Aria2FallbackToQt").toBool());
     m_followLauncherDownloadLimits->setChecked(s->get("Aria2FollowLauncherDownloadLimits").toBool());
@@ -183,6 +262,7 @@ void Aria2Page::applySettings()
 {
     auto s = APPLICATION->settings();
     s->set("Aria2Enabled", m_enabled->isChecked());
+    s->set("Aria2AutoInstall", m_autoInstall->isChecked());
     s->set("Aria2ExecutablePath", m_executablePath->text());
     s->set("Aria2FallbackToQt", m_fallbackToQt->isChecked());
     s->set("Aria2FollowLauncherDownloadLimits", m_followLauncherDownloadLimits->isChecked());
@@ -201,4 +281,56 @@ void Aria2Page::applySettings()
     s->set("Aria2ProxyPort", m_proxyPort->value());
     s->set("Aria2ProxyUser", m_proxyUser->text());
     s->set("Aria2ProxyPass", m_proxyPass->text());
+}
+
+bool Aria2Page::ensureExecutableAvailable()
+{
+    if (!m_enabled->isChecked() || !m_autoInstall->isChecked() || !effectiveExecutablePath().isEmpty()) {
+        return true;
+    }
+
+    QString reason;
+    auto manager = Net::Aria2Manager::instance();
+    if (!manager->canInstallManagedExecutable(&reason)) {
+        QMessageBox::warning(this, tr("aria2"), reason);
+        return false;
+    }
+
+    auto task = manager->createInstallTask();
+    ProgressDialog progress(this);
+    if (progress.execWithTask(task.get()) != QDialog::Accepted) {
+        QMessageBox::warning(this, tr("aria2"), task->failReason());
+        return false;
+    }
+    detectExecutable();
+    return true;
+}
+
+QString Aria2Page::effectiveExecutablePath() const
+{
+    const auto customPath = m_executablePath->text().trimmed();
+    if (!customPath.isEmpty()) {
+        QFileInfo custom(customPath);
+        if (custom.exists() && custom.isFile() && custom.isExecutable()) {
+            return custom.absoluteFilePath();
+        }
+    }
+
+    auto manager = Net::Aria2Manager::instance();
+    const auto systemPath = manager->findSystemExecutable();
+    if (!systemPath.isEmpty()) {
+        return systemPath;
+    }
+
+    QFileInfo managed(manager->managedExecutablePath());
+    if (managed.exists() && managed.isFile() && managed.isExecutable()) {
+        return managed.absoluteFilePath();
+    }
+
+    QFileInfo bundled(manager->bundledExecutablePath());
+    if (bundled.exists() && bundled.isFile() && bundled.isExecutable()) {
+        return bundled.absoluteFilePath();
+    }
+
+    return {};
 }

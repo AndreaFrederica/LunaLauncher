@@ -329,6 +329,7 @@ void ExternalResourcesPage::updateActions()
     ui->actionViewHomepage->setEnabled(hasSelection && std::any_of(selectedResources.begin(), selectedResources.end(),
                                                                    [](Resource* resource) { return !resource->homepage().isEmpty(); }));
     ui->actionExportMetadata->setEnabled(!m_model->empty());
+    ui->actionValidateMods->setEnabled(!m_model->empty());
 }
 
 void ExternalResourcesPage::updateFrame(const QModelIndex& current, [[maybe_unused]] const QModelIndex& previous)

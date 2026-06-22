@@ -39,6 +39,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include "minecraft/mod/ModDependency.h"
+
 struct ModLicense {
     QString name = {};
     QString id = {};
@@ -140,6 +142,16 @@ struct ModDetails {
 
     QStringList dependencies = {};
 
+    // Structured dependency edges with full version ranges / kinds / sides.
+    // This is the authoritative source for the preflight checker; the flat
+    // `dependencies` list above is kept for back-compat with the existing
+    // requires/requiredBy graph in ModFolderModel.
+    QList<ModDependencyEdge> dependencyEdges = {};
+
+    // Mod environment ("client", "server", "both"/"*"). Empty means unknown /
+    // not declared (treated as "both"). Used for preflight side-mismatch checks.
+    QString environment = {};
+
     ModDetails() = default;
 
     /** Metadata should be handled manually to properly set the mod status. */
@@ -155,6 +167,8 @@ struct ModDetails {
         , licenses(other.licenses)
         , icon_file(other.icon_file)
         , dependencies(other.dependencies)
+        , dependencyEdges(other.dependencyEdges)
+        , environment(other.environment)
     {}
 
     ModDetails& operator=(const ModDetails& other) = default;

@@ -15,6 +15,8 @@
 #include <QWebSocket>
 #include <functional>
 
+#include "tasks/Task.h"
+
 namespace Net {
 
 struct Aria2DownloadInfo {
@@ -43,7 +45,12 @@ class Aria2Manager : public QObject {
     bool followLauncherDownloadLimits() const;
     int maxConcurrentDownloads() const;
     QString findExecutable() const;
+    QString findSystemExecutable() const;
     QString bundledExecutablePath() const;
+    QString managedExecutablePath() const;
+    bool canInstallManagedExecutable(QString* reason = nullptr) const;
+    Task::Ptr createInstallTask() const;
+    bool removeManagedExecutable(QString* reason = nullptr);
     bool ensureStarted(QString* error = nullptr);
     bool isRunning() const;
     QString statusText() const;

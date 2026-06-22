@@ -2,6 +2,7 @@
 
 #include "net/Aria2Download.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QNetworkRequest>
@@ -17,23 +18,8 @@
 #include "settings/SettingsObject.h"
 
 namespace {
-
-class SyntheticNetworkReply : public QNetworkReply {
-   public:
-    SyntheticNetworkReply(const QUrl& url, qint64 contentLength, QObject* parent = nullptr) : QNetworkReply(parent)
-    {
-        setUrl(url);
-        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
-        setHeader(QNetworkRequest::ContentLengthHeader, contentLength);
-        open(QIODevice::ReadOnly | QIODevice::Unbuffered);
-    }
-
-    void abort() override {}
-
-   protected:
-    qint64 readData(char*, qint64) override { return -1; }
-};
-
+// 1 week in seconds — mirrors MetaCacheSink's private MAX_TIME_TO_EXPIRE.
+constexpr qint64 kAria2DefaultCacheMaxAge = 1 * 7 * 24 * 60 * 60;
 }  // namespace
 
 namespace Net {
@@ -67,8 +53,10 @@ Download::Ptr Aria2Download::makeCached(QUrl url, MetaEntryPtr entry, Options op
     dl->m_url = std::move(url);
     dl->setObjectName(QString("ARIA2_CACHE:") + dl->m_url.toString());
     dl->m_options = options;
+    dl->m_cacheEntry = entry;
+    dl->m_isEternal = options.testFlag(Option::MakeEternal);
     auto md5Node = new ChecksumValidator(QCryptographicHash::Md5);
-    dl->m_sink.reset(new MetaCacheSink(entry, md5Node, options.testFlag(Option::MakeEternal)));
+    dl->m_sink.reset(new MetaCacheSink(entry, md5Node, dl->m_isEternal));
     return dl;
 }
 
@@ -209,20 +197,19 @@ void Aria2Download::finishFromTempFile()
         return;
     }
 
-    QNetworkRequest request(m_url);
-    auto state = m_sink->init(request);
-    if (state != State::Running) {
-        m_error = QNetworkReply::UnknownContentError;
-        m_errorString = m_sink->failReason();
-        emitFailed(m_errorString);
-        return;
-    }
-
-    qint64 copied = 0;
+    // Stream the temp file once: feed 256KB chunks into the MD5 hash while
+    // reporting progress. aria2 has already written the complete file, so we
+    // only hash it here — we do NOT push it back through the sink, which would
+    // trigger a second full-disk write and a PSaveFile::commit() that fails on
+    // Windows when antivirus locks the just-finished large file.
     const qint64 total = input.size();
+    setProgress(0, total);
+
+    QCryptographicHash md5(QCryptographicHash::Md5);
+    qint64 processed = 0;
     while (!input.atEnd()) {
         if (m_state == State::AbortedByUser) {
-            m_sink->abort();
+            input.close();
             QFile::remove(m_tempPath);
             emit aborted();
             emit finished();
@@ -230,35 +217,55 @@ void Aria2Download::finishFromTempFile()
         }
         QByteArray chunk = input.read(256 * 1024);
         if (chunk.isEmpty() && input.error() != QFile::NoError) {
-            m_sink->abort();
             m_error = QNetworkReply::UnknownContentError;
             m_errorString = input.errorString();
+            input.close();
+            QFile::remove(m_tempPath);
             emitFailed(m_errorString);
             return;
         }
-        copied += chunk.size();
-        state = m_sink->write(chunk);
-        setProgress(copied, total);
-        if (state == State::Failed) {
-            m_sink->abort();
-            m_error = QNetworkReply::UnknownContentError;
-            m_errorString = m_sink->failReason();
-            emitFailed(m_errorString);
-            return;
-        }
+        md5.addData(chunk);
+        processed += chunk.size();
+        setProgress(processed, total);
     }
+    input.close();
 
-    SyntheticNetworkReply reply(m_url, total, this);
-    state = m_sink->finalize(reply);
-    if (state != State::Succeeded) {
-        m_sink->abort();
+    // Place the file: rename aria2's temp to the target. FS::move uses
+    // std::filesystem::rename (overwrite-capable on Windows via
+    // MoveFileExW + MOVEFILE_REPLACE_EXISTING) with a copy+delete fallback.
+    if (!FS::ensureFilePathExists(m_targetPath)) {
         m_error = QNetworkReply::UnknownContentError;
-        m_errorString = m_sink->failReason();
+        m_errorString = tr("Could not create folder for %1").arg(m_targetPath);
+        QFile::remove(m_tempPath);
+        emitFailed(m_errorString);
+        return;
+    }
+    if (!FS::move(m_tempPath, m_targetPath)) {
+        m_error = QNetworkReply::UnknownContentError;
+        m_errorString = tr("Could not move aria2 output file from %1 to %2").arg(m_tempPath, m_targetPath);
+        QFile::remove(m_tempPath);
         emitFailed(m_errorString);
         return;
     }
 
-    QFile::remove(m_tempPath);
+    // For the cached (MetaCacheSink) case only: update the cache metadata
+    // manually, mirroring MetaCacheSink::finalizeCache. aria2 gives us no HTTP
+    // headers, so ETag and Last-Modified are left untouched — matching the old
+    // behavior where a SyntheticNetworkReply carried no such headers.
+    if (m_cacheEntry) {
+        QFileInfo targetInfo(m_targetPath);
+        m_cacheEntry->setMD5Sum(QString::fromLatin1(md5.result().toHex()));
+        m_cacheEntry->setLocalChangedTimestamp(targetInfo.lastModified().toUTC().toMSecsSinceEpoch());
+        if (m_isEternal) {
+            m_cacheEntry->makeEternal(true);
+        } else {
+            m_cacheEntry->setMaximumAge(kAria2DefaultCacheMaxAge);
+        }
+        m_cacheEntry->setCurrentAge(0);
+        m_cacheEntry->setStale(false);
+        APPLICATION->metacache()->updateEntry(m_cacheEntry);
+    }
+
     emitSucceeded();
 }
 

@@ -278,7 +278,7 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
     }
 
     {  // network
-        m_network = std::make_unique<QNetworkAccessManager>();
+        m_network.reset(new QNetworkAccessManager());
         qDebug() << "Detecting proxy settings...";
         QNetworkProxy proxy = QNetworkProxy::applicationProxy();
         m_network->setProxy(proxy);
@@ -767,7 +767,7 @@ QFileInfo PrismUpdaterApp::downloadAsset(const GitHubReleaseAsset& asset)
 
     qDebug() << "downloading" << file_url << "to" << out_file_path;
     auto download = Net::Download::makeFile(file_url, out_file_path);
-    download->setNetwork(m_network.get());
+    download->setNetwork(m_network);
     auto progress_dialog = ProgressDialog();
     progress_dialog.adjustSize();
 
@@ -1137,7 +1137,7 @@ void PrismUpdaterApp::downloadReleasePage(const QString& api_url, int page)
     int per_page = 30;
     auto page_url = QString("%1?per_page=%2&page=%3").arg(api_url).arg(QString::number(per_page)).arg(QString::number(page));
     auto [download, response] = Net::Download::makeByteArray(page_url);
-    download->setNetwork(m_network.get());
+    download->setNetwork(m_network);
     m_current_url = page_url;
 
     auto github_api_headers = std::make_unique<Net::RawHeaderProxy>();

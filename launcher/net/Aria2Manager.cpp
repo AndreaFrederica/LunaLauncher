@@ -4,6 +4,7 @@
 
 #include <QAbstractSocket>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -12,15 +13,213 @@
 #include <QNetworkRequest>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
+#include <QSysInfo>
+#include <QTemporaryDir>
 #include <QTimer>
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "archive/ArchiveReader.h"
 #include "net/Logging.h"
 #include "settings/SettingsObject.h"
 
 namespace Net {
+
+namespace {
+constexpr auto ARIA2_WINDOWS_X64_URL =
+    "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip";
+constexpr auto ARIA2_WINDOWS_X64_EXE_SHA256 = "be2099c214f63a3cb4954b09a0becd6e2e34660b886d4c898d260febfe9d70c2";
+
+struct Aria2InstallInfo {
+    bool supported = false;
+    QString url;
+    QString executableName;
+    QString executableSha256;
+    QString unsupportedReason;
+};
+
+Aria2InstallInfo installInfoForPlatform()
+{
+#ifdef Q_OS_WIN
+    if (QSysInfo::currentCpuArchitecture() == "x86_64") {
+        return { true, ARIA2_WINDOWS_X64_URL, "aria2c.exe", ARIA2_WINDOWS_X64_EXE_SHA256, {} };
+    }
+    return { false, {}, {}, {}, QObject::tr("Automatic aria2 download is only available for Windows x64.") };
+#elif defined(Q_OS_MACOS)
+    return { false, {}, {}, {}, QObject::tr("Automatic aria2 download is not available on macOS. Install aria2 with Homebrew, MacPorts, or set a custom aria2c path.") };
+#else
+    return { false, {}, {}, {}, QObject::tr("Automatic aria2 download is not available on this platform. Install aria2 with your package manager or set a custom aria2c path.") };
+#endif
+}
+
+QString executableFileName()
+{
+#ifdef Q_OS_WIN
+    return "aria2c.exe";
+#else
+    return "aria2c";
+#endif
+}
+
+QString sha256Hex(const QByteArray& data)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
+}
+
+bool isBundledBuildEnvironmentTool(const QString& candidate)
+{
+    if (!APPLICATION_DYN) {
+        return false;
+    }
+    const auto candidatePath = QDir::cleanPath(QFileInfo(candidate).canonicalFilePath());
+    const auto msysPath = QDir::cleanPath(QFileInfo(FS::PathCombine(APPLICATION->root(), ".msys2")).canonicalFilePath());
+    return !candidatePath.isEmpty() && !msysPath.isEmpty() &&
+           (candidatePath == msysPath || candidatePath.startsWith(msysPath + "/") || candidatePath.startsWith(msysPath + "\\"));
+}
+
+class Aria2InstallTask : public Task {
+   public:
+    Aria2InstallTask(QString targetPath, Aria2InstallInfo info) : Task(true), m_targetPath(std::move(targetPath)), m_info(std::move(info)) {}
+
+   private:
+    void executeTask() override
+    {
+        if (!m_info.supported) {
+            emitFailed(m_info.unsupportedReason);
+            return;
+        }
+
+        setStatus(tr("Downloading aria2"));
+        m_tempDir.reset(new QTemporaryDir(QDir::temp().absoluteFilePath("aria2-install-XXXXXX")));
+        if (!m_tempDir->isValid()) {
+            emitFailed(tr("Failed to create a temporary directory for aria2."));
+            return;
+        }
+
+        m_archivePath = m_tempDir->filePath("aria2.zip");
+        m_archiveFile.setFileName(m_archivePath);
+        if (!m_archiveFile.open(QIODevice::WriteOnly)) {
+            emitFailed(tr("Failed to create aria2 download file: %1").arg(m_archiveFile.errorString()));
+            return;
+        }
+
+        QNetworkRequest request(QUrl(m_info.url));
+        request.setHeader(QNetworkRequest::UserAgentHeader, APPLICATION->getUserAgent().toUtf8());
+        request.setTransferTimeout(APPLICATION->settings()->get("RequestTimeout").toInt() * 1000);
+        m_reply = APPLICATION->network()->get(request);
+        connect(m_reply, &QNetworkReply::readyRead, this, [this] {
+            if (m_archiveFile.write(m_reply->readAll()) < 0) {
+                m_writeError = m_archiveFile.errorString();
+                m_reply->abort();
+            }
+        });
+        connect(m_reply, &QNetworkReply::downloadProgress, this, &Task::setProgress);
+        connect(m_reply, &QNetworkReply::finished, this, [this] { downloadFinished(); });
+    }
+
+    bool abort() override
+    {
+        if (m_reply) {
+            m_reply->abort();
+            return true;
+        }
+        return Task::abort();
+    }
+
+    void downloadFinished()
+    {
+        m_archiveFile.write(m_reply->readAll());
+        const auto replyError = m_reply->error();
+        const auto replyErrorString = m_reply->errorString();
+        m_reply->deleteLater();
+        m_reply = nullptr;
+        m_archiveFile.close();
+
+        if (!m_writeError.isEmpty()) {
+            emitFailed(tr("Failed to write aria2 archive: %1").arg(m_writeError));
+            return;
+        }
+        if (replyError != QNetworkReply::NoError) {
+            emitFailed(tr("Failed to download aria2: %1").arg(replyErrorString));
+            return;
+        }
+
+        setStatus(tr("Installing aria2"));
+        tryInstallArchive();
+    }
+
+    void tryInstallArchive()
+    {
+        MMCZip::ArchiveReader archive(m_archivePath);
+        QString executableInArchive;
+        const auto files = archive.getFiles();
+        for (const auto& file : files) {
+            if (file.endsWith("/" + m_info.executableName) || file == m_info.executableName) {
+                executableInArchive = file;
+                break;
+            }
+        }
+        if (executableInArchive.isEmpty()) {
+            emitFailed(tr("Downloaded aria2 archive does not contain %1.").arg(m_info.executableName));
+            return;
+        }
+
+        auto archiveFile = archive.goToFile(executableInArchive);
+        if (!archiveFile) {
+            emitFailed(tr("Failed to open %1 from the aria2 archive.").arg(executableInArchive));
+            return;
+        }
+
+        int readStatus = 0;
+        const auto executableData = archiveFile->readAll(&readStatus);
+        if (readStatus < 0 || executableData.isEmpty()) {
+            emitFailed(tr("Failed to read %1 from the aria2 archive.").arg(executableInArchive));
+            return;
+        }
+
+        const auto actualSha256 = sha256Hex(executableData);
+        if (!m_info.executableSha256.isEmpty() && actualSha256 != m_info.executableSha256) {
+            emitFailed(tr("Downloaded aria2 executable did not match the expected checksum."));
+            return;
+        }
+
+        if (!FS::ensureFilePathExists(m_targetPath)) {
+            emitFailed(tr("Failed to create aria2 install directory."));
+            return;
+        }
+
+        QSaveFile output(m_targetPath);
+        if (!output.open(QIODevice::WriteOnly)) {
+            emitFailed(tr("Failed to open %1 for writing: %2").arg(m_targetPath, output.errorString()));
+            return;
+        }
+        if (output.write(executableData) != executableData.size()) {
+            emitFailed(tr("Failed to write %1: %2").arg(m_targetPath, output.errorString()));
+            return;
+        }
+        if (!output.commit()) {
+            emitFailed(tr("Failed to install %1: %2").arg(m_targetPath, output.errorString()));
+            return;
+        }
+
+        QFile::setPermissions(m_targetPath,
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner | QFileDevice::ReadUser |
+                                  QFileDevice::ExeUser | QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther |
+                                  QFileDevice::ExeOther);
+        emitSucceeded();
+    }
+
+    QString m_targetPath;
+    Aria2InstallInfo m_info;
+    std::unique_ptr<QTemporaryDir> m_tempDir;
+    QString m_archivePath;
+    QFile m_archiveFile;
+    QNetworkReply* m_reply = nullptr;
+    QString m_writeError;
+};
+}  // namespace
 
 Aria2Manager* Aria2Manager::instance()
 {
@@ -74,11 +273,7 @@ int Aria2Manager::maxConcurrentDownloads() const
 
 QString Aria2Manager::bundledExecutablePath() const
 {
-#ifdef Q_OS_WIN
-    const QString executable = "aria2c.exe";
-#else
-    const QString executable = "aria2c";
-#endif
+    const QString executable = executableFileName();
     const QDir appDir(QCoreApplication::applicationDirPath());
     QStringList candidates = { appDir.absoluteFilePath(FS::PathCombine("tools", FS::PathCombine("aria2", executable))),
                                appDir.absoluteFilePath(executable) };
@@ -99,31 +294,19 @@ QString Aria2Manager::bundledExecutablePath() const
     return candidates.first();
 }
 
-QString Aria2Manager::findExecutable() const
+QString Aria2Manager::managedExecutablePath() const
 {
-#ifdef Q_OS_WIN
-    const QString executable = "aria2c.exe";
-#else
-    const QString executable = "aria2c";
-#endif
-
-    if (APPLICATION_DYN) {
-        QString configured = APPLICATION->settings()->get("Aria2ExecutablePath").toString();
-        if (!configured.isEmpty()) {
-            QFileInfo info(configured);
-            if (info.exists() && info.isFile() && info.isExecutable()) {
-                return info.absoluteFilePath();
-            }
-        }
+    if (!APPLICATION_DYN) {
+        return {};
     }
+    return FS::PathCombine(APPLICATION->dataRoot(), "tools", "aria2", executableFileName());
+}
 
-    QFileInfo bundled(bundledExecutablePath());
-    if (bundled.exists() && bundled.isFile() && bundled.isExecutable()) {
-        return bundled.absoluteFilePath();
-    }
-
+QString Aria2Manager::findSystemExecutable() const
+{
+    const QString executable = executableFileName();
     const QString fromPath = QStandardPaths::findExecutable(executable);
-    if (!fromPath.isEmpty()) {
+    if (!fromPath.isEmpty() && !isBundledBuildEnvironmentTool(fromPath)) {
         return fromPath;
     }
 
@@ -136,12 +319,78 @@ QString Aria2Manager::findExecutable() const
 #endif
     for (const auto& candidate : commonPaths) {
         QFileInfo info(candidate);
-        if (info.exists() && info.isFile() && info.isExecutable()) {
+        if (info.exists() && info.isFile() && info.isExecutable() && !isBundledBuildEnvironmentTool(candidate)) {
             return info.absoluteFilePath();
         }
     }
 
     return {};
+}
+
+QString Aria2Manager::findExecutable() const
+{
+    if (APPLICATION_DYN) {
+        QString configured = APPLICATION->settings()->get("Aria2ExecutablePath").toString();
+        if (!configured.isEmpty()) {
+            QFileInfo info(configured);
+            if (info.exists() && info.isFile() && info.isExecutable()) {
+                return info.absoluteFilePath();
+            }
+        }
+    }
+
+    const auto system = findSystemExecutable();
+    if (!system.isEmpty()) {
+        return system;
+    }
+
+    QFileInfo managed(managedExecutablePath());
+    if (managed.exists() && managed.isFile() && managed.isExecutable()) {
+        return managed.absoluteFilePath();
+    }
+
+    QFileInfo bundled(bundledExecutablePath());
+    if (bundled.exists() && bundled.isFile() && bundled.isExecutable()) {
+        return bundled.absoluteFilePath();
+    }
+
+    return {};
+}
+
+bool Aria2Manager::canInstallManagedExecutable(QString* reason) const
+{
+    const auto info = installInfoForPlatform();
+    if (!info.supported && reason) {
+        *reason = info.unsupportedReason;
+    }
+    return info.supported;
+}
+
+Task::Ptr Aria2Manager::createInstallTask() const
+{
+    return makeShared<Aria2InstallTask>(managedExecutablePath(), installInfoForPlatform());
+}
+
+bool Aria2Manager::removeManagedExecutable(QString* reason)
+{
+    if (isRunning()) {
+        if (reason) {
+            *reason = tr("Stop aria2 before removing the downloaded executable.");
+        }
+        return false;
+    }
+
+    const auto path = managedExecutablePath();
+    if (path.isEmpty() || !QFileInfo::exists(path)) {
+        return true;
+    }
+    if (!QFile::remove(path)) {
+        if (reason) {
+            *reason = tr("Failed to remove %1.").arg(path);
+        }
+        return false;
+    }
+    return true;
 }
 
 bool Aria2Manager::isRunning() const

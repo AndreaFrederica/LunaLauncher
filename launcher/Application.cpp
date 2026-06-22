@@ -731,6 +731,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("RequestTimeout", 60);
         m_settings->registerSetting("Aria2Enabled", false);
         m_settings->registerSetting("Aria2ExecutablePath", "");
+        m_settings->registerSetting("Aria2AutoInstall", true);
         m_settings->registerSetting("Aria2FallbackToQt", true);
         m_settings->registerSetting("Aria2FollowLauncherDownloadLimits", true);
         m_settings->registerSetting("Aria2MaxConcurrentDownloads", 6);

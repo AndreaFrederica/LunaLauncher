@@ -6,6 +6,7 @@
 #include "ServerConsoleWidget.h"
 #include "server/ServerInstance.h"
 #include "server/ServerLaunchTask.h"
+#include <QPushButton>
 #include <QVBoxLayout>
 #include <QDebug>
 

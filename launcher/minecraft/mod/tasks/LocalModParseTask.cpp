@@ -19,6 +19,57 @@ static const QRegularExpression s_newlineRegex("\r\n|\n|\r");
 
 namespace ModUtils {
 
+// Serialize a Fabric/Quilt dependency constraint value (string / array / object
+// with any/all/versions) into a single range expression the ModVersionRange
+// module can evaluate. Arrays and "any" become OR ("||") clauses; "all" and
+// "versions" become space-joined (AND) clauses. Unrecognized shapes collapse
+// to "*" (no constraint) so we never false-positive on a missing dependency.
+static QString serializeFabricConstraint(const QJsonValue& v)
+{
+    if (v.isString())
+        return v.toString();
+    if (v.isArray()) {
+        QStringList parts;
+        for (const auto& e : v.toArray()) {
+            QString s = serializeFabricConstraint(e);
+            if (!s.isEmpty())
+                parts.append(s);
+        }
+        return parts.join(" || ");
+    }
+    if (v.isObject()) {
+        auto o = v.toObject();
+        if (o.contains("any"))
+            return serializeFabricConstraint(o.value("any"));
+        if (o.contains("all")) {
+            QStringList parts;
+            for (const auto& e : o.value("all").toArray()) {
+                QString s = serializeFabricConstraint(e);
+                if (!s.isEmpty())
+                    parts.append(s);
+            }
+            return parts.join(' ');
+        }
+        if (o.contains("versions"))
+            return serializeFabricConstraint(o.value("versions"));
+        if (o.contains("version"))
+            return serializeFabricConstraint(o.value("version"));
+    }
+    return {};
+}
+
+// Read the top-level "environment" field from fabric.mod.json / quilt.mod.json
+// into ModDetails::environment (normalized to "client"/"server"/"both").
+static QString parseEnvironment(const QJsonValue& env)
+{
+    QString e = env.toString().trimmed().toLower();
+    if (e == "client")
+        return "client";
+    if (e == "server")
+        return "server";
+    return "both";  // "*", "" or absent
+}
+
 // NEW format
 // https://github.com/MinecraftForge/FML/wiki/FML-mod-information-file/c8d8f1929aff9979e322af79a59ce81f3e02db6a
 
@@ -69,16 +120,30 @@ ModDetails ReadMCModInfo(QByteArray contents)
         auto addDep = [&details](QString dep) {
             if (dep == "mod_MinecraftForge" || dep == "Forge")
                 return;
+            // Legacy deps look like "mod_id:version" or "mod_id@version".
+            // Capture the version into a range edge, and the bare id into the
+            // flat list used by the existing requires/requiredBy graph.
+            QString versionRange;
             if (dep.contains(":")) {
-                dep = dep.section(":", 1);
+                versionRange = dep.section(":", 1);
+                dep = dep.section(":", 0, 0);
             }
             if (dep.contains("@")) {
+                if (versionRange.isEmpty())
+                    versionRange = dep.section("@", 1);
                 dep = dep.section("@", 0, 0);
             }
             if (dep.startsWith("mod_")) {
                 dep = dep.mid(4);
             }
             details.dependencies.append(dep);
+            ModDependencyEdge edge;
+            edge.fromModId = details.mod_id;
+            edge.toModId = dep;
+            edge.kind = DepKind::Required;
+            edge.versionRange = versionRange;
+            edge.source = "mcmod.info";
+            details.dependencyEdges.append(edge);
         };
 
         if (firstObj.contains("requiredMods")) {
@@ -241,6 +306,28 @@ ModDetails ReadMCModTOML(QByteArray contents)
             auto mandatory = (*t)["mandatory"].as_boolean();
             return mandatory && mandatory->get();
         };
+        auto readSide = [](toml::table* t) -> DepSide {
+            auto side = (*t)["side"].as_string();
+            if (!side)
+                return DepSide::Both;
+            std::string s = side->get();
+            if (s == "CLIENT")
+                return DepSide::Client;
+            if (s == "SERVER")
+                return DepSide::Server;
+            return DepSide::Both;
+        };
+        auto readOrdering = [](toml::table* t) -> DepOrder {
+            auto ord = (*t)["ordering"].as_string();
+            if (!ord)
+                return DepOrder::None;
+            std::string s = ord->get();
+            if (s == "BEFORE")
+                return DepOrder::Before;
+            if (s == "AFTER")
+                return DepOrder::After;
+            return DepOrder::None;
+        };
         for (auto& dep : *dependencies) {
             auto dep_table = dep.as_table();
             if (!dep_table) {
@@ -250,8 +337,47 @@ ModDetails ReadMCModTOML(QByteArray contents)
             if (!modId || ignoreModIds.contains(QString::fromStdString(modId->get()))) {
                 continue;
             }
-            if (isNeoForgeDep(dep_table) || isForgeDep(dep_table)) {
-                details.dependencies.append(QString::fromStdString(modId->get()));
+            // Determine kind from NeoForge "type" or legacy Forge "mandatory".
+            // NeoForge types: required/optional/incompatible/discouraged.
+            // Legacy Forge: mandatory bool (true=required, false=optional).
+            DepKind kind = DepKind::Optional;
+            bool isRequired = false;
+            if (auto type = (*dep_table)["type"].as_string()) {
+                std::string t = type->get();
+                if (t == "required") {
+                    kind = DepKind::Required;
+                    isRequired = true;
+                } else if (t == "optional") {
+                    kind = DepKind::Optional;
+                } else if (t == "incompatible") {
+                    kind = DepKind::Incompatible;
+                } else if (t == "discouraged") {
+                    kind = DepKind::Discouraged;
+                }
+            } else if (auto mandatory = (*dep_table)["mandatory"].as_boolean()) {
+                if (mandatory->get()) {
+                    kind = DepKind::Required;
+                    isRequired = true;
+                }
+            }
+
+            QString modIdStr = QString::fromStdString(modId->get());
+            ModDependencyEdge edge;
+            edge.fromModId = details.mod_id;
+            edge.toModId = modIdStr;
+            edge.kind = kind;
+            edge.side = readSide(dep_table);
+            edge.ordering = readOrdering(dep_table);
+            edge.source = "mods.toml";
+            if (auto vr = (*dep_table)["versionRange"].as_string()) {
+                edge.versionRange = QString::fromStdString(vr->get());
+            }
+            details.dependencyEdges.append(edge);
+
+            // Keep the flat list in sync (required deps only) for the existing
+            // requires/requiredBy graph in ModFolderModel.
+            if (isRequired) {
+                details.dependencies.append(modIdStr);
             }
         }
     };
@@ -360,17 +486,42 @@ ModDetails ReadFabricModInfo(QByteArray contents)
             }
         }
 
-        if (object.contains("depends")) {
-            auto depends = object.value("depends");
-            if (depends.isObject()) {
-                auto obj = depends.toObject();
-                for (auto key : obj.keys()) {
-                    if (key != "fabricloader" && key != "minecraft" && !key.startsWith("fabric-")) {
-                        details.dependencies.append(key);
-                    }
+        if (object.contains("environment")) {
+            details.environment = parseEnvironment(object.value("environment"));
+        } else {
+            details.environment = "both";
+        }
+
+        // Fabric dependency sections. Each maps an object of {modId: rangeExpr}
+        // to a dependency kind. We keep ALL edges (including virtual deps like
+        // minecraft/fabricloader) for the preflight checker; the flat
+        // `dependencies` list keeps only real, required mods for back-compat.
+        auto readFabricDepSection = [&details, &object](const QString& sectionName, DepKind kind) {
+            if (!object.contains(sectionName))
+                return;
+            auto section = object.value(sectionName);
+            if (!section.isObject())
+                return;
+            auto obj = section.toObject();
+            for (auto key : obj.keys()) {
+                ModDependencyEdge edge;
+                edge.fromModId = details.mod_id;
+                edge.toModId = key;
+                edge.kind = kind;
+                edge.versionRange = serializeFabricConstraint(obj.value(key));
+                edge.source = "fabric.mod.json";
+                details.dependencyEdges.append(edge);
+
+                if (kind == DepKind::Required && key != "fabricloader" && key != "minecraft" && !key.startsWith("fabric-")) {
+                    details.dependencies.append(key);
                 }
             }
-        }
+        };
+        readFabricDepSection("depends", DepKind::Required);
+        readFabricDepSection("recommends", DepKind::Recommended);
+        readFabricDepSection("suggests", DepKind::Suggested);
+        readFabricDepSection("conflicts", DepKind::Conflict);
+        readFabricDepSection("breaks", DepKind::Break);
     }
     return details;
 }
@@ -457,29 +608,58 @@ ModDetails ReadQuiltModInfo(QByteArray contents)
                     details.icon_file = icon.toString();
                 }
             }
-            if (object.contains("depends")) {
-                auto depends = object.value("depends");
-                if (depends.isArray()) {
-                    auto array = depends.toArray();
-                    for (auto obj : array) {
-                        QString modId;
-                        if (obj.isString()) {
-                            modId = obj.toString();
-                        } else if (obj.isObject()) {
-                            auto objValue = obj.toObject();
-                            modId = objValue.value("id").toString();
-                            if (objValue.contains("optional") && objValue.value("optional").toBool()) {
-                                continue;
-                            }
-                        } else {
-                            continue;
-                        }
-                        if (modId != "minecraft" && !modId.startsWith("quilt_")) {
-                            details.dependencies.append(modId);
-                        }
+            if (object.contains("minecraft")) {
+                details.environment = parseEnvironment(object.value("minecraft").toObject().value("environment"));
+            } else {
+                details.environment = "both";
+            }
+
+            // Quilt loader dependency array. Each entry is either a bare id
+            // string, or an object {id, versions, optional, unless}. We capture
+            // the full edge (with version constraint) for the preflight checker.
+            auto readQuiltDeps = [&details, &object](const QString& key, DepKind defaultKind) {
+                if (!object.contains(key))
+                    return;
+                auto arr = object.value(key).toArray();
+                for (auto entry : arr) {
+                    QString modId;
+                    QString versionRange;
+                    DepKind kind = defaultKind;
+                    bool optional = false;
+                    if (entry.isString()) {
+                        modId = entry.toString();
+                    } else if (entry.isObject()) {
+                        auto o = entry.toObject();
+                        modId = o.value("id").toString();
+                        // "versions" may be a string or array of accepted versions.
+                        if (o.contains("versions"))
+                            versionRange = serializeFabricConstraint(o.value("versions"));
+                        if (o.contains("optional") && o.value("optional").toBool())
+                            optional = true;
+                        if (key == "breaks")
+                            kind = DepKind::Break;
+                        else if (optional)
+                            kind = DepKind::Optional;
+                        else
+                            kind = DepKind::Required;
+                    } else {
+                        continue;
+                    }
+                    ModDependencyEdge edge;
+                    edge.fromModId = details.mod_id;
+                    edge.toModId = modId;
+                    edge.kind = kind;
+                    edge.versionRange = versionRange;
+                    edge.source = "quilt.mod.json";
+                    details.dependencyEdges.append(edge);
+
+                    if (kind == DepKind::Required && modId != "minecraft" && !modId.startsWith("quilt_")) {
+                        details.dependencies.append(modId);
                     }
                 }
-            }
+            };
+            readQuiltDeps("depends", DepKind::Required);
+            readQuiltDeps("breaks", DepKind::Break);
         }
 
     } catch (const Exception& e) {

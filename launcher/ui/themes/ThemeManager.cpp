@@ -30,6 +30,7 @@
 #include <QStyle>
 #include <QStyleFactory>
 #include "Exception.h"
+#include "FileSystem.h"
 #include "ui/themes/BrightTheme.h"
 #include "ui/themes/CatPack.h"
 #include "ui/themes/CustomTheme.h"

@@ -329,7 +329,10 @@ set(MINECRAFT_SOURCES
     minecraft/mod/MetadataHandler.h
     minecraft/mod/Mod.h
     minecraft/mod/Mod.cpp
+    minecraft/mod/ModDependency.h
     minecraft/mod/ModDetails.h
+    minecraft/mod/ModVersionRange.h
+    minecraft/mod/ModVersionRange.cpp
     minecraft/mod/ModFolderModel.h
     minecraft/mod/ModFolderModel.cpp
     minecraft/mod/Resource.h
@@ -358,6 +361,8 @@ set(MINECRAFT_SOURCES
     minecraft/mod/tasks/ResourceFolderLoadTask.cpp
     minecraft/mod/tasks/LocalModParseTask.h
     minecraft/mod/tasks/LocalModParseTask.cpp
+    minecraft/mod/tasks/ModPreflightTask.h
+    minecraft/mod/tasks/ModPreflightTask.cpp
     minecraft/mod/tasks/LocalResourceUpdateTask.h
     minecraft/mod/tasks/LocalResourceUpdateTask.cpp
     minecraft/mod/tasks/LocalDataPackParseTask.h
@@ -1252,6 +1257,8 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/ProgressDialog.h
     ui/dialogs/ReviewMessageBox.cpp
     ui/dialogs/ReviewMessageBox.h
+    ui/dialogs/ModPreflightDialog.cpp
+    ui/dialogs/ModPreflightDialog.h
     ui/dialogs/VersionSelectDialog.cpp
     ui/dialogs/VersionSelectDialog.h
     ui/dialogs/ResourceDownloadDialog.cpp

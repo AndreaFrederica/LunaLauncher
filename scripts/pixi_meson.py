@@ -55,10 +55,18 @@ def qt_config(root: Path, profile: str) -> Path:
 
 
 def build_dir(root: Path, profile: str) -> Path:
+    env_override = os.environ.get("LUNA_BUILD_DIR")
+    if env_override:
+        p = Path(env_override)
+        return p if p.is_absolute() else root / p
     return root / f"build-meson-{profile}"
 
 
 def install_dir(root: Path, profile: str) -> Path:
+    env_override = os.environ.get("LUNA_INSTALL_DIR")
+    if env_override:
+        p = Path(env_override)
+        return p if p.is_absolute() else root / p
     return root / f"install-{profile}"
 
 
@@ -158,6 +166,7 @@ def configure(root: Path, profile: str) -> None:
     idir = install_dir(root, profile)
 
     build_testing = os.environ.get("LUNA_BUILD_TESTING", "false").lower() in ("1", "true", "yes")
+    disable_ownership = os.environ.get("LUNA_DISABLE_OWNERSHIP_CHECK", "false").lower() in ("1", "true", "yes")
 
     args = [
         "meson",
@@ -170,6 +179,7 @@ def configure(root: Path, profile: str) -> None:
         "-Ddefault_library=static" if mode == "release" else "-Ddefault_library=shared",
         "-Dwarning_level=0",
         f"-Dbuild_testing={'true' if build_testing else 'false'}",
+        f"-Ddisable_ownership_check={'true' if disable_ownership else 'false'}",
         "-Dbuild_updater=false",
         "-Dbuild_filelinker=true" if system == "windows" else "-Dbuild_filelinker=false",
         "-Dlibarchive:tests=disabled",

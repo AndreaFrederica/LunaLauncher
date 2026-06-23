@@ -109,3 +109,28 @@ depends-on = [
   { task = "install", args = ["debug"] },
 ]
 cmd = "python scripts/pixi_meson.py test-install debug"
+
+# --- Offline test builds (FOR AUTOMATED TESTING ONLY - disables ownership check) ---
+
+[tasks.configure-test-offline]
+description = "Configure offline test build (NO ownership check - TESTING ONLY)"
+args = [
+  { arg = "profile", default = "debug", choices = ["debug", "release"] },
+]
+cmd = "python scripts/pixi_meson.py configure {{ profile }}"
+env = { LUNA_DISABLE_OWNERSHIP_CHECK = "1", LUNA_BUILD_TESTING = "1" }
+
+[tasks.build-test-offline]
+description = "Build offline test launcher (NO ownership check - TESTING ONLY)"
+depends-on = [
+  { task = "configure-test-offline", args = ["debug"] },
+]
+cmd = "python scripts/pixi_meson.py build debug"
+env = { LUNA_DISABLE_OWNERSHIP_CHECK = "1", LUNA_BUILD_TESTING = "1" }
+
+[tasks.test-offline]
+description = "Build + run offline test launcher (TESTING ONLY)"
+depends-on = [
+  { task = "build-test-offline", args = ["debug"] },
+]
+cmd = "python scripts/pixi_meson.py test debug"

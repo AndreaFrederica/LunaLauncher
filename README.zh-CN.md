@@ -26,6 +26,16 @@
 
 ---
 
+> **⚠️ 构建系统变更：已切换至 Meson**
+>
+> Luna Launcher 已从 **CMake** 切换为 **Meson** 作为主要构建系统。`CMakeLists.txt` 保留用于兼容，但**不再主动维护**，可能出现问题。
+>
+> **如果你正在将 Luna 的功能 backport 到 Prism Launcher 或其他分支：** 请注意，Luna 中的构建相关改动是针对 Meson 编写的（`meson.build`、`meson_options.txt`、`scripts/pixi_meson.py`）。如果你的目标项目仍使用 CMake，需要自行适配。
+>
+> 参阅[构建指南](https://lunalauncher.sirrus.cc/build.html)获取最新说明。
+
+---
+
 ## 特性
 
 > **注意：** Luna 是 Prism Launcher 的增强分支，在 Prism 的基础上额外增加了更多功能，同时保持与 Prism Launcher 实例和功能的完全兼容。

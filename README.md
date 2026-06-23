@@ -24,6 +24,16 @@
 
 ---
 
+> **⚠️ Build System Change: Meson Now Required**
+>
+> Luna Launcher has switched from **CMake** to **Meson** as its primary build system. The `CMakeLists.txt` is retained for compatibility but is **no longer actively maintained** and may have issues.
+>
+> **If you are backporting features from Luna to Prism Launcher or another fork:** Please be aware that build-related changes in Luna are written for Meson (`meson.build`, `meson_options.txt`, `scripts/pixi_meson.py`). You will need to adapt them to CMake if your target still uses CMake.
+>
+> See the [Build Guide](https://lunalauncher.sirrus.cc/build.html) for updated instructions.
+
+---
+
 ## Features
 
 > **Note:** Luna is an enhanced fork of Prism Launcher, adding extra features on top of Prism's foundation while maintaining full compatibility with Prism Launcher instances and functionality.

@@ -181,13 +181,18 @@ compiler_target_system = host_machine.system()
 compiler_target_system_version = host_machine.kernel()
 compiler_target_processor = host_machine.cpu_family()
 
-binary_dest_dir = '.'
+if is_linux
+  binary_dest_dir = 'bin'
+  exresource_dest_dir = join_paths('share', launcher_name, 'resources')
+else
+  binary_dest_dir = '.'
+  exresource_dest_dir = 'resource'
+endif
 library_dest_dir = '.'
 plugin_dest_dir = '.'
 resources_dest_dir = '.'
 jars_dest_dir = 'jars'
 framework_dest_dir = '.'
-exresource_dest_dir = 'resource'
 
 subdir('program_info')
 subdir('buildconfig')

@@ -35,6 +35,7 @@
  */
 
 #include "IconList.h"
+#include "BuildConfig.h"
 #include <FileSystem.h>
 #include <QDebug>
 #include <QCoreApplication>
@@ -68,8 +69,10 @@ IconList::IconList(const QStringList& builtinPaths, const QString& path, QObject
     QString installIconPath;
 #ifdef Q_OS_MACOS
     installIconPath = FS::PathCombine(appDir, "..", "Resources", "icons");
-#else
+#elif defined(Q_OS_WIN32)
     installIconPath = FS::PathCombine(appDir, "resource", "icons");
+#else
+    installIconPath = FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_NAME, "resources", "icons");
 #endif
     m_install_dir.setPath(installIconPath);
 

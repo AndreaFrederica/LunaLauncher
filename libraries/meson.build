@@ -26,8 +26,7 @@ localpeer_sources = [
   'LocalPeer/src/LockedFile.cpp',
   'LocalPeer/src/LockedFile.h',
   'LocalPeer/include/LocalPeer.h',
-  'LocalPeer/src/LockedFile_win.cpp',
-]
+] + (is_windows ? ['LocalPeer/src/LockedFile_win.cpp'] : ['LocalPeer/src/LockedFile_unix.cpp'])
 
 localpeer_moc_generated = qt.preprocess(
   moc_headers: files('LocalPeer/include/LocalPeer.h'),

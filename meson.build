@@ -59,7 +59,6 @@ else
     ],
     language: ['c', 'cpp'],
   )
-  add_project_link_arguments(['-Wl,--stack,8388608'], language: ['c', 'cpp'])
 endif
 
 add_project_arguments(

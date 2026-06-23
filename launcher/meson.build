@@ -1,10 +1,13 @@
 subdir('source_lists')
 
 if not is_windows
-  launcher_logic_sources -= [
-    'console/WindowsConsole.cpp',
-    'console/WindowsConsole.h',
-  ]
+  _filtered = []
+  foreach src : launcher_logic_sources
+    if src != 'console/WindowsConsole.cpp' and src != 'console/WindowsConsole.h'
+      _filtered += [src]
+    endif
+  endforeach
+  launcher_logic_sources = _filtered
 endif
 
 launcher_inc = include_directories('.', 'include')

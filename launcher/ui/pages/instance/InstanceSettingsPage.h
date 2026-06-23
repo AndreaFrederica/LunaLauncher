@@ -36,6 +36,8 @@
 #pragma once
 
 #include <QWidget>
+
+#include "Application.h"
 #include "BaseInstance.h"
 #include "ui/pages/BasePage.h"
 #include "ui/widgets/MinecraftSettingsWidget.h"

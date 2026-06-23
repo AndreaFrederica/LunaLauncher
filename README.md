@@ -185,7 +185,7 @@ Then use bash equivalents:
 
 #### Option B: Pixi + MSVC
 
-Uses Pixi with MSVC toolchain, managed via `pixi.toml`. Requires [Pixi](https://pixi.sh) and Visual Studio to be installed.
+Uses Pixi with MSVC toolchain, managed via `pixi.toml`. The Pixi path now drives Meson, while the old CMake tasks remain available as fallback.
 
 **Prerequisites:**
 
@@ -201,36 +201,28 @@ Start Menu > Visual Studio 2022 > x64 Native Tools Command Prompt for VS 2022
 ```powershell
 # From x64 Native Tools Command Prompt:
 
-# 1. Check / configure MSVC
-pixi run check_msvc
-
-# 2. Install Qt
-pixi run install_qt
-
-# 3. Install vcpkg
-pixi run install_vcpkg
-
-# 4. Configure
+# 1. One-time setup / configure
 pixi run configure
 
-# 5. Build
+# 2. Build
 pixi run build
 
-# 6. Install
+# 3. Install
 pixi run install
+
+# 4. Deploy Qt and runtime DLLs into install/
+pixi run deploy
 ```
 
 **Available Tasks:**
 
 | Command                | Description             |
 | ---------------------- | ----------------------- |
-| `pixi run check_msvc`   | Verify MSVC toolchain (sets up env if needed) |
-| `pixi run install_qt`   | Download/install Qt via Pixi                  |
-| `pixi run install_vcpkg`| Install vcpkg dependencies                    |
-| `pixi run configure`    | Configure CMake                               |
-| `pixi run build`        | Build the project                             |
-| `pixi run install`      | Install to `install/`                         |
-| `pixi run portable`     | Create portable build                         |
+| `pixi run configure`     | Configure Meson build directory               |
+| `pixi run build`         | One-shot setup + compile with Meson           |
+| `pixi run install`       | Build and install with Meson                  |
+| `pixi run deploy`        | Run `windeployqt` and copy runtime DLLs       |
+| `pixi run install_qt`    | Download/install Qt into `third_party/qt`     |
 
 ### Other Platforms
 

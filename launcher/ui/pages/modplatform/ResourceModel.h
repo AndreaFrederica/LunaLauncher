@@ -7,6 +7,9 @@
 #include <optional>
 
 #include <QAbstractListModel>
+#include <QIcon>
+#include <QModelIndex>
+#include <QUrl>
 
 #include "QObjectPtr.h"
 

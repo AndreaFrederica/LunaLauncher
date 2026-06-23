@@ -1,0 +1,29 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        buildtype: [debugoptimized, release]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache
+          python -m pip install meson ninja
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            subprojects/packagecache
+          key: ${{ runner.os }}-meson-${{ matrix.buildtype }}-${{ hashFiles('meson.build', 'meson_options.txt', '**/*.wrap') }}
+      - run: meson setup builddir --buildtype=${{ matrix.buildtype }} -Dwarning_level=3
+      - run: meson compile -C builddir
+      - run: meson test -C builddir --print-errorlogs

@@ -28,6 +28,12 @@ compile_commands.json
 build
 /build-*
 
+# Meson wrap outputs
+/subprojects/*
+!/subprojects/*.wrap
+!/subprojects/packagefiles/
+!/subprojects/packagefiles/**
+
 # Install dirs
 install
 /install-*
@@ -87,6 +93,7 @@ Testing/Temporary/*
 
 third_party/*
 vcpkg_installed/*
+.meson-empty-pkgconfig/
 aqtinstall.log
 *.pyc
 PrismLauncher-portable-noverify/*

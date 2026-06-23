@@ -189,7 +189,7 @@ m2m shell
 
 #### 选项 B：Pixi + MSVC
 
-使用 Pixi 配合 MSVC 工具链，通过 `pixi.toml` 管理。需要安装 [Pixi](https://pixi.sh) 和 Visual Studio。
+使用 Pixi 配合 MSVC 工具链，通过 `pixi.toml` 管理。Pixi 路径现在使用 Meson，旧的 CMake 任务保留为兼容备用。
 
 **前置要求：**
 
@@ -205,7 +205,7 @@ m2m shell
 ```powershell
 # 在 x64 Native Tools Command Prompt 中：
 
-# 1. 安装依赖并配置
+# 1. 初始化并配置
 pixi run configure
 
 # 2. 构建
@@ -213,16 +213,20 @@ pixi run build
 
 # 3. 安装
 pixi run install
+
+# 4. 部署 Qt 与运行时 DLL 到 install/
+pixi run deploy
 ```
 
 **可用任务：**
 
 | 命令 | 说明 |
 |------|------|
-| `pixi run configure` | 配置 CMake |
-| `pixi run build` | 构建项目 |
-| `pixi run install` | 安装到 `install/` |
-| `pixi run portable` | 创建便携版 |
+| `pixi run configure` | 配置 Meson 构建目录 |
+| `pixi run build` | 一键完成依赖准备并用 Meson 编译 |
+| `pixi run install` | 使用 Meson 构建并安装到 `install/` |
+| `pixi run deploy` | 运行 `windeployqt` 并复制运行时 DLL |
+| `pixi run install_qt` | 下载并安装 Qt 到 `third_party/qt` |
 
 ### 其他平台
 

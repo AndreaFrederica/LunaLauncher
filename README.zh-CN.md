@@ -67,145 +67,20 @@ Luna Launcher 支持基于实例的 `lunaui` 自定义设置面板。
 
 ## 构建
 
-### Windows
+本项目使用 **Meson** 作为构建系统。推荐通过 **Pixi** 来构建，它可以自动处理依赖和环境配置。
 
-本项目为 Windows 提供了两个自动化构建环境：
+### 快速开始（Pixi）
 
-#### 选项 A：MSYS2 + GCC（推荐）
+#### 前置要求
 
-使用 MSYS2 的 UCRT64 GCC 工具链，通过 `msys2.toml` 管理。
-
-**方法 1：使用 Msys2Manager (m2m) - 推荐**
-
-[m2m](https://github.com/AndreaFrederica/Msys2Manager/releases) 是专门用于管理 MSYS2 环境的 CLI 工具。下载最新版本并将其添加到 PATH。
-
-**前置要求：**
-
-- Java Development Kit 8 或更高版本
-  - 确保在 Adoptium 安装程序中启用"设置 JAVA_HOME 变量"
-  - 构建前需要设置 `JAVA_HOME` 环境变量
-
-```powershell
-# 1. 设置 JAVA_HOME（根据需要调整路径）
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
-
-# 2. 引导安装 MSYS2（仅首次）
-m2m bootstrap
-
-# 3. 配置和构建
-m2m run configure
-m2m run build
-
-# 4. 安装
-m2m run install
-```
-
-**可用的 m2m 命令：**
-
-| 命令 | 说明 |
-|------|------|
-| `m2m init` | 初始化 `msys2.toml` 配置 |
-| `m2m bootstrap` | 下载并安装 MSYS2 |
-| `m2m run <task>` | 运行 `msys2.toml` 中定义的任务 |
-| `m2m run -l` | 列出可用任务 |
-| `m2m sync` | 同步配置中的包 |
-| `m2m add <package>` | 添加包到配置 |
-| `m2m remove <package>` | 从配置中删除包 |
-| `m2m shell` | 打开交互式 MSYS2 shell |
-| `m2m update` | 更新所有 MSYS2 包 |
-
-**方法 2：使用 PowerShell 脚本**
-
-或者，使用提供的 PowerShell 脚本：
-
-**前置要求：**
-
-- Java Development Kit 8 或更高版本
-  - 确保在 Adoptium 安装程序中启用"设置 JAVA_HOME 变量"
-  - 构建前需要设置 `JAVA_HOME` 环境变量
-
-```powershell
-# 1. 设置 JAVA_HOME（根据需要调整路径）
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.12.101-hotspot"
-
-# 2. 初始化 MSYS2 环境（仅首次）
-.\tools\msys2\bootstrap.ps1
-
-# 3. 配置和构建
-.\tools\msys2\run.ps1 configure
-.\tools\msys2\run.ps1 build
-
-# 4. 安装
-.\tools\msys2\run.ps1 install
-```
-
-**可用的 PowerShell 命令：**
-
-| 命令 | 说明 |
-|------|------|
-| `.\tools\msys2\run.ps1 configure` | 配置 CMake |
-| `.\tools\msys2\run.ps1 configure_debug` | 配置 CMake（Debug 模式） |
-| `.\tools\msys2\run.ps1 build` | 构建项目 |
-| `.\tools\msys2\run.ps1 install` | 安装到 `install/` |
-| `.\tools\msys2\run.ps1 portable` | 创建便携版 |
-| `.\tools\msys2\run.ps1 clean` | 清理构建目录 |
-| `.\tools\msys2\run.ps1 test` | 运行构建目录中的程序 |
-| `.\tools\msys2\run.ps1 test_install` | 运行安装目录中的程序 |
-| `.\tools\msys2\sync.ps1` | 同步 `msys2.toml` 中的包 |
-| `.\tools\msys2\add.ps1 <package>` | 添加包 |
-| `.\tools\msys2\remove.ps1 <package>` | 删除包 |
-
-**管理依赖：**
-
-编辑 `msys2.toml` 添加/删除包，然后运行 `m2m sync` 或 `.\tools\msys2\sync.ps1`。
-
-或使用辅助命令：
-```powershell
-# 使用 m2m
-m2m add mingw-w64-ucrt-x86_64-qt6-tools
-m2m remove mingw-w64-ucrt-x86_64-qt6-tools
-
-# 使用 PowerShell
-.\tools\msys2\add.ps1 mingw-w64-ucrt-x86_64-qt6-tools
-.\tools\msys2\remove.ps1 mingw-w64-ucrt-x86_64-qt6-tools
-```
-
-**在 MSYS2 Shell 中：**
-
-```powershell
-# 使用 m2m
-m2m shell
-
-# 使用 PowerShell
-.\tools\msys2\shell.ps1
-```
-
-然后使用 bash 等价命令：
-```bash
-./tools/msys2/sync.sh
-./tools/msys2/run.sh configure
-./tools/msys2/run.sh build
-```
-
-#### 选项 B：Pixi + MSVC
-
-使用 Pixi 配合 MSVC 工具链，通过 `pixi.toml` 管理。Pixi 路径现在使用 Meson，旧的 CMake 任务保留为兼容备用。
-
-**前置要求：**
-
-- Visual Studio 2022（或 Build Tools）
 - [Pixi](https://pixi.sh/latest/installation/)
 
-**重要提示：** 你必须在 **x64 Native Tools Command Prompt for VS 2022**（或对应 VS 版本）中运行命令。可在以下位置找到：
+**Windows：** 你必须在 **x64 Native Tools Command Prompt for VS 2022**（或对应 VS 版本）中运行命令。
 
-```
-开始菜单 > Visual Studio 2022 > x64 Native Tools Command Prompt for VS 2022
-```
+**Linux：** 确保 `gcc`、`g++`、`pkg-config` 和 Qt 6 开发库可用（Pixi 会自动安装大部分）。
 
-```powershell
-# 在 x64 Native Tools Command Prompt 中：
-
-# 1. 初始化并配置
+```bash
+# 1. 配置
 pixi run configure
 
 # 2. 构建
@@ -213,24 +88,80 @@ pixi run build
 
 # 3. 安装
 pixi run install
-
-# 4. 部署 Qt 与运行时 DLL 到 install/
-pixi run deploy
 ```
 
-**可用任务：**
+#### 可用任务
 
 | 命令 | 说明 |
 |------|------|
 | `pixi run configure` | 配置 Meson 构建目录 |
 | `pixi run build` | 一键完成依赖准备并用 Meson 编译 |
 | `pixi run install` | 使用 Meson 构建并安装到 `install/` |
-| `pixi run deploy` | 运行 `windeployqt` 并复制运行时 DLL |
+| `pixi run deploy` | 运行 `windeployqt` 并复制运行时 DLL（仅 Windows） |
 | `pixi run install_qt` | 下载并安装 Qt 到 `third_party/qt` |
 
-### 其他平台
+#### 构建配置
 
-对于 Linux、macOS 或在没有自动化环境的 Windows 上手动构建，以下是详细的构建说明。
+| 配置 | 说明 |
+|------|------|
+| `release`（默认） | Release 构建，静态库 |
+| `debug` | Debug 构建，动态库 |
+| `linux-x64-gcc-release` | Linux 交叉编译 Release 构建 |
+
+```bash
+# 以 Debug 模式构建
+pixi run build --profile debug
+
+# 为 Linux 交叉编译（从 Windows）
+pixi run build --profile linux-x64-gcc-release
+```
+
+### Linux 原生构建
+
+在 Linux 机器上，可以直接使用 Pixi：
+
+```bash
+# 安装依赖（Arch 示例）
+sudo pacman -S meson ninja gcc pkgconf qt6-base qt6-svg qt6-imageformats qt6-5compat quazip-qt6 cmark
+
+# 配置
+pixi run configure
+
+# 构建
+pixi run build
+
+# 安装
+pixi run install
+```
+
+### 手动 Meson 构建
+
+如果不使用 Pixi：
+
+```bash
+# 安装依赖（Ubuntu/Debian 示例）
+sudo apt install meson ninja-build gcc g++ pkg-config qt6-base-dev qt6-svg-dev qt6-imageformats-dev qt6-5compat-dev libquazip1-qt6-dev libcmark-dev zlib1g-dev libarchive-dev liblz4-dev libzstd-dev liblzma-dev libbz2-dev libqrencode-dev
+
+# 配置
+meson setup build --buildtype=release --wrap-mode=forcefallback
+
+# 构建
+meson compile -C build
+
+# 安装
+meson install -C build --no-rebuild
+```
+
+#### 常用 Meson 选项
+
+| 选项 | 说明 |
+|------|------|
+| `-Dbuild_testing=false` | 禁用测试（默认） |
+| `-Dbuild_updater=false` | 禁用自动更新 |
+| `-Denable_java_downloader=true` | 启用 Java 自动下载 |
+| `-Ddisable_ownership_check=false` | 禁用所有权验证 |
+| `-Dgamemode=enabled` | 启用 GameMode 支持（Linux） |
+| `-Db_vscrt=md` | 使用 MSVC 动态运行时（Windows） |
 
 ---
 
@@ -247,173 +178,28 @@ cd LunaLauncher
 
 本文档的其余部分假设您已经克隆了仓库。
 
-### Windows 上使用 MSYS2 手动构建
+### IDE 设置
 
-如果您不想使用自动化脚本，可以按照以下手动步骤操作。
+#### VS Code
 
-**依赖项：**
+1. 安装 [Meson 扩展](https://marketplace.visualstudio.com/items?itemName=mesonbuild.mesonbuild) 以获得 Meson 支持
+2. 安装 [C/C++ 扩展](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
+3. 打开项目文件夹 - VS Code 会自动检测 Meson 构建
+4. 通过 `Ctrl+Shift+B` 使用构建任务
 
-- [MSYS2](https://www.msys2.org/) - Windows 软件分发和构建平台
-- Java Development Kit 8 或更高版本
-  - 确保在 Adoptium 安装程序中启用"设置 JAVA_HOME 变量"
-
-**准备 MSYS2：**
-
-1. 从开始菜单的 MSYS2 文件夹中打开快捷方式
-2. 我们建议使用 MSYS2 的 UCRT64 或 CLANG64 msystem 进行构建
-3. 安装辅助工具：
-   ```bash
-   pacman -Syu pactoys git mingw-w64-ucrt-x86_64-binutils
-   ```
-4. 使用 pacboy 安装所有构建依赖：
-   ```bash
-   pacboy -S toolchain:p cmake:p ninja:p qt6-base:p qt6-5compat:p qt6-svg:p qt6-imageformats:p quazip-qt6:p extra-cmake-modules:p ccache:p
-   ```
-
-   或者使用 Qt 5（适用于较旧的 Windows 版本）：
-   ```bash
-   pacboy -S toolchain:p cmake:p ninja:p qt5-base:p qt5-svg:p qt5-imageformats:p quazip-qt5:p extra-cmake-modules:p ccache:p
-   ```
-
-**从命令行编译：**
-
-```bash
-# 导航到源文件夹
-cd /path/to/LunaLauncher
-
-# 配置 CMake（Debug 构建）
-cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_BUILD_TYPE=Debug -G Ninja
-
-# 对于 Release 构建，将上面的 Debug 替换为 Release
-
-# 可选：添加 -DLauncher_QT_VERSION_MAJOR=5 以使用 Qt 5
-# 可选：添加 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache 以加快重新编译速度
-
-# 构建
-cmake --build build
-
-# 安装
-cmake --install build
-
-# 创建便携版（数据存储在应用程序目录中）
-cmake --install build --component portable
-```
-
-**Qt 5 构建注意事项：** 使用 Qt 5 构建时，OpenSSL DLL 不会自动复制。手动复制它们：
-```bash
-cp /ucrt64/bin/libcrypto-1_1-x64.dll /ucrt64/bin/libssl-1_1-x64.dll install
-```
-将 `ucrt64` 替换为您的 msystem（例如 `clang64`）。
-
-### Windows 上使用 MSVC 手动构建
-
-**依赖项：**
-
-- [Visual Studio](https://visualstudio.microsoft.com/) - Windows 软件分发和构建平台
-  - 如果不想安装 Visual Studio IDE，请下载"Visual Studio Build Tools"
-  - 选择"使用 C++ 的桌面开发"
-  - CMake 将在可选组件中被选中
-- Java Development Kit 8 或更高版本
-- [Qt](https://www.qt.io/)
-  - 对于 Qt 6（推荐 Qt 6.6.2），需要"Qt 5 兼容性模块"和"Qt 图像格式"
-  - 对于 Qt 5（推荐 Qt 5.15.2），需要 OpenSSL 工具包
-
-**从命令行编译：**
-
-您需要从 **x64 Native Tools Command Prompt for VS 2022**（或相应 VS 版本）运行命令。
-
-```cmd
-REM 导航到源文件夹
-cd C:\Path\To\LunaLauncher
-
-REM 配置 CMake（根据需要调整 Qt 路径）
-cmake -Bbuild -DCMAKE_INSTALL_PREFIX=install -DENABLE_LTO=ON -DCMAKE_PREFIX_PATH=C:\Qt\6.6.2\msvc2019_64\lib\cmake
-
-REM 构建（Debug）
-cmake --build build --config Debug -- /p:UseMultiToolTask=true /p:EnforceProcessCountAcrossBuilds=true
-
-REM 安装
-cmake --install build --config Debug
-
-REM 创建便携版
-cmake --install build --config Debug --component portable
-```
-
-**Qt 5 构建注意事项：** 手动复制 OpenSSL DLL：
-```cmd
-robocopy C:\Qt\Tools\OpenSSL\Win_x64\bin\ install libcrypto-1_1-x64.dll libssl-1_1-x64.dll
-```
-
-### Linux 和 macOS
-
-对于 Linux 和 macOS 构建，请参考上游 Prism Launcher 构建说明：
-
-- <https://prismlauncher.org/wiki/development/>
-
-构建过程和要求基本相同，除了项目名称。
-
----
-
-## IDE 和工具
-
-### ccache
-
-ccache 是一个编译器缓存，通过缓存以前的编译来加速重新编译。
-
-- **MSYS2:** 使用 `pacboy -S ccache:p` 安装，并在 CMake 中添加 `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache`
-- **MSVC:** 需要 ccache 4.7.x 或更高版本。复制 `ccache.exe` 并重命名为 `cl.exe`，然后在构建参数中添加 `/p:CLToolExe=cl.exe /p:CLToolPath=<ccache cl 路径>`
-
-### VS Code
-
-1. 安装 [C/C++ 扩展](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
-2. 配置 C/C++：编辑配置 (UI)
-   - 将 Qt include 文件夹添加到 `includePath`
-   - 将 `-L/{Qt 路径}/lib` 添加到 `compilerArgs`
-   - 将 `compileCommands` 设置为 `${workspaceFolder}/build/compile_commands.json`
-   - 将 `cppStandard` 设置为 `c++17` 或更高
-3. 使用 `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` 重新配置 CMake
-
-示例 `.vscode/c_cpp_properties.json`：
-```json
-{
-    "configurations": [
-        {
-            "name": "Windows (MSYS2)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "C:/msys64/ucrt64/include/**"
-            ],
-            "compilerPath": "C:/msys64/ucrt64/bin/gcc.exe",
-            "compilerArgs": [
-                "-LC:/msys64/ucrt64/lib"
-            ],
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
-            "cStandard": "c17",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-gcc-x64"
-        }
-    ],
-    "version": 4
-}
-```
-
-### CLion
+#### CLion
 
 1. 打开 CLion → File → Open → 选择源文件夹
-2. Settings → Build, Execution, Deployment → Toolchains
-   - 设置 CMake、Make、C 编译器、C++ 编译器、调试器
-3. Settings → Build, Execution, Deployment → CMake
-   - 将构建目录设置为 `build`
-4. 创建新配置，目标：所有目标
-5. 使用按钮构建和运行
+2. CLion 会自动检测 Meson 项目
+3. Settings → Build → Meson → 按需设置构建目录
+4. 使用按钮构建和运行
 
-### Qt Creator
+#### Qt Creator
 
-1. 通过 MSYS2 安装 Qt Creator：`pacboy -S qt-creator:p`
-2. 从 MSYS2 shell 打开 Qt Creator：`qtcreator`
-3. File → Open File or Project → 选择 `CMakeLists.txt`
-4. 点击右下角的"Configure Project"
-5. 按"Run"按钮
+1. 安装 Qt Creator
+2. File → Open File or Project → 选择项目根目录（Qt Creator 会检测 `meson.build`）
+3. 按提示配置项目
+4. 按"Run"按钮运行
 
 ---
 
@@ -435,10 +221,8 @@ Luna Launcher 离不开早期项目及其贡献者的工作。
 如果你进行代码更改（而不仅仅是打包）：
 
 - 明确说明你的分支 **不是** Prism Launcher，且 **不被** Prism Launcher 项目认可或与其关联。
-- 检查 [CMakeLists.txt](CMakeLists.txt) 并将所有上游 API 密钥更改为你自己的，或将它们设置为空字符串 (`""`) 以禁用相关功能。
-
-如果你正在为发行版构建此软件，请将 `Launcher_BUILD_PLATFORM` 设置为适当的标识符（例如：`archlinux`、`fedora`、`nixpkgs`）。
-如果你是在构建由发行版包管理器分发的软件包，请将 `CMAKE_INSTALL_PREFIX` 设为 `/usr`，不要用 `/usr/local`。
+- 检查 `meson.build` 并将所有上游 API 密钥更改为你自己的，或将它们设置为空字符串 (`""`) 以禁用相关功能。
+- 如果你是在构建由发行版包管理器分发的软件包，请将 `--prefix` 设为 `/usr`，不要用 `/usr/local`。
 
 ---
 

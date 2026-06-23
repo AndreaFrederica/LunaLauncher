@@ -1,6 +1,6 @@
 [workspace]
 authors = ["AndreaFrederica <andreafrederica@outlook.com>"]
-name = "PrismLauncher"
+name = "LunaLauncher"
 platforms = ["win-64", "linux-64"]
 version = "0.1.0"
 channels = [
@@ -70,3 +70,42 @@ args = [
   { arg = "profile", default = "release", choices = ["debug", "release", "linux-x64-gcc-release"] },
 ]
 cmd = "python scripts/pixi_meson.py deploy {{ profile }}"
+
+[tasks.test]
+description = "Run built executable to verify it launches"
+args = [
+  { arg = "profile", default = "debug", choices = ["debug", "release"] },
+]
+cmd = "python scripts/pixi_meson.py test {{ profile }}"
+
+[tasks.test-install]
+description = "Run installed executable to verify install"
+args = [
+  { arg = "profile", default = "debug", choices = ["debug", "release"] },
+]
+cmd = "python scripts/pixi_meson.py test-install {{ profile }}"
+
+[tasks.clean]
+description = "Clean build directory for a profile"
+args = [
+  { arg = "profile", default = "release", choices = ["debug", "release", "linux-x64-gcc-release"] },
+]
+cmd = "python scripts/pixi_meson.py clean {{ profile }}"
+
+[tasks.clean-all]
+description = "Remove all build-meson-* and install-* directories"
+cmd = "python scripts/pixi_meson.py clean-all"
+
+[tasks.test-debug]
+description = "Build + test (debug)"
+depends-on = [
+  { task = "build", args = ["debug"] },
+]
+cmd = "python scripts/pixi_meson.py test debug"
+
+[tasks.test-install-debug]
+description = "Build + install + test (debug)"
+depends-on = [
+  { task = "install", args = ["debug"] },
+]
+cmd = "python scripts/pixi_meson.py test-install debug"

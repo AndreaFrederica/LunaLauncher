@@ -156,6 +156,9 @@ def configure(root: Path, profile: str) -> None:
     system = profile_system(profile)
     bdir = build_dir(root, profile)
     idir = install_dir(root, profile)
+
+    build_testing = os.environ.get("LUNA_BUILD_TESTING", "false").lower() in ("1", "true", "yes")
+
     args = [
         "meson",
         "setup",
@@ -166,7 +169,7 @@ def configure(root: Path, profile: str) -> None:
         mode,
         "-Ddefault_library=static" if mode == "release" else "-Ddefault_library=shared",
         "-Dwarning_level=0",
-        "-Dbuild_testing=false",
+        f"-Dbuild_testing={'true' if build_testing else 'false'}",
         "-Dbuild_updater=false",
         "-Dbuild_filelinker=true" if system == "windows" else "-Dbuild_filelinker=false",
         "-Dlibarchive:tests=disabled",
@@ -191,6 +194,45 @@ def configure(root: Path, profile: str) -> None:
 def build(root: Path, profile: str) -> None:
     validate_profile(profile)
     run(["meson", "compile", "-C", str(build_dir(root, profile))], cwd=root, env=task_env(root, profile))
+
+
+def test_build(root: Path, profile: str) -> None:
+    validate_profile(profile)
+    system = profile_system(profile)
+    bdir = build_dir(root, profile)
+    exe_name = "lunalauncher.exe" if system == "windows" else "lunalauncher"
+    exe = bdir / "launcher" / exe_name
+    if not exe.exists():
+        raise SystemExit(f"Build executable not found: {exe}")
+    run([str(exe)], cwd=bdir, env=task_env(root, profile))
+
+
+def test_install(root: Path, profile: str) -> None:
+    validate_profile(profile)
+    system = profile_system(profile)
+    idir = install_dir(root, profile)
+    if system == "windows":
+        exe = idir / "lunalauncher.exe"
+    else:
+        exe = idir / "bin" / "lunalauncher"
+    if not exe.exists():
+        raise SystemExit(f"Installed executable not found: {exe}")
+    run([str(exe)], cwd=idir, env=task_env(root, profile))
+
+
+def clean(root: Path, profile: str) -> None:
+    validate_profile(profile)
+    bdir = build_dir(root, profile)
+    if bdir.exists():
+        shutil.rmtree(bdir)
+        print(f"Removed {bdir}")
+
+
+def clean_all(root: Path) -> None:
+    for d in root.iterdir():
+        if d.is_dir() and (d.name.startswith("build-meson-") or d.name.startswith("install-")):
+            shutil.rmtree(d)
+            print(f"Removed {d}")
 
 
 def copy_runtime_dlls(root: Path, profile: str) -> None:
@@ -240,7 +282,7 @@ def install(root: Path, profile: str) -> None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        raise SystemExit("usage: pixi_meson.py <install-qt|configure|build|install|deploy> [profile]")
+        raise SystemExit("usage: pixi_meson.py <install-qt|configure|build|install|deploy|test|test-install|clean|clean-all> [profile]")
 
     root = repo_root()
     command = sys.argv[1]
@@ -256,6 +298,14 @@ def main() -> None:
         install(root, profile)
     elif command == "deploy":
         deploy(root, profile)
+    elif command == "test":
+        test_build(root, profile)
+    elif command == "test-install":
+        test_install(root, profile)
+    elif command == "clean":
+        clean(root, profile)
+    elif command == "clean-all":
+        clean_all(root)
     else:
         raise SystemExit(f"unknown command: {command}")
 

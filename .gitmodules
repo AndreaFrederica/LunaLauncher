@@ -24,7 +24,7 @@
 	url = https://github.com/AndreaFrederica/cmark.git
 [submodule "libraries/quickjs-ng"]
 	path = libraries/quickjs-ng
-	url = git@github.com:W-874/quickjs-ng.git
+	url = https://github.com/AndreaFrederica/quickjs-ng.git
 [submodule "libraries/tomlplusplus"]
 	path = libraries/tomlplusplus
 	url = https://github.com/marzer/tomlplusplus.git

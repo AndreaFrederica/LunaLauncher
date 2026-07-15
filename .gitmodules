@@ -1,6 +1,6 @@
 [submodule "libraries/libnbtplusplus"]
 	path = libraries/libnbtplusplus
-	url = https://github.com/PrismLauncher/libnbtplusplus.git
+	url = https://github.com/AndreaFrederica/libnbtplusplus.git
 [submodule "flatpak/shared-modules"]
 	path = flatpak/shared-modules
 	url = https://github.com/flathub/shared-modules.git
@@ -15,7 +15,7 @@
 	url = https://github.com/AndreaFrederica/LunaLauncher_webpage.git
 [submodule "libraries/cmark"]
 	path = libraries/cmark
-	url = https://github.com/commonmark/cmark.git
+	url = https://github.com/AndreaFrederica/cmark.git
 [submodule "libraries/quickjs-ng"]
 	path = libraries/quickjs-ng
 	url = git@github.com:W-874/quickjs-ng.git

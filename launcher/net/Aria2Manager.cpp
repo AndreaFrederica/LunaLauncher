@@ -153,6 +153,10 @@ class Aria2InstallTask : public Task {
     void tryInstallArchive()
     {
         MMCZip::ArchiveReader archive(m_archivePath);
+        if (!archive.collectFiles()) {
+            emitFailed(tr("Downloaded aria2 archive does not contain %1.").arg(m_info.executableName));
+            return;
+        }
         QString executableInArchive;
         const auto files = archive.getFiles();
         for (const auto& file : files) {
@@ -235,14 +239,7 @@ Aria2Manager::Aria2Manager(QObject* parent) : QObject(parent)
 
 Aria2Manager::~Aria2Manager()
 {
-    if (m_process && m_process->state() != QProcess::NotRunning) {
-        m_shutdownRequested = true;
-        m_process->terminate();
-        if (!m_process->waitForFinished(3000)) {
-            m_process->kill();
-            m_process->waitForFinished(1000);
-        }
-    }
+    shutdown();
 }
 
 bool Aria2Manager::isEnabledBySettings() const
@@ -443,6 +440,7 @@ bool Aria2Manager::ensureStarted(QString* error)
     args << "--summary-interval=0";
     args << "--auto-file-renaming=false";
     args << "--allow-overwrite=true";
+    args << "--no-want-digest-header=true";
     args << QString("--max-concurrent-downloads=%1").arg(maxConcurrentDownloads());
 
     const auto proxy = proxyOptions();
@@ -549,7 +547,13 @@ void Aria2Manager::shutdown()
         return;
     }
     m_shutdownRequested = true;
-    rpc("aria2.shutdown", QJsonArray{ "token:" + m_secret }, this, [](bool, const QJsonValue&, const QString&) {});
+    m_pollTimer.stop();
+    m_webSocket.close();
+    m_process->terminate();
+    if (!m_process->waitForFinished(3000)) {
+        m_process->kill();
+        m_process->waitForFinished(1000);
+    }
 }
 
 void Aria2Manager::restartActiveDownloads(const QString& reason)

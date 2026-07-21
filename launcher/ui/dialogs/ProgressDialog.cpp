@@ -110,6 +110,9 @@ void ProgressDialog::updateSize(bool recenterParent)
     QSize minSize = QSize(480, minHeight);
 
     setMinimumSize(minSize);
+    if (isVisible()) {
+        return;
+    }
     adjustSize();
 
     QSize newSize = this->size();
@@ -254,7 +257,9 @@ void ProgressDialog::changeStepProgress(TaskStepProgress const& task_progress)
     task_bar->setDetails(task_progress.details);
 
     if (task_progress.isDone()) {
-        task_bar->setVisible(false);
+        taskProgress.remove(task_progress.uid);
+        ui->taskProgressLayout->removeWidget(task_bar);
+        task_bar->deleteLater();
     }
 }
 

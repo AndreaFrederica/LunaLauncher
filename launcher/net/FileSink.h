@@ -38,6 +38,8 @@
 #include "PSaveFile.h"
 #include "Sink.h"
 
+class QFile;
+
 namespace Net {
 class FileSink : public Sink {
    public:
@@ -49,6 +51,9 @@ class FileSink : public Sink {
     auto write(QByteArray& data) -> Task::State override;
     auto abort() -> Task::State override;
     auto finalize(QNetworkReply& reply) -> Task::State override;
+
+    auto validateExistingFile(QNetworkRequest& request, QNetworkReply& reply, QFile& input) -> Task::State;
+    auto finalizeExistingFile(QNetworkReply& reply) -> Task::State;
 
     auto hasLocalData() -> bool override;
 

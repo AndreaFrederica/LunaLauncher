@@ -18,8 +18,21 @@
 #include "settings/SettingsObject.h"
 
 namespace {
-// 1 week in seconds — mirrors MetaCacheSink's private MAX_TIME_TO_EXPIRE.
-constexpr qint64 kAria2DefaultCacheMaxAge = 1 * 7 * 24 * 60 * 60;
+class Aria2NetworkReply final : public QNetworkReply {
+   public:
+    explicit Aria2NetworkReply(const QUrl& url)
+    {
+        setUrl(url);
+        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
+        open(QIODevice::ReadOnly);
+        setFinished(true);
+    }
+
+    void abort() override {}
+
+   protected:
+    qint64 readData(char*, qint64) override { return -1; }
+};
 }  // namespace
 
 namespace Net {
@@ -53,15 +66,17 @@ Download::Ptr Aria2Download::makeCached(QUrl url, MetaEntryPtr entry, Options op
     dl->m_url = std::move(url);
     dl->setObjectName(QString("ARIA2_CACHE:") + dl->m_url.toString());
     dl->m_options = options;
-    dl->m_cacheEntry = entry;
-    dl->m_isEternal = options.testFlag(Option::MakeEternal);
     auto md5Node = new ChecksumValidator(QCryptographicHash::Md5);
-    dl->m_sink.reset(new MetaCacheSink(entry, md5Node, dl->m_isEternal));
+    dl->m_sink.reset(new MetaCacheSink(entry, md5Node, options.testFlag(Option::MakeEternal)));
     return dl;
 }
 
 void Aria2Download::executeTask()
 {
+    m_finished = false;
+    m_error = QNetworkReply::NoError;
+    m_errorString.clear();
+
     if (!shouldUseFor(m_url)) {
         Download::executeTask();
         return;
@@ -85,6 +100,7 @@ void Aria2Download::executeTask()
     for (auto& headerProxy : m_headerProxies) {
         headerProxy->writeHeaders(request);
     }
+    m_request = request;
 
     QString error;
     auto manager = Aria2Manager::instance();
@@ -143,7 +159,21 @@ void Aria2Download::startQtFallback(const QString& reason)
         emitFailed(reason);
         return;
     }
+    disconnect(Aria2Manager::instance(), nullptr, this, nullptr);
+    cleanupAria2Files();
+    m_gid.clear();
+    m_error = QNetworkReply::NoError;
+    m_errorString.clear();
     Download::executeTask();
+}
+
+void Aria2Download::cleanupAria2Files()
+{
+    if (m_tempPath.isEmpty()) {
+        return;
+    }
+    QFile::remove(m_tempPath);
+    QFile::remove(m_tempPath + ".aria2");
 }
 
 void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2DownloadInfo& info)
@@ -166,13 +196,22 @@ void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2Download
     } else if (info.status == "error" || info.status == "removed") {
         m_finished = true;
         m_error = info.status == "removed" ? QNetworkReply::OperationCanceledError : QNetworkReply::UnknownNetworkError;
-        m_errorString = info.errorMessage.isEmpty() ? tr("aria2 download failed with status %1").arg(info.status) : info.errorMessage;
-        m_sink->abort();
-        QFile::remove(m_tempPath);
+        const QString aria2Error = info.errorMessage.isEmpty() ? tr("aria2 download failed with status %1").arg(info.status)
+                                                               : info.errorMessage;
+        m_errorString = tr("aria2 download failed for %1 (GID %2, error code %3): %4")
+                            .arg(info.url.isEmpty() ? m_url.toString() : info.url,
+                                 info.gid.isEmpty() ? gid : info.gid,
+                                 info.errorCode.isEmpty() ? tr("unknown") : info.errorCode,
+                                 aria2Error);
+        qCWarning(taskDownloadLogC) << getUid().toString() << m_errorString;
         if (m_state == State::AbortedByUser) {
+            cleanupAria2Files();
             emit aborted();
             emit finished();
+        } else if (info.status == "error" && Aria2Manager::instance()->fallbackToQtEnabled()) {
+            startQtFallback(m_errorString);
         } else {
+            cleanupAria2Files();
             emitFailed(m_errorString);
         }
     }
@@ -197,36 +236,16 @@ void Aria2Download::finishFromTempFile()
         return;
     }
 
-    // Stream the temp file once: feed 256KB chunks into the MD5 hash while
-    // reporting progress. aria2 has already written the complete file, so we
-    // only hash it here — we do NOT push it back through the sink, which would
-    // trigger a second full-disk write and a PSaveFile::commit() that fails on
-    // Windows when antivirus locks the just-finished large file.
-    const qint64 total = input.size();
-    setProgress(0, total);
-
-    QCryptographicHash md5(QCryptographicHash::Md5);
-    qint64 processed = 0;
-    while (!input.atEnd()) {
-        if (m_state == State::AbortedByUser) {
-            input.close();
-            QFile::remove(m_tempPath);
-            emit aborted();
-            emit finished();
-            return;
-        }
-        QByteArray chunk = input.read(256 * 1024);
-        if (chunk.isEmpty() && input.error() != QFile::NoError) {
-            m_error = QNetworkReply::UnknownContentError;
-            m_errorString = input.errorString();
-            input.close();
-            QFile::remove(m_tempPath);
-            emitFailed(m_errorString);
-            return;
-        }
-        md5.addData(chunk);
-        processed += chunk.size();
-        setProgress(processed, total);
+    auto fileSink = dynamic_cast<FileSink*>(m_sink.get());
+    Aria2NetworkReply reply(m_url);
+    if (!fileSink || fileSink->validateExistingFile(m_request, reply, input) != State::Succeeded) {
+        m_error = QNetworkReply::UnknownContentError;
+        m_errorString = m_sink->failReason().isEmpty() ? tr("Failed to validate aria2 output file %1").arg(m_tempPath)
+                                                       : m_sink->failReason();
+        input.close();
+        QFile::remove(m_tempPath);
+        emitFailed(m_errorString);
+        return;
     }
     input.close();
 
@@ -248,22 +267,11 @@ void Aria2Download::finishFromTempFile()
         return;
     }
 
-    // For the cached (MetaCacheSink) case only: update the cache metadata
-    // manually, mirroring MetaCacheSink::finalizeCache. aria2 gives us no HTTP
-    // headers, so ETag and Last-Modified are left untouched — matching the old
-    // behavior where a SyntheticNetworkReply carried no such headers.
-    if (m_cacheEntry) {
-        QFileInfo targetInfo(m_targetPath);
-        m_cacheEntry->setMD5Sum(QString::fromLatin1(md5.result().toHex()));
-        m_cacheEntry->setLocalChangedTimestamp(targetInfo.lastModified().toUTC().toMSecsSinceEpoch());
-        if (m_isEternal) {
-            m_cacheEntry->makeEternal(true);
-        } else {
-            m_cacheEntry->setMaximumAge(kAria2DefaultCacheMaxAge);
-        }
-        m_cacheEntry->setCurrentAge(0);
-        m_cacheEntry->setStale(false);
-        APPLICATION->metacache()->updateEntry(m_cacheEntry);
+    if (fileSink->finalizeExistingFile(reply) != State::Succeeded) {
+        m_error = QNetworkReply::UnknownContentError;
+        m_errorString = m_sink->failReason();
+        emitFailed(m_errorString);
+        return;
     }
 
     emitSucceeded();
@@ -275,7 +283,7 @@ bool Aria2Download::abort()
     if (!m_gid.isEmpty()) {
         Aria2Manager::instance()->removeDownload(m_gid);
     }
-    QFile::remove(m_tempPath);
+    cleanupAria2Files();
     return true;
 }
 

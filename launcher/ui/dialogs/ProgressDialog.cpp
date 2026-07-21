@@ -62,6 +62,8 @@ std::tuple<int, int> map_int_zero_max(T current, T range_max, T range_min)
 ProgressDialog::ProgressDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ProgressDialog)
 {
     ui->setupUi(this);
+    ui->taskProgressLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
+    ui->taskProgressLayout->setAlignment(Qt::AlignTop);
     ui->taskProgressScrollArea->setHidden(true);
     this->setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setAttribute(Qt::WidgetAttribute::WA_QuitOnClose, true);
@@ -228,13 +230,36 @@ void ProgressDialog::changeStatus([[maybe_unused]] const QString& status)
 
 void ProgressDialog::addTaskProgress(TaskStepProgress const& progress)
 {
-    SubTaskProgressBar* task_bar = new SubTaskProgressBar(this);
+    SubTaskProgressBar* task_bar = new SubTaskProgressBar(ui->taskProgressContainer);
     taskProgress.insert(progress.uid, task_bar);
     ui->taskProgressLayout->addWidget(task_bar);
+    updateTaskProgressLayout();
+}
+
+void ProgressDialog::updateTaskProgressLayout()
+{
+    ui->taskProgressLayout->invalidate();
+    ui->taskProgressLayout->activate();
+    ui->taskProgressContainer->setMinimumHeight(ui->taskProgressLayout->minimumSize().height());
+    ui->taskProgressContainer->updateGeometry();
 }
 
 void ProgressDialog::changeStepProgress(TaskStepProgress const& task_progress)
 {
+    if (finishedTaskProgress.contains(task_progress.uid)) {
+        return;
+    }
+
+    if (task_progress.isDone()) {
+        finishedTaskProgress.insert(task_progress.uid);
+        if (auto task_bar = taskProgress.take(task_progress.uid)) {
+            ui->taskProgressLayout->removeWidget(task_bar);
+            task_bar->deleteLater();
+            updateTaskProgressLayout();
+        }
+        return;
+    }
+
     m_is_multi_step = true;
     if (ui->taskProgressScrollArea->isHidden()) {
         ui->taskProgressScrollArea->setHidden(false);
@@ -245,22 +270,17 @@ void ProgressDialog::changeStepProgress(TaskStepProgress const& task_progress)
         addTaskProgress(task_progress);
     auto task_bar = taskProgress.value(task_progress.uid);
 
-    auto const [mapped_current, mapped_total] = map_int_zero_max<qint64>(task_progress.current, task_progress.total, 0);
     if (task_progress.total <= 0) {
-        task_bar->setRange(0, 0);
+        task_bar->setRange(0, 100);
+        task_bar->setValue(0);
     } else {
+        auto const [mapped_current, mapped_total] = map_int_zero_max<qint64>(task_progress.current, task_progress.total, 0);
         task_bar->setRange(0, mapped_total);
+        task_bar->setValue(mapped_current);
     }
 
-    task_bar->setValue(mapped_current);
     task_bar->setStatus(task_progress.status);
     task_bar->setDetails(task_progress.details);
-
-    if (task_progress.isDone()) {
-        taskProgress.remove(task_progress.uid);
-        ui->taskProgressLayout->removeWidget(task_bar);
-        task_bar->deleteLater();
-    }
 }
 
 void ProgressDialog::changeProgress(qint64 current, qint64 total)

@@ -118,7 +118,7 @@
       </property>
       <layout class="QVBoxLayout" name="taskProgressLayout">
        <property name="spacing">
-        <number>2</number>
+         <number>8</number>
        </property>
       </layout>
      </widget>

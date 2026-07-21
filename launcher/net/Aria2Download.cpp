@@ -183,11 +183,15 @@ void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2Download
     }
 
     setProgress(info.completedLength, info.totalLength);
-    QString progress = tr("%1 / %2")
-                           .arg(StringUtils::humanReadableFileSize(info.completedLength))
-                           .arg(info.totalLength > 0 ? StringUtils::humanReadableFileSize(info.totalLength) : tr("unknown"));
-    QString speed = tr("%1 /s").arg(StringUtils::humanReadableFileSize(info.downloadSpeed));
-    setDetails(progress + "\n" + speed);
+    if (info.status == "waiting" && info.totalLength <= 0) {
+        setDetails(tr("Waiting for aria2 to start"));
+    } else {
+        QString progress = tr("%1 / %2")
+                               .arg(StringUtils::humanReadableFileSize(info.completedLength))
+                               .arg(info.totalLength > 0 ? StringUtils::humanReadableFileSize(info.totalLength) : tr("unknown"));
+        QString speed = tr("%1 /s").arg(StringUtils::humanReadableFileSize(info.downloadSpeed));
+        setDetails(progress + "\n" + speed);
+    }
 
     if (info.status == "complete") {
         m_finished = true;

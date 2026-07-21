@@ -72,19 +72,23 @@ def install_dir(root: Path, profile: str) -> Path:
 
 def task_env(root: Path, profile: str) -> dict[str, str]:
     env = os.environ.copy()
+    system = profile_system(profile)
     qt_tools = qt_tools_root(root) if is_cross_profile(profile) else qt_target_root(root, profile)
     qt_target = qt_target_root(root, profile)
-    path_entries = [
-        entry
-        for entry in env.get("PATH", "").split(os.pathsep)
-        if "msys64" not in entry.lower()
-    ]
+    path_entries = []
+    for entry in env.get("PATH", "").split(os.pathsep):
+        normalized = entry.replace("\\", "/").lower().rstrip("/")
+        if "msys64" in normalized:
+            continue
+        if system == "windows" and normalized.endswith(("/library/usr/bin", "/library/mingw-w64/bin")):
+            continue
+        path_entries.append(entry)
     env["PATH"] = os.pathsep.join([str(qt_tools / "bin")] + path_entries)
     env["CMAKE_PREFIX_PATH"] = str(qt_target / "lib" / "cmake")
-    if profile_system(profile) == "windows" or is_cross_profile(profile):
+    if system == "windows" or is_cross_profile(profile):
         env["PKG_CONFIG_PATH"] = ""
         env["PKG_CONFIG_LIBDIR"] = str(root / ".meson-empty-pkgconfig")
-    if profile_system(profile) == "windows":
+    if system == "windows":
         env.setdefault("CC", "cl")
         env.setdefault("CXX", "cl")
         env.setdefault("CMAKE_GENERATOR", "Ninja")

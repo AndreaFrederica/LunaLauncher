@@ -123,9 +123,16 @@ void Aria2Download::executeTask()
     connect(manager, &Aria2Manager::downloadGidChanged, this, &Aria2Download::aria2DownloadGidChanged, Qt::UniqueConnection);
     manager->addDownload(m_url, tempInfo.absolutePath(), tempInfo.fileName(), options, this,
                          [this](bool ok, const QString& gid, const QString& error) {
-                             if (!ok) {
-                                 startQtFallback(error);
-                                 return;
+                              if (m_state == State::AbortedByUser) {
+                                  if (ok && !gid.isEmpty()) {
+                                      m_gid = gid;
+                                      Aria2Manager::instance()->removeDownload(gid);
+                                  }
+                                  return;
+                              }
+                              if (!ok) {
+                                  startQtFallback(error);
+                                  return;
                              }
                              m_gid = gid;
                              setStatus(tr("Downloading with aria2: %1").arg(StringUtils::truncateUrlHumanFriendly(m_url, 80)));

@@ -760,10 +760,14 @@ void Aria2Manager::addDownload(const QUrl& url,
     params << QJsonArray{ url.toString() };
     params << options;
 
-    rpc("aria2.addUri", params, context,
-        [this, url, dir, out, extraOptions, callback = std::move(callback)](bool ok, const QJsonValue& result, const QString& error) {
+    QPointer<QObject> guard(context);
+    rpc("aria2.addUri", params, this,
+        [this, guard, url, dir, out, extraOptions, callback = std::move(callback)](bool ok, const QJsonValue& result,
+                                                                                  const QString& error) {
             if (!ok) {
-                callback(false, {}, error);
+                if (guard) {
+                    callback(false, {}, error);
+                }
                 return;
             }
             const QString gid = result.toString();
@@ -776,6 +780,10 @@ void Aria2Manager::addDownload(const QUrl& url,
             m_requests.insert(gid, AddRequest{ url, dir, out, extraOptions });
             m_activeGids.insert(gid);
             emit downloadsChanged();
+            if (!guard) {
+                removeDownload(gid);
+                return;
+            }
             callback(true, gid, {});
             poll();
         });

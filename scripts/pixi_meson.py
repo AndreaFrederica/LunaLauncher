@@ -87,6 +87,7 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
     if profile_system(profile) == "windows":
         env.setdefault("CC", "cl")
         env.setdefault("CXX", "cl")
+        env.setdefault("CMAKE_GENERATOR", "Ninja")
     else:
         env.pop("CC", None)
         env.pop("CXX", None)
@@ -246,7 +247,27 @@ def clean_all(root: Path) -> None:
 
 
 def copy_runtime_dlls(root: Path, profile: str) -> None:
-    return
+    if profile_system(profile) != "windows":
+        return
+
+    runtime_dir = Path(sys.prefix) / "Library" / "bin"
+    runtime_patterns = [
+        "libcrypto-*.dll",
+        "libssl-*.dll",
+        "concrt140.dll",
+        "msvcp140*.dll",
+        "vcruntime140*.dll",
+    ]
+    idir = install_dir(root, profile)
+
+    for pattern in runtime_patterns:
+        sources = sorted(runtime_dir.glob(pattern))
+        if not sources:
+            raise SystemExit(f"missing runtime DLL matching {pattern} in {runtime_dir}")
+        for source in sources:
+            destination = idir / source.name
+            shutil.copy2(source, destination)
+            print(f"Copied runtime DLL: {source.name}")
 
 
 def deploy(root: Path, profile: str) -> None:

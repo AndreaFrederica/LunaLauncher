@@ -89,8 +89,11 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
         env["PKG_CONFIG_PATH"] = ""
         env["PKG_CONFIG_LIBDIR"] = str(root / ".meson-empty-pkgconfig")
     if system == "windows":
-        env.setdefault("CC", "cl")
-        env.setdefault("CXX", "cl")
+        compiler = "ccache cl" if shutil.which("ccache", path=env["PATH"]) else "cl"
+        env.setdefault("CC", compiler)
+        env.setdefault("CXX", compiler)
+        env.setdefault("CCACHE_BASEDIR", str(root))
+        env.setdefault("CCACHE_NOHASHDIR", "true")
         env.setdefault("CMAKE_GENERATOR", "Ninja")
     else:
         env.pop("CC", None)

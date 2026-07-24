@@ -48,10 +48,14 @@ void LibrariesTask::executeTask()
         libArtifactPool.append(agent.library);
     }
     libArtifactPool.append(profile->getMainJar());
-    processArtifactPool(libArtifactPool, failedLocalLibraries, inst->getLocalLibraryPath());
+    if (!processArtifactPool(libArtifactPool, failedLocalLibraries, inst->getLocalLibraryPath())) {
+        return;
+    }
 
     QStringList failedLocalJarMods;
-    processArtifactPool(profile->getJarMods(), failedLocalJarMods, inst->jarModsDir());
+    if (!processArtifactPool(profile->getJarMods(), failedLocalJarMods, inst->jarModsDir())) {
+        return;
+    }
 
     if (!failedLocalJarMods.empty() || !failedLocalLibraries.empty()) {
         downloadJob.reset();

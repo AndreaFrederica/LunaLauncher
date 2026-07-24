@@ -20,6 +20,7 @@ bool InstanceCreationTask::abort()
         return m_gameFilesTask->abort();
     }
 
+    emitAborted();
     return true;
 }
 
@@ -40,8 +41,9 @@ void InstanceCreationTask::executeTask()
 
     m_instance = createInstance();
     if (!m_instance) {
-        if (m_abort)
+        if (m_abort) {
             return;
+        }
 
         qWarning() << "Instance creation failed!";
         if (!m_error_message.isEmpty()) {

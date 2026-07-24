@@ -80,7 +80,9 @@ auto NetJob::addNetAction(Net::NetRequest::Ptr action) -> bool
 void NetJob::executeTask()
 {
     if (canDelegateWholeQueueToAria2()) {
-        setMaxConcurrent(static_cast<int>(totalSize()));
+#if defined(LAUNCHER_APPLICATION)
+        setMaxConcurrent(qMax(1, Net::Aria2Manager::instance()->maxConcurrentDownloads()));
+#endif
         ConcurrentTask::executeTask();
         return;
     }

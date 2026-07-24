@@ -469,7 +469,8 @@ std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
 
     loop.exec();
 
-    bool did_succeed = getError().isEmpty();
+    m_filesJob.reset();
+    bool did_succeed = !m_abort && getError().isEmpty();
 
     // Update information of the already installed instance, if any.
     if (m_instance && did_succeed) {
@@ -582,14 +583,12 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
         }
     }
 
-    connect(m_filesJob.get(), &NetJob::finished, this, [this, &loop]() {
-        m_filesJob.reset();
-        validateOtherResources(loop);
-    });
-    connect(m_filesJob.get(), &NetJob::failed, [this](QString reason) {
-        m_filesJob.reset();
+    connect(m_filesJob.get(), &NetJob::succeeded, this, [this, &loop]() { validateOtherResources(loop); });
+    connect(m_filesJob.get(), &NetJob::failed, this, [this, &loop](QString reason) {
         setError(reason);
+        loop.quit();
     });
+    connect(m_filesJob.get(), &NetJob::aborted, &loop, &QEventLoop::quit);
     connect(m_filesJob.get(), &NetJob::progress, this, [this](qint64 current, qint64 total) {
         setDetails(tr("%1 out of %2 complete").arg(current).arg(total));
         setProgress(current, total);

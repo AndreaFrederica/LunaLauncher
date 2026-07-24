@@ -37,6 +37,7 @@
 
 #include <QDialog>
 #include <QHash>
+#include <QSet>
 #include <QUuid>
 #include <memory>
 
@@ -88,6 +89,7 @@ class ProgressDialog : public QDialog {
    private:
     bool handleImmediateResult(QDialog::DialogCode& result);
     void addTaskProgress(TaskStepProgress const& progress);
+    void updateTaskProgressLayout();
 
    private:
     Ui::ProgressDialog* ui;
@@ -98,4 +100,5 @@ class ProgressDialog : public QDialog {
 
     bool m_is_multi_step = false;
     QHash<QUuid, SubTaskProgressBar*> taskProgress;
+    QSet<QUuid> finishedTaskProgress;
 };

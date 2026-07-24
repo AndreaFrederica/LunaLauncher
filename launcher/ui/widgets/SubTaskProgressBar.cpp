@@ -29,6 +29,10 @@ unique_qobject_ptr<SubTaskProgressBar> SubTaskProgressBar::create(QWidget* paren
 SubTaskProgressBar::SubTaskProgressBar(QWidget* parent) : QWidget(parent), ui(new Ui::SubTaskProgressBar)
 {
     ui->setupUi(this);
+    ui->statusLabel->setBackgroundRole(QPalette::Window);
+    ui->statusLabel->setAutoFillBackground(true);
+    ui->statusDetailsLabel->setBackgroundRole(QPalette::Window);
+    ui->statusDetailsLabel->setAutoFillBackground(true);
 }
 SubTaskProgressBar::~SubTaskProgressBar()
 {
@@ -47,10 +51,18 @@ void SubTaskProgressBar::setValue(int value)
 
 void SubTaskProgressBar::setStatus(QString status)
 {
+    if (ui->statusLabel->text() == status) {
+        return;
+    }
     ui->statusLabel->setText(status);
+    ui->statusLabel->repaint();
 }
 
 void SubTaskProgressBar::setDetails(QString details)
 {
+    if (ui->statusDetailsLabel->text() == details) {
+        return;
+    }
     ui->statusDetailsLabel->setText(details);
+    ui->statusDetailsLabel->repaint();
 }

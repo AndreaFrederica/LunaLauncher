@@ -137,6 +137,36 @@ Task::State FileSink::finalize(QNetworkReply& reply)
     return finalizeCache(reply);
 }
 
+Task::State FileSink::validateExistingFile(QNetworkRequest& request, QNetworkReply& reply, QFile& input)
+{
+    m_wroteAnyData = false;
+    if (!initAllValidators(request)) {
+        m_fail_reason = "Failed to initialize validators";
+        return Task::State::Failed;
+    }
+
+    while (!input.atEnd()) {
+        auto data = input.read(256 * 1024);
+        if ((data.isEmpty() && input.error() != QFileDevice::NoError) || !writeAllValidators(data)) {
+            m_fail_reason = input.error() == QFileDevice::NoError ? "Validators failed" : input.errorString();
+            failAllValidators();
+            return Task::State::Failed;
+        }
+        m_wroteAnyData = m_wroteAnyData || !data.isEmpty();
+    }
+
+    if (!finalizeAllValidators(reply)) {
+        m_fail_reason = "Failed to finalize validators";
+        return Task::State::Failed;
+    }
+    return Task::State::Succeeded;
+}
+
+Task::State FileSink::finalizeExistingFile(QNetworkReply& reply)
+{
+    return finalizeCache(reply);
+}
+
 Task::State FileSink::initCache(QNetworkRequest&)
 {
     return Task::State::Running;

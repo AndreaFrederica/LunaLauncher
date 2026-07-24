@@ -26,12 +26,17 @@ test_sources = [
 
 foreach test_source : test_sources
   test_name = test_source.split('/')[-1].replace('.cpp', '')
+  test_file = files(test_source)
+  test_moc = qt.preprocess(
+    moc_sources: test_file,
+    include_directories: [include_directories('..', '../launcher')],
+    dependencies: [launcher_logic_dep, qt_test_dep],
+  )
   test_exe = executable(
     test_name,
-    files(test_source),
+    [test_file, test_moc],
     include_directories: [include_directories('..', '../launcher')],
-    link_with: launcher_logic,
-    dependencies: [qt_test_dep],
+    dependencies: [launcher_logic_dep, qt_test_dep],
   )
   test(test_name, test_exe)
 endforeach

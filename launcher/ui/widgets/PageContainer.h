@@ -89,6 +89,8 @@ class PageContainer : public QWidget, public BasePageContainer {
     virtual void setParentContainer(BasePageContainer* container) { m_container = container; };
 
     void changeEvent(QEvent*) override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
 
     void hidePageList() { m_pageList->hide(); }
 

@@ -184,6 +184,7 @@ void PageContainer::createUI()
     m_layout->addWidget(m_pageList, 0, 0, 3, 1);
     m_layout->addLayout(m_pageStack, 1, 1, 1, 1);
     m_layout->setColumnStretch(1, 4);
+    m_layout->setRowStretch(1, 1);
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);
 }
@@ -280,4 +281,41 @@ void PageContainer::changeEvent(QEvent* event)
         retranslate();
     }
     QWidget::changeEvent(event);
+}
+
+QSize PageContainer::sizeHint() const
+{
+    // Use the current page's size hint instead of the maximum of all pages.
+    // This allows the dialog to shrink when switching to a smaller page.
+    if (m_currentPage) {
+        auto* pageWidget = dynamic_cast<QWidget*>(m_currentPage);
+        if (pageWidget) {
+            QSize pageHint = pageWidget->sizeHint();
+            QSize listHint = m_pageList->sizeHint();
+            int headerHeight = m_header->sizeHint().height();
+            return QSize(
+                listHint.width() + pageHint.width(),
+                headerHeight + pageHint.height()
+            );
+        }
+    }
+    return QWidget::sizeHint();
+}
+
+QSize PageContainer::minimumSizeHint() const
+{
+    // Use the current page's minimum size hint instead of the maximum of all pages.
+    if (m_currentPage) {
+        auto* pageWidget = dynamic_cast<QWidget*>(m_currentPage);
+        if (pageWidget) {
+            QSize pageMin = pageWidget->minimumSizeHint();
+            QSize listMin = m_pageList->minimumSizeHint();
+            int headerHeight = m_header->minimumSizeHint().height();
+            return QSize(
+                listMin.width() + pageMin.width(),
+                headerHeight + pageMin.height()
+            );
+        }
+    }
+    return QWidget::minimumSizeHint();
 }

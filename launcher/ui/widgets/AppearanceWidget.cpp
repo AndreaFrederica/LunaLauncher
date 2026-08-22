@@ -40,6 +40,7 @@
 #include <DesktopServices.h>
 #include <QGraphicsOpacityEffect>
 #include "BuildConfig.h"
+#include "ui/dialogs/ThemeDownloadDialog.h"
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 
@@ -86,6 +87,14 @@ AppearanceWidget::AppearanceWidget(bool themesOnly, QWidget* parent)
     connect(m_ui->catPackFolder, &QPushButton::clicked, this,
             [] { DesktopServices::openPath(APPLICATION->themeManager()->getCatPacksFolder().path()); });
     connect(m_ui->reloadThemesButton, &QPushButton::pressed, this, &AppearanceWidget::loadThemeSettings);
+    connect(m_ui->downloadThemesButton, &QPushButton::clicked, this, [this] {
+        ThemeDownloadDialog dialog(this);
+        connect(&dialog, &ThemeDownloadDialog::themesInstalled, this, [this] {
+            loadThemeSettings();
+            APPLICATION->themeManager()->applyCurrentlySelectedTheme();
+        });
+        dialog.exec();
+    });
 }
 
 AppearanceWidget::~AppearanceWidget()

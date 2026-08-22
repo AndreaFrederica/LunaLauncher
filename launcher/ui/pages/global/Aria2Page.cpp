@@ -14,6 +14,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -24,7 +25,14 @@
 
 Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
 {
-    auto root = new QVBoxLayout(this);
+    auto outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+
+    auto scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    auto scrollContent = new QWidget();
+    auto root = new QVBoxLayout(scrollContent);
 
     auto general = new QGroupBox(tr("Download Backend"), this);
     auto generalLayout = new QFormLayout(general);
@@ -142,6 +150,9 @@ Aria2Page::Aria2Page(QWidget* parent) : QWidget(parent)
     detectExecutable();
     updateProxyWidgets();
     updateTransferWidgets();
+
+    scrollArea->setWidget(scrollContent);
+    outer->addWidget(scrollArea);
 }
 
 bool Aria2Page::apply()

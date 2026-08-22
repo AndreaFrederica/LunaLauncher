@@ -15,7 +15,7 @@
 
 #include "Index.h"
 
-#include "CleanroomMeta.h"
+#include "MetadataProvider.h"
 #include "JsonFormat.h"
 #include "QObjectPtr.h"
 #include "VersionList.h"
@@ -136,11 +136,14 @@ void Index::connectVersionList(const int row, const VersionList::Ptr& list)
 
 Task::Ptr Index::loadVersion(const QString& uid, const QString& version, Net::Mode mode, bool force)
 {
-    if (Cleanroom::isUid(uid)) {
+    // Check if a metadata provider handles this UID (e.g., Cleanroom from Maven).
+    // Providers manage their own data sources, so we delegate entirely to them.
+    auto* provider = findProviderForUid(uid);
+    if (provider) {
         auto loadTask =
             makeShared<SequentialTask>(tr("Load meta for %1:%2", "This is for the task name that loads the meta index.").arg(uid, version));
-        loadTask->addTask(Cleanroom::loadVersionListTask(get(uid).get(), mode));
-        loadTask->addTask(Cleanroom::loadVersionTask(get(uid, version).get(), mode));
+        loadTask->addTask(provider->loadVersionListTask(get(uid).get()));
+        loadTask->addTask(provider->loadVersionTask(get(uid, version).get()));
         return loadTask;
     }
 

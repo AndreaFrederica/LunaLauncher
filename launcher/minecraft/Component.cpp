@@ -37,6 +37,7 @@
 #include <meta/Index.h>
 #include <meta/VersionList.h>
 
+
 #include <QSaveFile>
 
 #include "Application.h"
@@ -114,6 +115,8 @@ std::shared_ptr<class VersionFile> Component::getVersionFile() const
 std::shared_ptr<class Meta::VersionList> Component::getVersionList() const
 {
     // FIXME: what if the metadata index isn't loaded yet?
+    // UIDs handled by metadata providers (e.g. Cleanroom) are pre-registered
+    // at startup via registerBuiltinProviders(), so hasUid() returns true.
     if (APPLICATION->metadataIndex()->hasUid(m_uid)) {
         return APPLICATION->metadataIndex()->get(m_uid);
     }

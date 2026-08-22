@@ -71,6 +71,7 @@
 #include "minecraft/PackProfile.h"
 #include "minecraft/auth/AccountList.h"
 
+#include "meta/CleanroomMeta.h"
 #include "meta/Index.h"
 #include "meta/VersionList.h"
 
@@ -237,6 +238,13 @@ void VersionPage::updateButtons(int row)
     if (row == -1)
         row = currentRow();
     auto patch = m_profile->getComponent(row);
+    if (patch) {
+        auto versionList = patch->getVersionList();
+        if (versionList) {
+            connect(versionList.get(), &QAbstractItemModel::modelReset, this, &VersionPage::updateVersionControls,
+                    Qt::UniqueConnection);
+        }
+    }
     ui->actionRemove->setEnabled(patch && patch->isRemovable());
     ui->actionMove_down->setEnabled(patch && patch->isMoveable());
     ui->actionMove_up->setEnabled(patch && patch->isMoveable());
@@ -415,6 +423,26 @@ void VersionPage::on_actionChange_version_triggered()
             m_inst->settings()->set("JavaPath", "");
         }
     }
+
+    if (Meta::Cleanroom::isUid(uid)) {
+        m_profile->saveNow();
+        auto task = Meta::Cleanroom::updateInstanceTask(m_inst->instanceRoot(), vselect.selectedVersion()->descriptor());
+        ProgressDialog dialog(this);
+        if (dialog.execWithTask(task.get()) != QDialog::Accepted) {
+            if (!task->failReason().isEmpty()) {
+                QMessageBox::critical(this, tr("Error"), task->failReason());
+            }
+            return;
+        }
+
+        if (auto result = m_profile->reload(Net::Mode::Online); !result) {
+            QMessageBox::critical(this, tr("Error"), result.error);
+            return;
+        }
+        m_container->refreshContainer();
+        return;
+    }
+
     m_profile->setComponentVersion(uid, vselect.selectedVersion()->descriptor(), important);
     m_profile->resolve(Net::Mode::Online);
     m_container->refreshContainer();

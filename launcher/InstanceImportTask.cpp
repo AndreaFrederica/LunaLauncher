@@ -45,6 +45,7 @@
 #include "archive/ExtractZipTask.h"
 #include "icons/IconList.h"
 #include "icons/IconUtils.h"
+#include "meta/CleanroomMeta.h"
 
 #include "modplatform/flame/FlameInstanceCreationTask.h"
 #include "modplatform/modrinth/ModrinthInstanceCreationTask.h"
@@ -55,11 +56,7 @@
 
 #include "net/ApiDownload.h"
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QFileInfo>
-#include <QSaveFile>
 #include <QtConcurrentRun>
 #include <memory>
 
@@ -274,81 +271,6 @@ bool installIcon(QString root, QString instIconKey)
     return false;
 }
 
-bool writeJsonDocument(const QString& path, const QJsonDocument& document)
-{
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        return false;
-    }
-    const auto data = document.toJson(QJsonDocument::Indented);
-    if (file.write(data) != data.size()) {
-        return false;
-    }
-    return file.commit();
-}
-
-bool normalizeCleanroomMultiMCInstance(const QString& root)
-{
-    constexpr auto oldUid = "net.minecraftforge";
-    constexpr auto cleanroomUid = "com.cleanroommc.cleanroom";
-
-    const auto mmcPackPath = FS::PathCombine(root, "mmc-pack.json");
-    QFile mmcPackFile(mmcPackPath);
-    if (!mmcPackFile.open(QIODevice::ReadOnly)) {
-        return false;
-    }
-
-    auto packDoc = QJsonDocument::fromJson(mmcPackFile.readAll());
-    auto packRoot = packDoc.object();
-    auto components = packRoot.value("components").toArray();
-    bool foundCleanroom = false;
-
-    for (auto componentValue : components) {
-        auto component = componentValue.toObject();
-        if (component.value("uid").toString() == oldUid && component.value("cachedName").toString().compare("Cleanroom", Qt::CaseInsensitive) == 0) {
-            foundCleanroom = true;
-            break;
-        }
-    }
-
-    if (!foundCleanroom) {
-        return false;
-    }
-
-    for (qsizetype i = 0; i < components.size(); ++i) {
-        auto component = components.at(i).toObject();
-        if (component.value("uid").toString() == oldUid) {
-            component.insert("uid", cleanroomUid);
-            components.replace(i, component);
-        }
-    }
-    packRoot.insert("components", components);
-
-    const auto patchesDir = FS::PathCombine(root, "patches");
-    const auto oldPatchPath = FS::PathCombine(patchesDir, "net.minecraftforge.json");
-    const auto cleanroomPatchPath = FS::PathCombine(patchesDir, "com.cleanroommc.cleanroom.json");
-
-    QFile patchFile(oldPatchPath);
-    if (!patchFile.open(QIODevice::ReadOnly)) {
-        return false;
-    }
-
-    auto patchDoc = QJsonDocument::fromJson(patchFile.readAll());
-    auto patchRoot = patchDoc.object();
-    patchRoot.insert("uid", cleanroomUid);
-    patchRoot.insert("name", "Cleanroom");
-
-    if (!writeJsonDocument(mmcPackPath, QJsonDocument(packRoot))) {
-        return false;
-    }
-    if (!writeJsonDocument(cleanroomPatchPath, QJsonDocument(patchRoot))) {
-        return false;
-    }
-
-    QFile::remove(oldPatchPath);
-    return true;
-}
-
 void InstanceImportTask::processFlame()
 {
     shared_qobject_ptr<FlameCreationTask> inst_creation_task = nullptr;
@@ -420,7 +342,7 @@ void InstanceImportTask::processTechnic()
 
 void InstanceImportTask::processMultiMC()
 {
-    normalizeCleanroomMultiMCInstance(m_stagingPath);
+    Meta::Cleanroom::normalizeInstance(m_stagingPath);
 
     QString configPath = FS::PathCombine(m_stagingPath, "instance.cfg");
     auto instanceSettings = std::make_unique<INISettingsObject>(configPath);

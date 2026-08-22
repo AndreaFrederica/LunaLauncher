@@ -138,6 +138,8 @@ QList<BasePage*> InstallLoaderDialog::getPages()
              new InstallLoaderPage("net.neoforged", "neoforged", tr("NeoForge"), {}, profile),
              // Forge
              new InstallLoaderPage("net.minecraftforge", "forge", tr("Forge"), {}, profile),
+             // Cleanroom (1.12.2 Forge fork)
+             new InstallLoaderPage("com.cleanroommc.cleanroom", "cleanroom", tr("Cleanroom"), {}, profile),
              // Fabric
              new InstallLoaderPage("net.fabricmc.fabric-loader", "fabricmc", tr("Fabric"), Version("1.14"), profile),
              // Quilt

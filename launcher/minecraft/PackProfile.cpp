@@ -56,6 +56,7 @@
 #include "Json.h"
 #include "meta/Index.h"
 #include "meta/JsonFormat.h"
+#include "meta/CleanroomMeta.h"
 #include "minecraft/Component.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/OneSixVersionFormat.h"
@@ -292,6 +293,10 @@ bool PackProfile::save_internal()
 
 PackProfile::Result PackProfile::load()
 {
+    if (Meta::Cleanroom::normalizeInstance(d->m_instance->instanceRoot())) {
+        qCInfo(instanceProfileC) << d->m_instance->name() << "| Migrated legacy Cleanroom component UID";
+    }
+
     auto filename = componentsFilePath();
 
     // load the new component list and swap it with the current one...

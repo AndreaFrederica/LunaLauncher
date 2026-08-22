@@ -83,6 +83,10 @@ LoaderCompat loaderCompatible(ModPlatform::ModLoaderType modLoader, ModPlatform:
     // NeoForge on 1.20.1 runs Forge mods.
     if (instanceLoader == ModPlatform::NeoForge && modLoader == ModPlatform::Forge)
         return { true, ProblemSeverity::Warning };
+    // Cleanroom is a 1.12 Forge fork — runs Forge mods.
+    // TODO: Revisit if Cleanroom mods diverge from Forge compatibility.
+    if (instanceLoader == ModPlatform::Cleanroom && modLoader == ModPlatform::Forge)
+        return { true, ProblemSeverity::None };
     return { false, ProblemSeverity::Error };
 }
 
@@ -193,11 +197,18 @@ void ModPreflightTask::executeTask()
     ModPlatform::ModLoaderType instanceLoader = ModPlatform::Forge;  // default fallback
     QString instanceLoaderName = "forge";
     QString loaderVersion;
+    // Cleanroom is a 1.12 Forge fork. CurseForge/Modrinth APIs don't have a
+    // "cleanroom" loader category, so we map it to "forge" for API queries while
+    // keeping ModPlatform::Cleanroom for internal platform identification.
+    // TODO: Revisit when CurseForge/Modrinth add native Cleanroom loader support.
+    bool isCleanroom = loaders.contains(ModPlatform::Cleanroom);
     auto primaryLoaderStr = [&]() -> QString {
         if (loaders.isEmpty())
             return {};
         if (loaders.contains(ModPlatform::NeoForge))
             return "neoforge";
+        if (isCleanroom)
+            return "forge";
         if (loaders.contains(ModPlatform::Forge))
             return "forge";
         if (loaders.contains(ModPlatform::Quilt))
@@ -206,11 +217,11 @@ void ModPreflightTask::executeTask()
             return "fabric";
         if (loaders.contains(ModPlatform::LiteLoader))
             return "liteloader";
-        if (loaders.contains(ModPlatform::Cleanroom))
-            return "cleanroom";
         return "forge";
     }();
     auto loaderComponent = [&]() -> QString {
+        if (isCleanroom)
+            return "com.cleanroommc.cleanroom";
         if (primaryLoaderStr == "neoforge")
             return "net.neoforged";
         if (primaryLoaderStr == "forge")
@@ -221,24 +232,25 @@ void ModPreflightTask::executeTask()
             return "net.fabricmc.fabric-loader";
         if (primaryLoaderStr == "liteloader")
             return "com.mumfrey.liteloader";
-        if (primaryLoaderStr == "cleanroom")
-            return "com.cleanroommc.cleanroom";
         return {};
     }();
     loaderVersion = profile->getComponentVersion(loaderComponent);
-    if (primaryLoaderStr == "neoforge")
-        instanceLoader = ModPlatform::NeoForge;
-    else if (primaryLoaderStr == "quilt")
-        instanceLoader = ModPlatform::Quilt;
-    else if (primaryLoaderStr == "fabric")
-        instanceLoader = ModPlatform::Fabric;
-    else if (primaryLoaderStr == "liteloader")
-        instanceLoader = ModPlatform::LiteLoader;
-    else if (primaryLoaderStr == "cleanroom")
+    if (isCleanroom) {
         instanceLoader = ModPlatform::Cleanroom;
-    else
+        instanceLoaderName = "cleanroom";
+    } else if (primaryLoaderStr == "neoforge") {
+        instanceLoader = ModPlatform::NeoForge;
+    } else if (primaryLoaderStr == "quilt") {
+        instanceLoader = ModPlatform::Quilt;
+    } else if (primaryLoaderStr == "fabric") {
+        instanceLoader = ModPlatform::Fabric;
+    } else if (primaryLoaderStr == "liteloader") {
+        instanceLoader = ModPlatform::LiteLoader;
+    } else {
         instanceLoader = ModPlatform::Forge;
-    instanceLoaderName = primaryLoaderStr;
+    }
+    if (instanceLoaderName.isEmpty())
+        instanceLoaderName = primaryLoaderStr;
 
     // Java: prefer the instance's configured Java version; fall back to the
     // Minecraft component's compatibleJavaMajors when unset.

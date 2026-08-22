@@ -1,7 +1,7 @@
 [workspace]
 authors = ["AndreaFrederica <andreafrederica@outlook.com>"]
 name = "LunaLauncher"
-platforms = ["win-64", "linux-64"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
 version = "0.1.0"
 channels = [
   "conda-forge",
@@ -21,6 +21,11 @@ ccache = ">=4.13.6,<5"
 powershell = ">=7.5.4,<8"
 
 [target.linux-64.dependencies]
+c-compiler = ">=1.11.0,<2"
+cxx-compiler = ">=1.11.0,<2"
+pkg-config = ">=0.29.2,<0.30"
+
+[target.osx-arm64.dependencies]
 c-compiler = ">=1.11.0,<2"
 cxx-compiler = ">=1.11.0,<2"
 pkg-config = ">=0.29.2,<0.30"

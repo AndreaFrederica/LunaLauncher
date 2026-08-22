@@ -67,6 +67,7 @@ launcher_moc_header_generated = qt.preprocess(
     libarchive_dep,
     tomlplusplus_dep,
     libqrencode_dep,
+    apple_define_dep,
   ],
   preserve_paths: true,
 )
@@ -99,6 +100,7 @@ launcher_moc_source_generated = qt.preprocess(
     libarchive_dep,
     tomlplusplus_dep,
     libqrencode_dep,
+    apple_define_dep,
   ],
 )
 
@@ -159,6 +161,12 @@ launcher_logic = static_library(
 launcher_main_sources = ['main.cpp']
 if is_windows
   launcher_main_sources += windows.compile_resources(launcher_windows_rc_file)
+elif is_macos
+  launcher_main_sources += [
+    'macsandbox/SecurityBookmarkFileAccess.mm',
+    'macsandbox/SecurityBookmarkFileAccess.h',
+    'ui/themes/ThemeManager.mm',
+  ]
 endif
 
 if is_windows
@@ -199,6 +207,7 @@ else
       qt_widgets_dep,
       qt_network_dep,
     ],
+    link_args: is_macos ? ['-framework', 'AppKit', '-framework', 'Carbon', '-framework', 'Foundation', '-framework', 'ApplicationServices'] : [],
     install: true,
     install_dir: binary_dest_dir,
   )
@@ -290,3 +299,10 @@ install_data(
   ],
   install_dir: join_paths(exresource_dest_dir, 'jsapi'),
 )
+
+if is_macos
+  install_data(
+    join_paths(meson.project_source_root(), 'program_info', 'lunalauncher.icns'),
+    install_dir: exresource_dest_dir,
+  )
+endif

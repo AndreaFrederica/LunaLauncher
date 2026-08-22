@@ -18,4 +18,4 @@
 	url = https://github.com/commonmark/cmark.git
 [submodule "libraries/quickjs-ng"]
 	path = libraries/quickjs-ng
-	url = git@github.com:W-874/quickjs-ng.git
+	url = https://github.com/W-874/quickjs-ng.git

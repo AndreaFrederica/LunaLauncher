@@ -16,9 +16,10 @@ project(
 host_system = host_machine.system()
 is_windows = host_system == 'windows'
 is_linux = host_system == 'linux'
+is_macos = host_system == 'darwin'
 
-if not is_windows and not is_linux
-  error('This Meson build currently supports Windows and Linux targets.')
+if not is_windows and not is_linux and not is_macos
+  error('This Meson build currently supports Windows, Linux, and macOS targets.')
 endif
 
 if meson.project_source_root() == meson.project_build_root()
@@ -35,6 +36,13 @@ python_prog = find_program('python', required: true)
 
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
+
+if is_macos
+  add_languages('objcpp', required: true)
+  apple_define_dep = declare_dependency(compile_args: ['-D__APPLE__', '-DQ_OS_MACOS'])
+else
+  apple_define_dep = dependency('', required: false)
+endif
 
 if cpp.get_argument_syntax() == 'msvc'
   add_project_arguments(
@@ -58,6 +66,17 @@ else
       '-DQT_NO_DEBUG',
     ],
     language: ['c', 'cpp'],
+  )
+endif
+
+if is_macos
+  add_project_arguments(
+    ['-Wno-implicit-function-declaration', '-Wno-error=implicit-function-declaration'],
+    language: 'c',
+  )
+  add_project_arguments(
+    ['-Wno-error=implicit-function-declaration'],
+    language: 'cpp',
   )
 endif
 
@@ -137,8 +156,16 @@ launcher_matrix_url = 'https://prismlauncher.org/matrix'
 launcher_discord_url = 'https://prismlauncher.org/discord'
 launcher_subreddit_url = 'https://prismlauncher.org/reddit'
 launcher_user_agent = '@0@/@1@'.format(launcher_common_name, launcher_version_name)
-launcher_glfw_library_name = 'glfw.dll'
-launcher_openal_library_name = 'OpenAL.dll'
+if is_macos
+  launcher_glfw_library_name = 'libglfw.dylib'
+  launcher_openal_library_name = 'libopenal.dylib'
+elif is_windows
+  launcher_glfw_library_name = 'glfw.dll'
+  launcher_openal_library_name = 'OpenAL.dll'
+else
+  launcher_glfw_library_name = 'libglfw.so'
+  launcher_openal_library_name = 'libopenal.so'
+endif
 launcher_msa_client_id = 'a60a8e54-8c3c-4b25-9fe4-8ec4e616c410'
 launcher_curseforge_api_key = '$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC'
 launcher_enable_java_downloader = get_option('enable_java_downloader')

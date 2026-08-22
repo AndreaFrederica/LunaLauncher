@@ -41,6 +41,7 @@
 #include <QKeyEvent>
 #include <limits>
 
+#include "StringUtils.h"
 #include "tasks/Task.h"
 
 #include "ui/widgets/SubTaskProgressBar.h"
@@ -62,7 +63,12 @@ std::tuple<int, int> map_int_zero_max(T current, T range_max, T range_min)
 ProgressDialog::ProgressDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ProgressDialog)
 {
     ui->setupUi(this);
+    ui->taskProgressLayout->setAlignment(Qt::AlignTop);
     ui->taskProgressScrollArea->setHidden(true);
+    auto speedSizePolicy = ui->globalSpeedWidget->sizePolicy();
+    speedSizePolicy.setRetainSizeWhenHidden(true);
+    ui->globalSpeedWidget->setSizePolicy(speedSizePolicy);
+    ui->globalSpeedWidget->setHidden(true);
     this->setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setAttribute(Qt::WidgetAttribute::WA_QuitOnClose, true);
     changeProgress(0, 100);
@@ -102,6 +108,7 @@ void ProgressDialog::updateSize(bool recenterParent)
     QPoint lastPos = this->pos();
     int minHeight = ui->globalStatusDetailsLabel->minimumSize().height() + (ui->verticalLayout->spacing() * 2);
     minHeight += ui->globalProgressBar->minimumSize().height() + ui->verticalLayout->spacing();
+    minHeight += ui->globalSpeedWidget->minimumSizeHint().height() + ui->verticalLayout->spacing();
     if (!ui->taskProgressScrollArea->isHidden())
         minHeight += ui->taskProgressScrollArea->minimumSizeHint().height() + ui->verticalLayout->spacing();
     if (ui->skipButton->isVisible())
@@ -110,7 +117,13 @@ void ProgressDialog::updateSize(bool recenterParent)
     QSize minSize = QSize(480, minHeight);
 
     setMinimumSize(minSize);
-    adjustSize();
+
+    // Grow to fit new content without shrinking either dimension that is already large enough.
+    // adjustSize() cannot be used here because it can grow one dimension while shrinking the other.
+    const QSize expandedSize = lastSize.expandedTo(sizeHint());
+    if (lastSize != expandedSize) {
+        resize(expandedSize);
+    }
 
     QSize newSize = this->size();
     // if the current window is a different size
@@ -150,6 +163,7 @@ int ProgressDialog::execWithTask(Task* task)
     this->m_taskConnections.push_back(connect(task, &Task::details, this, &ProgressDialog::changeStatus));
     this->m_taskConnections.push_back(connect(task, &Task::stepProgress, this, &ProgressDialog::changeStepProgress));
     this->m_taskConnections.push_back(connect(task, &Task::progress, this, &ProgressDialog::changeProgress));
+    this->m_taskConnections.push_back(connect(task, &Task::transferRate, this, &ProgressDialog::changeTransferRate));
     this->m_taskConnections.push_back(connect(task, &Task::aborted, this, &ProgressDialog::hide));
     this->m_taskConnections.push_back(connect(task, &Task::abortStatusChanged, ui->skipButton, &QPushButton::setEnabled));
     this->m_taskConnections.push_back(connect(task, &Task::abortButtonTextChanged, ui->skipButton, &QPushButton::setText));
@@ -164,6 +178,9 @@ int ProgressDialog::execWithTask(Task* task)
     } else {
         changeStatus(task->getStatus());
         changeProgress(task->getProgress(), task->getTotalProgress());
+        if (task->getTransferRate() > 0) {
+            changeTransferRate(task->getTransferRate());
+        }
     }
 
     return QDialog::exec();
@@ -262,6 +279,12 @@ void ProgressDialog::changeProgress(qint64 current, qint64 total)
 {
     ui->globalProgressBar->setMaximum(total);
     ui->globalProgressBar->setValue(current);
+}
+
+void ProgressDialog::changeTransferRate(qint64 bytesPerSecond)
+{
+    ui->globalSpeedValueLabel->setText(tr("%1/s").arg(StringUtils::humanReadableFileSize(bytesPerSecond)));
+    ui->globalSpeedWidget->setVisible(true);
 }
 
 void ProgressDialog::keyPressEvent(QKeyEvent* e)

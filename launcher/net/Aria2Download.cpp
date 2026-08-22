@@ -153,6 +153,7 @@ void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2Download
     }
 
     setProgress(info.completedLength, info.totalLength);
+    setTransferRate(info.downloadSpeed);
     QString progress = tr("%1 / %2")
                            .arg(StringUtils::humanReadableFileSize(info.completedLength))
                            .arg(info.totalLength > 0 ? StringUtils::humanReadableFileSize(info.totalLength) : tr("unknown"));

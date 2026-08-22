@@ -44,6 +44,7 @@
 #include <QNetworkReply>
 #include <QUrl>
 #include <QTimer>
+#include <algorithm>
 #include <memory>
 
 #if defined(LAUNCHER_APPLICATION)
@@ -136,8 +137,8 @@ void NetRequest::onProgress(qint64 bytesReceived, qint64 bytesTotal)
     // use milliseconds for speed precision
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
     auto bytes_received_since = bytesReceived - m_last_progress_bytes;
-    auto dl_speed_bps = (double)bytes_received_since / elapsed_ms.count() * 1000;
-    auto remaining_time_s = (bytesTotal - bytesReceived) / dl_speed_bps;
+    const auto dl_speed_bps = elapsed_ms.count() > 0 ? static_cast<double>(bytes_received_since) / elapsed_ms.count() * 1000 : 0.0;
+    const auto remaining_time_s = dl_speed_bps > 0 ? (bytesTotal - bytesReceived) / dl_speed_bps : 0;
 
     //: Current amount of bytes downloaded, out of the total amount of bytes in the download
     QString dl_progress =
@@ -155,6 +156,7 @@ void NetRequest::onProgress(qint64 bytesReceived, qint64 bytesTotal)
 
     setDetails(dl_progress + "\n" + dl_speed_str);
 
+    setTransferRate(static_cast<qint64>(std::max(0.0, dl_speed_bps)));
     setProgress(bytesReceived, bytesTotal);
 }
 

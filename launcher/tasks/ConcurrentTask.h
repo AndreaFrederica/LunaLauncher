@@ -85,12 +85,14 @@ class ConcurrentTask : public Task {
     void subTaskStatus(Task::Ptr task, const QString& msg);
     void subTaskDetails(Task::Ptr task, const QString& msg);
     void subTaskProgress(Task::Ptr task, qint64 current, qint64 total);
+    void subTaskTransferRate(Task::Ptr task, qint64 bytesPerSecond);
 
    protected:
     // NOTE: This is not thread-safe.
     unsigned int totalSize() const { return static_cast<unsigned int>(m_queue.size() + m_doing.size() + m_done.size()); }
 
     virtual void updateState();
+    void updateTransferRate();
 
     void startSubTask(Task::Ptr task);
 
@@ -103,6 +105,7 @@ class ConcurrentTask : public Task {
     QHash<Task*, Task::Ptr> m_succeeded;
 
     QHash<QUuid, std::shared_ptr<TaskStepProgress>> m_task_progress;
+    QHash<Task*, qint64> m_task_transfer_rates;
 
     int m_total_max_size;
 };

@@ -36,6 +36,7 @@
 #include "ConcurrentTask.h"
 
 #include <QDebug>
+#include <utility>
 #include "tasks/Task.h"
 
 ConcurrentTask::ConcurrentTask(QString task_name, int max_concurrent) : Task(), m_total_max_size(max_concurrent)
@@ -104,8 +105,10 @@ void ConcurrentTask::clear()
     m_failed.clear();
     m_queue.clear();
     m_task_progress.clear();
+    m_task_transfer_rates.clear();
 
     m_progress = 0;
+    setTransferRate(0);
 }
 
 void ConcurrentTask::executeNextSubTask()
@@ -160,6 +163,8 @@ void ConcurrentTask::startSubTask(Task::Ptr next)
     connect(next.get(), &Task::stepProgress, this, &ConcurrentTask::stepProgress);
 
     connect(next.get(), &Task::progress, this, [this, next](qint64 current, qint64 total) { subTaskProgress(next, current, total); });
+    connect(next.get(), &Task::transferRate, this,
+            [this, next](qint64 bytesPerSecond) { subTaskTransferRate(next, bytesPerSecond); });
 
     m_doing.insert(next.get(), next);
 
@@ -177,6 +182,8 @@ void ConcurrentTask::subTaskFinished(Task::Ptr task, TaskStepState state)
     (state == TaskStepState::Succeeded ? m_succeeded : m_failed).insert(task.get(), task);
 
     m_doing.remove(task.get());
+    m_task_transfer_rates.remove(task.get());
+    updateTransferRate();
 
     auto task_progress = *m_task_progress.value(task->getUid());
     task_progress.state = state;
@@ -237,6 +244,21 @@ void ConcurrentTask::subTaskProgress(Task::Ptr task, qint64 current, qint64 tota
     if (totalSize() == 1) {
         setProgress(task_progress->current, task_progress->total);
     }
+}
+
+void ConcurrentTask::subTaskTransferRate(Task::Ptr task, qint64 bytesPerSecond)
+{
+    m_task_transfer_rates.insert(task.get(), bytesPerSecond);
+    updateTransferRate();
+}
+
+void ConcurrentTask::updateTransferRate()
+{
+    qint64 totalBytesPerSecond = 0;
+    for (const auto bytesPerSecond : std::as_const(m_task_transfer_rates)) {
+        totalBytesPerSecond += bytesPerSecond;
+    }
+    setTransferRate(totalBytesPerSecond);
 }
 
 void ConcurrentTask::updateState()

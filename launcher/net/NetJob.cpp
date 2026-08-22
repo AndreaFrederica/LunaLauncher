@@ -37,7 +37,8 @@
 
 #include "NetJob.h"
 #include <QNetworkReply>
-#include <QTimer>
+#include <algorithm>
+#include <utility>
 #include "net/NetRequest.h"
 #include "tasks/ConcurrentTask.h"
 #if defined(LAUNCHER_APPLICATION)
@@ -55,13 +56,6 @@ NetJob::NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> netwo
 #if defined(LAUNCHER_APPLICATION)
     if (APPLICATION_DYN && max_concurrent < 0) {
         max_concurrent = APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt();
-
-        // Check if using BMCLAPI for dynamic rate limiting
-        int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
-        if (mirrorType == MirrorDownload::BMCLAPI) {
-            m_is_bmclapi = true;
-            // Don't limit concurrency by default - will add delay dynamically if 429 occurs
-        }
     }
 #endif
     if (max_concurrent > 0)
@@ -72,9 +66,38 @@ auto NetJob::addNetAction(Net::NetRequest::Ptr action) -> bool
 {
     action->setNetwork(m_network);
 
+    const auto taskId = action->getUid();
+    connect(action.get(), &Task::progress, this, [this, taskId](qint64 current, qint64) { updateDownloadSpeed(taskId, current); });
+
     addTask(action);
 
     return true;
+}
+
+void NetJob::updateDownloadSpeed(const QUuid& taskId, qint64 downloadedBytes)
+{
+    auto& recorded = m_downloadedBytes[taskId];
+    recorded = std::max(recorded, downloadedBytes);
+
+    if (!m_speedTimer.isValid()) {
+        m_speedTimer.start();
+        return;
+    }
+
+    constexpr qint64 sampleIntervalMs = 250;
+    const auto elapsedMs = m_speedTimer.elapsed();
+    if (elapsedMs < sampleIntervalMs) {
+        return;
+    }
+
+    qint64 totalDownloaded = 0;
+    for (const auto bytes : std::as_const(m_downloadedBytes)) {
+        totalDownloaded += bytes;
+    }
+    const auto bytesSinceLastSample = std::max<qint64>(0, totalDownloaded - m_lastSpeedSampleBytes);
+    setTransferRate(bytesSinceLastSample * 1000 / elapsedMs);
+    m_lastSpeedSampleBytes = totalDownloaded;
+    m_speedTimer.restart();
 }
 
 void NetJob::executeTask()
@@ -85,23 +108,12 @@ void NetJob::executeTask()
         return;
     }
 
-    // For BMCLAPI, start only 1 task at a time to avoid 429 errors
-    if (m_is_bmclapi) {
-        QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection);
-    } else {
-        ConcurrentTask::executeTask();
-    }
+    ConcurrentTask::executeTask();
 }
 
 void NetJob::executeNextSubTask()
 {
-    // For BMCLAPI with active rate limiting, add delay between requests
-    if (m_is_bmclapi && m_bmclapi_delay_ms > 0 && !m_queue.isEmpty()) {
-        QTimer::singleShot(m_bmclapi_delay_ms, this,
-                           [this]() { QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection); });
-    } else {
-        ConcurrentTask::executeNextSubTask();
-    }
+    ConcurrentTask::executeNextSubTask();
 }
 
 bool NetJob::canDelegateWholeQueueToAria2() const

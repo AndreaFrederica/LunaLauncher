@@ -37,6 +37,7 @@
 #include "Task.h"
 
 #include <QDebug>
+#include <algorithm>
 
 #include "AssertHelpers.h"
 
@@ -71,6 +72,15 @@ void Task::setProgress(qint64 current, qint64 total)
         m_progressTotal = total;
 
         emit progress(m_progress, m_progressTotal);
+    }
+}
+
+void Task::setTransferRate(qint64 bytesPerSecond)
+{
+    bytesPerSecond = std::max<qint64>(0, bytesPerSecond);
+    if (m_transferRate != bytesPerSecond) {
+        m_transferRate = bytesPerSecond;
+        emit transferRate(m_transferRate);
     }
 }
 
@@ -116,6 +126,7 @@ void Task::emitFailed(QString reason)
         qCCritical(taskLogC) << "Task" << describe() << "failed while not running!!!!:" << reason;
         return;
     }
+    setTransferRate(0);
     m_state = State::Failed;
     m_failReason = reason;
     qCCritical(taskLogC) << "Task" << describe() << "failed:" << reason;
@@ -130,6 +141,7 @@ void Task::emitAborted()
         qCCritical(taskLogC) << "Task" << describe() << "aborted while not running!!!!";
         return;
     }
+    setTransferRate(0);
     m_state = State::AbortedByUser;
     m_failReason = tr("Aborted");
     if (m_show_debug)
@@ -145,6 +157,7 @@ void Task::emitSucceeded()
         qCCritical(taskLogC) << "Task" << describe() << "succeeded while not running!!!!";
         return;
     }
+    setTransferRate(0);
     m_state = State::Succeeded;
     if (m_show_debug)
         qCDebug(taskLogC) << "Task" << describe() << "succeeded";
@@ -200,11 +213,13 @@ void Task::propagateFromOther(Task* other)
     connect(other, &Task::status, this, &Task::setStatus);
     connect(other, &Task::details, this, &Task::setDetails);
     connect(other, &Task::progress, this, &Task::setProgress);
+    connect(other, &Task::transferRate, this, &Task::setTransferRate);
     connect(other, &Task::stepProgress, this, &Task::propagateStepProgress);
 
     setStatus(other->getStatus());
     setDetails(other->getDetails());
     setProgress(other->getProgress(), other->getTotalProgress());
+    setTransferRate(other->getTransferRate());
     for (const auto& progress : other->getStepProgress()) {
         propagateStepProgress(*progress);
     }

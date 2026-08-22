@@ -123,6 +123,7 @@ class Task : public QObject, public QRunnable {
 
     qint64 getProgress() { return m_progress; }
     qint64 getTotalProgress() { return m_progressTotal; }
+    qint64 getTransferRate() const { return m_transferRate; }
     virtual auto getStepProgress() const -> TaskStepProgressList { return {}; }
 
     QUuid getUid() { return m_uid; }
@@ -139,6 +140,7 @@ class Task : public QObject, public QRunnable {
    signals:
     void started();
     void progress(qint64 current, qint64 total);
+    void transferRate(qint64 bytesPerSecond);
     //! called when a task has either succeeded, aborted or failed.
     void finished();
     //! called when a task has succeeded
@@ -200,6 +202,7 @@ class Task : public QObject, public QRunnable {
     void setStatus(const QString& status);
     void setDetails(const QString& details);
     void setProgress(qint64 current, qint64 total);
+    void setTransferRate(qint64 bytesPerSecond);
 
    protected:
     State m_state = State::Inactive;
@@ -207,8 +210,9 @@ class Task : public QObject, public QRunnable {
     QString m_failReason = "";
     QString m_status;
     QString m_details;
-    int m_progress = 0;
-    int m_progressTotal = 100;
+    qint64 m_progress = 0;
+    qint64 m_progressTotal = 100;
+    qint64 m_transferRate = 0;
 
     // TODO: Nuke in favor of QLoggingCategory
     bool m_show_debug = true;

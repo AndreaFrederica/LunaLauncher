@@ -34,6 +34,7 @@
 #include "tasks/ConcurrentTask.h"
 
 class QPushButton;
+class CurseForgeDownloadPageService;
 
 struct BlockedMod {
     QString name;
@@ -75,8 +76,10 @@ class BlockedModsDialog : public QDialog {
     QSet<QString> m_pendingHashPaths;
     bool m_rehashPending;
     QString m_hashType;
+    CurseForgeDownloadPageService* m_curseForgeDownloadPages = nullptr;
 
     void openAll(bool missingOnly);
+    void openAllInSystemBrowser(bool missingOnly);
     void addDownloadFolder();
     void update();
     void directoryChanged(QString path);

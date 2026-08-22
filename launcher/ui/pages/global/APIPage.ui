@@ -542,6 +542,29 @@
            </widget>
           </item>
           <item>
+           <widget class="QLabel" name="curseForgeDownloadBrowserLabel">
+            <property name="text">
+             <string>Restricted file download pages:</string>
+            </property>
+            <property name="buddy">
+             <cstring>curseForgeDownloadBrowserComboBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="curseForgeDownloadBrowserComboBox"/>
+          </item>
+          <item>
+           <widget class="QLabel" name="curseForgeDownloadBrowserNote">
+            <property name="text">
+             <string>The embedded browser displays the official CurseForge page and imports the file after it is downloaded and verified.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="verticalSpacer_3">
             <property name="orientation">
              <enum>Qt::Vertical</enum>

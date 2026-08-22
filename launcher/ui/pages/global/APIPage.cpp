@@ -52,6 +52,7 @@
 #include "BuildConfig.h"
 #include "minecraft/MirrorDownload.h"
 #include "modplatform/ModApiMirror.h"
+#include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "net/PasteUpload.h"
 #include "net/PclDownloadLibrary.h"
 #include "settings/SettingsObject.h"
@@ -84,6 +85,15 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     for (auto* comboBox : { ui->modrinthMirrorComboBox, ui->curseForgeMirrorComboBox }) {
         comboBox->addItem(tr("Official"), ModApiMirror::Official);
         comboBox->addItem(tr("MCIM"), ModApiMirror::MCIM);
+    }
+
+    ui->curseForgeDownloadBrowserComboBox->addItem(tr("Embedded browser"), "Embedded");
+    ui->curseForgeDownloadBrowserComboBox->addItem(tr("System browser"), "System");
+    if (!CurseForgeDownloadPageService::isAvailable()) {
+        const auto embeddedIndex = ui->curseForgeDownloadBrowserComboBox->findData("Embedded");
+        ui->curseForgeDownloadBrowserComboBox->setItemData(embeddedIndex, false, Qt::UserRole - 1);
+        ui->curseForgeDownloadBrowserComboBox->setItemData(
+            embeddedIndex, tr("The embedded CurseForge browser was not built or is unavailable."), Qt::ToolTipRole);
     }
 
     // Add download backend dropdown
@@ -252,6 +262,13 @@ void APIPage::loadSettings()
     loadModApiMirror(ui->modrinthMirrorComboBox, s->get("ModrinthMirror").toInt());
     loadModApiMirror(ui->curseForgeMirrorComboBox, s->get("CurseForgeMirror").toInt());
 
+    const auto curseForgeDownloadBrowser = s->get("CurseForgeDownloadBrowser").toString();
+    auto curseForgeDownloadBrowserIndex = ui->curseForgeDownloadBrowserComboBox->findData(curseForgeDownloadBrowser);
+    if (curseForgeDownloadBrowserIndex < 0 || (curseForgeDownloadBrowser == "Embedded" && !CurseForgeDownloadPageService::isAvailable())) {
+        curseForgeDownloadBrowserIndex = ui->curseForgeDownloadBrowserComboBox->findData("System");
+    }
+    ui->curseForgeDownloadBrowserComboBox->setCurrentIndex(curseForgeDownloadBrowserIndex);
+
     // Load download backend
     int backend = s->get("DownloadBackend").toInt();
     int backendIndex = ui->downloadBackendComboBox->findData(backend);
@@ -293,6 +310,7 @@ void APIPage::applySettings()
     s->set("DownloadMirrorType", mirrorType);
     s->set("ModrinthMirror", ui->modrinthMirrorComboBox->currentData().toInt());
     s->set("CurseForgeMirror", ui->curseForgeMirrorComboBox->currentData().toInt());
+    s->set("CurseForgeDownloadBrowser", ui->curseForgeDownloadBrowserComboBox->currentData().toString());
 
     // Save download backend
     s->set("DownloadBackend", ui->downloadBackendComboBox->currentData().toInt());

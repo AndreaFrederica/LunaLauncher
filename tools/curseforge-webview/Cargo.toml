@@ -1,0 +1,15 @@
+[package]
+name = "luna-cf-webview"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["unstable"] }
+url = "2"

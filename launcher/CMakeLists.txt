@@ -49,6 +49,8 @@ set(CORE_SOURCES
     InstanceCopyTask.cpp
     InstanceImportTask.h
     InstanceImportTask.cpp
+    modplatform/pcl/PCLPack.h
+    modplatform/pcl/PCLPack.cpp
 
     # Resource downloading task
     ResourceDownloadTask.h
@@ -1488,6 +1490,7 @@ endif()
 qt_add_resources(LAUNCHER_RESOURCES
     resources/backgrounds/backgrounds.qrc
     resources/multimc/multimc.qrc
+    resources/pcl/lucide/lucide.qrc
     resources/pe_dark/pe_dark.qrc
     resources/pe_light/pe_light.qrc
     resources/pe_colored/pe_colored.qrc

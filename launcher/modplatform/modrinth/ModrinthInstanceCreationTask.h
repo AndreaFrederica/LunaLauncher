@@ -42,6 +42,7 @@ class ModrinthCreationTask final : public InstanceCreationTask {
 
     bool updateInstance() override;
     std::unique_ptr<BaseInstance> createInstance() override;
+    bool isPclPack() const { return m_pclPackDetected; }
 
    private:
     bool parseManifest(const QString&, std::vector<File>&, bool set_internal_data = true, bool show_optional_dialog = true);
@@ -58,4 +59,5 @@ class ModrinthCreationTask final : public InstanceCreationTask {
     std::optional<BaseInstance*> m_instance;
 
     QString m_root_path = "minecraft";
+    bool m_pclPackDetected = false;
 };

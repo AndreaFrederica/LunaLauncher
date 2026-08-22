@@ -78,6 +78,9 @@ class CustomUIPanelPage : public QWidget, public BasePage {
     static JSValue jsSetState(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
     static JSValue jsGetState(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
     static JSValue jsSaveState(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
+    static JSValue jsGetInstanceSetting(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
+    static JSValue jsSetInstanceSetting(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
+    static JSValue jsOpenFolder(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
     static JSValue jsFsExists(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
     static JSValue jsFsReadFile(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
     static JSValue jsFsWriteFile(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv);
@@ -102,6 +105,7 @@ class CustomUIPanelPage : public QWidget, public BasePage {
     QJsonObject getModState(const QString& modName) const;
     QJsonArray listManagedMods(const QString& filter) const;
     bool resolveFsPath(const QString& userPath, QString& absolutePathOut) const;
+    bool openInstanceFolder(const QString& userPath, bool create);
 
    private:
     struct JsDeadline {

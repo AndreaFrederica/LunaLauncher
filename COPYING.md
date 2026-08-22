@@ -32,6 +32,31 @@
          See the License for the specific language governing permissions and
          limitations under the License.
 
+## PCL compatibility Lucide icon resources
+
+The icons under `launcher/resources/pcl/lucide/` were copied from the
+Apache-2.0-licensed PCL.Core project (Copyright 2025 PCL Community) and are
+from Lucide Static 1.17.0.
+The complete upstream notice, including the MIT notice for Feather-derived
+icons, is retained in `launcher/resources/pcl/lucide/LICENSE.txt` and embedded
+alongside the icon resources.
+
+    ISC License
+
+    Copyright (c) 2026 Lucide Icons and Contributors
+
+    Permission to use, copy, modify, and/or distribute this software for any
+    purpose with or without fee is hereby granted, provided that the above
+    copyright notice and this permission notice appear in all copies.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+    WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+    ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+    WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 ## PolyMC
 
      PolyMC - Minecraft Launcher

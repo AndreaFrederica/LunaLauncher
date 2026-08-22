@@ -79,6 +79,26 @@ QByteArray ArchiveReader::File::readAll(int* outStatus)
     return data;
 }
 
+bool ArchiveReader::File::copyTo(QIODevice& output)
+{
+    const void* buffer = nullptr;
+    size_t size = 0;
+    la_int64_t offset = 0;
+
+    int status = ARCHIVE_OK;
+    while ((status = archive_read_data_block(m_archive.get(), &buffer, &size, &offset)) == ARCHIVE_OK) {
+        if (output.write(static_cast<const char*>(buffer), static_cast<qint64>(size)) != static_cast<qint64>(size)) {
+            qWarning() << "Failed writing extracted archive member:" << output.errorString();
+            return false;
+        }
+    }
+    if (status != ARCHIVE_EOF) {
+        qWarning() << "libarchive read error:" << archive_error_string(m_archive.get());
+        return false;
+    }
+    return true;
+}
+
 QDateTime ArchiveReader::File::dateTime()
 {
     auto mtime = archive_entry_mtime(m_entry);
@@ -246,6 +266,10 @@ bool ArchiveReader::parse(const std::function<bool(File*)>& doStuff)
 bool ArchiveReader::File::isFile()
 {
     return (archive_entry_filetype(m_entry) & AE_IFMT) == AE_IFREG;
+}
+qint64 ArchiveReader::File::size()
+{
+    return archive_entry_size(m_entry);
 }
 bool ArchiveReader::File::skip()
 {

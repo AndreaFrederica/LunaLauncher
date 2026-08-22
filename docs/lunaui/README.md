@@ -55,6 +55,9 @@ Available global object:
 - `launcher.setState(key, value): boolean`
 - `launcher.getState(key): JsonValue | undefined`
 - `launcher.saveState(): boolean`
+- `launcher.getInstanceSetting(name): JsonValue | undefined`
+- `launcher.setInstanceSetting(name, value): boolean`
+- `launcher.openFolder(path, create?): boolean`
 - `launcher.fs.*`:
   - `exists(path)`
   - `readFile(path)`
@@ -71,6 +74,8 @@ Controls support:
 - `activateVariant`
 - `setState`
 - `saveState`
+- `setInstanceSetting`
+- `openFolder`
 - `reloadTabs` / `refreshTabs`
 - `runHandler` / `callHandler`
 
@@ -80,6 +85,10 @@ Controls support:
 - array of objects
 - string handler name
 
+`openFolder` accepts only paths inside the current instance root. Relative paths are resolved from the instance root. If
+`create` is `true`, a missing target directory is created after validating its nearest existing ancestor. The resolved real
+path is checked again before opening, so symlink or junction traversal outside the instance is rejected.
+
 ## Control Types
 
 Common control `type` values:
@@ -88,8 +97,15 @@ Common control `type` values:
 - `separator`
 - `toggle` / `checkbox`
 - `select` / `combo`
+- `input` / `lineedit`
+- `textarea`
+- `number` / `spinbox`
+- `accountselect` / `account-select`
 - `button`
 - `moddetails` (`moddetail` / `modinfo` / `mod-info` aliases)
+
+Controls can use `sourceSetting` to initialize from a registered instance setting. Use the
+`setInstanceSetting` action to write the control value back. Unknown/unregistered setting names are rejected.
 
 ## `moddetails` Notes
 

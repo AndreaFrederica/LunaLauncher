@@ -49,6 +49,7 @@
 
 #include "modplatform/flame/FlameInstanceCreationTask.h"
 #include "modplatform/modrinth/ModrinthInstanceCreationTask.h"
+#include "modplatform/pcl/PCLPack.h"
 #include "modplatform/technic/TechnicPackProcessor.h"
 
 #include "settings/INISettingsObject.h"
@@ -57,6 +58,7 @@
 #include "net/ApiDownload.h"
 
 #include <QFileInfo>
+#include <QTemporaryFile>
 #include <QtConcurrentRun>
 #include <memory>
 
@@ -130,15 +132,20 @@ void InstanceImportTask::processZipPack()
     qDebug() << "Attempting to determine instance type";
 
     QString root;
+    QStringList nestedPackCandidates;
+    m_modpackType = ModpackType::Unknown;
     // NOTE: Prioritize modpack platforms that aren't searched for recursively.
     // Especially Flame has a very common filename for its manifest, which may appear inside overrides for example
     // https://docs.modrinth.com/docs/modpacks/format_definition/#storage
-    auto detectInstance = [this, &extractDir, &root](MMCZip::ArchiveReader::File* f, bool& stop) {
+    auto detectInstance = [this, &extractDir, &root, &nestedPackCandidates](MMCZip::ArchiveReader::File* f, bool& stop) {
         if (!isRunning()) {
             stop = true;
             return true;
         }
         auto fileName = f->filename();
+        if (f->isFile() && !PCL::findNestedPackCandidates({ fileName }).isEmpty()) {
+            nestedPackCandidates.append(fileName);
+        }
         if (fileName == "modrinth.index.json") {
             // process as Modrinth pack
             qDebug() << "Modrinth:" << true;
@@ -169,6 +176,54 @@ void InstanceImportTask::processZipPack()
         return;
     }
     if (m_modpackType == ModpackType::Unknown) {
+        nestedPackCandidates.removeDuplicates();
+        if (nestedPackCandidates.size() > 1) {
+            emitFailed(tr("Archive contains multiple nested modpacks. Remove all but one modpack.mrpack or modpack.zip and try again."));
+            return;
+        }
+        if (nestedPackCandidates.size() == 1) {
+            if (m_nestedArchiveDepth >= 1) {
+                emitFailed(tr("Nested modpack depth exceeds the supported PCL wrapper format."));
+                return;
+            }
+
+            auto nestedFile = packZip.goToFile(nestedPackCandidates.constFirst());
+            constexpr qint64 MAX_NESTED_PACK_SIZE = 8LL * 1024 * 1024 * 1024;
+            if (!nestedFile || !nestedFile->isFile() || nestedFile->size() <= 0 || nestedFile->size() > MAX_NESTED_PACK_SIZE) {
+                emitFailed(tr("The nested PCL modpack is empty or exceeds the 8 GiB safety limit."));
+                return;
+            }
+
+            auto temporary = std::make_unique<QTemporaryFile>(QDir::tempPath() + "/luna-pcl-XXXXXX.mrpack");
+            temporary->setAutoRemove(true);
+            if (!temporary->open() || !nestedFile->copyTo(*temporary) || !temporary->flush()) {
+                emitFailed(tr("Could not extract the nested PCL modpack."));
+                return;
+            }
+            temporary->close();
+
+            MMCZip::ArchiveReader nestedReader(temporary->fileName());
+            bool hasModrinthIndex = false;
+            const bool validArchive = nestedReader.parse([&hasModrinthIndex](MMCZip::ArchiveReader::File* file, bool& stop) {
+                if (QDir::fromNativeSeparators(file->filename()).compare("modrinth.index.json", Qt::CaseInsensitive) == 0) {
+                    hasModrinthIndex = true;
+                    stop = true;
+                }
+                return file->skip();
+            });
+            if (!validArchive || !hasModrinthIndex) {
+                emitFailed(tr("The nested PCL modpack is not a valid Modrinth pack."));
+                return;
+            }
+
+            m_nestedArchive = std::move(temporary);
+            m_archivePath = m_nestedArchive->fileName();
+            m_nestedArchiveDepth++;
+            m_pclWrapperDetected = true;
+            setStatus(tr("Opening nested PCL modpack"));
+            processZipPack();
+            return;
+        }
         emitFailed(tr("Archive does not contain a recognized modpack type."));
         return;
     }
@@ -269,6 +324,16 @@ bool installIcon(QString root, QString instIconKey)
         return true;
     }
     return false;
+}
+
+void InstanceImportTask::addPclCompatibilityWarning()
+{
+    const auto warning =
+        tr("This instance was imported from a PCL modpack using experimental compatibility support. Some PCL-specific settings "
+           "or files may not behave exactly as they do in PCL. Review the PCL compatibility page and "
+           "lunaui/migration/pcl-report.json before launching the instance.");
+    if (!m_Warnings.contains(warning))
+        logWarning(warning);
 }
 
 void InstanceImportTask::processFlame()
@@ -414,6 +479,10 @@ void InstanceImportTask::processModrinth()
     connect(inst_creation_task.get(), &Task::succeeded, this, [this, weak] {
         if (auto sp = weak.lock()) {
             setOverride(sp->shouldOverride(), sp->originalInstanceID());
+            if (m_pclWrapperDetected || sp->isPclPack())
+                addPclCompatibilityWarning();
+        } else if (m_pclWrapperDetected) {
+            addPclCompatibilityWarning();
         }
         emitSucceeded();
     });

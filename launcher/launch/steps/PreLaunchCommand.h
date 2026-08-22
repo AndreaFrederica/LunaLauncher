@@ -22,6 +22,7 @@ class PreLaunchCommand : public LaunchStep {
     Q_OBJECT
    public:
     explicit PreLaunchCommand(LaunchTask* parent);
+    PreLaunchCommand(LaunchTask* parent, QString command, bool useNativeShell);
     virtual ~PreLaunchCommand() {};
 
     virtual void executeTask();
@@ -34,4 +35,5 @@ class PreLaunchCommand : public LaunchStep {
    private:
     LoggedProcess m_process;
     QString m_command;
+    bool m_useNativeShell = false;
 };

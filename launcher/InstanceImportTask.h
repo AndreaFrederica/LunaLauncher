@@ -37,7 +37,9 @@
 
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QTemporaryFile>
 #include <QUrl>
+#include <memory>
 #include "InstanceTask.h"
 
 class InstanceImportTask : public InstanceTask {
@@ -56,6 +58,7 @@ class InstanceImportTask : public InstanceTask {
     void processTechnic();
     void processFlame();
     void processModrinth();
+    void addPclCompatibilityWarning();
 
    private slots:
     void processZipPack();
@@ -64,6 +67,9 @@ class InstanceImportTask : public InstanceTask {
    private: /* data */
     QUrl m_sourceUrl;
     QString m_archivePath;
+    std::unique_ptr<QTemporaryFile> m_nestedArchive;
+    int m_nestedArchiveDepth = 0;
+    bool m_pclWrapperDetected = false;
     Task::Ptr m_task;
     enum class ModpackType {
         Unknown,

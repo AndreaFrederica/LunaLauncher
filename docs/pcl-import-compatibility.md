@@ -1,0 +1,139 @@
+# PCL 整合包导入兼容性
+
+本文记录 Luna Launcher 对 Plain Craft Launcher (PCL) 整合包的兼容边界。分析依据为 PCL 源码提交
+`639de1b48a44326cbd5465579295cecf23d9056a` 和 `PCL-Modpack-Format-Spec.md`。
+
+## 包格式
+
+PCL 勾选“包含启动器”后导出的 `.zip` 是一个外层包装，核心内容仍是标准 Modrinth mrpack：
+
+```text
+outer.zip
+├── Plain Craft Launcher.exe
+├── PCL/                     # PCL 启动器全局个性化配置
+└── modpack.mrpack           # 标准 Modrinth 整合包
+```
+
+Luna 支持在根目录或一级子目录中查找 `modpack.mrpack`、`modpack.zip`，只把这一个归档成员流式提取到临时文件，
+验证其根目录含有 `modrinth.index.json` 后重新进入现有 Modrinth 导入流程。
+
+PCL 也会直接导出扩展名为 `.zip` 或 `.mrpack` 的标准 Modrinth 包。此类包没有 PCL 外层结构，唯一可靠的 PCL
+实例语义标记是 `overrides/PCL/Setup.ini` 或 `overrides/PCL/config.json`。Luna 始终先按 mrpack 导入，overrides
+和索引文件全部落地后再探测并转换 PCL 配置，因此不能依赖压缩包文件名、外层启动器或 Logo 判断包来源。
+添加整合包页面会把 PCL 标记为实验性支持；实际检测到外层 PCL 包装或实例内 PCL 配置后，导入成功提示还会明确
+说明可能存在兼容性问题，并引导用户在首次启动前检查 PCL 兼容设置和 `lunaui/migration/pcl-report.json`。
+
+安全约束：
+
+- 不解压、不检查、不执行外层 EXE。
+- 不导入外层 `PCL/`，因为它属于启动器全局配置，可能包含个人数据。
+- 只接受一层包装，内层包未解压大小上限为 8 GiB。
+- 同时发现多个候选内层包时中止并明确报错。
+- 内层 mrpack 原有的路径越界检查继续生效。
+
+## 实例设置转换
+
+mrpack 中的 `overrides/PCL/Setup.ini` 和可选的 `overrides/PCL/config.json` 会随 overrides 保留为实例的
+`minecraft/PCL/`。Luna 在创建实例、完成 mrpack 文件下载后读取它们，应用能够保持语义的设置，并生成：
+
+```text
+<instance>/lunaui/
+├── manifest.json
+├── generated/pcl-compat.json
+└── migration/pcl-report.json
+```
+
+生成文件含源文件 SHA-256 和生成器版本。`pcl-compat.json` 是可继续编辑实例设置的 LunaUI；
+`pcl-report.json` 逐项记录 `mapped`、`mapped-approximate`、`mapped-with-prompt`、`mapped-noop`、`ignored-cache`、
+`unsupported` 或 `invalid`。原始 `Setup.ini` 不会被修改。
+
+当前可靠映射：
+
+| PCL 字段 | Luna 字段或行为 |
+|---|---|
+| `CustomInfo` | `notes` |
+| `Logo` + `LogoCustom` | 自定义图片按内容哈希安装为 Luna 实例图标，同时限制路径必须位于游戏目录内 |
+| PCL 内置 `Logo` URI | 仅使用独立 PCL 资源目录中完全同名的许可兼容资源；如 `Anvil.png` 使用 Lucide `anvil.svg`，不做语义映射 |
+| `VersionAdvanceJvm` | 保存到 `JvmArgs`；引用的 Java agent 均随实例存在时启用 `OverrideJavaArgs` |
+| `VersionAdvanceGame` | 追加到 `ExtraGameArgs` |
+| `VersionAdvanceRun` + 等待模式 | 保留为独立的 Windows `cmd.exe` 步骤，须在 LunaUI 中明确信任后才启用；启用后追加在全局启动前命令之后 |
+| `VersionServerEnter` | `JoinServerOnLaunch=true` + 地址 |
+| `VersionRamType=2` | 跟随 Luna 全局内存设置 |
+| `VersionRamType=1` + `VersionRamCustom` | 按 PCL 的分段公式换算为 MiB |
+| `VersionArgumentJavaV2=0` | 使用 Luna 的全局/自动 Java 选择 |
+| `VersionArgumentJavaV2=2` | 在实例游戏目录内查找 Java 候选，但须在 LunaUI 中明确信任后才启用；找不到时列为待处理 |
+| `config.json/InstanceForcedJava` | 保留 PCL 选择的 Java 版本和来源路径；路径存在时作为禁用候选，否则提示选择同版本 Java |
+| `VersionArgumentTitle` | 实例窗口标题覆盖 |
+| `VersionArgumentInfo` | Minecraft `version_type` 覆盖 |
+| `VersionArgumentIndie*` | 无操作，Luna 实例天然隔离 |
+| `VersionAdvanceDisableJLW/LUA` | 无操作，Luna 不使用对应 PCL 补丁 |
+
+`VersionAdvanceJvm`、`VersionAdvanceGame`、`VersionArgumentTitle`、`VersionArgumentInfo` 仅在值不含 PCL
+运行时替换标记时自动映射。诸如 `{user}`、`{date}`、`{setup:...}` 的值依赖账户、时间或 PCL 本地状态，
+导入时不能正确求值，因此会保留在迁移报告中要求人工处理，不会把未展开的字面量写入启动设置。
+
+`VersionAdvanceJvm` 中的 `-javaagent:` 相对路径还会以实例游戏目录为基准检查。若文件不存在、越出实例目录，
+或使用不可移植的绝对路径，Luna 会保留原始 JVM 参数但关闭 `OverrideJavaArgs`，并在生成的 LunaUI 与迁移报告中
+列出缺失项和放置规则。相对路径须按原目录结构放入游戏目录，例如 `GraphicsFixer.jar` 应放在
+`<实例>/minecraft/GraphicsFixer.jar`，`agents/a.jar` 应放在 `<实例>/minecraft/agents/a.jar`；绝对路径或越界路径
+须先改为实例内路径。对安全的相对路径，生成的 LunaUI 会提供按钮，通过受实例目录限制的 `openFolder` 动作
+创建并打开对应放置目录。`Setup.ini` 只记录参数，不包含下载 URL；Luna 不会为缺失的可执行 JAR 猜测下载来源。
+
+PCL 命令变量映射为：
+
+```text
+{verpath}       -> ${INST_DIR}
+{version_path}  -> ${INST_DIR}
+{verindie}      -> ${INST_MC_DIR}
+{version_indie} -> ${INST_MC_DIR}
+{minecraft}     -> ${INST_MC_DIR}
+{java}java.exe / {java}javaw.exe -> ${INST_JAVA}
+{name}          -> ${INST_NAME}
+```
+
+`VersionAdvanceRunWait=False` 仍列为不支持，因为 Luna 的启动任务必须等待启动前步骤结束。非 Windows 系统也不会运行
+PCL 的 `cmd.exe` 命令。等待型命令和整合包内置 Java 都属于可执行内容，导入时默认禁用，由生成的 LunaUI 要求用户显式确认。
+Luna 使用独立追加步骤而不是 `OverrideCommands`，因此不会替换用户的全局启动前命令。
+
+PCL Logo 转换遵循 MMC/Prism 的普通自定义实例图标机制：导入时按图像内容生成稳定的 `iconKey`，把图片作为
+文件型图标安装，而不是让实例继续引用 PCL 的 WPF `pack://` URI。之后从 Luna 导出 MMC zip 时，现有导出器会把
+`<iconKey>.<扩展名>` 写入实例根目录；原版 Prism/MultiMC 可按 `instance.cfg` 的 `iconKey` 重新导入。PCL-CE 中许可
+兼容的 Lucide 资源完整保存在 `launcher/resources/pcl/lucide/`，但仅 `Anvil`、`Egg` 与当前 PCL Block Logo 真正同名；
+`Fabric`、`CobbleStone` 等不会被替换成含义相近但图案不同的 Luna 图标，并会列为 `unsupported`。
+使用内置 Lucide 图标时，完整的 ISC/Feather MIT 文本也会以带内容哈希的文件名写入实例根目录，随 MMC zip 一同导出。
+
+## 已有功能但需要用户选择
+
+以下能力 Luna 已经具备，但不能仅凭 PCL 配置安全地自动绑定，所以迁移报告会要求用户确认：
+
+- `VersionServerLogin`：Luna 已有 Microsoft、离线、统一通行证、Yggdrasil/Authlib Injector 账户体系，
+  但导入包不能代替用户登录或猜测应绑定的本地账户。`VersionServerNide`、`VersionServerAuthServer`、
+  `VersionServerAuthRegister`、`VersionServerAuthName` 会作为添加/选择对应账户时的参考信息写入迁移报告。
+- `VersionArgumentJavaV2=1/3`、`VersionArgumentJavaRange`：Luna 支持兼容 Java 检查和指定 Java，
+  但 PCL 的精确补丁范围与其本地 `VersionArgumentJavaSelect` 记录不能跨机器无损映射。
+- `VersionAdvanceDisableModUpdate`：Luna 的 Mod 更新本来就是用户主动操作；若要求严格禁止更新，仍需新增实例级 UI 锁。
+- `DisplayType`：可近似映射到实例分组，但 PCL 的隐藏/分类语义与 Luna 分组不等价。
+
+## 不能等价映射
+
+- `VersionAdvanceAssets`、`VersionAdvanceAssetsV2`：禁用资源、库、客户端 JAR 校验会削弱 Luna 的完整性保证。
+- `VersionRamType=0`：PCL 按可用物理内存和实例类型动态计算；Luna 没有相同算法的实例模式。
+- `VersionRamOptimize=1`：PCL 的 Windows 进程工作集清理没有 Luna 对应项。
+- `IsStar`：Luna 当前没有实例收藏状态，且 PCL 导出时会写为 `False`。
+- `VersionAdvanceGC`：PCL 预设依赖运行时 Java 版本；在未完成等价预设表和验证前不猜测 JVM 参数。
+- 外层 `PCL/Custom.xaml`：它是可执行语义的 WPF UI，不能安全、通用地转换为声明式 LunaUI。
+- 外层 `Pictures`、`Musics`、`Help`、`hints.txt` 等启动器个性化内容：属于 PCL 全局界面，不属于实例。
+
+以下是 PCL 缓存字段，Luna 忽略并以 mrpack/组件元数据为准：`State`、`Info`、`ReleaseTime`、
+`VersionFabric`、`VersionForge`、`VersionNeoForge`、`VersionOptiFine`、`VersionLiteLoader`、
+`VersionVanilla`、`VersionVanillaName`。
+
+## LunaUI 扩展
+
+LunaUI 现在支持 `input`/`lineedit`、`textarea`、`number`/`spinbox`、`accountselect` 控件，以及：
+
+- 控件字段 `sourceSetting`，用于从已注册的实例设置读取当前值。
+- 动作 `setInstanceSetting`，用于把控件值写回已注册的实例设置。
+- JS API `launcher.getInstanceSetting(name)` 和 `launcher.setInstanceSetting(name, value)`。
+
+写入仅允许已经由实例注册的设置名，不能用 LunaUI 临时创建任意设置。

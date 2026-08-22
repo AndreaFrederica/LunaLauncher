@@ -38,6 +38,7 @@
 #include "MinecraftInstance.h"
 #include "Application.h"
 #include "BuildConfig.h"
+#include "Commandline.h"
 #include "Json.h"
 #include "QObjectPtr.h"
 #include "settings/Setting.h"
@@ -246,6 +247,9 @@ void MinecraftInstance::loadSpecificSettings()
     m_settings->registerSetting("JoinServerOnLaunch", false);
     m_settings->registerSetting("JoinServerOnLaunchAddress", "");
     m_settings->registerSetting("JoinWorldOnLaunch", "");
+    m_settings->registerSetting("ExtraGameArgs", "");
+    m_settings->registerSetting("OverrideVersionType", false);
+    m_settings->registerSetting("VersionType", "");
 
     // Use account for instance, this does not have a global override
     m_settings->registerSetting("UseAccountForInstance", false);
@@ -791,6 +795,7 @@ QStringList MinecraftInstance::processMinecraftArgs(AuthSessionPtr session, Mine
     for (auto tweaker : profile->getTweakers()) {
         args << "--tweakClass" << tweaker;
     }
+    args.append(Commandline::splitArgs(m_settings->get("ExtraGameArgs").toString()));
 
     if (targetToJoin) {
         if (!targetToJoin->address.isEmpty()) {
@@ -1081,7 +1086,9 @@ QMap<QString, QString> MinecraftInstance::makeProfileVarMapping(std::shared_ptr<
 
     result["profile_name"] = name();
     result["version_name"] = profile->getMinecraftVersion();
-    result["version_type"] = profile->getMinecraftVersionType();
+    result["version_type"] = m_settings->get("OverrideVersionType").toBool()
+                                 ? m_settings->get("VersionType").toString()
+                                 : profile->getMinecraftVersionType();
 
     QString absRootDir = QDir(gameRoot()).absolutePath();
     result["game_directory"] = absRootDir;
@@ -1217,6 +1224,12 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
     // run pre-launch command if that's needed
     if (getPreLaunchCommand().size()) {
         auto step = makeShared<PreLaunchCommand>(pptr);
+        step->setWorkingDirectory(gameRoot());
+        process->appendStep(step);
+    }
+    if (const auto command = settings()->get("AppendPreLaunchCommand").toString();
+        settings()->get("EnableAppendPreLaunchCommand").toBool() && !command.isEmpty()) {
+        auto step = makeShared<PreLaunchCommand>(pptr, command, settings()->get("AppendPreLaunchCommandUseShell").toBool());
         step->setWorkingDirectory(gameRoot());
         process->appendStep(step);
     }

@@ -20,6 +20,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QDir>
+#include <QIODevice>
 #include <QStringList>
 #include <memory>
 #include <optional>
@@ -46,10 +47,12 @@ class ArchiveReader {
 
         QString filename();
         bool isFile();
+        qint64 size();
         QDateTime dateTime();
         const char* error();
 
         QByteArray readAll(int* outStatus = nullptr);
+        bool copyTo(QIODevice& output);
         bool skip();
         bool writeFile(archive* out, const QString& targetFileName = "", bool notBlock = false);
         bool writeFile(archive* out, const QString& targetFileName, std::optional<QDir> root, bool notBlock = false);

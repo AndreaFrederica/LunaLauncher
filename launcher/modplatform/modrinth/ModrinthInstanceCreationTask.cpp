@@ -12,6 +12,7 @@
 #include "minecraft/mod/Mod.h"
 #include "modplatform/EnsureMetadataTask.h"
 #include "modplatform/helpers/OverrideUtils.h"
+#include "modplatform/pcl/PCLPack.h"
 
 #include "net/ChecksumValidator.h"
 
@@ -226,7 +227,6 @@ std::unique_ptr<BaseInstance> ModrinthCreationTask::createInstance()
         instance->setManagedPack("modrinth", "", name(), "", "");
 
     instance->setName(name());
-    instance->saveNow();
 
     auto downloadMods = makeShared<NetJob>(tr("Mod Download Modrinth"), APPLICATION->network());
 
@@ -319,6 +319,14 @@ std::unique_ptr<BaseInstance> ModrinthCreationTask::createInstance()
         delete resource;
     }
     resources.clear();
+
+    if (ended_well) {
+        const auto pclConversion = PCL::convertInstanceConfig(*instance);
+        m_pclPackDetected = pclConversion.found;
+        if (pclConversion.found && !pclConversion.error.isEmpty())
+            qWarning() << "PCL instance settings conversion was incomplete:" << pclConversion.error;
+        instance->saveNow();
+    }
 
     // Update information of the already installed instance, if any.
     if (m_instance && ended_well) {

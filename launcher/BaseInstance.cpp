@@ -80,6 +80,8 @@ BaseInstance::BaseInstance(SettingsObject* globalSettings, std::unique_ptr<Setti
     m_settings->registerSetting("name", "Unnamed Instance");
     m_settings->registerSetting("iconKey", "default");
     m_settings->registerSetting("notes", "");
+    m_settings->registerSetting("OverrideWindowTitle", false);
+    m_settings->registerSetting("WindowTitle", "");
 
     m_settings->registerSetting("lastLaunchTime", 0);
     m_settings->registerSetting("totalTimePlayed", 0);
@@ -105,6 +107,9 @@ BaseInstance::BaseInstance(SettingsObject* globalSettings, std::unique_ptr<Setti
     m_settings->registerOverride(globalSettings->getSetting("PreLaunchCommand"), commandSetting);
     m_settings->registerOverride(globalSettings->getSetting("WrapperCommand"), commandSetting);
     m_settings->registerOverride(globalSettings->getSetting("PostExitCommand"), commandSetting);
+    m_settings->registerSetting("AppendPreLaunchCommand", "");
+    m_settings->registerSetting("EnableAppendPreLaunchCommand", false);
+    m_settings->registerSetting("AppendPreLaunchCommandUseShell", false);
 
     // Console
     auto consoleSetting = m_settings->registerSetting("OverrideConsole", false);
@@ -462,6 +467,11 @@ QString BaseInstance::name() const
 
 QString BaseInstance::windowTitle() const
 {
+    if (m_settings->get("OverrideWindowTitle").toBool()) {
+        const auto title = m_settings->get("WindowTitle").toString();
+        if (!title.isEmpty())
+            return title;
+    }
     return BuildConfig.LAUNCHER_DISPLAYNAME + ": " + name();
 }
 

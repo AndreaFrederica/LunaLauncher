@@ -114,6 +114,7 @@ class PclDownloadLibrary {
     void setThreadLimit(int limit);
     /// Speed limit in bytes/sec. <= 0 means unlimited.
     void setSpeedLimit(qint64 bytesPerSec);
+    void setProxy(const QString& type, const QString& host, int port, const QString& user, const QString& password);
 
     // ---- Raw C function pointers (resolved from the shared library) ----
     int (*pcl_download_init)() = nullptr;
@@ -137,6 +138,7 @@ class PclDownloadLibrary {
     void (*pcl_free_string)(const char*) = nullptr;
     void (*pcl_download_set_thread_limit)(int) = nullptr;
     void (*pcl_download_set_speed_limit)(long long) = nullptr;
+    void (*pcl_download_set_proxy)(const char*, const char*, int, const char*, const char*) = nullptr;
     void (*pcl_download_set_event_callback)(void*) = nullptr;
 
    private:

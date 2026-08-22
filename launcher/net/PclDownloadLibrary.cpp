@@ -158,6 +158,7 @@ bool PclDownloadLibrary::load()
     if (!resolve(pcl_free_string,                        "pcl_free_string"))                        return false;
     if (!resolve(pcl_download_set_thread_limit,          "pcl_download_set_thread_limit"))          return false;
     if (!resolve(pcl_download_set_speed_limit,           "pcl_download_set_speed_limit"))           return false;
+    if (!resolve(pcl_download_set_proxy,                 "pcl_download_set_proxy"))                 return false;
     if (!resolve(pcl_download_set_event_callback,        "pcl_download_set_event_callback"))        return false;
     // clang-format on
 
@@ -175,6 +176,12 @@ bool PclDownloadLibrary::load()
         auto s = APPLICATION->settings();
         pcl_download_set_thread_limit(s->get("PclDownloadThreadLimit").toInt());
         pcl_download_set_speed_limit(static_cast<long long>(s->get("PclDownloadSpeedLimitKBps").toInt()) * 1024);
+        const auto proxyType = s->get("ProxyType").toString().toUtf8();
+        const auto proxyHost = s->get("ProxyAddr").toString().toUtf8();
+        const auto proxyUser = s->get("ProxyUser").toString().toUtf8();
+        const auto proxyPassword = s->get("ProxyPass").toString().toUtf8();
+        pcl_download_set_proxy(proxyType.constData(), proxyHost.constData(), s->get("ProxyPort").toInt(), proxyUser.constData(),
+                               proxyPassword.constData());
     }
 #endif
 
@@ -296,4 +303,20 @@ void PclDownloadLibrary::setSpeedLimit(qint64 bytesPerSec)
 {
     if (isLoaded())
         pcl_download_set_speed_limit(static_cast<long long>(bytesPerSec));
+}
+
+void PclDownloadLibrary::setProxy(const QString& type,
+                                  const QString& host,
+                                  int port,
+                                  const QString& user,
+                                  const QString& password)
+{
+    if (!isLoaded())
+        return;
+
+    const auto typeUtf8 = type.toUtf8();
+    const auto hostUtf8 = host.toUtf8();
+    const auto userUtf8 = user.toUtf8();
+    const auto passwordUtf8 = password.toUtf8();
+    pcl_download_set_proxy(typeUtf8.constData(), hostUtf8.constData(), port, userUtf8.constData(), passwordUtf8.constData());
 }

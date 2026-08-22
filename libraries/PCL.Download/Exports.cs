@@ -287,6 +287,23 @@ public static class Exports
         catch { /* ignore */ }
     }
 
+    /// <summary>Apply the launcher's proxy configuration to newly started downloads.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "pcl_download_set_proxy")]
+    public static void SetProxy(IntPtr typePtr, IntPtr hostPtr, int port, IntPtr userPtr, IntPtr passwordPtr)
+    {
+        try
+        {
+            DownloadConfig.ConfigureProxy(
+                Marshal.PtrToStringUTF8(typePtr) ?? "Default",
+                Marshal.PtrToStringUTF8(hostPtr) ?? "",
+                port,
+                Marshal.PtrToStringUTF8(userPtr) ?? "",
+                Marshal.PtrToStringUTF8(passwordPtr) ?? "");
+            FileDownloader.ReloadProxyHandler();
+        }
+        catch { /* ignore */ }
+    }
+
     // ========== 内部实现 ==========
 
     private static int WaitForTask(int taskId)

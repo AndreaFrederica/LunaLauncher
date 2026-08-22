@@ -55,6 +55,7 @@
 #include "modplatform/ModApiMirror.h"
 #include "net/Aria2Manager.h"
 #include "net/PasteUpload.h"
+#include "net/PclDownloadLibrary.h"
 #include "tasks/Task.h"
 #include "tools/GenericProfiler.h"
 #include "ui/InstanceWindow.h"
@@ -798,6 +799,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("DownloadsDir", QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
         m_settings->registerSetting("DownloadsDirWatchRecursive", false);
         m_settings->registerSetting("MoveModsFromDownloadsDir", false);
+        m_settings->registerSetting("CurseForgeDownloadBrowser", "Embedded");
         m_settings->registerSetting("SkinsDir", "skins");
         m_settings->registerSetting("JavaDir", "java");
 
@@ -1961,6 +1963,7 @@ void Application::updateProxySettings(QString proxyTypeStr, QString addr, int po
     qDebug() << "Detecting proxy settings...";
     QNetworkProxy proxy = QNetworkProxy::applicationProxy();
     m_network->setProxy(proxy);
+    PclDownloadLibrary::instance().setProxy(proxyTypeStr, addr, port, user, password);
 
     QString proxyDesc;
     if (proxy.type() == QNetworkProxy::NoProxy) {

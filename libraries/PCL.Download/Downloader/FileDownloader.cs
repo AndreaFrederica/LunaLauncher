@@ -9,13 +9,26 @@ namespace PCL.Download;
 /// </summary>
 public static class FileDownloader
 {
-    private static readonly SocketsHttpHandler SharedHttpHandler = new()
+    private static SocketsHttpHandler SharedHttpHandler = CreateHttpHandler();
+
+    private static SocketsHttpHandler CreateHttpHandler()
     {
-        MaxConnectionsPerServer = 64,
-        PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
-        EnableMultipleHttp2Connections = true,
-    };
+        var handler = new SocketsHttpHandler
+        {
+            MaxConnectionsPerServer = 64,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+            EnableMultipleHttp2Connections = true,
+        };
+        DownloadConfig.ApplyProxy(handler);
+        return handler;
+    }
+
+    internal static void ReloadProxyHandler()
+    {
+        // Active downloads retain their handler. New downloads atomically pick up the new proxy.
+        Interlocked.Exchange(ref SharedHttpHandler, CreateHttpHandler());
+    }
 
     /// <summary>
     /// Optional: provide a custom HttpClient factory. If null, uses default HttpClient.
@@ -255,7 +268,7 @@ public static class FileDownloader
         if (HttpClientFactory is not null)
             return HttpClientFactory(url);
 
-        return new HttpClient(SharedHttpHandler, disposeHandler: false)
+        return new HttpClient(Volatile.Read(ref SharedHttpHandler), disposeHandler: false)
         {
             DefaultRequestVersion = System.Net.HttpVersion.Version20,
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,

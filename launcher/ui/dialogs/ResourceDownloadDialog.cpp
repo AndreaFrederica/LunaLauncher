@@ -42,6 +42,7 @@
 #include "ui/dialogs/ReviewMessageBox.h"
 
 #include "ui/pages/modplatform/ResourcePage.h"
+#include "ui/pages/modplatform/JSApiModPage.h"
 
 #include "ui/pages/modplatform/flame/FlameResourcePages.h"
 #include "ui/pages/modplatform/hangar/HangarResourcePages.h"
@@ -298,6 +299,11 @@ ModDownloadDialog::ModDownloadDialog(QWidget* parent, ModFolderModel* mods, Base
 QList<BasePage*> ModDownloadDialog::getPages()
 {
     QList<BasePage*> pages;
+    auto appendJSAPIs = [this, &pages] {
+        const auto apis = JSAPIManager::instance().getAPIsForType(ModPlatform::ResourceType::Mod);
+        for (const auto& api : apis)
+            pages.append(JSApiModPage::create(this, *m_instance, api.get()));
+    };
 
     // Check if it's a server instance
     if (m_instance->traits().contains("server")) {
@@ -305,6 +311,7 @@ QList<BasePage*> ModDownloadDialog::getPages()
         if (serverInst) {
             auto loaders = serverInst->getModLoaderTypes();
 
+            appendJSAPIs();
             if (ModrinthAPI::validateModLoaders(loaders))
                 pages.append(ModrinthModPage::create(this, *m_instance));
             if (APPLICATION->capabilities() & Application::SupportsFlame && FlameAPI::validateModLoaders(loaders))
@@ -316,6 +323,7 @@ QList<BasePage*> ModDownloadDialog::getPages()
     // Original Minecraft instance logic
     auto loaders = static_cast<MinecraftInstance*>(m_instance)->getPackProfile()->getSupportedModLoaders().value();
 
+    appendJSAPIs();
     if (ModrinthAPI::validateModLoaders(loaders))
         pages.append(ModrinthModPage::create(this, *m_instance));
     if (APPLICATION->capabilities() & Application::SupportsFlame && FlameAPI::validateModLoaders(loaders))

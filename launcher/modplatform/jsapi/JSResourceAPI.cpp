@@ -8,7 +8,7 @@
  *  the Free Software Foundation, version 3.
  */
 
-// QuickJS 浣跨敤 C99 澶嶅悎瀛楅潰閲忥紝鍦?C++ 涓細浜х敓 pedantic 璀﹀憡
+// QuickJS uses C99 compound literals, which trigger pedantic warnings in C++.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
@@ -22,13 +22,15 @@
 #include <QJsonObject>
 #include <QNetworkRequest>
 
+#include <optional>
+
 #pragma GCC diagnostic pop
 
 // ============================================================================
-// JavaScript 缁戝畾杈呭姪鍑芥暟
+// JavaScript binding helpers
 // ============================================================================
 
-// HTTP GET 璇锋眰
+// HTTP GET request
 static JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     if (argc < 1)
@@ -38,15 +40,15 @@ static JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     if (!url)
         return JS_EXCEPTION;
 
-    // 鍒涘缓涓€涓?Promise (鏆傛椂杩斿洖绌哄璞★紝瀹為檯搴旇寮傛澶勭悊)
-    // TODO: 瀹炵幇鐪熸鐨勫紓姝ヨ姹?
+    // Placeholder until asynchronous JavaScript HTTP requests are supported.
+    // TODO: Implement asynchronous request handling.
     JSValue result = JS_NewObject(ctx);
     JS_FreeCString(ctx, url);
 
     return result;
 }
 
-// JSON 瑙ｆ瀽
+// JSON parsing
 static JSValue js_json_parse(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     if (argc < 1)
@@ -62,7 +64,7 @@ static JSValue js_json_parse(JSContext* ctx, JSValueConst this_val, int argc, JS
     return result;
 }
 
-// JSON 搴忓垪鍖?
+// JSON serialization
 static JSValue js_json_stringify(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     if (argc < 1)
@@ -72,7 +74,7 @@ static JSValue js_json_stringify(JSContext* ctx, JSValueConst this_val, int argc
     return str;
 }
 
-// 鏃ュ織杈撳嚭
+// Logging
 static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
     for (int i = 0; i < argc; i++) {
@@ -86,11 +88,22 @@ static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, J
 }
 
 // ============================================================================
-// JSResourceAPI 瀹炵幇
+// JSResourceAPI implementation
 // ============================================================================
 
-// 闈欐€佹垚鍛樺垵濮嬪寲
+// Static member initialization
 QList<std::shared_ptr<JSResourceAPI>> JSResourceAPI::s_registeredAPIs;
+
+static std::optional<ModPlatform::ResourceProvider> providerFromString(const QString& provider)
+{
+    if (provider.compare("modrinth", Qt::CaseInsensitive) == 0)
+        return ModPlatform::ResourceProvider::MODRINTH;
+    if (provider.compare("curseforge", Qt::CaseInsensitive) == 0 || provider.compare("flame", Qt::CaseInsensitive) == 0)
+        return ModPlatform::ResourceProvider::FLAME;
+    if (provider.compare("hangar", Qt::CaseInsensitive) == 0)
+        return ModPlatform::ResourceProvider::HANGAR;
+    return std::nullopt;
+}
 
 JSResourceAPI::JSResourceAPI(const QString& apiName) : m_apiName(apiName)
 {
@@ -126,13 +139,13 @@ std::shared_ptr<JSResourceAPI> JSResourceAPI::fromString(const QString& jsCode, 
         return nullptr;
     }
 
-    // 鍔犺浇鍏冩暟鎹?
+    // Load metadata.
     if (!api->loadMetadata()) {
         qWarning() << "[JSResourceAPI] Failed to load metadata for" << apiName;
         return nullptr;
     }
 
-    // 娉ㄥ唽鍒板叏灞€鍒楄〃
+    // Register the API globally.
     auto sharedApi = std::shared_ptr<JSResourceAPI>(api.release());
     s_registeredAPIs.append(sharedApi);
 
@@ -145,7 +158,7 @@ std::shared_ptr<JSResourceAPI> JSResourceAPI::fromString(const QString& jsCode, 
 
 bool JSResourceAPI::initialize(const QString& jsCode)
 {
-    // 鍒涘缓 QuickJS 杩愯鏃跺拰涓婁笅鏂?
+    // Create the QuickJS runtime and context.
     m_runtime = JS_NewRuntime();
     if (!m_runtime) {
         m_lastError = "Failed to create JS runtime";
@@ -160,10 +173,10 @@ bool JSResourceAPI::initialize(const QString& jsCode)
         return false;
     }
 
-    // 璁剧疆 JavaScript 缁戝畾
+    // Install JavaScript bindings.
     setupJSBindings();
 
-    // 鎵ц JavaScript 浠ｇ爜
+    // Evaluate the JavaScript source.
     QByteArray codeUtf8 = jsCode.toUtf8();
     JSValue result = JS_Eval(m_context, codeUtf8.constData(), codeUtf8.size(),
                               m_apiName.toUtf8().constData(), JS_EVAL_TYPE_GLOBAL);
@@ -181,7 +194,7 @@ bool JSResourceAPI::initialize(const QString& jsCode)
 
     JS_FreeValue(m_context, result);
 
-    // 鑾峰彇 API 瀵硅薄 (鏈熸湜 JS 浠ｇ爜瀵煎嚭 'api' 瀵硅薄)
+    // Read the global `api` object exported by the script.
     JSValue global = JS_GetGlobalObject(m_context);
     m_apiObject = JS_GetPropertyStr(m_context, global, "api");
     JS_FreeValue(m_context, global);
@@ -203,7 +216,7 @@ bool JSResourceAPI::loadMetadata()
         return false;
     }
 
-    // 鑾峰彇 metadata 瀵硅薄
+    // Read the metadata object.
     JSValue metadataObj = JS_GetPropertyStr(m_context, m_apiObject, "metadata");
     if (JS_IsUndefined(metadataObj)) {
         m_lastError = "API object must have a 'metadata' property";
@@ -212,7 +225,7 @@ bool JSResourceAPI::loadMetadata()
         return false;
     }
 
-    // 璇诲彇鍚勪釜瀛楁
+    // Read metadata fields.
     auto getStringProp = [this, &metadataObj](const char* key) -> QString {
         JSValue val = JS_GetPropertyStr(m_context, metadataObj, key);
         QString result;
@@ -260,7 +273,7 @@ bool JSResourceAPI::loadMetadata()
     m_metadata.enabled = getBoolProp("enabled", true);
     m_metadata.priority = getIntProp("priority", 0);
 
-    // 璇诲彇 supportedTypes 鏁扮粍
+    // Read the supportedTypes array.
     JSValue typesArray = JS_GetPropertyStr(m_context, metadataObj, "supportedTypes");
     if (JS_IsArray(typesArray)) {
         JSValue lengthVal = JS_GetPropertyStr(m_context, typesArray, "length");
@@ -280,7 +293,7 @@ bool JSResourceAPI::loadMetadata()
     JS_FreeValue(m_context, typesArray);
     JS_FreeValue(m_context, metadataObj);
 
-    // 楠岃瘉蹇呴渶瀛楁
+    // Validate required fields.
     if (m_metadata.id.isEmpty()) {
         m_lastError = "Metadata 'id' is required";
         qWarning() << "[JSResourceAPI]" << m_lastError;
@@ -294,17 +307,17 @@ void JSResourceAPI::setupJSBindings()
 {
     JSValue global = JS_GetGlobalObject(m_context);
 
-    // 鍒涘缓 console 瀵硅薄
+    // Create the console object.
     JSValue console = JS_NewObject(m_context);
     JS_SetPropertyStr(m_context, console, "log", JS_NewCFunction(m_context, js_console_log, "log", 0));
     JS_SetPropertyStr(m_context, global, "console", console);
 
-    // 鍒涘缓 http 瀵硅薄
+    // Create the HTTP object.
     JSValue http = JS_NewObject(m_context);
     JS_SetPropertyStr(m_context, http, "get", JS_NewCFunction(m_context, js_http_get, "get", 1));
     JS_SetPropertyStr(m_context, global, "http", http);
 
-    // 澧炲己 JSON 瀵硅薄
+    // Add JSON helpers.
     JSValue json = JS_GetPropertyStr(m_context, global, "JSON");
     if (JS_IsUndefined(json)) {
         json = JS_NewObject(m_context);
@@ -336,7 +349,7 @@ void JSResourceAPI::cleanup()
 }
 
 // ============================================================================
-// JavaScript 璋冪敤杈呭姪鍑芥暟
+// JavaScript invocation helpers
 // ============================================================================
 
 JSValue JSResourceAPI::callJSFunction(const char* funcName, int argc, JSValueConst* argv) const
@@ -419,12 +432,12 @@ JSValue JSResourceAPI::jsonArrayToJSValue(const QJsonArray& arr) const
 }
 
 // ============================================================================
-// ResourceAPI 鎺ュ彛瀹炵幇
+// ResourceAPI implementation
 // ============================================================================
 
 Task::Ptr JSResourceAPI::getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const
 {
-    // TODO: 璋冪敤 JS 鐨?getProjects 鏂规硶
+    // TODO: Call the JavaScript getProjects method.
     qWarning() << "[JSResourceAPI] getProjects not implemented yet";
     return Task::Ptr();
 }
@@ -438,7 +451,7 @@ void JSResourceAPI::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject&
     if (!JS_IsUndefined(result)) {
         QJsonObject resultObj = jsValueToJsonObject(result);
 
-        // 鏇存柊 pack 瀵硅薄
+        // Populate the pack.
         if (resultObj.contains("name"))
             pack.name = resultObj["name"].toString();
         if (resultObj.contains("slug"))
@@ -452,14 +465,23 @@ void JSResourceAPI::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject&
         if (resultObj.contains("logoUrl"))
             pack.logoUrl = resultObj["logoUrl"].toString();
 
+        const auto providerName = resultObj.value("provider").toString(m_metadata.provider);
+        if (const auto provider = providerFromString(providerName); provider.has_value()) {
+            pack.provider = provider.value();
+        } else {
+            qWarning() << "[JSResourceAPI] Unsupported provider" << providerName << "from" << m_metadata.id;
+            pack.provider = ModPlatform::ResourceProvider::MODRINTH;
+        }
+
         if (resultObj.contains("logoName")) {
             pack.logoName = resultObj["logoName"].toString();
         } else if (!pack.logoUrl.isEmpty() && !pack.slug.isEmpty()) {
             pack.logoName = QString("%1.%2").arg(pack.slug, QFileInfo(QUrl(pack.logoUrl).fileName()).suffix());
         }
 
-        // 浣滆€呬俊鎭?
+        // Authors
         if (resultObj.contains("authors")) {
+            pack.authors.clear();
             QJsonArray authorsArr = resultObj["authors"].toArray();
             for (const auto& authorVal : authorsArr) {
                 QJsonObject authorObj = authorVal.toObject();
@@ -485,13 +507,10 @@ void JSResourceAPI::loadIndexedPack(ModPlatform::IndexedPack& pack, QJsonObject&
             pack.side = ModPlatform::Side::ClientSide;
         }
 
-        // 鏍囪闇€瑕佸姞杞介澶栨暟鎹?
+        // Project details are loaded lazily.
         pack.extraDataLoaded = false;
 
-        // 涓嬭浇閲忓拰鍏虫敞鏁?(ExtraData)
-        // 娉ㄦ剰: IndexedPack 缁撴瀯浣撲腑娌℃湁鐩存帴瀛樺偍 downloads/follows 鐨勫瓧娈碉紝
-        // 瀹冧滑閫氬父瀛樺偍鍦?extraData 涓垨鑰呬綔涓?UI 鏄剧ず鐨勪竴閮ㄥ垎銆?
-        // 杩欓噷鎴戜滑鍋囪 JS API 杩斿洖鐨勫璞＄粨鏋勪笌 IndexedPack 鍏煎銆?
+        // IndexedPack currently has no direct fields for download or follower counts.
 
         JS_FreeValue(m_context, result);
     }
@@ -511,7 +530,7 @@ ModPlatform::IndexedVersion JSResourceAPI::loadIndexedPackVersion(QJsonObject& o
     if (!JS_IsUndefined(result)) {
         QJsonObject resultObj = jsValueToJsonObject(result);
 
-        // 瑙ｆ瀽鐗堟湰淇℃伅
+        // Parse version information.
         if (resultObj.contains("version"))
             version.version = resultObj["version"].toString();
         if (resultObj.contains("versionId"))
@@ -613,7 +632,7 @@ void JSResourceAPI::loadExtraPackInfo(ModPlatform::IndexedPack& pack, QJsonObjec
     if (!JS_IsUndefined(result)) {
         QJsonObject resultObj = jsValueToJsonObject(result);
 
-        // 鏇存柊棰濆淇℃伅
+        // Populate additional project information.
         if (resultObj.contains("logoUrl"))
             pack.logoUrl = resultObj["logoUrl"].toString();
         if (resultObj.contains("body"))
@@ -657,8 +676,12 @@ auto JSResourceAPI::getSortingMethods() const -> QList<ResourceAPI::SortingMetho
 
     JSValue result = callJSFunction("getSortingMethods", 0, nullptr);
     if (!JS_IsUndefined(result) && JS_IsArray(result)) {
-        // 瑙ｆ瀽鎺掑簭鏂规硶鏁扮粍
-        // TODO: 瀹炵幇瀹屾暣鐨勬暟缁勮В鏋?
+        const auto values = jsValueToJsonArray(result);
+        for (qsizetype i = 0; i < values.size(); ++i) {
+            const auto value = values.at(i).toObject();
+            methods.append({ static_cast<unsigned int>(value.value("index").toInt(i)), value.value("name").toString(),
+                             value.value("displayName").toString(value.value("name").toString()) });
+        }
         JS_FreeValue(m_context, result);
     }
 
@@ -667,7 +690,7 @@ auto JSResourceAPI::getSortingMethods() const -> QList<ResourceAPI::SortingMetho
 
 auto JSResourceAPI::getSearchURL(SearchArgs const& args) const -> std::optional<QString>
 {
-    // 灏?SearchArgs 杞崲涓?JS 瀵硅薄
+    // Convert SearchArgs to a JavaScript object.
     JSValue jsArgs = JS_NewObject(m_context);
     JS_SetPropertyStr(m_context, jsArgs, "offset", JS_NewInt32(m_context, args.offset));
 
@@ -675,6 +698,29 @@ auto JSResourceAPI::getSearchURL(SearchArgs const& args) const -> std::optional<
         JS_SetPropertyStr(m_context, jsArgs, "search",
                          JS_NewString(m_context, args.search.value().toUtf8().constData()));
     }
+
+    if (args.sorting.has_value()) {
+        JSValue sorting = JS_NewObject(m_context);
+        JS_SetPropertyStr(m_context, sorting, "index", JS_NewInt32(m_context, static_cast<int>(args.sorting->index)));
+        JS_SetPropertyStr(m_context, sorting, "name", JS_NewString(m_context, args.sorting->name.toUtf8().constData()));
+        JS_SetPropertyStr(m_context, jsArgs, "sorting", sorting);
+    }
+    if (args.loaders.has_value())
+        JS_SetPropertyStr(m_context, jsArgs, "modLoaders", JS_NewInt32(m_context, static_cast<int>(args.loaders.value())));
+    if (args.pluginLoaders.has_value())
+        JS_SetPropertyStr(m_context, jsArgs, "pluginLoaders", JS_NewInt32(m_context, static_cast<int>(args.pluginLoaders.value())));
+    if (args.versions.has_value()) {
+        JSValue versions = JS_NewArray(m_context);
+        uint32_t index = 0;
+        for (const auto& version : args.versions.value())
+            JS_SetPropertyUint32(m_context, versions, index++, JS_NewString(m_context, version.toString().toUtf8().constData()));
+        JS_SetPropertyStr(m_context, jsArgs, "versions", versions);
+    }
+    if (args.categoryIds.has_value())
+        JS_SetPropertyStr(m_context, jsArgs, "categories", jsonArrayToJSValue(QJsonArray::fromStringList(args.categoryIds.value())));
+    if (args.side.has_value())
+        JS_SetPropertyStr(m_context, jsArgs, "side", JS_NewInt32(m_context, static_cast<int>(args.side.value())));
+    JS_SetPropertyStr(m_context, jsArgs, "openSource", JS_NewBool(m_context, args.openSource));
 
     JSValue argv[] = { jsArgs };
     JSValue result = callJSFunction("getSearchURL", 1, argv);
@@ -748,12 +794,26 @@ auto JSResourceAPI::getVersionsURL(VersionSearchArgs const& args) const -> std::
 
 auto JSResourceAPI::getDependencyURL(DependencySearchArgs const& args) const -> std::optional<QString>
 {
-    // Hangar 涓嶉渶瑕佸崟鐙殑渚濊禆 URL
-    return {};
+    JSValue jsArgs = JS_NewObject(m_context);
+    JS_SetPropertyStr(m_context, jsArgs, "addonId", JS_NewString(m_context, args.dependency.addonId.toString().toUtf8().constData()));
+    if (!args.dependency.version.isEmpty())
+        JS_SetPropertyStr(m_context, jsArgs, "versionId", JS_NewString(m_context, args.dependency.version.toUtf8().constData()));
+    JS_SetPropertyStr(m_context, jsArgs, "minecraftVersion", JS_NewString(m_context, args.mcVersion.toString().toUtf8().constData()));
+    JS_SetPropertyStr(m_context, jsArgs, "modLoaders", JS_NewInt32(m_context, static_cast<int>(args.loader)));
+
+    JSValue argv[] = { jsArgs };
+    JSValue result = callJSFunction("getDependencyURL", 1, argv);
+    std::optional<QString> url;
+    if (!JS_IsUndefined(result) && !JS_IsNull(result)) {
+        url = jsValueToString(result);
+        JS_FreeValue(m_context, result);
+    }
+    JS_FreeValue(m_context, jsArgs);
+    return url;
 }
 
 // ============================================================================
-// 闈欐€佹柟娉?- API 娉ㄥ唽鍜屾煡璇?
+// Static API registration and lookup methods
 // ============================================================================
 
 QList<std::shared_ptr<JSResourceAPI>> JSResourceAPI::getRegisteredAPIs()
@@ -772,7 +832,7 @@ QList<std::shared_ptr<JSResourceAPI>> JSResourceAPI::getAPIsForResourceType(ModP
         }
     }
 
-    // 鎸変紭鍏堢骇鎺掑簭锛堥檷搴忥級
+    // Sort by descending priority.
     std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
         return a->m_metadata.priority > b->m_metadata.priority;
     });

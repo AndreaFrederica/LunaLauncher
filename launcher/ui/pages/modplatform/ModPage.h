@@ -42,6 +42,23 @@ class ModPage : public ResourcePage {
         return page;
     }
 
+    template <typename T, typename API>
+    static T* create(ModDownloadDialog* dialog, BaseInstance& instance, API* api)
+    {
+        auto page = new T(dialog, instance, api);
+        auto model = static_cast<ModModel*>(page->getModel());
+
+        auto filter_widget = page->createFilterWidget();
+        page->setFilterWidget(filter_widget);
+        model->setFilter(page->getFilter());
+
+        connect(model, &ResourceModel::versionListUpdated, page, &ResourcePage::versionListUpdated);
+        connect(model, &ResourceModel::projectInfoUpdated, page, &ResourcePage::updateUi);
+        connect(model, &QAbstractListModel::modelReset, page, &ResourcePage::modelReset);
+
+        return page;
+    }
+
     //: The plural version of 'mod'
     inline QString resourcesString() const override { return tr("mods"); }
     //: The singular version of 'mods'

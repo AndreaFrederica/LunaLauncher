@@ -88,23 +88,28 @@ bool JSAPIManager::loadAPIFromFile(const QString& filePath)
         return false;
     }
 
+    if (getAPIById(api->getMetadata().id)) {
+        qDebug() << "[JSAPIManager] Ignoring duplicate API ID" << api->getMetadata().id << "from" << filePath;
+        m_loadedFiles.append(filePath);
+        return false;
+    }
+
     // 存储 shared_ptr
     m_apis.append(api);
     m_loadedFiles.append(filePath);
 
     emit apiLoaded(api->getMetadata().id);
 
-    // Register cache base for this API
-    // The base name convention is ID + "Plugins" (or other types, but currently we use Plugins)
-    // See JSApiPluginPage::metaEntryBase()
-    QString cacheBase = api->getMetadata().id + "Plugins";
-    QString cachePath = "cache/" + cacheBase;
-
-    // We need to access the global HttpMetaCache instance
-    // Since JSAPIManager is a singleton, we can assume Application is initialized
     if (APPLICATION->metacache()) {
-        APPLICATION->metacache()->addBase(cacheBase, QDir(cachePath).absolutePath());
-        qDebug() << "[JSAPIManager] Registered cache base:" << cacheBase << "at" << cachePath;
+        const auto registerCache = [](const QString& cacheBase) {
+            const QString cachePath = "cache/" + cacheBase;
+            APPLICATION->metacache()->addBase(cacheBase, QDir(cachePath).absolutePath());
+            qDebug() << "[JSAPIManager] Registered cache base:" << cacheBase << "at" << cachePath;
+        };
+        if (api->getMetadata().supportedTypes.contains(static_cast<int>(ModPlatform::ResourceType::Mod)))
+            registerCache(api->getMetadata().id + "Mods");
+        if (api->getMetadata().supportedTypes.contains(static_cast<int>(ModPlatform::ResourceType::Plugin)))
+            registerCache(api->getMetadata().id + "Plugins");
     }
 
     qDebug() << "[JSAPIManager] Successfully loaded:" << api->getMetadata().displayName

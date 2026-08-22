@@ -51,12 +51,19 @@ declare enum PluginLoaderType {
  * Mod 加载器位标志
  */
 declare enum ModLoaderType {
-    Forge = 0x01,
-    Cauldron = 0x02,
-    LiteLoader = 0x04,
-    Fabric = 0x08,
-    Quilt = 0x10,
-    NeoForge = 0x20
+    NeoForge = 0x001,
+    Forge = 0x002,
+    Cauldron = 0x004,
+    LiteLoader = 0x008,
+    Fabric = 0x010,
+    Quilt = 0x020,
+    DataPack = 0x040,
+    Babric = 0x080,
+    BTA = 0x100,
+    LegacyFabric = 0x200,
+    Ornithe = 0x400,
+    Rift = 0x800,
+    Cleanroom = 0x1000
 }
 
 // ============================================================================
@@ -87,6 +94,12 @@ interface SearchArgs {
 
     /** 分类标签过滤 */
     categories?: string[];
+
+    /** 运行端过滤 */
+    side?: number;
+
+    /** 是否仅显示开源项目 */
+    openSource?: boolean;
 }
 
 /**
@@ -125,6 +138,9 @@ interface DependencySearchArgs {
  * 排序方法
  */
 interface SortingMethod {
+    /** 排序项 ID */
+    index?: number;
+
     /** 排序名称（用于 API 请求） */
     name: string;
 

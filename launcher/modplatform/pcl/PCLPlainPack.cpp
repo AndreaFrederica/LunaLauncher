@@ -227,7 +227,7 @@ bool copyGameFiles(const QString& sourceRoot, const QString& version, const QStr
 
 QString originalMinecraftVersion(const QString& sourceRoot, const QString& version, QJsonArray& entries)
 {
-    QFile setupFile(FS::PathCombine(sourceRoot, "versions", version, "PCL", "Setup.ini"));
+    QFile setupFile(FS::PathCombine(sourceRoot, "versions", version, FS::PathCombine("PCL", "Setup.ini")));
     if (setupFile.open(QIODevice::ReadOnly)) {
         const auto setup = parseSetup(setupFile.readAll());
         const auto original = setup.values.value("VersionOriginal").trimmed();
@@ -578,7 +578,7 @@ bool installLocalComponent(PackProfile* profile, const VersionFilePtr& patch, bo
 {
     if (!writeJson(profile->patchFilePathForUid(patch->uid), OneSixVersionFormat::versionFileToJson(patch), error))
         return false;
-    auto component = std::make_shared<Component>(profile, patch->uid, patch);
+    auto component = makeShared<Component>(profile, patch->uid, patch);
     component->setImportant(important);
     component->updateCachedData();
     profile->appendComponent(component);
@@ -826,14 +826,14 @@ PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QS
             result.error = QObject::tr("Could not create the Minecraft %1 component.").arg(minecraftVersion);
             return result;
         }
-        if (!installLocalComponent(profile, mite, true, result.error) ||
-            !installLocalComponent(profile, loader, false, result.error)) {
+        if (!installLocalComponent(profile.get(), mite, true, result.error) ||
+            !installLocalComponent(profile.get(), loader, false, result.error)) {
             return result;
         }
         record(result.entries, "components", "mapped",
                QObject::tr("Created separate Minecraft %1, MITE core %2, and FishModLoader %3 components.")
                    .arg(minecraftVersion, version, fishLoader.version));
-    } else if (!installLocalComponent(profile, patch, true, result.error)) {
+    } else if (!installLocalComponent(profile.get(), patch, true, result.error)) {
         return result;
     }
     profile->saveNow();

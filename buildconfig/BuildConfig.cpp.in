@@ -88,6 +88,9 @@ Config::Config()
 #cmakedefine01 Launcher_ENABLE_PCL_DOWNLOAD
     PCL_DOWNLOAD_ENABLED = Launcher_ENABLE_PCL_DOWNLOAD;
 
+#cmakedefine01 Launcher_ENABLE_CURSEFORGE_WEBVIEW
+    CURSEFORGE_WEBVIEW_ENABLED = Launcher_ENABLE_CURSEFORGE_WEBVIEW;
+
     GIT_COMMIT = "@Launcher_GIT_COMMIT@";
     GIT_TAG = "@Launcher_GIT_TAG@";
     GIT_REFSPEC = "@Launcher_GIT_REFSPEC@";

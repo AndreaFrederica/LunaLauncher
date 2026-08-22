@@ -149,6 +149,15 @@ launcher_disable_ownership_check = get_option('disable_ownership_check')
 launcher_bundle_aria2c = get_option('bundle_aria2c')
 launcher_aria2c_path = get_option('aria2c_path')
 
+curseforge_webview_opt = get_option('curseforge_webview')
+cargo_prog = find_program('cargo', required: curseforge_webview_opt)
+launcher_enable_curseforge_webview = cargo_prog.found()
+if launcher_enable_curseforge_webview and is_linux
+  webkit2gtk_dep = dependency('webkit2gtk-4.1', required: curseforge_webview_opt)
+  gtk3_dep = dependency('gtk+-3.0', required: curseforge_webview_opt)
+  launcher_enable_curseforge_webview = webkit2gtk_dep.found() and gtk3_dep.found()
+endif
+
 git_commit = ''
 git_tag = 'GIT-NOTFOUND'
 git_refspec = 'refs/heads/stable'
@@ -216,6 +225,10 @@ subdir('buildconfig')
 subdir('libraries/cmark')
 subdir('libraries')
 subdir('launcher')
+
+if launcher_enable_curseforge_webview
+  subdir('tools/curseforge-webview')
+endif
 
 if launcher_enable_pcl_download
   subdir('libraries/PCL.Download')

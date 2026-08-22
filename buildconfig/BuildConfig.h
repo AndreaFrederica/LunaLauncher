@@ -75,6 +75,7 @@ class Config {
     bool UPDATER_ENABLED = false;
     bool JAVA_DOWNLOADER_ENABLED = false;
     bool PCL_DOWNLOAD_ENABLED = false;
+    bool CURSEFORGE_WEBVIEW_ENABLED = false;
 
     /// A short string identifying this build's platform or distribution.
     QString BUILD_PLATFORM;

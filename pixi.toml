@@ -17,6 +17,7 @@ ninja = ">=1.13.2,<2"
 git = ">=2.52.0,<3"
 ccache = ">=4.13.6,<5"
 dotnet-sdk = ">=10.0.0,<11"
+rust = ">=1.89.0,<2"
 
 [target.win-64.dependencies]
 powershell = ">=7.5.4,<8"

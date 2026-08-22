@@ -77,12 +77,18 @@ bool FlameCreationTask::abort()
     if (!canAbort())
         return false;
 
-    if (m_processUpdateFileInfoJob)
-        m_processUpdateFileInfoJob->abort();
-    if (m_filesJob)
-        m_filesJob->abort();
-    if (m_modIdResolver)
-        m_modIdResolver->abort();
+    if (m_processUpdateFileInfoJob && m_processUpdateFileInfoJob->isRunning()) {
+        const auto job = m_processUpdateFileInfoJob;
+        job->abort();
+    }
+    if (m_filesJob && m_filesJob->isRunning()) {
+        const auto job = m_filesJob;
+        job->abort();
+    }
+    if (m_modIdResolver && m_modIdResolver->isRunning()) {
+        const auto resolver = m_modIdResolver;
+        resolver->abort();
+    }
 
     return InstanceCreationTask::abort();
 }
@@ -582,13 +588,18 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
         }
     }
 
-    connect(m_filesJob.get(), &NetJob::finished, this, [this, &loop]() {
+    connect(m_filesJob.get(), &NetJob::succeeded, this, [this, &loop]() {
         m_filesJob.reset();
         validateOtherResources(loop);
     });
-    connect(m_filesJob.get(), &NetJob::failed, [this](QString reason) {
+    connect(m_filesJob.get(), &NetJob::failed, this, [this, &loop](QString reason) {
         m_filesJob.reset();
         setError(reason);
+        loop.quit();
+    });
+    connect(m_filesJob.get(), &NetJob::aborted, this, [this, &loop]() {
+        m_filesJob.reset();
+        loop.quit();
     });
     connect(m_filesJob.get(), &NetJob::progress, this, [this](qint64 current, qint64 total) {
         setDetails(tr("%1 out of %2 complete").arg(current).arg(total));

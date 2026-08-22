@@ -39,10 +39,12 @@ void InstanceCreationTask::executeTask()
     }
 
     m_instance = createInstance();
-    if (!m_instance) {
-        if (m_abort)
-            return;
+    if (m_abort) {
+        emitAborted();
+        return;
+    }
 
+    if (!m_instance) {
         qWarning() << "Instance creation failed!";
         if (!m_error_message.isEmpty()) {
             qWarning() << "Reason:" << m_error_message;

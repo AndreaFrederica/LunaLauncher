@@ -93,6 +93,11 @@ libnbt_lib = static_library(
 
 libnbt_dep = declare_dependency(include_directories: libnbt_inc, link_with: libnbt_lib, dependencies: [zlib_dep])
 
+quickjs_c_args = ['-D_GNU_SOURCE']
+if is_windows
+  quickjs_c_args += ['-DWIN32_LEAN_AND_MEAN', '-D_WIN32_WINNT=0x0601']
+endif
+
 quickjs_lib = static_library(
   'qjs',
   [
@@ -103,11 +108,7 @@ quickjs_lib = static_library(
     'quickjs-ng/quickjs.c',
   ],
   include_directories: quickjs_inc,
-  c_args: [
-    '-D_GNU_SOURCE',
-    '-DWIN32_LEAN_AND_MEAN',
-    '-D_WIN32_WINNT=0x0601',
-  ],
+  c_args: quickjs_c_args,
   dependencies: [math_dep, threads_dep, dl_dep],
 )
 
@@ -171,7 +172,7 @@ if is_windows
     cc.find_library('Winmm', required: true),
     cc.find_library('Ws2_32', required: true),
   ]
-elif is_linux
+elif is_linux or is_macos
   qtermwidget_sources += ['qtermwidget/lib/ptyqt/unixptyprocess.cpp']
   qtermwidget_platform_deps += [threads_dep, dl_dep]
 endif

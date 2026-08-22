@@ -13,7 +13,7 @@ qtermwidget_moc_headers = [
 
 if is_windows
   qtermwidget_moc_headers += ['qtermwidget/lib/ptyqt/conptyprocess.h']
-elif is_linux
+elif is_linux or is_macos
   qtermwidget_moc_headers += ['qtermwidget/lib/ptyqt/unixptyprocess.h']
 endif
 

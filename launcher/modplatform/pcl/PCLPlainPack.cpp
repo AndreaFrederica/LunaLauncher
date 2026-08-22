@@ -10,10 +10,13 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
+#include <QtEndian>
 #include <algorithm>
 
 #include "Exception.h"
 #include "FileSystem.h"
+#include "archive/ArchiveReader.h"
+#include "minecraft/Component.h"
 #include "minecraft/GradleSpecifier.h"
 #include "minecraft/Library.h"
 #include "minecraft/MinecraftInstance.h"
@@ -22,9 +25,52 @@
 #include "minecraft/OneSixVersionFormat.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/VersionFile.h"
+#include "modplatform/pcl/PCLPack.h"
 
 namespace PCL {
+
+int classFileJavaMajor(const QByteArray& data)
+{
+    if (data.size() < 8)
+        return 0;
+    const auto* bytes = reinterpret_cast<const uchar*>(data.constData());
+    if (qFromBigEndian<quint32>(bytes) != 0xCAFEBABE)
+        return 0;
+    const auto classVersion = qFromBigEndian<quint16>(bytes + 6);
+    return classVersion >= 45 ? classVersion - 44 : 0;
+}
+
+bool isFishModLoaderLibrary(const QString& coordinate)
+{
+    const GradleSpecifier spec(coordinate);
+    return spec.valid() && spec.groupId() == QLatin1String("net.xiaoyu233.fishmodloader") &&
+           spec.artifactId() == QLatin1String("fishmodloader");
+}
+
 namespace {
+
+constexpr auto MITE_COMPONENT_UID = "org.lunalauncher.mite";
+constexpr auto FISH_MOD_LOADER_UID = "net.xiaoyu233.fishmodloader";
+constexpr auto FISH_MOD_LOADER_MAIN_CLASS = "net.xiaoyu233.fml.relaunch.client.Main";
+constexpr auto OFFICIAL_LEGACY_INDEX_SHA1 = "c0fd82e8ce9fbc93119e40d96d5a4e62cfa3f729";
+
+struct AssetBundleInfo {
+    bool hasIndex = false;
+    bool validIndex = false;
+    bool officialLegacyIndex = false;
+    int totalEntries = 0;
+    int presentEntries = 0;
+
+    bool complete() const { return validIndex && totalEntries > 0 && presentEntries == totalEntries; }
+};
+
+struct FishModLoaderInfo {
+    qsizetype libraryIndex = -1;
+    QString version;
+    QString sourcePath;
+
+    bool detected() const { return libraryIndex >= 0; }
+};
 
 void record(QJsonArray& entries, const QString& key, const QString& status, const QString& detail = {})
 {
@@ -177,6 +223,90 @@ bool copyGameFiles(const QString& sourceRoot, const QString& version, const QStr
         }
     }
     return true;
+}
+
+QString originalMinecraftVersion(const QString& sourceRoot, const QString& version, QJsonArray& entries)
+{
+    QFile setupFile(FS::PathCombine(sourceRoot, "versions", version, "PCL", "Setup.ini"));
+    if (setupFile.open(QIODevice::ReadOnly)) {
+        const auto setup = parseSetup(setupFile.readAll());
+        const auto original = setup.values.value("VersionOriginal").trimmed();
+        if (!original.isEmpty()) {
+            record(entries, "VersionOriginal", "mapped", original);
+            return original;
+        }
+    }
+
+    static const QRegularExpression versionPrefix(R"(^([0-9]+\.[0-9]+(?:\.[0-9]+)?))");
+    const auto match = versionPrefix.match(version);
+    if (match.hasMatch()) {
+        record(entries, "minecraftVersion", "mapped-approximate",
+               QObject::tr("Inferred %1 from the custom version ID %2.").arg(match.captured(1), version));
+        return match.captured(1);
+    }
+    return version;
+}
+
+int classJavaMajorInArchive(const QString& archivePath, const QString& className)
+{
+    if (archivePath.isEmpty() || className.isEmpty())
+        return 0;
+    auto classPath = className;
+    classPath.replace('.', '/');
+    classPath += ".class";
+
+    MMCZip::ArchiveReader archive(archivePath);
+    auto file = archive.goToFile(classPath);
+    if (!file)
+        return 0;
+    int status = 0;
+    const auto data = file->readAll(&status);
+    return status < 0 ? 0 : classFileJavaMajor(data);
+}
+
+AssetBundleInfo inspectAssetBundle(const QString& assetsRoot, const QString& assetId)
+{
+    AssetBundleInfo result;
+    const auto indexPath = FS::PathCombine(assetsRoot, "indexes", assetId + ".json");
+    QFile indexFile(indexPath);
+    if (!indexFile.open(QIODevice::ReadOnly))
+        return result;
+
+    result.hasIndex = true;
+    const auto indexData = indexFile.readAll();
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(indexData, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject() || !document.object().value("objects").isObject())
+        return result;
+
+    result.validIndex = true;
+    result.officialLegacyIndex =
+        assetId == QLatin1String("legacy") &&
+        QCryptographicHash::hash(indexData, QCryptographicHash::Sha1).toHex() == QByteArray(OFFICIAL_LEGACY_INDEX_SHA1);
+    const auto objects = document.object().value("objects").toObject();
+    const QDir objectRoot(FS::PathCombine(assetsRoot, "objects"));
+    const QDir virtualRoot(FS::PathCombine(assetsRoot, "virtual", assetId));
+    static const QRegularExpression hashPattern(QRegularExpression::anchoredPattern("[0-9a-fA-F]{40}"));
+    for (auto it = objects.constBegin(); it != objects.constEnd(); ++it) {
+        ++result.totalEntries;
+        const auto hash = it.value().toObject().value("hash").toString();
+        if (!hashPattern.match(hash).hasMatch())
+            continue;
+        const auto objectPath = objectRoot.filePath(hash.left(2) + '/' + hash);
+        auto virtualPath = QDir::cleanPath(it.key());
+        const bool safeVirtualPath = !QDir::isAbsolutePath(virtualPath) && virtualPath != ".." && !virtualPath.startsWith("../");
+        if (QFileInfo(objectPath).isFile() || (safeVirtualPath && QFileInfo(virtualRoot.filePath(virtualPath)).isFile()))
+            ++result.presentEntries;
+    }
+    return result;
+}
+
+void requireComponent(const VersionFilePtr& component, const QString& uid, const QString& version)
+{
+    Meta::Require requirement;
+    requirement.uid = uid;
+    requirement.equalsVersion = version;
+    component->m_requires.insert(requirement);
 }
 
 bool argumentRulesAllow(const QJsonArray& rules)
@@ -444,6 +574,17 @@ bool writeJson(const QString& path, const QJsonDocument& document, QString& erro
     return true;
 }
 
+bool installLocalComponent(PackProfile* profile, const VersionFilePtr& patch, bool important, QString& error)
+{
+    if (!writeJson(profile->patchFilePathForUid(patch->uid), OneSixVersionFormat::versionFileToJson(patch), error))
+        return false;
+    auto component = std::make_shared<Component>(profile, patch->uid, patch);
+    component->setImportant(important);
+    component->updateCachedData();
+    profile->appendComponent(component);
+    return true;
+}
+
 }  // namespace
 
 QList<PlainPackCandidate> findPlainPackCandidates(const QStringList& archiveFiles)
@@ -475,6 +616,7 @@ PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QS
     if (!resolveVersion(sourceRoot, version, resolving, sourceVersion, result.error, result.entries))
         return result;
 
+    const auto minecraftVersion = originalMinecraftVersion(sourceRoot, version, result.entries);
     const auto repairedDownloads = sanitizeDownloads(sourceVersion, result.entries);
     convertArguments(sourceVersion, result.entries);
     VersionFilePtr patch;
@@ -496,13 +638,46 @@ PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QS
     }
     record(result.entries, "mainClass", "mapped", patch->mainClass);
 
-    const auto javaMajor = sourceVersion.value("javaVersion").toObject().value("majorVersion").toInt();
-    if (javaMajor > 0)
-        patch->compatibleJavaMajors.append(javaMajor);
-
     const auto sourceVersionRoot = FS::PathCombine(sourceRoot, "versions", version);
     const auto sourceJar = FS::PathCombine(sourceVersionRoot, version + ".jar");
     const auto localLibraries = instance.getLocalLibraryPath();
+    const auto sourceLibraries = sourceVersion.value("libraries").toArray();
+    FishModLoaderInfo fishLoader;
+    for (qsizetype i = 0; i < sourceLibraries.size(); ++i) {
+        const auto libraryObject = sourceLibraries.at(i).toObject();
+        const auto coordinate = libraryObject.value("name").toString();
+        if (!isFishModLoaderLibrary(coordinate))
+            continue;
+        const GradleSpecifier spec(coordinate);
+        fishLoader.libraryIndex = i;
+        fishLoader.version = spec.version();
+        fishLoader.sourcePath = localLibrarySource(FS::PathCombine(sourceRoot, "libraries"), libraryObject);
+        break;
+    }
+    if (patch->mainClass != QLatin1String(FISH_MOD_LOADER_MAIN_CLASS))
+        fishLoader = {};
+
+    int javaMajor = sourceVersion.value("javaVersion").toObject().value("majorVersion").toInt();
+    if (javaMajor <= 0) {
+        if (fishLoader.detected())
+            javaMajor = classJavaMajorInArchive(fishLoader.sourcePath, patch->mainClass);
+        if (javaMajor <= 0)
+            javaMajor = classJavaMajorInArchive(sourceJar, patch->mainClass);
+        if (javaMajor > 0) {
+            record(result.entries, "javaVersion", "mapped",
+                   QObject::tr("Java %1 was inferred from the imported main class bytecode.").arg(javaMajor));
+        }
+    }
+    if (javaMajor > 0) {
+        patch->compatibleJavaMajors.clear();
+        patch->compatibleJavaMajors.append(javaMajor);
+    }
+
+    if (fishLoader.detected()) {
+        record(result.entries, "FishModLoader", "mapped",
+               QObject::tr("Detected FishModLoader %1 from its Maven coordinate and launch main class.").arg(fishLoader.version));
+    }
+
     if (QFileInfo::exists(sourceJar)) {
         const auto jarHash = QCryptographicHash::hash(version.toUtf8(), QCryptographicHash::Sha256).toHex().left(12);
         const auto targetName = QString("pcl-main-%1.jar").arg(QString::fromLatin1(jarHash));
@@ -530,7 +705,6 @@ PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QS
         record(result.entries, "mainJar", "download-required", clientDownload->url);
     }
 
-    const auto sourceLibraries = sourceVersion.value("libraries").toArray();
     for (qsizetype i = 0; i < sourceLibraries.size() && i < patch->libraries.size(); ++i) {
         const auto libraryObject = sourceLibraries.at(i).toObject();
         auto library = patch->libraries.at(i);
@@ -573,17 +747,45 @@ PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QS
 
     const auto sourceAssets = FS::PathCombine(sourceRoot, "assets");
     if (QFileInfo::exists(sourceAssets)) {
-        instance.settings()->set("UseLocalAssets", true);
-        if (!mergeDirectory(sourceAssets, instance.assetsRoot(), result.error))
-            return result;
         if (patch->assets.isEmpty())
             patch->assets = "legacy";
         if (!patch->mojangAssetIndex)
             patch->mojangAssetIndex = std::make_shared<MojangAssetIndexInfo>(patch->assets);
-        record(result.entries, "assets", "mapped-instance-local", "assets/");
-        record(result.entries, "assets.prism-compatibility", "unsupported",
-               QObject::tr(
-                   "Prism Launcher does not recognize Luna's UseLocalAssets setting; exported files are preserved but may not be used."));
+        const auto assetId = patch->mojangAssetIndex->id.isEmpty() ? patch->assets : patch->mojangAssetIndex->id;
+        const auto assetBundle = inspectAssetBundle(sourceAssets, assetId);
+        if (assetBundle.hasIndex && !assetBundle.complete() && assetBundle.officialLegacyIndex) {
+            instance.settings()->set("UseLocalAssets", false);
+            record(result.entries, "assets", "download-required",
+                   QObject::tr("The pack contains the official %1 index but only %2 of %3 referenced files. Luna will use its standard asset downloader instead of treating this as a complete local asset store.")
+                       .arg(assetId)
+                       .arg(assetBundle.presentEntries)
+                       .arg(assetBundle.totalEntries));
+            record(result.entries, "assets.prism-compatibility", "mapped",
+                   QObject::tr("Official Minecraft assets use the standard MMC/Prism asset store."));
+        } else {
+            instance.settings()->set("UseLocalAssets", true);
+            const auto localAssets = FS::PathCombine(instance.instanceRoot(), "assets");
+            if (!mergeDirectory(sourceAssets, localAssets, result.error))
+                return result;
+            record(result.entries, "assets", assetBundle.complete() ? "mapped-instance-local" : "mapped-with-warning", "assets/");
+            if (assetBundle.hasIndex && !assetBundle.validIndex) {
+                record(result.entries, "assets.completeness", "invalid",
+                       QObject::tr("The bundled %1 asset index is not a valid Minecraft asset index, so Luna cannot verify or repair it.")
+                           .arg(assetId));
+            } else if (assetBundle.hasIndex && !assetBundle.complete()) {
+                record(result.entries, "assets.completeness", "unsupported",
+                       QObject::tr("The custom asset index references %1 files, but only %2 are bundled and no verified standard index can replace it.")
+                           .arg(assetBundle.totalEntries)
+                           .arg(assetBundle.presentEntries));
+            } else if (!assetBundle.hasIndex) {
+                record(result.entries, "assets.completeness", "unsupported",
+                       QObject::tr("The bundled assets do not contain indexes/%1.json, so Luna cannot verify or repair them.")
+                           .arg(assetId));
+            }
+            record(result.entries, "assets.prism-compatibility", "unsupported",
+                   QObject::tr(
+                       "Prism Launcher does not recognize Luna's UseLocalAssets setting; exported files are preserved but may not be used."));
+        }
     }
 
     const auto originalRoot = FS::PathCombine(instance.instanceRoot(), "pcl-import", "original");
@@ -592,15 +794,54 @@ PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QS
 
     auto profile = instance.getPackProfile();
     profile->buildingFromScratch();
-    profile->setComponentVersion("net.minecraft", version, true);
-    const auto patchPath = FS::PathCombine(instance.instanceRoot(), "patches", "net.minecraft.json");
-    if (!writeJson(patchPath, OneSixVersionFormat::versionFileToJson(patch), result.error))
+    const bool splitMiteComponents = fishLoader.detected() && QFileInfo::exists(sourceJar) && minecraftVersion != version;
+    if (splitMiteComponents) {
+        auto mite = std::make_shared<VersionFile>();
+        mite->uid = MITE_COMPONENT_UID;
+        mite->name = QObject::tr("MITE core");
+        mite->version = version;
+        mite->mainJar = patch->mainJar;
+        mite->minecraftArguments = patch->minecraftArguments;
+        mite->appletClass = patch->appletClass;
+        requireComponent(mite, "net.minecraft", minecraftVersion);
+
+        auto loader = std::make_shared<VersionFile>();
+        loader->uid = FISH_MOD_LOADER_UID;
+        loader->name = "FishModLoader";
+        loader->version = fishLoader.version;
+        loader->mainClass = patch->mainClass;
+        loader->addnJvmArguments = patch->addnJvmArguments;
+        loader->addTweakers = patch->addTweakers;
+        loader->libraries = patch->libraries;
+        loader->mavenFiles = patch->mavenFiles;
+        loader->agents = patch->agents;
+        loader->traits = patch->traits;
+        loader->jarMods = patch->jarMods;
+        loader->mods = patch->mods;
+        loader->compatibleJavaMajors = patch->compatibleJavaMajors;
+        loader->compatibleJavaName = patch->compatibleJavaName;
+        requireComponent(loader, mite->uid, mite->version);
+
+        if (!profile->setComponentVersion("net.minecraft", minecraftVersion, true)) {
+            result.error = QObject::tr("Could not create the Minecraft %1 component.").arg(minecraftVersion);
+            return result;
+        }
+        if (!installLocalComponent(profile, mite, true, result.error) ||
+            !installLocalComponent(profile, loader, false, result.error)) {
+            return result;
+        }
+        record(result.entries, "components", "mapped",
+               QObject::tr("Created separate Minecraft %1, MITE core %2, and FishModLoader %3 components.")
+                   .arg(minecraftVersion, version, fishLoader.version));
+    } else if (!installLocalComponent(profile, patch, true, result.error)) {
         return result;
+    }
     profile->saveNow();
 
     QJsonObject report{ { "formatVersion", 1 },
                         { "source", QString("versions/%1/%1.json").arg(version) },
                         { "version", version },
+                        { "minecraftVersion", minecraftVersion },
                         { "entries", result.entries } };
     if (!writeJson(FS::PathCombine(instance.instanceRoot(), "lunaui", "migration", "pcl-plain-report.json"), QJsonDocument(report),
                    result.error))

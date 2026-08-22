@@ -124,6 +124,27 @@ PCL 的 `cmd.exe` 命令。等待型命令和整合包内置 Java 都属于可�
 assets。MMC ZIP 导出器会包含该目录，但原版 Prism/MultiMC 不识别 `UseLocalAssets`，所以此项只能保证数据随包保留，
 不能保证由原版 Prism/MultiMC 直接启动时使用相同资源；该限制会保留在兼容性报告中。
 
+若普通 ZIP 内含的 `legacy` 索引与 Mojang 官方 1.6.4 索引完全一致，但没有带齐索引引用的对象，Luna 不会把这个目录
+误判为完整的本地资源库，而是关闭 `UseLocalAssets`，让已有的标准资源更新流程补齐文件。自定义、损坏或缺失的索引无法
+安全地映射到 Mojang 下载源，仍保留为实例本地资源，并在报告中列出无法验证或缺少的部分。
+
+## MITE 与 FishModLoader
+
+普通 ZIP 的版本 JSON 同时满足以下条件时，Luna 会把它识别为 MITE/FishModLoader 实例，而不是普通 Fabric 或
+Legacy Fabric 实例：主类为 `net.xiaoyu233.fml.relaunch.client.Main`，且库列表包含
+`net.xiaoyu233.fishmodloader:fishmodloader:<版本>`。FishModLoader 虽然内嵌了 Fabric Loader 与 Mixin 的衍生实现，
+但它不是可替换为标准 `net.fabricmc.fabric-loader` 组件的普通 Legacy Fabric 加载器。
+
+转换后组件按启动覆盖顺序拆分为：
+
+1. `net.minecraft`：使用 `Setup.ini` 的 `VersionOriginal`（例如 1.6.4）接入 Luna/Prism 的标准 Minecraft 元数据与下载。
+2. `org.lunalauncher.mite`：保留整合包提供的已修改 Minecraft 核心 JAR 和旧式游戏参数；MITE 是核心替换，不只是加载器。
+3. `net.xiaoyu233.fishmodloader`：保留 FishModLoader 入口类、运行库、Mixin/Fabric 运行时字段和 Java 约束。
+
+若版本 JSON 没有 `javaVersion`，Luna 会读取实际启动主类的 class 文件版本。例如 class major 61 会生成 Java 17 约束，
+不会沿用 Minecraft 1.6.4 通常使用的 Java 8。无法同时确认主类和 Maven 坐标时不做专用拆分，继续使用普通 ZIP 的单组件
+兼容路径，避免把其他自定义核心误识别成 MITE。
+
 PCL Logo 转换遵循 MMC/Prism 的普通自定义实例图标机制：导入时按图像内容生成稳定的 `iconKey`，把图片作为
 文件型图标安装，而不是让实例继续引用 PCL 的 WPF `pack://` URI。之后从 Luna 导出 MMC zip 时，现有导出器会把
 `<iconKey>.<扩展名>` 写入实例根目录；原版 Prism/MultiMC 可按 `instance.cfg` 的 `iconKey` 重新导入。PCL-CE 中许可

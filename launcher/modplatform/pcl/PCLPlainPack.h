@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include <QByteArray>
 #include <QJsonArray>
 #include <QList>
 #include <QString>
@@ -22,6 +23,8 @@ struct PlainPackConversionResult {
 };
 
 QList<PlainPackCandidate> findPlainPackCandidates(const QStringList& archiveFiles);
+int classFileJavaMajor(const QByteArray& data);
+bool isFishModLoaderLibrary(const QString& coordinate);
 PlainPackConversionResult convertPlainPack(MinecraftInstance& instance, const QString& sourceRoot, const QString& version);
 
 }  // namespace PCL

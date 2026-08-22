@@ -115,6 +115,21 @@ class PCLPackTest : public QObject {
         QCOMPARE(candidates.at(1).root, QString("MyPack/.minecraft/"));
         QCOMPARE(candidates.at(1).version, QString("custom"));
     }
+
+    void classFileJavaVersion()
+    {
+        QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("cafebabe0000003d")), 17);
+        QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("cafebabe00000034")), 8);
+        QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("000000000000003d")), 0);
+        QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("cafebabe")), 0);
+    }
+
+    void fishModLoaderCoordinate()
+    {
+        QVERIFY(PCL::isFishModLoaderLibrary("net.xiaoyu233.fishmodloader:fishmodloader:v3.4.2"));
+        QVERIFY(!PCL::isFishModLoaderLibrary("net.fabricmc:fabric-loader:0.16.0"));
+        QVERIFY(!PCL::isFishModLoaderLibrary("broken-coordinate"));
+    }
 };
 
 QTEST_GUILESS_MAIN(PCLPackTest)

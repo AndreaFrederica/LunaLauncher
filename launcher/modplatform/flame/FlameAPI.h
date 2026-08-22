@@ -6,9 +6,9 @@
 
 #include <QList>
 #include <cstdint>
-#include "BuildConfig.h"
 #include "Json.h"
 #include "Version.h"
+#include "modplatform/ModApiMirror.h"
 #include "modplatform/ModIndex.h"
 #include "modplatform/ResourceAPI.h"
 #include "modplatform/flame/FlameModIndex.h"
@@ -123,13 +123,13 @@ class FlameAPI : public ResourceAPI {
         if (args.versions.has_value() && !args.versions.value().empty())
             get_arguments.append(QString("gameVersion=%1").arg(args.versions.value().front().toString()));
 
-        return BuildConfig.FLAME_BASE_URL + "/mods/search?gameId=432&" + get_arguments.join('&');
+        return ModApiMirror::curseForgeBaseUrl() + "/mods/search?gameId=432&" + get_arguments.join('&');
     }
 
     std::optional<QString> getVersionsURL(const VersionSearchArgs& args) const override
     {
         auto addonId = args.pack->addonId.toString();
-        QString url = QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files?pageSize=10000").arg(addonId);
+        QString url = QString(ModApiMirror::curseForgeBaseUrl() + "/mods/%1/files?pageSize=10000").arg(addonId);
 
         if (args.mcVersions.has_value())
             url += QString("&gameVersion=%1").arg(args.mcVersions.value().front().toString());
@@ -162,12 +162,16 @@ class FlameAPI : public ResourceAPI {
     void loadExtraPackInfo(ModPlatform::IndexedPack& m, [[maybe_unused]] QJsonObject&) const override { FlameMod::loadBody(m); }
 
    private:
-    std::optional<QString> getInfoURL(const QString& id) const override { return QString(BuildConfig.FLAME_BASE_URL + "/mods/%1").arg(id); }
+    std::optional<QString> getInfoURL(const QString& id) const override
+    {
+        return QString(ModApiMirror::curseForgeBaseUrl() + "/mods/%1").arg(id);
+    }
     std::optional<QString> getDependencyURL(const DependencySearchArgs& args) const override
     {
         auto addonId = args.dependency.addonId.toString();
         auto url =
-            QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files?pageSize=10000&gameVersion=%2").arg(addonId, args.mcVersion.toString());
+            QString(ModApiMirror::curseForgeBaseUrl() + "/mods/%1/files?pageSize=10000&gameVersion=%2")
+                .arg(addonId, args.mcVersion.toString());
         if (args.loader && ModPlatform::hasSingleModLoaderSelected(args.loader)) {
             int mappedModLoader = getMappedModLoader(static_cast<ModPlatform::ModLoaderType>(static_cast<int>(args.loader)));
             url += QString("&modLoaderType=%1").arg(mappedModLoader);

@@ -42,6 +42,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QTabBar>
 #include <QValidator>
@@ -50,9 +51,12 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "minecraft/MirrorDownload.h"
+#include "modplatform/ModApiMirror.h"
 #include "net/PasteUpload.h"
+#include "net/PclDownloadLibrary.h"
 #include "settings/SettingsObject.h"
 #include "tools/BaseProfiler.h"
+#include "ui/pages/global/PclDownloadPage.h"
 
 APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 {
@@ -77,7 +81,34 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
         ui->mirrorTypeComboBox->addItem(tr(MirrorDownload::MirrorTypes.at(mirrorType).name.toUtf8()), mirrorType);
     }
 
+    for (auto* comboBox : { ui->modrinthMirrorComboBox, ui->curseForgeMirrorComboBox }) {
+        comboBox->addItem(tr("Official"), ModApiMirror::Official);
+        comboBox->addItem(tr("MCIM"), ModApiMirror::MCIM);
+    }
+
+    // Add download backend dropdown
+    ui->downloadBackendComboBox->addItem(tr("Qt (Built-in)"), 0);
+    ui->downloadBackendComboBox->addItem(tr("aria2"), 1);
+    ui->downloadBackendComboBox->addItem(tr("dotNetDownload"), 2);
+
+    // Loading also initializes the NativeAOT engine. Merely checking isLoaded()
+    // would leave this option disabled until another page happened to load it.
+    auto& pclDownload = PclDownloadLibrary::instance();
+    if (!BuildConfig.PCL_DOWNLOAD_ENABLED || (!pclDownload.isLoaded() && !pclDownload.load())) {
+        ui->downloadBackendComboBox->setItemData(2, false, Qt::UserRole - 1);
+        ui->downloadBackendComboBox->setItemData(
+            2, tr("PCL.Download library was not built or is unavailable: %1").arg(pclDownload.errorString()), Qt::ToolTipRole);
+    }
+
     void (QComboBox::*currentIndexChangedSignal)(int)(&QComboBox::currentIndexChanged);
+    connect(ui->downloadBackendComboBox, currentIndexChangedSignal, this, [this](int index) {
+        if (!m_container)
+            return;
+        auto* pclPage = dynamic_cast<PclDownloadPage*>(m_container->getPage("dotnet-download-settings"));
+        if (pclPage) {
+            pclPage->setEnabledFromBackend(ui->downloadBackendComboBox->itemData(index).toInt() == 2);
+        }
+    });
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLPlaceholder);
     // This function needs to be called even when the ComboBox's index is still in its default state.
     updateBaseURLPlaceholder(ui->pasteTypeComboBox->currentIndex());
@@ -111,6 +142,16 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 APIPage::~APIPage()
 {
     delete ui;
+}
+
+void APIPage::setPclDownloadEnabled(bool enabled)
+{
+    const int backend = enabled ? 2 : 0;
+    if (!enabled && ui->downloadBackendComboBox->currentData().toInt() != 2)
+        return;
+
+    const QSignalBlocker blocker(ui->downloadBackendComboBox);
+    ui->downloadBackendComboBox->setCurrentIndex(ui->downloadBackendComboBox->findData(backend));
 }
 
 void APIPage::resetBaseURLNote()
@@ -201,6 +242,24 @@ void APIPage::loadSettings()
     }
     ui->mirrorTypeComboBox->setCurrentIndex(mirrorTypeIndex);
 
+    const auto loadModApiMirror = [](QComboBox* comboBox, int mirror) {
+        int index = comboBox->findData(mirror);
+        if (index == -1) {
+            index = comboBox->findData(ModApiMirror::Official);
+        }
+        comboBox->setCurrentIndex(index);
+    };
+    loadModApiMirror(ui->modrinthMirrorComboBox, s->get("ModrinthMirror").toInt());
+    loadModApiMirror(ui->curseForgeMirrorComboBox, s->get("CurseForgeMirror").toInt());
+
+    // Load download backend
+    int backend = s->get("DownloadBackend").toInt();
+    int backendIndex = ui->downloadBackendComboBox->findData(backend);
+    if (backendIndex == -1) {
+        backendIndex = 0;  // Default to Qt
+    }
+    ui->downloadBackendComboBox->setCurrentIndex(backendIndex);
+
     QString msaClientID = s->get("MSAClientIDOverride").toString();
     ui->msaClientID->setText(msaClientID);
     QString metaURL = s->get("MetaURLOverride").toString();
@@ -232,6 +291,11 @@ void APIPage::applySettings()
     // Save mirror type and URLs based on selection
     int mirrorType = ui->mirrorTypeComboBox->currentData().toInt();
     s->set("DownloadMirrorType", mirrorType);
+    s->set("ModrinthMirror", ui->modrinthMirrorComboBox->currentData().toInt());
+    s->set("CurseForgeMirror", ui->curseForgeMirrorComboBox->currentData().toInt());
+
+    // Save download backend
+    s->set("DownloadBackend", ui->downloadBackendComboBox->currentData().toInt());
 
     if (mirrorType == MirrorDownload::Custom) {
         // Save custom URLs

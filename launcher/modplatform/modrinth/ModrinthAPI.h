@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "BuildConfig.h"
 #include "modplatform/ModIndex.h"
+#include "modplatform/ModApiMirror.h"
 #include "modplatform/ResourceAPI.h"
 #include "modplatform/modrinth/ModrinthPackIndex.h"
 
@@ -173,17 +173,17 @@ class ModrinthAPI : public ResourceAPI {
         }
         get_arguments.append(QString("facets=%1").arg(createFacets(args)));
 
-        return BuildConfig.MODRINTH_PROD_URL + "/search?" + get_arguments.join('&');
+        return ModApiMirror::modrinthBaseUrl() + "/search?" + get_arguments.join('&');
     };
 
     auto getInfoURL(const QString& id) const -> std::optional<QString> override
     {
-        return BuildConfig.MODRINTH_PROD_URL + "/project/" + id;
+        return ModApiMirror::modrinthBaseUrl() + "/project/" + id;
     };
 
     auto getMultipleModInfoURL(const QStringList& ids) const -> QString
     {
-        return BuildConfig.MODRINTH_PROD_URL + QString("/projects?ids=[\"%1\"]").arg(ids.join("\",\""));
+        return ModApiMirror::modrinthBaseUrl() + QString("/projects?ids=[\"%1\"]").arg(ids.join("\",\""));
     };
 
     auto getVersionsURL(const VersionSearchArgs& args) const -> std::optional<QString> override
@@ -198,7 +198,7 @@ class ModrinthAPI : public ResourceAPI {
         get_arguments.append(QString("include_changelog=%1").arg("true"));
 
         return QString("%1/project/%2/version%3%4")
-            .arg(BuildConfig.MODRINTH_PROD_URL, args.pack->addonId.toString(), get_arguments.isEmpty() ? "" : "?", get_arguments.join('&'));
+            .arg(ModApiMirror::modrinthBaseUrl(), args.pack->addonId.toString(), get_arguments.isEmpty() ? "" : "?", get_arguments.join('&'));
     };
 
     QString getGameVersionsArray(const std::list<Version>& mcVersions) const
@@ -221,9 +221,9 @@ class ModrinthAPI : public ResourceAPI {
     std::optional<QString> getDependencyURL(const DependencySearchArgs& args) const override
     {
         return args.dependency.version.length() != 0
-                   ? QString("%1/version/%2").arg(BuildConfig.MODRINTH_PROD_URL, args.dependency.version)
+                   ? QString("%1/version/%2").arg(ModApiMirror::modrinthBaseUrl(), args.dependency.version)
                    : QString(R"(%1/project/%2/version?game_versions=["%3"]&loaders=["%4"]&include_changelog=%5)")
-                         .arg(BuildConfig.MODRINTH_PROD_URL)
+                         .arg(ModApiMirror::modrinthBaseUrl())
                          .arg(args.dependency.addonId.toString())
                          .arg(mapMCVersionToModrinth(args.mcVersion))
                          .arg(getModLoaderStrings(args.loader).join("\",\""))

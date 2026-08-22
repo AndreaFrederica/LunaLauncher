@@ -48,6 +48,7 @@
 #include "MetaCacheSink.h"
 #if defined(LAUNCHER_APPLICATION)
 #include "net/Aria2Download.h"
+#include "net/PclDownloadTask.h"
 #endif
 
 namespace Net {
@@ -55,6 +56,9 @@ namespace Net {
 #if defined(LAUNCHER_APPLICATION)
 auto Download::makeCached(QUrl url, MetaEntryPtr entry, Options options) -> Download::Ptr
 {
+    if (PclDownloadTask::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+        return PclDownloadTask::makeCached(std::move(url), entry, options);
+    }
     if (Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
         return Aria2Download::makeCached(std::move(url), entry, options);
     }
@@ -86,6 +90,9 @@ auto Download::makeByteArray(QUrl url, Options options) -> std::pair<Download::P
 auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Ptr
 {
 #if defined(LAUNCHER_APPLICATION)
+    if (PclDownloadTask::shouldUseFor(url)) {
+        return PclDownloadTask::makeFile(std::move(url), std::move(path), options);
+    }
     if (Aria2Download::shouldUseFor(url)) {
         return Aria2Download::makeFile(std::move(url), std::move(path), options);
     }

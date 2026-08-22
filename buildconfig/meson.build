@@ -26,6 +26,7 @@ buildconfig_conf.set('Launcher_COMPILER_TARGET_PROCESSOR', compiler_target_proce
 buildconfig_conf.set('MACOSX_SPARKLE_UPDATE_PUBLIC_KEY', '')
 buildconfig_conf.set('MACOSX_SPARKLE_UPDATE_FEED_URL', '')
 buildconfig_conf.set10('Launcher_ENABLE_JAVA_DOWNLOADER', launcher_enable_java_downloader)
+buildconfig_conf.set10('Launcher_ENABLE_PCL_DOWNLOAD', launcher_enable_pcl_download)
 buildconfig_conf.set('Launcher_GIT_COMMIT', git_commit)
 buildconfig_conf.set('Launcher_GIT_TAG', git_tag)
 buildconfig_conf.set('Launcher_GIT_REFSPEC', git_refspec)

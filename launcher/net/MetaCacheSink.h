@@ -46,6 +46,7 @@ class MetaCacheSink : public FileSink {
     virtual ~MetaCacheSink() = default;
 
     auto hasLocalData() -> bool override;
+    QByteArray md5Sum() { return m_md5Node->hash(); }
 
    protected:
     auto initCache(QNetworkRequest& request) -> Task::State override;

@@ -51,6 +51,8 @@ set(CORE_SOURCES
     InstanceImportTask.cpp
     modplatform/pcl/PCLPack.h
     modplatform/pcl/PCLPack.cpp
+    modplatform/pcl/PCLPlainPack.h
+    modplatform/pcl/PCLPlainPack.cpp
 
     # Resource downloading task
     ResourceDownloadTask.h

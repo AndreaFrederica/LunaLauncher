@@ -23,6 +23,20 @@ PCL 也会直接导出扩展名为 `.zip` 或 `.mrpack` 的标准 Modrinth 包�
 添加整合包页面会把 PCL 标记为实验性支持；实际检测到外层 PCL 包装或实例内 PCL 配置后，导入成功提示还会明确
 说明可能存在兼容性问题，并引导用户在首次启动前检查 PCL 兼容设置和 `lunaui/migration/pcl-report.json`。
 
+PCL 还常见把整个游戏目录直接压缩的“普通 ZIP”，没有 Modrinth 或 MMC 清单。Luna 通过
+`<前缀>/versions/<版本>/<版本>.json` 识别这类包；如果包含多个版本，会在导入时要求选择。选中的游戏目录会转换为
+MMC 实例结构：`instance.cfg`、`mmc-pack.json`、`patches/net.minecraft.json` 和 `minecraft/`。版本目录中的自定义客户端
+JAR 与包内 Maven 库会复制到实例本地库；未内嵌的库保留下载信息。原始版本 JSON 保存在
+`pcl-import/original/`，转换明细保存在 `lunaui/migration/pcl-plain-report.json`。
+
+ZIP 导入路径支持传统 ZipCrypto 密码，包括普通 PCL ZIP、MMC/Prism ZIP、Modrinth 包和 PCL 外层包装。Luna 检测到
+加密成员后会显示密码输入框，并在正式解压前读取一个加密文件验证密码；密码不会写入实例或报告，也不会根据文件名硬编码
+默认值。AES ZIP 是否可用取决于当前 libarchive 构建，无法解密时会作为导入错误返回。
+
+旧式安装素材包（例如只有版本 JSON 和待合并 `.class` 文件、没有 `versions/<版本>/<版本>.jar` 的 MITE 安装包）不是
+可启动的 PCL 实例。Luna 不会猜测基底 JAR 或自动修改 Minecraft JAR；这类包需要独立、可验证的补丁合并器，目前列为
+不支持。
+
 安全约束：
 
 - 不解压、不检查、不执行外层 EXE。
@@ -46,6 +60,10 @@ mrpack 中的 `overrides/PCL/Setup.ini` 和可选的 `overrides/PCL/config.json`
 生成文件含源文件 SHA-256 和生成器版本。`pcl-compat.json` 是可继续编辑实例设置的 LunaUI；
 `pcl-report.json` 逐项记录 `mapped`、`mapped-approximate`、`mapped-with-prompt`、`mapped-noop`、`ignored-cache`、
 `unsupported` 或 `invalid`。原始 `Setup.ini` 不会被修改。
+
+普通 ZIP 的 `pcl-plain-report.json` 还会使用 `mapped-local`、`mapped-instance-local`、`download-required`、
+`download-unverified`、`repaired-download-metadata`、`mapped-platform` 和 `ignored-launcher-global`，以区分内嵌文件、
+启动时需要下载的文件、无法验证的下载、只针对当前操作系统完成的参数转换以及未导入的 PCL 全局状态。
 
 当前可靠映射：
 
@@ -95,6 +113,10 @@ PCL 命令变量映射为：
 PCL 的 `cmd.exe` 命令。等待型命令和整合包内置 Java 都属于可执行内容，导入时默认禁用，由生成的 LunaUI 要求用户显式确认。
 Luna 使用独立追加步骤而不是 `OverrideCommands`，因此不会替换用户的全局启动前命令。
 
+普通 ZIP 内嵌的 assets 保存在实例根目录 `assets/`，并由 `UseLocalAssets=true` 隔离使用，避免导入时覆盖 Luna 的全局
+assets。MMC ZIP 导出器会包含该目录，但原版 Prism/MultiMC 不识别 `UseLocalAssets`，所以此项只能保证数据随包保留，
+不能保证由原版 Prism/MultiMC 直接启动时使用相同资源；该限制会保留在兼容性报告中。
+
 PCL Logo 转换遵循 MMC/Prism 的普通自定义实例图标机制：导入时按图像内容生成稳定的 `iconKey`，把图片作为
 文件型图标安装，而不是让实例继续引用 PCL 的 WPF `pack://` URI。之后从 Luna 导出 MMC zip 时，现有导出器会把
 `<iconKey>.<扩展名>` 写入实例根目录；原版 Prism/MultiMC 可按 `instance.cfg` 的 `iconKey` 重新导入。PCL-CE 中许可
@@ -127,6 +149,9 @@ PCL Logo 转换遵循 MMC/Prism 的普通自定义实例图标机制：导入时
 以下是 PCL 缓存字段，Luna 忽略并以 mrpack/组件元数据为准：`State`、`Info`、`ReleaseTime`、
 `VersionFabric`、`VersionForge`、`VersionNeoForge`、`VersionOptiFine`、`VersionLiteLoader`、
 `VersionVanilla`、`VersionVanillaName`。
+
+普通 ZIP 根目录中的 `PCL/` 和 `PCL.ini` 也属于 PCL 启动器的全局缓存或个性化状态，不会复制到实例。只有选中
+版本目录下的 `PCL/Setup.ini`、`PCL/config.json`、Logo 和其他实例文件会合并到 `minecraft/PCL/` 后参与转换。
 
 ## LunaUI 扩展
 

@@ -58,6 +58,7 @@ class InstanceImportTask : public InstanceTask {
     void processTechnic();
     void processFlame();
     void processModrinth();
+    void processPCLPlain();
     void addPclCompatibilityWarning();
 
    private slots:
@@ -70,6 +71,8 @@ class InstanceImportTask : public InstanceTask {
     std::unique_ptr<QTemporaryFile> m_nestedArchive;
     int m_nestedArchiveDepth = 0;
     bool m_pclWrapperDetected = false;
+    QString m_archivePassphrase;
+    QString m_pclPlainVersion;
     Task::Ptr m_task;
     enum class ModpackType {
         Unknown,
@@ -77,6 +80,7 @@ class InstanceImportTask : public InstanceTask {
         Technic,
         Flame,
         Modrinth,
+        PCLPlain,
     } m_modpackType = ModpackType::Unknown;
 
     // Extra info we might need, that's available before, but can't be derived from

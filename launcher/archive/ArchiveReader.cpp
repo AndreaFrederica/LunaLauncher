@@ -29,6 +29,16 @@
 #include <optional>
 
 namespace MMCZip {
+static void configureReader(archive* archive, const QString& passphrase)
+{
+    archive_read_support_format_all(archive);
+    archive_read_support_filter_all(archive);
+    if (!passphrase.isEmpty()) {
+        const auto utf8 = passphrase.toUtf8();
+        archive_read_add_passphrase(archive, utf8.constData());
+    }
+}
+
 QStringList ArchiveReader::getFiles()
 {
     return m_fileNames;
@@ -116,8 +126,7 @@ auto ArchiveReader::goToFile(const QString& filename) -> std::unique_ptr<File>
 {
     auto f = std::make_unique<File>();
     auto* a = f->m_archive.get();
-    archive_read_support_format_all(a);
-    archive_read_support_filter_all(a);
+    configureReader(a, m_passphrase);
     auto fileName = m_archivePath.toStdWString();
     if (archive_read_open_filename_w(a, fileName.data(), m_blockSize) != ARCHIVE_OK) {
         qCritical() << "Failed to open archive file:" << m_archivePath << "-" << archive_error_string(a);
@@ -235,8 +244,7 @@ bool ArchiveReader::parse(const std::function<bool(File*, bool&)>& doStuff)
 {
     auto f = std::make_unique<File>();
     auto* a = f->m_archive.get();
-    archive_read_support_format_all(a);
-    archive_read_support_filter_all(a);
+    configureReader(a, m_passphrase);
     auto fileName = m_archivePath.toStdWString();
     if (archive_read_open_filename_w(a, fileName.data(), m_blockSize) != ARCHIVE_OK) {
         qCritical() << "Failed to open archive file:" << m_archivePath << "-" << f->error();
@@ -266,6 +274,10 @@ bool ArchiveReader::parse(const std::function<bool(File*)>& doStuff)
 bool ArchiveReader::File::isFile()
 {
     return (archive_entry_filetype(m_entry) & AE_IFMT) == AE_IFREG;
+}
+bool ArchiveReader::File::isEncrypted()
+{
+    return archive_entry_is_encrypted(m_entry) == 1;
 }
 qint64 ArchiveReader::File::size()
 {

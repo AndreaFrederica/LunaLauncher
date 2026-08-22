@@ -5,6 +5,7 @@
 #include <QTest>
 
 #include "modplatform/pcl/PCLPack.h"
+#include "modplatform/pcl/PCLPlainPack.h"
 
 class PCLPackTest : public QObject {
     Q_OBJECT
@@ -98,6 +99,21 @@ class PCLPackTest : public QObject {
                      name);
         }
         QVERIFY(PCL::pclBuiltinIconCandidate("PCL/Logo.png").isEmpty());
+    }
+
+    void plainPackCandidates()
+    {
+        const QStringList files{ ".minecraft/versions/1.6.4-MITE/1.6.4-MITE.json",
+                                 "MyPack/.minecraft/versions/custom/custom.json",
+                                 "MITE 1.6.4 Installation Files/1.6.4-MITE/1.6.4-MITE.json",
+                                 "versions/wrong/not-wrong.json",
+                                 "versions/almost/almost.json.bak" };
+        const auto candidates = PCL::findPlainPackCandidates(files);
+        QCOMPARE(candidates.size(), 2);
+        QCOMPARE(candidates.at(0).root, QString(".minecraft/"));
+        QCOMPARE(candidates.at(0).version, QString("1.6.4-MITE"));
+        QCOMPARE(candidates.at(1).root, QString("MyPack/.minecraft/"));
+        QCOMPARE(candidates.at(1).version, QString("custom"));
     }
 };
 

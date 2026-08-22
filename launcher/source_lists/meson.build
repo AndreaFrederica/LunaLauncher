@@ -46,6 +46,8 @@ launcher_logic_sources = [
   'InstanceImportTask.h',
   'modplatform/pcl/PCLPack.cpp',
   'modplatform/pcl/PCLPack.h',
+  'modplatform/pcl/PCLPlainPack.cpp',
+  'modplatform/pcl/PCLPlainPack.h',
   'InstanceList.cpp',
   'InstanceList.h',
   'InstancePageProvider.h',

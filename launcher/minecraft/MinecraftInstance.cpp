@@ -248,6 +248,7 @@ void MinecraftInstance::loadSpecificSettings()
     m_settings->registerSetting("JoinServerOnLaunchAddress", "");
     m_settings->registerSetting("JoinWorldOnLaunch", "");
     m_settings->registerSetting("ExtraGameArgs", "");
+    m_settings->registerSetting("UseLocalAssets", false);
     m_settings->registerSetting("OverrideVersionType", false);
     m_settings->registerSetting("VersionType", "");
 
@@ -378,6 +379,18 @@ QString MinecraftInstance::getLocalLibraryPath() const
 {
     QDir libraries_dir(FS::PathCombine(instanceRoot(), "libraries/"));
     return libraries_dir.absolutePath();
+}
+
+QString MinecraftInstance::assetsRoot() const
+{
+    if (usesLocalAssets())
+        return FS::PathCombine(instanceRoot(), "assets");
+    return QDir("assets/").absolutePath();
+}
+
+bool MinecraftInstance::usesLocalAssets() const
+{
+    return settings()->get("UseLocalAssets").toBool();
 }
 
 bool MinecraftInstance::supportsDemo() const
@@ -791,7 +804,7 @@ QProcessEnvironment MinecraftInstance::createLaunchEnvironment()
 QStringList MinecraftInstance::processMinecraftArgs(AuthSessionPtr session, MinecraftTarget::Ptr targetToJoin) const
 {
     auto profile = m_components->getProfile();
-    auto args = profile->getMinecraftArguments().split(' ', Qt::SkipEmptyParts);
+    auto args = Commandline::splitArgs(profile->getMinecraftArguments());
     for (auto tweaker : profile->getTweakers()) {
         args << "--tweakClass" << tweaker;
     }
@@ -1092,9 +1105,9 @@ QMap<QString, QString> MinecraftInstance::makeProfileVarMapping(std::shared_ptr<
 
     QString absRootDir = QDir(gameRoot()).absolutePath();
     result["game_directory"] = absRootDir;
-    QString absAssetsDir = QDir("assets/").absolutePath();
+    const auto absAssetsDir = assetsRoot();
     auto assets = profile->getMinecraftAssets();
-    result["game_assets"] = AssetsUtils::getAssetsDir(assets->id, resourcesDir()).absolutePath();
+    result["game_assets"] = AssetsUtils::getAssetsDir(assets->id, resourcesDir(), absAssetsDir).absolutePath();
 
     // 1.7.3+ assets tokens
     result["assets_root"] = absAssetsDir;

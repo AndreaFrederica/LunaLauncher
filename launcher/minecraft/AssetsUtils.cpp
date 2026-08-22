@@ -171,9 +171,9 @@ bool loadAssetsIndexJson(const QString& assetsId, const QString& path, AssetsInd
 }
 
 // FIXME: ugly code duplication
-QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder)
+QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder, const QString& assetsRoot)
 {
-    QDir assetsDir = QDir("assets/");
+    QDir assetsDir(assetsRoot);
     QDir indexDir = QDir(FS::PathCombine(assetsDir.path(), "indexes"));
     QDir objectDir = QDir(FS::PathCombine(assetsDir.path(), "objects"));
     QDir virtualDir = QDir(FS::PathCombine(assetsDir.path(), "virtual"));
@@ -203,9 +203,9 @@ QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder)
 }
 
 // FIXME: ugly code duplication
-bool reconstructAssets(QString assetsId, QString resourcesFolder)
+bool reconstructAssets(QString assetsId, QString resourcesFolder, QString assetsRoot)
 {
-    QDir assetsDir = QDir("assets/");
+    QDir assetsDir(assetsRoot);
     QDir indexDir = QDir(FS::PathCombine(assetsDir.path(), "indexes"));
     QDir objectDir = QDir(FS::PathCombine(assetsDir.path(), "objects"));
     QDir virtualDir = QDir(FS::PathCombine(assetsDir.path(), "virtual"));

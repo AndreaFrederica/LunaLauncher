@@ -20,6 +20,7 @@
 #include <QDir>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <utility>
 #include "archive/ArchiveReader.h"
 #include "tasks/Task.h"
 
@@ -28,8 +29,8 @@ namespace MMCZip {
 class ExtractZipTask : public Task {
     Q_OBJECT
    public:
-    ExtractZipTask(QString input, QDir outputDir, QString subdirectory = "")
-        : m_input(input), m_outputDir(outputDir), m_subdirectory(subdirectory)
+    ExtractZipTask(QString input, QDir outputDir, QString subdirectory = "", QString passphrase = {})
+        : m_input(std::move(input), std::move(passphrase)), m_outputDir(std::move(outputDir)), m_subdirectory(std::move(subdirectory))
     {}
     virtual ~ExtractZipTask() = default;
 

@@ -1,6 +1,7 @@
 #include "AssetUpdateTask.h"
 
 #include "BuildConfig.h"
+#include "FileSystem.h"
 #include "launch/LaunchStep.h"
 #include "minecraft/AssetsUtils.h"
 #include "minecraft/MinecraftInstance.h"
@@ -11,6 +12,8 @@
 #include "Application.h"
 
 #include "net/ApiDownload.h"
+
+#include <QFileInfo>
 
 AssetUpdateTask::AssetUpdateTask(MinecraftInstance* inst)
 {
@@ -23,6 +26,17 @@ void AssetUpdateTask::executeTask()
     auto components = m_inst->getPackProfile();
     auto profile = components->getProfile();
     auto assets = profile->getMinecraftAssets();
+    if (m_inst->usesLocalAssets()) {
+        const auto indexPath = FS::PathCombine(m_inst->assetsRoot(), "indexes", assets->id + ".json");
+        const auto virtualPath = FS::PathCombine(m_inst->assetsRoot(), "virtual", assets->id);
+        if (!QFileInfo::exists(indexPath) && !QFileInfo::exists(virtualPath)) {
+            emitFailed(tr("The PCL pack's instance-local assets are missing the %1 index and virtual directory.").arg(assets->id));
+            return;
+        }
+        setStatus(tr("Using assets bundled with the PCL pack"));
+        emitSucceeded();
+        return;
+    }
     QUrl indexUrl = assets->url;
 
     // Rewrite URL for mirror support

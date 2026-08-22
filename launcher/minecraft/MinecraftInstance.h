@@ -109,6 +109,8 @@ class MinecraftInstance : public BaseInstance {
 
     // where the instance-local libraries should be
     QString getLocalLibraryPath() const;
+    QString assetsRoot() const;
+    bool usesLocalAssets() const;
 
     /** Returns whether the instance, with its version, has support for demo mode. */
     bool supportsDemo() const;

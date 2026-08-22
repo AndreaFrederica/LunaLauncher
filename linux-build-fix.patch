@@ -1,0 +1,45 @@
+diff --git a/libraries/meson.build b/libraries/meson.build
+index 77740c54d..315511fe7 100644
+--- a/libraries/meson.build
++++ b/libraries/meson.build
+@@ -26,9 +26,14 @@ localpeer_sources = [
+   'LocalPeer/src/LockedFile.cpp',
+   'LocalPeer/src/LockedFile.h',
+   'LocalPeer/include/LocalPeer.h',
+-  'LocalPeer/src/LockedFile_win.cpp',
+ ]
+ 
++if is_windows
++  localpeer_sources += ['LocalPeer/src/LockedFile_win.cpp']
++elif is_linux
++  localpeer_sources += ['LocalPeer/src/LockedFile_unix.cpp']
++endif
++
+ localpeer_moc_generated = qt.preprocess(
+   moc_headers: files('LocalPeer/include/LocalPeer.h'),
+   include_directories: localpeer_inc,
+diff --git a/meson.build b/meson.build
+index 49db8066a..9be393c38 100644
+--- a/meson.build
++++ b/meson.build
+@@ -59,7 +59,7 @@ else
+     ],
+     language: ['c', 'cpp'],
+   )
+-  add_project_link_arguments(['-Wl,--stack,8388608'], language: ['c', 'cpp'])
++  # Stack size on Linux is controlled by ulimit, no linker flag needed
+ endif
+ 
+ add_project_arguments(
+diff --git a/scripts/pixi_meson.py b/scripts/pixi_meson.py
+index 5928c342f..3945dab78 100644
+--- a/scripts/pixi_meson.py
++++ b/scripts/pixi_meson.py
+@@ -170,6 +170,7 @@ def configure(root: Path, profile: str) -> None:
+         "-Dbuild_updater=false",
+         "-Dbuild_filelinker=true" if system == "windows" else "-Dbuild_filelinker=false",
+         "-Dlibarchive:tests=disabled",
++        "-Dlibarchive:iconv=disabled",
+         "-Dlibarchive:zlib=enabled",
+         "-Dlibarchive:bz2lib=enabled",
+         "-Dlibarchive:lz4=enabled",

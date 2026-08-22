@@ -171,7 +171,7 @@ if is_windows
     cc.find_library('Winmm', required: true),
     cc.find_library('Ws2_32', required: true),
   ]
-elif is_linux
+elif is_linux or is_macos
   qtermwidget_sources += ['qtermwidget/lib/ptyqt/unixptyprocess.cpp']
   qtermwidget_platform_deps += [threads_dep, dl_dep]
 endif

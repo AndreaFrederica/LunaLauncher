@@ -146,6 +146,10 @@ set(NET_SOURCES
     net/Aria2Download.cpp
     net/Aria2Manager.h
     net/Aria2Manager.cpp
+    net/PclDownloadLibrary.h
+    net/PclDownloadLibrary.cpp
+    net/PclDownloadTask.h
+    net/PclDownloadTask.cpp
     net/ApiUpload.cpp
     net/ApiUpload.h
     net/NetRequest.cpp
@@ -489,6 +493,10 @@ set(META_SOURCES
     meta/JsonFormat.h
     meta/CleanroomMeta.cpp
     meta/CleanroomMeta.h
+    meta/CleanroomMetadataProvider.cpp
+    meta/CleanroomMetadataProvider.h
+    meta/MetadataProvider.cpp
+    meta/MetadataProvider.h
     meta/BaseEntity.cpp
     meta/BaseEntity.h
     meta/VersionList.cpp
@@ -502,6 +510,8 @@ set(META_SOURCES
 set(API_SOURCES
     modplatform/ModIndex.h
     modplatform/ModIndex.cpp
+    modplatform/ModApiMirror.h
+    modplatform/ModApiMirror.cpp
     modplatform/ResourceType.h
     modplatform/ResourceType.cpp
 
@@ -910,6 +920,8 @@ set(LUNA_FEATURE_SOURCES
     ui/pages/modplatform/PluginModel.h
     ui/pages/modplatform/JSApiPluginPage.cpp
     ui/pages/modplatform/JSApiPluginPage.h
+    ui/pages/modplatform/JSApiModPage.cpp
+    ui/pages/modplatform/JSApiModPage.h
     ui/pages/modplatform/hangar/HangarResourcePages.cpp
     ui/pages/modplatform/hangar/HangarResourcePages.h
     ui/pages/modplatform/hangar/HangarResourceModels.cpp
@@ -1130,6 +1142,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/APIPage.h
     ui/pages/global/Aria2Page.cpp
     ui/pages/global/Aria2Page.h
+    ui/pages/global/PclDownloadPage.cpp
+    ui/pages/global/PclDownloadPage.h
     ui/pages/global/Aria2MonitorPanel.cpp
     ui/pages/global/Aria2MonitorPanel.h
 
@@ -1265,6 +1279,8 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/ResourceDownloadDialog.h
     ui/dialogs/ScrollMessageBox.cpp
     ui/dialogs/ScrollMessageBox.h
+    ui/dialogs/ThemeDownloadDialog.cpp
+    ui/dialogs/ThemeDownloadDialog.h
     ui/dialogs/BlockedModsDialog.cpp
     ui/dialogs/BlockedModsDialog.h
     ui/dialogs/ChooseProviderDialog.h
@@ -1924,6 +1940,8 @@ install(
 install(
     FILES
         modplatform/jsapi/modrinth_plugin_api.js
+        modplatform/jsapi/mcim_modrinth_api.js
+        modplatform/jsapi/mcim_curseforge_api.js
         modplatform/jsapi/resource-api.d.ts
         modplatform/jsapi/README.md
         modplatform/jsapi/DEPLOYMENT.md

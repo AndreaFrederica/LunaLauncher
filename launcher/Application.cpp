@@ -50,7 +50,9 @@
 
 #include "DataMigrationTask.h"
 #include "java/JavaInstallList.h"
+#include "meta/MetadataProvider.h"
 #include "minecraft/MirrorDownload.h"
+#include "modplatform/ModApiMirror.h"
 #include "net/Aria2Manager.h"
 #include "net/PasteUpload.h"
 #include "tasks/Task.h"
@@ -74,6 +76,7 @@
 #include "ui/pages/global/LauncherPage.h"
 #include "ui/pages/global/MinecraftPage.h"
 #include "ui/pages/global/Nide8AuthPage.h"
+#include "ui/pages/global/PclDownloadPage.h"
 #include "ui/pages/global/ProxyPage.h"
 #include "ui/pages/global/TerracottaPage.h"
 #include "ui/pages/global/YukariConnectPage.h"
@@ -664,9 +667,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "Build Artifact             : " << BuildConfig.BUILD_ARTIFACT;
         qInfo() << "Updates Enabled           : " << (updaterEnabled() ? "Yes" : "No");
 
-        // Initialize JavaScript API manager
-        JSAPIManager::instance().initialize();
-
         if (adjustedBy.size()) {
             qInfo() << "Work dir before adjustment : " << origcwdPath;
             qInfo() << "Work dir after adjustment  : " << QDir::currentPath();
@@ -711,6 +711,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("IconTheme", QString());
         m_settings->registerSetting("ApplicationTheme", QString());
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
+        m_settings->registerSetting("ThemeDownloadSources", QStringList{ "https://github.com/PrismLauncher/Themes" });
+        m_settings->registerSetting("ThemeDownloadSource", QString("https://github.com/PrismLauncher/Themes"));
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
@@ -752,6 +754,11 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("Aria2ProxyUser", "");
         m_settings->registerSetting("Aria2ProxyPass", "");
 
+        // Download backend: 0=Qt, 1=Aria2, 2=dotNetDownload (default)
+        m_settings->registerSetting("DownloadBackend", 2);
+        m_settings->registerSetting("PclDownloadFallbackToQt", true);
+        m_settings->registerSetting("PclDownloadThreadLimit", 8);
+        m_settings->registerSetting("PclDownloadSpeedLimitKBps", 0);
         QString defaultMonospace;
         int defaultSize = 11;
 #ifdef Q_OS_WIN32
@@ -972,6 +979,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         {
             // Download Mirror Settings
             m_settings->registerSetting("DownloadMirrorType", MirrorDownload::MirrorType::Official);
+            m_settings->registerSetting("ModrinthMirror", ModApiMirror::Official);
+            m_settings->registerSetting("CurseForgeMirror", ModApiMirror::Official);
             m_settings->registerSetting("LibrariesURL", "");
             m_settings->registerSetting("FMLLibsURL", "");
             m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON
@@ -1050,6 +1059,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<AccountListPage>();
             m_globalSettingsProvider->addPage<APIPage>();
             m_globalSettingsProvider->addPage<Aria2Page>();
+            m_globalSettingsProvider->addPage<PclDownloadPage>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<Nide8AuthPage>();
             m_globalSettingsProvider->addPage<TerracottaPage>();
@@ -1162,7 +1172,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_metacache->addBase("translations", QDir("translations").absolutePath());
         m_metacache->addBase("meta", QDir("meta").absolutePath());
         m_metacache->addBase("java", QDir("cache/java").absolutePath());
+        JSAPIManager::instance().initialize();
         m_metacache->Load();
+        Meta::registerBuiltinProviders();
         qInfo() << "<> Cache initialized.";
     }
 

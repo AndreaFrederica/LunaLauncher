@@ -284,6 +284,8 @@ install_subdir('exresources/fonts', install_dir: exresource_dest_dir)
 install_data(
   [
     'modplatform/jsapi/modrinth_plugin_api.js',
+    'modplatform/jsapi/mcim_modrinth_api.js',
+    'modplatform/jsapi/mcim_curseforge_api.js',
     'modplatform/jsapi/resource-api.d.ts',
     'modplatform/jsapi/README.md',
     'modplatform/jsapi/DEPLOYMENT.md',

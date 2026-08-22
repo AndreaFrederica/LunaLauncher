@@ -36,6 +36,7 @@
 #include <BuildConfig.h>
 
 #include <QDateTime>
+#include <QCoreApplication>
 #include <QDir>
 #include <QMutex>
 #include <QMutexLocker>
@@ -242,11 +243,54 @@ YukariConnect::~YukariConnect()
 
 QString YukariConnect::getLocalPath() const
 {
+    const QString managedPath = getManagedPath();
+    if (QFileInfo::exists(managedPath)) {
+        return managedPath;
+    }
+
+    const QString bundledPath = getBundledPath();
+    if (!bundledPath.isEmpty()) {
+        return bundledPath;
+    }
+
+    return managedPath;
+}
+
+QString YukariConnect::getManagedPath() const
+{
 #ifdef Q_OS_WIN32
     return FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect.exe");
 #else
     return FS::PathCombine(APPLICATION->dataRoot(), "yukari-connect");
 #endif
+}
+
+QString YukariConnect::getBundledPath() const
+{
+    const QDir applicationDir(QCoreApplication::applicationDirPath());
+#ifdef Q_OS_WIN32
+    const QStringList relativePaths = {
+        FS::PathCombine("tools", FS::PathCombine("yukariconnect", "YukariConnect.exe")),
+    };
+#elif defined(Q_OS_MACOS)
+    const QStringList relativePaths = {
+        FS::PathCombine("..", FS::PathCombine("Resources", FS::PathCombine("tools", FS::PathCombine("yukariconnect", "YukariConnect")))),
+        FS::PathCombine("tools", FS::PathCombine("yukariconnect", "YukariConnect")),
+        FS::PathCombine("..", FS::PathCombine("tools", FS::PathCombine("yukariconnect", "YukariConnect"))),
+    };
+#else
+    const QStringList relativePaths = {
+        FS::PathCombine("..", FS::PathCombine("tools", FS::PathCombine("yukariconnect", "YukariConnect"))),
+        FS::PathCombine("tools", FS::PathCombine("yukariconnect", "YukariConnect")),
+    };
+#endif
+    for (const auto& relativePath : relativePaths) {
+        const QFileInfo bundledExecutable(applicationDir.absoluteFilePath(relativePath));
+        if (bundledExecutable.exists() && bundledExecutable.isFile() && bundledExecutable.isExecutable()) {
+            return bundledExecutable.absoluteFilePath();
+        }
+    }
+    return {};
 }
 
 QString YukariConnect::getMetadataPath() const
@@ -256,10 +300,7 @@ QString YukariConnect::getMetadataPath() const
 
 QString YukariConnect::getConfigPath() const
 {
-    // YukariConnect config file (yukari.json) is in the same directory as the executable
-    QFileInfo fileInfo(getLocalPath());
-    QString configDir = fileInfo.absolutePath();
-    return FS::PathCombine(configDir, "yukari.json");
+    return FS::PathCombine(APPLICATION->dataRoot(), "yukari.json");
 }
 
 QString YukariConnect::getVersion() const
@@ -1007,8 +1048,8 @@ bool YukariConnect::startProcess()
     // Create process
     m_process = new QProcess(this);
 
-    // Run beside the downloaded executable so YukariConnect can find yukari.json.
-    m_process->setWorkingDirectory(QFileInfo(exePath).absolutePath());
+    // Keep runtime configuration and downloaded EasyTier resources in writable user data.
+    m_process->setWorkingDirectory(APPLICATION->dataRoot());
 
     // Setup process to run in background
     m_process->setProcessChannelMode(QProcess::MergedChannels);

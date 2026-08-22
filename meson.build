@@ -16,9 +16,10 @@ project(
 host_system = host_machine.system()
 is_windows = host_system == 'windows'
 is_linux = host_system == 'linux'
+is_macos = host_system == 'darwin'
 
-if not is_windows and not is_linux
-  error('This Meson build currently supports Windows and Linux targets.')
+if not is_windows and not is_linux and not is_macos
+  error('This Meson build supports Windows, Linux, and macOS targets.')
 endif
 
 if meson.project_source_root() == meson.project_build_root()
@@ -142,6 +143,8 @@ launcher_openal_library_name = 'OpenAL.dll'
 launcher_msa_client_id = 'a60a8e54-8c3c-4b25-9fe4-8ec4e616c410'
 launcher_curseforge_api_key = '$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC'
 launcher_enable_java_downloader = get_option('enable_java_downloader')
+launcher_enable_pcl_download = get_option('build_pcl_download')
+launcher_enable_yukari_connect = get_option('build_yukari_connect')
 launcher_disable_ownership_check = get_option('disable_ownership_check')
 launcher_bundle_aria2c = get_option('bundle_aria2c')
 launcher_aria2c_path = get_option('aria2c_path')
@@ -184,21 +187,70 @@ compiler_target_processor = host_machine.cpu_family()
 if is_linux
   binary_dest_dir = 'bin'
   exresource_dest_dir = join_paths('share', launcher_name, 'resources')
+  library_dest_dir = '.'
+  plugin_dest_dir = '.'
+  resources_dest_dir = '.'
+  jars_dest_dir = 'jars'
+  framework_dest_dir = '.'
+elif is_macos
+  app_bundle_dir = launcher_name + '.app/Contents'
+  binary_dest_dir = join_paths(app_bundle_dir, 'MacOS')
+  exresource_dest_dir = join_paths(app_bundle_dir, 'Resources')
+  library_dest_dir = join_paths(app_bundle_dir, 'MacOS')
+  plugin_dest_dir = join_paths(app_bundle_dir, 'MacOS')
+  resources_dest_dir = join_paths(app_bundle_dir, 'Resources')
+  jars_dest_dir = join_paths(app_bundle_dir, 'MacOS', 'jars')
+  framework_dest_dir = join_paths(app_bundle_dir, 'Frameworks')
 else
   binary_dest_dir = '.'
   exresource_dest_dir = 'resource'
+  library_dest_dir = '.'
+  plugin_dest_dir = '.'
+  resources_dest_dir = '.'
+  jars_dest_dir = 'jars'
+  framework_dest_dir = '.'
 endif
-library_dest_dir = '.'
-plugin_dest_dir = '.'
-resources_dest_dir = '.'
-jars_dest_dir = 'jars'
-framework_dest_dir = '.'
 
 subdir('program_info')
 subdir('buildconfig')
 subdir('libraries/cmark')
 subdir('libraries')
 subdir('launcher')
+
+if launcher_enable_pcl_download
+  subdir('libraries/PCL.Download')
+
+  # Copy the native library next to the launcher executable in the build tree,
+  # so the loader finds it when running from the build directory.
+  # (If dotnet is missing, pcl_download_lib is a disabler and this target is
+  # silently disabled as well.)
+  custom_target(
+    'pcl-download-deploy',
+    input: pcl_download_lib,
+    output: 'pcl_download_deploy.stamp',
+    command: [
+      python_prog,
+      '-c',
+      'import shutil, sys, pathlib; shutil.copy2(sys.argv[1], sys.argv[2]); pathlib.Path(sys.argv[3]).write_text("ok")',
+      '@INPUT@',
+      meson.current_build_dir() / 'launcher',
+      '@OUTPUT@',
+    ],
+    build_by_default: true,
+  )
+endif
+
+if launcher_enable_yukari_connect
+  yukari_connect_install_dir = (
+    is_macos
+    ? join_paths(resources_dest_dir, 'tools', 'yukariconnect')
+    : join_paths('tools', 'yukariconnect')
+  )
+  yukari_connect_project = subproject(
+    'yukariconnect',
+    default_options: ['install_dir=' + yukari_connect_install_dir],
+  )
+endif
 
 if get_option('build_testing')
   subdir('tests')

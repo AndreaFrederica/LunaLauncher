@@ -1,0 +1,5 @@
+[wrap-git]
+url = https://github.com/ElicaseTech/YukariConnect.git
+revision = ea488a71425fec96b1adad3ea8f6e76696516019
+patch_directory = yukariconnect
+

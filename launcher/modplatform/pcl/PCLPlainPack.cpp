@@ -423,7 +423,7 @@ bool hasDownloadSource(const QJsonObject& library)
     if (!downloads.value("artifact").toObject().value("url").toString().isEmpty() || !library.value("url").toString().isEmpty())
         return true;
     const auto classifiers = downloads.value("classifiers").toObject();
-    for (auto classifier = classifiers.cbegin(); classifier != classifiers.cend(); ++classifier) {
+    for (auto classifier = classifiers.constBegin(); classifier != classifiers.constEnd(); ++classifier) {
         if (!classifier.value().toObject().value("url").toString().isEmpty())
             return true;
     }

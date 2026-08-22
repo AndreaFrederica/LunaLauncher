@@ -390,7 +390,7 @@ QString MinecraftInstance::assetsRoot() const
 
 bool MinecraftInstance::usesLocalAssets() const
 {
-    return settings()->get("UseLocalAssets").toBool();
+    return m_settings->get("UseLocalAssets").toBool();
 }
 
 bool MinecraftInstance::supportsDemo() const

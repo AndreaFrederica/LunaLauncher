@@ -377,7 +377,6 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
     QString bundledJavaCandidate;
     QString forcedJavaVersion;
     QString forcedJavaSummary;
-    bool needsJavaSelection = false;
     QStringList unavailableJvmAgents;
 
     if (configFound) {
@@ -394,27 +393,9 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
                                     .arg(qMax(pclConfig.javaBuild, 0))
                                     .arg(qMax(pclConfig.javaRevision, 0));
             forcedJavaSummary = QString("PCL selected Java %1 from %2").arg(forcedJavaVersion, pclConfig.javaFolder);
-            needsJavaSelection = true;
-
-            QString javaCandidate;
-#ifdef Q_OS_WIN
-            const QDir javaFolder(QDir::fromNativeSeparators(pclConfig.javaFolder));
-            for (const auto& executable : { "javaw.exe", "java.exe" }) {
-                const auto candidate = javaFolder.filePath(executable);
-                if (QFileInfo(candidate).isFile()) {
-                    javaCandidate = candidate;
-                    break;
-                }
-            }
-#endif
-            if (!javaCandidate.isEmpty()) {
-                apply("JavaPath", javaCandidate);
-                record("InstanceForcedJava", pclConfig.javaFolder, "mapped-with-prompt", "OverrideJavaLocation=false, JavaPath",
-                       forcedJavaSummary + "; the executable still exists but must be enabled explicitly in Luna");
-            } else {
-                record("InstanceForcedJava", pclConfig.javaFolder, "mapped-with-prompt", "OverrideJavaLocation, JavaPath",
-                       forcedJavaSummary + "; the source-machine path is unavailable, select an equivalent Java in Luna");
-            }
+            apply("OverrideJavaLocation", false);
+            record("InstanceForcedJava", pclConfig.javaFolder, "mapped-with-prompt", "OverrideJavaLocation=false",
+                   forcedJavaSummary + "; Luna's native instance Java selection remains authoritative");
             record("InstanceMigratedJava", "true", "mapped", "PCL config migration metadata");
         }
     }
@@ -506,7 +487,9 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
         } else if (type == 1) {
             record("VersionRamType", value, "invalid", {}, "Custom memory mode requires VersionRamCustom");
         } else if (type == 0) {
-            record("VersionRamType", value, "unsupported", {}, "PCL dynamic memory allocation has no exact Luna equivalent");
+            apply("OverrideMemory", false);
+            record("VersionRamType", value, "mapped-approximate", "OverrideMemory=false",
+                   "PCL dynamic allocation was replaced with Luna's native global/default memory policy");
         } else {
             record("VersionRamType", value, "invalid", {}, "Unknown PCL memory mode");
         }
@@ -530,20 +513,24 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
             record("VersionArgumentJavaV2", value, "mapped", "OverrideJavaLocation=false");
         } else if (type == 2) {
             const auto java = findBundledJava(instance.gameRoot());
+            apply("OverrideJavaLocation", false);
             if (!java.isEmpty()) {
                 // Keep the executable selected but disabled until the user explicitly trusts it.
                 apply("JavaPath", java);
                 bundledJavaCandidate = java;
-                record("VersionArgumentJavaV2", value, "mapped-with-prompt", "OverrideJavaLocation, JavaPath",
-                       "A bundled executable was found; enable it explicitly in the generated LunaUI after verifying the pack");
+                record("VersionArgumentJavaV2", value, "mapped-with-prompt", "OverrideJavaLocation=false, JavaPath",
+                       "A bundled executable was found but not enabled; select it explicitly in Luna's native instance Java settings after verifying the pack");
             } else {
                 record("VersionArgumentJavaV2", value, "mapped-with-prompt", {}, "Bundled Java was requested but no Java executable was found");
             }
         } else if (type == 1) {
-            record("VersionArgumentJavaV2", value, "mapped-with-prompt", "VersionArgumentJavaRange",
-                   "Luna can select a compatible Java major, but PCL exact ranges require validation");
+            apply("OverrideJavaLocation", false);
+            record("VersionArgumentJavaV2", value, "mapped-approximate", "OverrideJavaLocation=false",
+                   "PCL range selection was replaced with Luna's native automatic Java selection");
         } else if (type == 3) {
-            record("VersionArgumentJavaV2", value, "mapped-with-prompt", {}, "A specific Java must be selected in Luna");
+            apply("OverrideJavaLocation", false);
+            record("VersionArgumentJavaV2", value, "mapped-with-prompt", "OverrideJavaLocation=false",
+                   "The source-machine Java selection was not imported; Luna's native instance Java selection remains authoritative");
         } else {
             record("VersionArgumentJavaV2", value, "invalid", {}, "Unknown PCL Java mode");
         }
@@ -614,7 +601,7 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
             apply("AppendPreLaunchCommandUseShell", true);
             apply("EnableAppendPreLaunchCommand", false);
             record("VersionAdvanceRun", setup.values.value("VersionAdvanceRun"), "mapped-with-prompt", "AppendPreLaunchCommand",
-                   "The command is retained but disabled until explicitly enabled in the generated LunaUI");
+                   "The command is retained but disabled until explicitly enabled in the generated migration page");
             record("VersionAdvanceRunWait", setup.values.value("VersionAdvanceRunWait", "True"), "mapped", {},
                    "When enabled, the appended command completes before game launch");
         }
@@ -693,16 +680,17 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
     if (setup.values.contains("VersionArgumentJavaRange") && !handled.contains("VersionArgumentJavaRange")) {
         const auto javaMode = setup.values.value("VersionArgumentJavaV2").toInt();
         record("VersionArgumentJavaRange", setup.values.value("VersionArgumentJavaRange"),
-               javaMode == 1 ? "mapped-with-prompt" : "mapped-noop", {},
-               javaMode == 1 ? "Validate and select a compatible Java in Luna" : "The selected PCL Java mode does not use this range");
+               javaMode == 1 ? "mapped-approximate" : "mapped-noop", javaMode == 1 ? "AutomaticJava" : QString(),
+               javaMode == 1 ? "Luna's native automatic Java selection replaces the PCL-specific range"
+                             : "The selected PCL Java mode does not use this range");
     }
 
     if (setup.values.contains("VersionArgumentJavaSelect")) {
         const auto value = setup.values.value("VersionArgumentJavaSelect");
         const auto javaMode = setup.values.value("VersionArgumentJavaV2").toInt();
         record("VersionArgumentJavaSelect", value, javaMode == 3 ? "mapped-with-prompt" : "mapped-noop",
-               javaMode == 3 ? "JavaPath" : QString(),
-               javaMode == 3 ? "Select the corresponding local Java installation in Luna"
+               javaMode == 3 ? "OverrideJavaLocation=false" : QString(),
+               javaMode == 3 ? "The machine-local PCL selection was not imported; use Luna's native instance Java setting"
                              : "The selected PCL Java mode does not use this cached local selection");
     }
 
@@ -738,16 +726,14 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
         { "type", "text" },
         { "text_i18n",
           localized(setupFound && configFound
-                        ? "Settings converted from PCL. The original Setup.ini and config.json are retained."
-                        : (setupFound ? "Settings converted from PCL. The original Setup.ini is retained."
-                                      : "Settings converted from PCL. The original config.json is retained."),
+                        ? "PCL settings were migrated into Luna's native instance settings. The original Setup.ini and config.json are retained."
+                        : (setupFound ? "PCL settings were migrated into Luna's native instance settings. The original Setup.ini is retained."
+                                      : "PCL settings were migrated into Luna's native instance settings. The original config.json is retained."),
                     setupFound && configFound
-                        ? "以下设置由 PCL 配置转换而来，原始 Setup.ini 和 config.json 已保留。"
-                        : (setupFound ? "以下设置由 PCL 配置转换而来，原始 Setup.ini 已保留。"
-                                      : "以下设置由 PCL 配置转换而来，原始 config.json 已保留。")) }
+                        ? "PCL 配置已迁移到 Luna 原生实例设置，原始 Setup.ini 和 config.json 已保留。"
+                        : (setupFound ? "PCL 配置已迁移到 Luna 原生实例设置，原始 Setup.ini 已保留。"
+                                      : "PCL 配置已迁移到 Luna 原生实例设置，原始 config.json 已保留。")) }
     });
-    if (settings->get("notes").toString().size())
-        controls.append(settingInput("pcl_notes", "textarea", "notes", "Instance notes", "实例备注"));
     if (!settings->get("JvmArgs").toString().isEmpty()) {
         if (!unavailableJvmAgents.isEmpty()) {
             controls.append(QJsonObject{
@@ -780,63 +766,40 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
                 });
             }
         }
-        controls.append(settingToggle("pcl_override_jvm", "OverrideJavaArgs", "Use instance JVM arguments", "使用实例 JVM 参数"));
-        controls.append(settingInput("pcl_jvm_args", "textarea", "JvmArgs", "JVM arguments", "JVM 参数"));
     }
-    if (settings->get("OverrideJavaLocation").toBool())
-        controls.append(settingInput("pcl_java_path", "input", "JavaPath", "Java executable", "Java 可执行文件"));
     if (!forcedJavaSummary.isEmpty()) {
         controls.append(QJsonObject{
             { "type", "text" },
             { "text_i18n",
-              localized(QString("PCL selected Java %1 from %2. This source-machine path was not enabled automatically; select or verify an equivalent Java installation.")
+              localized(QString("PCL selected Java %1 from %2. This machine-local selection was not imported; Luna's native instance Java setting remains in control.")
                             .arg(forcedJavaVersion, pclConfig.javaFolder),
-                        QString("PCL 选择了位于 %2 的 Java %1。该来源机器路径不会自动启用，请选择或确认等价的 Java 安装。")
+                        QString("PCL 选择了位于 %2 的 Java %1。该机器本地选择不会被导入，仍由 Luna 原生实例 Java 设置管理。")
                             .arg(forcedJavaVersion, pclConfig.javaFolder)) }
         });
     }
     if (!bundledJavaCandidate.isEmpty()) {
-        controls.append(settingToggle("pcl_enable_bundled_java", "OverrideJavaLocation", "Trust and use bundled Java",
-                                      "信任并使用整合包内置 Java"));
-        auto javaCandidate = settingInput("pcl_bundled_java", "input", "JavaPath", "Bundled Java candidate", "内置 Java 候选路径");
-        javaCandidate.remove("sourceSetting");
-        javaCandidate.insert("default", bundledJavaCandidate);
-        controls.append(javaCandidate);
+        controls.append(QJsonObject{
+            { "type", "text" },
+            { "text_i18n",
+              localized(QString("A bundled Java candidate was found at %1. It was not enabled; Luna's native instance Java setting remains in control.")
+                            .arg(bundledJavaCandidate),
+                        QString("在 %1 找到整合包内置 Java 候选，但未启用；仍由 Luna 原生实例 Java 设置管理。")
+                            .arg(bundledJavaCandidate)) }
+        });
     }
-    if (needsJavaSelection || setup.values.value("VersionArgumentJavaV2").toInt() == 1 ||
-        setup.values.value("VersionArgumentJavaV2").toInt() == 3) {
-        controls.append(settingToggle("pcl_override_java", "OverrideJavaLocation", "Use a specific Java executable", "使用指定 Java 可执行文件"));
-        controls.append(settingInput("pcl_java_path_prompt", "input", "JavaPath", "Java executable", "Java 可执行文件"));
+    if (forcedJavaSummary.isEmpty() &&
+        (setup.values.value("VersionArgumentJavaV2").toInt() == 1 || setup.values.value("VersionArgumentJavaV2").toInt() == 3)) {
+        controls.append(QJsonObject{
+            { "type", "text" },
+            { "text_i18n",
+              localized("The PCL Java selection was not portable. Luna's native automatic or per-instance Java setting will be used.",
+                        "PCL 的 Java 选择无法跨机器迁移，将使用 Luna 原生的自动或实例 Java 设置。") }
+        });
     }
-    bool loginModeOk = false;
-    const auto loginMode = setup.values.value("VersionServerLogin").toInt(&loginModeOk);
-    if (loginModeOk && loginMode >= 1 && loginMode <= 4) {
-        controls.append(QJsonObject{ { "id", "pcl_account" },
-                                     { "type", "accountselect" },
-                                     { "label_i18n", localized("Account for this instance", "此实例使用的账户") } });
-    }
-    if (settings->get("JoinServerOnLaunch").toBool()) {
-        controls.append(settingToggle("pcl_join_server", "JoinServerOnLaunch", "Join a server on launch", "启动时进入服务器"));
-        controls.append(settingInput("pcl_server", "input", "JoinServerOnLaunchAddress", "Server to join on launch", "启动时进入的服务器"));
-    }
-    if (settings->get("OverrideMemory").toBool()) {
-        controls.append(settingToggle("pcl_override_memory", "OverrideMemory", "Use instance memory settings", "使用实例内存设置"));
-        controls.append(settingInput("pcl_memory", "number", "MaxMemAlloc", "Maximum memory (MiB)", "最大内存 (MiB)"));
-    }
-    if (!settings->get("ExtraGameArgs").toString().isEmpty())
-        controls.append(settingInput("pcl_game_args", "textarea", "ExtraGameArgs", "Additional game arguments", "附加游戏参数"));
     if (!settings->get("AppendPreLaunchCommand").toString().isEmpty()) {
         controls.append(settingToggle("pcl_enable_prelaunch", "EnableAppendPreLaunchCommand", "Trust and run this command before launch",
                                       "信任并在启动前运行此命令"));
         controls.append(settingInput("pcl_prelaunch", "textarea", "AppendPreLaunchCommand", "Appended pre-launch command", "追加的启动前命令"));
-    }
-    if (settings->get("OverrideWindowTitle").toBool()) {
-        controls.append(settingToggle("pcl_override_title", "OverrideWindowTitle", "Use a custom game window title", "使用自定义游戏窗口标题"));
-        controls.append(settingInput("pcl_window_title", "input", "WindowTitle", "Game window title", "游戏窗口标题"));
-    }
-    if (settings->get("OverrideVersionType").toBool()) {
-        controls.append(settingToggle("pcl_override_version_type", "OverrideVersionType", "Use a custom version type", "使用自定义版本类型"));
-        controls.append(settingInput("pcl_version_type", "input", "VersionType", "Version type", "版本类型"));
     }
 
     int unsupportedCount = 0;
@@ -853,16 +816,16 @@ ConversionResult convertInstanceConfig(MinecraftInstance& instance)
         controls.append(QJsonObject{ { "type", "separator" } });
         controls.append(QJsonObject{ { "type", "text" },
                                      { "text_i18n",
-                                       localized(QString("%1 setting(s) need attention: %2. See migration/pcl-report.json for details.")
+                                       localized(QString("%1 setting(s) were not converted exactly: %2. See migration/pcl-report.json for details.")
                                                      .arg(unsupportedCount)
                                                      .arg(unsupportedKeys.join(", ")),
-                                                 QString("%1 项设置需要处理：%2。详情见 migration/pcl-report.json。")
+                                                 QString("%1 项设置未能精确转换：%2。详情见 migration/pcl-report.json。")
                                                      .arg(unsupportedCount)
                                                      .arg(unsupportedKeys.join(", "))) } });
     }
 
-    QJsonObject page{ { "panel", QJsonObject{ { "name_i18n", localized("PCL compatibility", "PCL 兼容设置") } } },
-                      { "title_i18n", localized("Converted settings", "已转换设置") },
+    QJsonObject page{ { "panel", QJsonObject{ { "name_i18n", localized("PCL migration", "PCL 迁移") } } },
+                      { "title_i18n", localized("Migration status", "迁移状态") },
                       { "controls", controls } };
     page.insert("generatedBy", GENERATOR_ID);
     page.insert("sourceSha256", sourceHash);

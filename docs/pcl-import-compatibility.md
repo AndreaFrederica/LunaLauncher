@@ -57,7 +57,9 @@ mrpack 中的 `overrides/PCL/Setup.ini` 和可选的 `overrides/PCL/config.json`
 └── migration/pcl-report.json
 ```
 
-生成文件含源文件 SHA-256 和生成器版本。`pcl-compat.json` 是可继续编辑实例设置的 LunaUI；
+生成文件含源文件 SHA-256 和生成器版本。PCL 中已有 Luna 原生对应项的字段会直接写入实例设置，并继续由 Luna 的
+常规实例设置页面管理；`pcl-compat.json` 只显示迁移状态、缺失文件位置以及必须显式信任的 PCL 特有操作，不再重复提供
+内存、Java、JVM 参数、服务器地址、窗口标题等编辑器。
 `pcl-report.json` 逐项记录 `mapped`、`mapped-approximate`、`mapped-with-prompt`、`mapped-noop`、`ignored-cache`、
 `unsupported` 或 `invalid`。原始 `Setup.ini` 不会被修改。
 
@@ -74,13 +76,16 @@ mrpack 中的 `overrides/PCL/Setup.ini` 和可选的 `overrides/PCL/config.json`
 | PCL 内置 `Logo` URI | 仅使用独立 PCL 资源目录中完全同名的许可兼容资源；如 `Anvil.png` 使用 Lucide `anvil.svg`，不做语义映射 |
 | `VersionAdvanceJvm` | 保存到 `JvmArgs`；引用的 Java agent 均随实例存在时启用 `OverrideJavaArgs` |
 | `VersionAdvanceGame` | 追加到 `ExtraGameArgs` |
-| `VersionAdvanceRun` + 等待模式 | 保留为独立的 Windows `cmd.exe` 步骤，须在 LunaUI 中明确信任后才启用；启用后追加在全局启动前命令之后 |
+| `VersionAdvanceRun` + 等待模式 | 保留为独立的 Windows `cmd.exe` 步骤，须在生成的迁移页中明确信任后才启用；启用后追加在全局启动前命令之后 |
 | `VersionServerEnter` | `JoinServerOnLaunch=true` + 地址 |
 | `VersionRamType=2` | 跟随 Luna 全局内存设置 |
 | `VersionRamType=1` + `VersionRamCustom` | 按 PCL 的分段公式换算为 MiB |
+| `VersionRamType=0` | 改用 Luna 原生全局/默认内存策略 |
 | `VersionArgumentJavaV2=0` | 使用 Luna 的全局/自动 Java 选择 |
-| `VersionArgumentJavaV2=2` | 在实例游戏目录内查找 Java 候选，但须在 LunaUI 中明确信任后才启用；找不到时列为待处理 |
-| `config.json/InstanceForcedJava` | 保留 PCL 选择的 Java 版本和来源路径；路径存在时作为禁用候选，否则提示选择同版本 Java |
+| `VersionArgumentJavaV2=1` | 改用 Luna 原生自动 Java 选择；PCL 精确范围保留在报告中 |
+| `VersionArgumentJavaV2=2` | 在实例游戏目录内查找 Java 候选但不启用，之后仍由 Luna 原生实例 Java 设置选择 |
+| `VersionArgumentJavaV2=3` | 不导入来源机器的 Java 路径，继续使用 Luna 原生实例 Java 设置 |
+| `config.json/InstanceForcedJava` | 仅在迁移报告中保留 PCL 选择的 Java 版本和来源路径，不导入来源机器路径；Java 仍由 Luna 原生实例设置管理 |
 | `VersionArgumentTitle` | 实例窗口标题覆盖 |
 | `VersionArgumentInfo` | Minecraft `version_type` 覆盖 |
 | `VersionArgumentIndie*` | 无操作，Luna 实例天然隔离 |
@@ -91,11 +96,12 @@ mrpack 中的 `overrides/PCL/Setup.ini` 和可选的 `overrides/PCL/config.json`
 导入时不能正确求值，因此会保留在迁移报告中要求人工处理，不会把未展开的字面量写入启动设置。
 
 `VersionAdvanceJvm` 中的 `-javaagent:` 相对路径还会以实例游戏目录为基准检查。若文件不存在、越出实例目录，
-或使用不可移植的绝对路径，Luna 会保留原始 JVM 参数但关闭 `OverrideJavaArgs`，并在生成的 LunaUI 与迁移报告中
+或使用不可移植的绝对路径，Luna 会保留原始 JVM 参数但关闭 `OverrideJavaArgs`，并在生成的迁移页与迁移报告中
 列出缺失项和放置规则。相对路径须按原目录结构放入游戏目录，例如 `GraphicsFixer.jar` 应放在
 `<实例>/minecraft/GraphicsFixer.jar`，`agents/a.jar` 应放在 `<实例>/minecraft/agents/a.jar`；绝对路径或越界路径
-须先改为实例内路径。对安全的相对路径，生成的 LunaUI 会提供按钮，通过受实例目录限制的 `openFolder` 动作
-创建并打开对应放置目录。`Setup.ini` 只记录参数，不包含下载 URL；Luna 不会为缺失的可执行 JAR 猜测下载来源。
+须先改为实例内路径。对安全的相对路径，生成的迁移页会提供按钮，通过受实例目录限制的 `openFolder` 动作创建并打开
+对应放置目录；文件就位后在 Luna 原生实例 Java/JVM 参数设置中启用。`Setup.ini` 只记录参数，不包含下载 URL；Luna
+不会为缺失的可执行 JAR 猜测下载来源。
 
 PCL 命令变量映射为：
 
@@ -110,8 +116,9 @@ PCL 命令变量映射为：
 ```
 
 `VersionAdvanceRunWait=False` 仍列为不支持，因为 Luna 的启动任务必须等待启动前步骤结束。非 Windows 系统也不会运行
-PCL 的 `cmd.exe` 命令。等待型命令和整合包内置 Java 都属于可执行内容，导入时默认禁用，由生成的 LunaUI 要求用户显式确认。
-Luna 使用独立追加步骤而不是 `OverrideCommands`，因此不会替换用户的全局启动前命令。
+PCL 的 `cmd.exe` 命令。等待型命令和整合包内置 Java 都属于可执行内容，导入时默认禁用；启动前命令可在生成的迁移页
+显式确认，内置 Java 则只能通过 Luna 原生实例 Java 设置选择。Luna 使用独立追加步骤而不是 `OverrideCommands`，因此
+不会替换用户的全局启动前命令。
 
 普通 ZIP 内嵌的 assets 保存在实例根目录 `assets/`，并由 `UseLocalAssets=true` 隔离使用，避免导入时覆盖 Luna 的全局
 assets。MMC ZIP 导出器会包含该目录，但原版 Prism/MultiMC 不识别 `UseLocalAssets`，所以此项只能保证数据随包保留，
@@ -131,15 +138,14 @@ PCL Logo 转换遵循 MMC/Prism 的普通自定义实例图标机制：导入时
 - `VersionServerLogin`：Luna 已有 Microsoft、离线、统一通行证、Yggdrasil/Authlib Injector 账户体系，
   但导入包不能代替用户登录或猜测应绑定的本地账户。`VersionServerNide`、`VersionServerAuthServer`、
   `VersionServerAuthRegister`、`VersionServerAuthName` 会作为添加/选择对应账户时的参考信息写入迁移报告。
-- `VersionArgumentJavaV2=1/3`、`VersionArgumentJavaRange`：Luna 支持兼容 Java 检查和指定 Java，
-  但 PCL 的精确补丁范围与其本地 `VersionArgumentJavaSelect` 记录不能跨机器无损映射。
+- `VersionArgumentJavaV2=1/3`、`VersionArgumentJavaRange`：Luna 会继续使用原生自动或实例 Java 设置，
+  PCL 的精确补丁范围与其本地 `VersionArgumentJavaSelect` 记录仅作为迁移参考，不能跨机器无损映射。
 - `VersionAdvanceDisableModUpdate`：Luna 的 Mod 更新本来就是用户主动操作；若要求严格禁止更新，仍需新增实例级 UI 锁。
 - `DisplayType`：可近似映射到实例分组，但 PCL 的隐藏/分类语义与 Luna 分组不等价。
 
 ## 不能等价映射
 
 - `VersionAdvanceAssets`、`VersionAdvanceAssetsV2`：禁用资源、库、客户端 JAR 校验会削弱 Luna 的完整性保证。
-- `VersionRamType=0`：PCL 按可用物理内存和实例类型动态计算；Luna 没有相同算法的实例模式。
 - `VersionRamOptimize=1`：PCL 的 Windows 进程工作集清理没有 Luna 对应项。
 - `IsStar`：Luna 当前没有实例收藏状态，且 PCL 导出时会写为 `False`。
 - `VersionAdvanceGC`：PCL 预设依赖运行时 Java 版本；在未完成等价预设表和验证前不猜测 JVM 参数。

@@ -1,8 +1,10 @@
 #include <QTest>
 
 #include <settings/INIFile.h>
+#include <settings/INISettingsObject.h>
 #include <QList>
 #include <QSettings>
+#include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QVariant>
 #include "FileSystem.h"
@@ -189,6 +191,31 @@ PreLaunchCommand=)";
 #if defined(Q_OS_WIN)
         FS::deletePath(fileName);
 #endif
+    }
+
+    void test_ImportRegisteredSettings()
+    {
+        QTemporaryDir destinationDir;
+        QVERIFY(destinationDir.isValid());
+        const auto destination = destinationDir.filePath("lunalauncher.cfg");
+
+        INISettingsObject settings(destination);
+        settings.registerSetting({ "ResourceURLOverride", "ResourceURL" }, "");
+        settings.registerSetting("LunaOnly", "kept");
+
+        INIFile prismSettings;
+        prismSettings.set("ResourceURL", "https://resources.example.test/");
+        prismSettings.set("UnknownPrismSetting", "ignored");
+
+        QCOMPARE(settings.importSettings(prismSettings), 1);
+        QCOMPARE(settings.get("ResourceURLOverride").toString(), "https://resources.example.test/");
+        QCOMPARE(settings.get("LunaOnly").toString(), "kept");
+
+        INIFile saved;
+        QCOMPARE(saved.loadFile(destination), true);
+        QCOMPARE(saved.get("ResourceURLOverride", QString()).toString(), "https://resources.example.test/");
+        QCOMPARE(saved.contains("ResourceURL"), false);
+        QCOMPARE(saved.contains("UnknownPrismSetting"), false);
     }
 };
 

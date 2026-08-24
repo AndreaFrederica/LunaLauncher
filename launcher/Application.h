@@ -168,6 +168,8 @@ class Application : public QApplication {
     QString getModrinthAPIToken();
     QString getUserAgent();
 
+    int importPrismSettings(QString* errorMessage = nullptr);
+
     /// this is the root of the 'installation'. Used for automatic updates
     const QString& root() { return m_rootPath; }
 

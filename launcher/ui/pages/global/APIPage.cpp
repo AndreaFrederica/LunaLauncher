@@ -281,11 +281,11 @@ void APIPage::loadSettings()
     ui->msaClientID->setText(msaClientID);
     QString metaURL = s->get("MetaURLOverride").toString();
     ui->metaURL->setText(metaURL);
-    QString resourceURL = s->get("ResourceURL").toString();
+    QString resourceURL = s->get("ResourceURLOverride").toString();
     ui->resourceURL->setText(resourceURL);
     QString libraryURL = s->get("LibrariesURL").toString();
     ui->libraryURL->setText(libraryURL);
-    QString fmlLibsURL = s->get("FMLLibsURL").toString();
+    QString fmlLibsURL = s->get("LegacyFMLLibsURLOverride").toString();
     ui->fmlLibsURL->setText(fmlLibsURL);
     QString mojangDownloadsMirrorURL = s->get("MojangDownloadsMirrorURL").toString();
     ui->mojangDownloadsMirrorURL->setText(mojangDownloadsMirrorURL);
@@ -376,25 +376,25 @@ void APIPage::applySettings()
         }
 
         s->set("MetaURLOverride", metaURL.toString());
-        s->set("ResourceURL", resourceURL.toString());
+        s->set("ResourceURLOverride", resourceURL.toString());
         s->set("LibrariesURL", libraryURL.toString());
-        s->set("FMLLibsURL", fmlLibsURL.toString());
+        s->set("LegacyFMLLibsURLOverride", fmlLibsURL.toString());
         s->set("MojangDownloadsMirrorURL", mojangDownloadsMirrorURL.toString());
     } else if (mirrorType == MirrorDownload::Official) {
         // Clear overrides to use official servers
         s->set("MetaURLOverride", "");
-        s->set("ResourceURL", BuildConfig.DEFAULT_RESOURCE_BASE);
+        s->set("ResourceURLOverride", "");
         s->set("LibrariesURL", "");
-        s->set("FMLLibsURL", "");
+        s->set("LegacyFMLLibsURLOverride", "");
         s->set("MojangDownloadsMirrorURL", "");
     } else if (mirrorType == MirrorDownload::BMCLAPI) {
         // Set BMCLAPI URLs for Minecraft assets only
         // BMCLAPI does NOT provide Prism Launcher's meta files, so don't override MetaURLOverride
         const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::BMCLAPI);
         s->set("MetaURLOverride", "");  // Keep default for Prism Launcher meta
-        s->set("ResourceURL", mirrorInfo.defaultAssetsUrl);
+        s->set("ResourceURLOverride", mirrorInfo.defaultAssetsUrl);
         s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
-        s->set("FMLLibsURL", mirrorInfo.defaultFMLLibsUrl);
+        s->set("LegacyFMLLibsURLOverride", mirrorInfo.defaultFMLLibsUrl);
         s->set("MojangDownloadsMirrorURL", "");  // BMCLAPI URL is handled in code, not stored
     }
 

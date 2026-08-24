@@ -575,7 +575,7 @@ void PrismUpdaterApp::moveAndFinishUpdate(QDir target)
         FS::copy(m_updateLogPath, fail_marker).overwrite(true)();
     } else {
         logUpdate(tr("Update succeed."));
-        auto success_marker = FS::PathCombine(m_dataPath, ".prism_launcher_update.success");
+        auto success_marker = FS::PathCombine(m_dataPath, ".lunalauncher_update.success");
         FS::copy(m_updateLogPath, success_marker).overwrite(true)();
     }
     auto update_lock_path = FS::PathCombine(m_dataPath, ".prism_launcher_update.lock");

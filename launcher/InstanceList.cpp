@@ -58,6 +58,7 @@
 #include "minecraft/MinecraftInstance.h"
 #include "server/ServerInstance.h"
 #include "settings/INISettingsObject.h"
+#include "settings/Setting.h"
 
 #ifdef Q_OS_WIN32
 #include <windows.h>
@@ -876,18 +877,47 @@ void InstanceList::instanceDirContentsChanged(const QString& path)
     emit instancesChanged();
 }
 
-void InstanceList::on_InstFolderChanged([[maybe_unused]] const Setting& setting, QVariant value)
+void InstanceList::on_InstFolderChanged(const Setting& setting, QVariant value)
 {
-    QString newInstDir = QDir(value.toString()).canonicalPath();
+    const QString requestedPath = value.toString();
+    if (!QDir::current().exists(requestedPath) && !QDir::current().mkpath(requestedPath)) {
+        qWarning() << "Could not create new instance folder" << requestedPath;
+        m_globalSettings->set(setting.id(), m_instDir);
+        return;
+    }
+
+    QString newInstDir = QDir(requestedPath).canonicalPath();
+    if (newInstDir.isEmpty()) {
+        qWarning() << "Could not resolve new instance folder" << requestedPath;
+        m_globalSettings->set(setting.id(), m_instDir);
+        return;
+    }
+
     if (newInstDir != m_instDir) {
         if (m_groupsLoaded) {
             saveGroupList();
         }
+
+        if (m_watcher) {
+            m_watcher->removePath(m_instDir);
+        }
         m_instDir = newInstDir;
+        if (m_watcher && !m_watcher->addPath(m_instDir)) {
+            qWarning() << "Could not watch new instance folder" << m_instDir;
+        }
+
+        beginResetModel();
+        for (const auto& instance : m_instances) {
+            instance->invalidate();
+        }
+        m_instances.clear();
+        m_groupNameCache.clear();
+        m_collapsedGroups.clear();
+        m_instanceGroupIndex.clear();
+        instanceSet.clear();
         m_groupsLoaded = false;
-        beginRemoveRows(QModelIndex(), 0, count());
-        m_instances.erase(m_instances.begin(), m_instances.end());
-        endRemoveRows();
+        m_instancesProbed = false;
+        endResetModel();
         emit instancesChanged();
     }
 }

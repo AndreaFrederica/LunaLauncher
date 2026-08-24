@@ -63,8 +63,8 @@ void LegacyFMLLibrariesTask::executeTask()
     auto metacache = APPLICATION->metacache();
     Net::Download::Options options = Net::Download::Option::MakeEternal;
 
-    // Check for FMLLibsURL override setting
-    auto fmlLibsUrl = APPLICATION->settings()->get("FMLLibsURL").toString();
+    // Check for legacy FML libraries URL override setting
+    auto fmlLibsUrl = APPLICATION->settings()->get("LegacyFMLLibsURLOverride").toString();
     if (fmlLibsUrl.isEmpty()) {
         fmlLibsUrl = BuildConfig.LEGACY_FMLLIBS_BASE_URL;
     }

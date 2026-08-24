@@ -60,6 +60,7 @@
 #include "tools/GenericProfiler.h"
 #include "ui/InstanceWindow.h"
 #include "ui/MainWindow.h"
+#include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
 #include "ui/dialogs/ProgressDialog.h"
@@ -134,6 +135,7 @@
 #include "tools/MCEditTool.h"
 
 #include "settings/INISettingsObject.h"
+#include "settings/INIFile.h"
 #include "settings/Setting.h"
 
 #include "meta/Index.h"
@@ -352,6 +354,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "a", "profile" }, "Use the account specified by its profile name (only valid in combination with --launch)", "profile" },
           { { "o", "offline" }, "Launch offline, with given player name (only valid in combination with --launch)", "offline" },
           { "alive", "Write a small '" + liveCheckFile + "' file after the launcher starts" },
+          { "show-window", "Show the main launcher window (useful in combination with --launch)" },
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" } });
     // Has to be positional for some OS to handle that properly
@@ -373,6 +376,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_liveCheck = parser.isSet("alive");
 
     m_instanceIdToShowWindowOf = parser.value("show");
+    m_showMainWindow = parser.isSet("show-window");
 
     for (auto url : parser.values("import")) {
         m_urlsToImport.append(normalizeImportUrl(url));
@@ -885,6 +889,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ModMetadataDisabled", false);
         m_settings->registerSetting("ModDependenciesDisabled", false);
         m_settings->registerSetting("SkipModpackUpdatePrompt", false);
+        m_settings->registerSetting("ShowModIncompat", false);
 
         // Minecraft offline player name
         m_settings->registerSetting("LastOfflinePlayerName", "");
@@ -926,6 +931,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("UpdateDialogGeometry", "");
 
+        m_settings->registerSetting("NewsGeometry", "");
+
         m_settings->registerSetting("ModDownloadGeometry", "");
         m_settings->registerSetting("RPDownloadGeometry", "");
         m_settings->registerSetting("TPDownloadGeometry", "");
@@ -966,17 +973,17 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             QUrl metaUrl(m_settings->get("MetaURLOverride").toString());
 
             // get rid of invalid meta urls
-            if (!metaUrl.isValid() || (metaUrl.scheme() != "http" && metaUrl.scheme() != "https"))
+            if (!metaUrl.isEmpty() && (!metaUrl.isValid() || (metaUrl.scheme() != "http" && metaUrl.scheme() != "https")))
                 m_settings->reset("MetaURLOverride");
 
             // Resource URL
-            m_settings->registerSetting("ResourceURL", BuildConfig.DEFAULT_RESOURCE_BASE);
+            m_settings->registerSetting({ "ResourceURLOverride", "ResourceURL" }, "");
 
-            QUrl resourceUrl(m_settings->get("ResourceURL").toString());
+            QUrl resourceUrl(m_settings->get("ResourceURLOverride").toString());
 
             // get rid of invalid resource urls
-            if (!resourceUrl.isValid() || (resourceUrl.scheme() != "http" && resourceUrl.scheme() != "https"))
-                m_settings->reset("ResourceURL");
+            if (!resourceUrl.isEmpty() && (!resourceUrl.isValid() || (resourceUrl.scheme() != "http" && resourceUrl.scheme() != "https")))
+                m_settings->reset("ResourceURLOverride");
         }
         {
             // Download Mirror Settings
@@ -984,7 +991,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_settings->registerSetting("ModrinthMirror", ModApiMirror::Official);
             m_settings->registerSetting("CurseForgeMirror", ModApiMirror::Official);
             m_settings->registerSetting("LibrariesURL", "");
-            m_settings->registerSetting("FMLLibsURL", "");
+            m_settings->registerSetting({ "LegacyFMLLibsURLOverride", "FMLLibsURL" }, "");
             m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON
 
             QUrl librariesUrl(m_settings->get("LibrariesURL").toString());
@@ -994,10 +1001,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 m_settings->reset("LibrariesURL");
             }
 
-            QUrl fmlLibsUrl(m_settings->get("FMLLibsURL").toString());
+            QUrl fmlLibsUrl(m_settings->get("LegacyFMLLibsURLOverride").toString());
             // get rid of invalid fml libs urls
             if (!fmlLibsUrl.isEmpty() && (!fmlLibsUrl.isValid() || (fmlLibsUrl.scheme() != "http" && fmlLibsUrl.scheme() != "https"))) {
-                m_settings->reset("FMLLibsURL");
+                m_settings->reset("LegacyFMLLibsURLOverride");
             }
 
             QUrl mojangDownloadsMirrorUrl(m_settings->get("MojangDownloadsMirrorURL").toString());
@@ -1028,6 +1035,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 m_settings->set("FlameKeyOverride", flameKey);
             m_settings->reset("CFKeyOverride");
         }
+        m_settings->registerSetting("FallbackMRBlockedMods", true);
         m_settings->registerSetting("ModrinthToken", "");
         m_settings->registerSetting("UserAgentOverride", "");
 
@@ -1174,6 +1182,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_metacache->addBase("translations", QDir("translations").absolutePath());
         m_metacache->addBase("meta", QDir("meta").absolutePath());
         m_metacache->addBase("java", QDir("cache/java").absolutePath());
+        m_metacache->addBase("feed", QDir("cache/feed").absolutePath());
         JSAPIManager::instance().initialize();
         m_metacache->Load();
         Meta::registerBuiltinProviders();
@@ -1366,6 +1375,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         }
     }
 
+    if (qgetenv("XDG_CURRENT_DESKTOP") == "gamescope") {
+        installEventFilter(new ToolTipFilter);
+    }
+
     if (createSetupWizard()) {
         return;
     }
@@ -1527,7 +1540,10 @@ void Application::performMainStartupAction()
             }
 
             launch(inst, m_launchOffline ? LaunchMode::Offline : LaunchMode::Normal, targetToJoin, accountToUse, m_offlineName);
-            return;
+
+            if (!m_showMainWindow) {
+                return;
+            }
         }
     }
     if (!m_instanceIdToShowWindowOf.isEmpty()) {
@@ -2096,6 +2112,31 @@ QString Application::getUserAgent()
     return BuildConfig.USER_AGENT;
 }
 
+int Application::importPrismSettings(QString* errorMessage)
+{
+    const QString prismData =
+        FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher");
+    const QString configPath = FS::PathCombine(prismData, "prismlauncher.cfg");
+
+    if (!QFileInfo::exists(configPath)) {
+        if (errorMessage) {
+            *errorMessage = tr("No Prism Launcher settings file was found at %1.").arg(QDir::toNativeSeparators(configPath));
+        }
+        return -1;
+    }
+
+    INIFile source;
+    if (!source.loadFile(configPath)) {
+        if (errorMessage) {
+            *errorMessage = tr("The Prism Launcher settings file could not be read: %1")
+                                .arg(QDir::toNativeSeparators(configPath));
+        }
+        return -1;
+    }
+
+    return m_settings->importSettings(source);
+}
+
 bool Application::handleDataMigration(const QString& currentData,
                                       const QString& oldData,
                                       const QString& name,
@@ -2173,6 +2214,16 @@ bool Application::handleDataMigration(const QString& currentData,
         ProgressDialog diag;
         DataMigrationTask task(oldData, currentData, any(std::move(filters)));
         if (diag.execWithTask(&task)) {
+            const QString migratedConfig = FS::PathCombine(currentData, configFile);
+            const QString lunaConfig = FS::PathCombine(currentData, BuildConfig.LAUNCHER_CONFIGFILE);
+            if (configFile != BuildConfig.LAUNCHER_CONFIGFILE && QFileInfo::exists(migratedConfig) && !QFileInfo::exists(lunaConfig) &&
+                !FS::move(migratedConfig, lunaConfig)) {
+                const QString reason = tr("Could not rename %1 to %2.")
+                                           .arg(QDir::toNativeSeparators(migratedConfig), QDir::toNativeSeparators(lunaConfig));
+                qWarning() << "<> Migration failed:" << reason;
+                QMessageBox::critical(nullptr, BuildConfig.LAUNCHER_DISPLAYNAME, tr("Migration failed! Reason: %1").arg(reason));
+                return true;
+            }
             qDebug() << "<> Migration succeeded";
             setDoNotMigrate();
         } else {

@@ -25,14 +25,34 @@ test_sources = [
   'XmlLogs_test.cpp',
 ]
 
+test_inc = include_directories('..', '../launcher')
+test_qt_deps = [
+  qt_core_dep,
+  qt_gui_dep,
+  qt_widgets_dep,
+  qt_network_dep,
+  qt_networkauth_dep,
+  qt_concurrent_dep,
+  qt_websockets_dep,
+  qt_xml_dep,
+  qt_opengl_dep,
+  qt_multimedia_dep,
+  qt_test_dep,
+]
+
 foreach test_source : test_sources
   test_name = test_source.split('/')[-1].replace('.cpp', '')
+  test_moc_generated = qt.preprocess(
+    moc_sources: files(test_source),
+    include_directories: [test_inc],
+    dependencies: test_qt_deps,
+  )
   test_exe = executable(
     test_name,
-    files(test_source),
-    include_directories: [include_directories('..', '../launcher')],
+    files(test_source) + test_moc_generated,
+    include_directories: [test_inc],
     link_with: launcher_logic,
-    dependencies: [qt_test_dep],
+    dependencies: test_qt_deps,
   )
   test(test_name, test_exe)
 endforeach

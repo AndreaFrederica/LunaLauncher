@@ -29,6 +29,7 @@
 
 class Setting;
 class SettingsObject;
+class INIFile;
 
 /*!
  * \brief The SettingsObject handles communicating settings between the application and a
@@ -163,6 +164,12 @@ class SettingsObject : public QObject {
      * \return True if the SettingsObject has a setting with the given ID.
      */
     bool contains(const QString& id);
+
+    /*! Import values for registered settings from a sectionless INI file.
+     *  Unknown keys are ignored and setting aliases are honored.
+     *  \return The number of settings imported.
+     */
+    int importSettings(const INIFile& source);
 
     /*!
      * \brief Reloads the settings and emit signals for changed settings

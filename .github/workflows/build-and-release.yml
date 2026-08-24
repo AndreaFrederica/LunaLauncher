@@ -162,7 +162,35 @@ jobs:
           frozen: true
 
       - name: Build and install with Meson
+        if: runner.os != 'Windows'
         run: pixi run install release
+
+      - name: Build and install with Meson (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $buildScript = @'
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+
+          $msvcBin = Join-Path $env:VCToolsInstallDir 'bin\HostX64\x64'
+          if (-not (Test-Path (Join-Path $msvcBin 'link.exe'))) {
+              throw "MSVC linker not found in $msvcBin"
+          }
+
+          $env:PATH = "$msvcBin$([IO.Path]::PathSeparator)$env:PATH"
+          python scripts/pixi_meson.py configure release
+          python scripts/pixi_meson.py build release
+          python scripts/pixi_meson.py install release
+          '@
+
+          $encodedBuildScript = [Convert]::ToBase64String(
+              [Text.Encoding]::Unicode.GetBytes($buildScript)
+          )
+          pixi run pwsh -NoProfile -EncodedCommand $encodedBuildScript
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
 
       - name: Show Meson build configuration
         run: pixi run meson introspect build-meson-release --buildoptions

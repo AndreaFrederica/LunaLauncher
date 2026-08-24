@@ -269,6 +269,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Stop .NET build servers
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: pixi run dotnet build-server shutdown
+
   release:
     name: Publish GitHub Release
     needs:

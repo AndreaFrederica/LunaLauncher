@@ -18,6 +18,10 @@ is_windows = host_system == 'windows'
 is_linux = host_system == 'linux'
 is_macos = host_system == 'darwin'
 
+if is_macos
+  add_languages('objcpp', required: true)
+endif
+
 if not is_windows and not is_linux and not is_macos
   error('This Meson build supports Windows, Linux, and macOS targets.')
 endif
@@ -138,8 +142,16 @@ launcher_matrix_url = 'https://prismlauncher.org/matrix'
 launcher_discord_url = 'https://prismlauncher.org/discord'
 launcher_subreddit_url = 'https://prismlauncher.org/reddit'
 launcher_user_agent = '@0@/@1@'.format(launcher_common_name, launcher_version_name)
-launcher_glfw_library_name = 'glfw.dll'
-launcher_openal_library_name = 'OpenAL.dll'
+if is_windows
+  launcher_glfw_library_name = 'glfw.dll'
+  launcher_openal_library_name = 'OpenAL.dll'
+elif is_macos
+  launcher_glfw_library_name = 'libglfw.dylib'
+  launcher_openal_library_name = 'libopenal.dylib'
+else
+  launcher_glfw_library_name = 'libglfw.so'
+  launcher_openal_library_name = 'libopenal.so'
+endif
 launcher_msa_client_id = 'a60a8e54-8c3c-4b25-9fe4-8ec4e616c410'
 launcher_curseforge_api_key = '$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC'
 launcher_enable_java_downloader = get_option('enable_java_downloader')

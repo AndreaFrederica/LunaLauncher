@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,8 @@ from pathlib import Path
 QT_VERSION = "6.10.1"
 QT_WINDOWS_ARCH = "msvc2022_64"
 QT_LINUX_ARCH = "gcc_64"
+QT_MACOS_ARCH = "macos"
+DEFAULT_MACOS_DEPLOYMENT_TARGET = "13.0"
 WINDOWS_PROFILES = {"release", "debug"}
 LINUX_CROSS_PROFILE = "linux-x64-gcc-release"
 PROFILES = WINDOWS_PROFILES | {LINUX_CROSS_PROFILE}
@@ -33,6 +36,8 @@ def profile_system(profile: str) -> str:
         return "windows"
     if system == "linux":
         return "linux"
+    if system == "darwin":
+        return "macos"
     raise SystemExit(f"unsupported native platform: {platform.system()}")
 
 
@@ -46,7 +51,13 @@ def qt_tools_root(root: Path) -> Path:
 
 
 def qt_target_root(root: Path, profile: str) -> Path:
-    arch = QT_LINUX_ARCH if profile_system(profile) == "linux" else QT_WINDOWS_ARCH
+    system = profile_system(profile)
+    if system == "linux":
+        arch = QT_LINUX_ARCH
+    elif system == "macos":
+        arch = QT_MACOS_ARCH
+    else:
+        arch = QT_WINDOWS_ARCH
     return root / "third_party" / "qt" / QT_VERSION / arch
 
 
@@ -90,6 +101,11 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
     else:
         env.pop("CC", None)
         env.pop("CXX", None)
+    if profile_system(profile) == "macos":
+        env["MACOSX_DEPLOYMENT_TARGET"] = os.environ.get(
+            "LUNA_MACOS_DEPLOYMENT_TARGET",
+            os.environ.get("MACOSX_DEPLOYMENT_TARGET", DEFAULT_MACOS_DEPLOYMENT_TARGET),
+        )
     return env
 
 
@@ -136,6 +152,25 @@ def install_qt_target(root: Path, profile: str) -> None:
     if profile_system(profile) == "windows":
         install_qt_tools(root)
         return
+    if profile_system(profile) == "macos":
+        run(
+            [
+                "aqt",
+                "install-qt",
+                "mac",
+                "desktop",
+                QT_VERSION,
+                "clang_64",
+                "-m",
+                "qtwebsockets",
+                "qtnetworkauth",
+                "qtmultimedia",
+                "-O",
+                str(root / "third_party" / "qt"),
+            ],
+            cwd=root,
+        )
+        return
     run(
         [
             "aqt",
@@ -155,9 +190,46 @@ def install_qt_target(root: Path, profile: str) -> None:
     )
 
 
+def patch_macos_qt_cmake_configs(root: Path, profile: str) -> None:
+    if profile_system(profile) != "macos":
+        return
+
+    cmake_root = qt_target_root(root, profile) / "lib" / "cmake"
+    property_pattern = re.compile(r'(INTERFACE_INCLUDE_DIRECTORIES\s+")([^"]*)(")')
+    patched_files = 0
+
+    for target_file in sorted(cmake_root.glob("Qt6*/Qt6*Targets.cmake")):
+        original = target_file.read_text(encoding="utf-8")
+
+        def remove_framework_roots(match: re.Match[str]) -> str:
+            paths = match.group(2).split(";")
+            framework_roots = [path for path in paths if path.rstrip("/").endswith(".framework")]
+            if not framework_roots:
+                return match.group(0)
+
+            for framework_root in framework_roots:
+                header_prefix = framework_root.rstrip("/") + "/"
+                if not any(path.startswith(header_prefix) and path.endswith("Headers") for path in paths):
+                    raise SystemExit(
+                        f"Refusing to patch unexpected Qt framework include metadata in {target_file}: "
+                        f"{framework_root} has no matching Headers entry"
+                    )
+
+            filtered = [path for path in paths if path not in framework_roots]
+            return match.group(1) + ";".join(filtered) + match.group(3)
+
+        updated = property_pattern.sub(remove_framework_roots, original)
+        if updated != original:
+            target_file.write_text(updated, encoding="utf-8")
+            patched_files += 1
+
+    print(f"Patched Qt framework include metadata in {patched_files} CMake target file(s)")
+
+
 def configure(root: Path, profile: str) -> None:
     validate_profile(profile)
     install_qt_target(root, profile)
+    patch_macos_qt_cmake_configs(root, profile)
     (root / ".meson-empty-pkgconfig").mkdir(exist_ok=True)
 
     mode = profile_mode(profile)
@@ -223,6 +295,8 @@ def test_install(root: Path, profile: str) -> None:
     idir = install_dir(root, profile)
     if system == "windows":
         exe = idir / "lunalauncher.exe"
+    elif system == "macos":
+        exe = idir / "LunaLauncher.app" / "Contents" / "MacOS" / "lunalauncher"
     else:
         exe = idir / "bin" / "lunalauncher"
     if not exe.exists():
@@ -251,7 +325,22 @@ def copy_runtime_dlls(root: Path, profile: str) -> None:
 
 def deploy(root: Path, profile: str) -> None:
     validate_profile(profile)
-    if profile_system(profile) != "windows":
+    system = profile_system(profile)
+    if system == "macos":
+        idir = install_dir(root, profile)
+        app_bundle = idir / "LunaLauncher.app"
+        macdeployqt = qt_target_root(root, profile) / "bin" / "macdeployqt"
+        if not app_bundle.is_dir():
+            raise SystemExit(f"missing macOS app bundle: {app_bundle}")
+        if not macdeployqt.exists():
+            raise SystemExit(f"missing macdeployqt: {macdeployqt}")
+        run(
+            [str(macdeployqt), str(app_bundle), "-always-overwrite", "-verbose=2"],
+            cwd=idir,
+            env=task_env(root, profile),
+        )
+        return
+    if system != "windows":
         print(f"No deploy step for {profile}")
         return
     mode = profile_mode(profile)

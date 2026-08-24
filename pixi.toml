@@ -1,7 +1,7 @@
 [workspace]
 authors = ["AndreaFrederica <andreafrederica@outlook.com>"]
 name = "LunaLauncher"
-platforms = ["win-64", "linux-64"]
+platforms = ["win-64", "linux-64", "osx-arm64"]
 version = "0.1.0"
 channels = [
   "conda-forge",

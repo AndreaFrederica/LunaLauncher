@@ -58,3 +58,26 @@ launcher_manifest_file = configure_file(
 launcher_ico_file = configure_file(input: 'lunalauncher.ico', output: 'lunalauncher.ico', copy: true)
 launcher_svg_file = configure_file(input: 'org.lunalauncher.LunaLauncher.svg', output: 'org.lunalauncher.LunaLauncher.svg', copy: true)
 launcher_mime_file = configure_file(input: 'org.lunalauncher.LunaLauncher.mime.xml', output: 'org.lunalauncher.LunaLauncher.xml', copy: true)
+
+if is_macos
+  macos_bundle_conf = configuration_data()
+  macos_bundle_conf.set('MACOSX_BUNDLE_EXECUTABLE_NAME', launcher_app_binary_name)
+  macos_bundle_conf.set('MACOSX_BUNDLE_INFO_STRING', launcher_display_name + ': A custom launcher for Minecraft that allows you to easily manage multiple installations of Minecraft at once.')
+  macos_bundle_conf.set('Launcher_Name', launcher_name)
+  macos_bundle_conf.set('MACOSX_BUNDLE_GUI_IDENTIFIER', launcher_app_id)
+  macos_bundle_conf.set('MACOSX_BUNDLE_LONG_VERSION_STRING', launcher_version_name)
+  macos_bundle_conf.set('MACOSX_BUNDLE_BUNDLE_NAME', launcher_display_name)
+  macos_bundle_conf.set('MACOSX_BUNDLE_SHORT_VERSION_STRING', launcher_version_name)
+  macos_bundle_conf.set('MACOSX_BUNDLE_BUNDLE_VERSION', launcher_version_name)
+  macos_bundle_conf.set('MACOSX_BUNDLE_COPYRIGHT', launcher_copyright)
+  macos_bundle_conf.set('MACOSX_SPARKLE_UPDATE_PUBLIC_KEY', 'v55ZWWD6QlPoXGV6VLzOTZxZUggWeE51X8cRQyQh6vA=')
+  macos_bundle_conf.set('MACOSX_SPARKLE_UPDATE_FEED_URL', 'https://prismlauncher.org/feed/appcast.xml')
+
+  launcher_macos_info_plist = configure_file(
+    input: meson.project_source_root() / 'cmake' / 'MacOSXBundleInfo.plist.in',
+    output: 'Info.plist',
+    configuration: macos_bundle_conf,
+    format: 'cmake',
+  )
+  launcher_icns_file = configure_file(input: 'lunalauncher.icns', output: 'lunalauncher.icns', copy: true)
+endif

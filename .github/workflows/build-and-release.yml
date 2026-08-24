@@ -1,145 +1,270 @@
-name: Build Linux+Windows and Publish Release
+name: Build and release with Pixi and Meson
+
+run-name: >-
+  ${{ github.event_name == 'push'
+      && format('Release {0}', github.ref_name)
+      || format('Build {0} ({1})', inputs.release_tag || github.sha, inputs.platform) }}
+
 on:
+  push:
+    tags:
+      - "**"
   workflow_dispatch:
     inputs:
-      enable_linux_gcc:
-        description: Enable Linux GCC build
+      platform:
+        description: Platforms to build
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - windows-x64
+          - linux-x64
+          - macos-arm64
+      publish_release:
+        description: Publish the artifacts to a GitHub Release
         type: boolean
-        default: true
-      enable_windows_msvc:
-        description: Enable Windows MSVC build
-        type: boolean
-        default: true
-      enable_windows_gcc:
-        description: Enable Windows GCC (MSYS2) build
-        type: boolean
+        required: true
         default: false
-      build_type:
-        description: Build type (Release/Debug)
-        type: string
-        default: Release
       prerelease:
-        description: Mark GitHub Release as prerelease
+        description: Mark a manually published Release as a prerelease
         type: boolean
-        default: true
-      version:
-        description: Release version/tag (empty = short commit id)
+        required: true
+        default: false
+      release_tag:
+        description: Release tag (empty uses the Meson project version)
         type: string
+        required: false
         default: ""
+
 permissions:
-  contents: write
+  contents: read
+
 jobs:
-  build_linux:
-    if: ${{ inputs.enable_linux_gcc }}
-    uses: ./.github/workflows/linux-gcc.yml
-    with:
-      build_type: ${{ inputs.build_type || 'Release' }}
-      publish_release: false
-      prerelease: ${{ inputs.prerelease }}
-      version: ${{ inputs.version }}
-  build_windows:
-    if: ${{ inputs.enable_windows_msvc }}
-    uses: ./.github/workflows/windows-msvc.yml
-    with:
-      build_type: ${{ inputs.build_type || 'Release' }}
-      publish_release: false
-      prerelease: ${{ inputs.prerelease }}
-      version: ${{ inputs.version }}
-  build_windows_gcc:
-    if: ${{ inputs.enable_windows_gcc }}
-    uses: ./.github/workflows/windows-gcc.yml
-    with:
-      build_type: ${{ inputs.build_type || 'Release' }}
-      publish_release: false
-      prerelease: ${{ inputs.prerelease }}
-      version: ${{ inputs.version }}
-  publish:
-    if: ${{ always() }}
+  prepare:
+    name: Prepare build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.meta.outputs.matrix }}
+      publish_release: ${{ steps.meta.outputs.publish_release }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      asset_version: ${{ steps.meta.outputs.asset_version }}
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+
+      - name: Resolve targets and release metadata
+        id: meta
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          SELECTED_PLATFORM: ${{ inputs.platform || 'all' }}
+          MANUAL_PUBLISH: ${{ inputs.publish_release || false }}
+          MANUAL_PRERELEASE: ${{ inputs.prerelease || false }}
+          MANUAL_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          case "$SELECTED_PLATFORM" in
+            all)
+              matrix='{"include":[{"target":"windows-x64","runner":"windows-2022"},{"target":"linux-x64","runner":"ubuntu-24.04"},{"target":"macos-arm64","runner":"macos-26"}]}'
+              ;;
+            windows-x64)
+              matrix='{"include":[{"target":"windows-x64","runner":"windows-2022"}]}'
+              ;;
+            linux-x64)
+              matrix='{"include":[{"target":"linux-x64","runner":"ubuntu-24.04"}]}'
+              ;;
+            macos-arm64)
+              matrix='{"include":[{"target":"macos-arm64","runner":"macos-26"}]}'
+              ;;
+            *)
+              echo "Unsupported platform: $SELECTED_PLATFORM" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            publish_release=true
+            release_tag="$REF_NAME"
+            if [[ "$release_tag" == *-* ]]; then
+              prerelease=true
+            else
+              prerelease=false
+            fi
+          else
+            publish_release="$MANUAL_PUBLISH"
+            prerelease="$MANUAL_PRERELEASE"
+            release_tag="$MANUAL_TAG"
+            if [[ -z "$release_tag" ]]; then
+              project_version="$(sed -n "s/^[[:space:]]*version: '\([^']*\)'.*/\1/p" meson.build | head -n 1)"
+              test -n "$project_version"
+              release_tag="v$project_version"
+            fi
+          fi
+
+          asset_version="$(printf '%s' "$release_tag" | sed 's/[^A-Za-z0-9._-]/-/g')"
+          {
+            echo "matrix=$matrix"
+            echo "publish_release=$publish_release"
+            echo "prerelease=$prerelease"
+            echo "release_tag=$release_tag"
+            echo "asset_version=$asset_version"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      LUNA_BUILD_DIR: build-meson-release
+      LUNA_INSTALL_DIR: install-release
+      LUNA_MACOS_DEPLOYMENT_TARGET: "13.0"
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+          vsversion: 2022
+
+      - name: Cache Qt
+        uses: actions/cache@v5.0.4
+        with:
+          path: third_party/qt
+          key: qt-${{ matrix.target }}-${{ hashFiles('scripts/pixi_meson.py') }}
+
+      - name: Cache compiler output
+        uses: actions/cache@v5.0.4
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.target }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.target }}-${{ github.ref_name }}-
+            ccache-${{ matrix.target }}-
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@v0.9.3
+        with:
+          cache: true
+          frozen: true
+
+      - name: Build and install with Meson
+        run: pixi run install release
+
+      - name: Show Meson build configuration
+        run: pixi run meson introspect build-meson-release --buildoptions
+
+      - name: Package Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET_VERSION: ${{ needs.prepare.outputs.asset_version }}
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          $archive = "release-assets/LunaLauncher-Windows-x64-$env:ASSET_VERSION.zip"
+          Compress-Archive -Path "install-release\*" -DestinationPath $archive -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          "$hash  $([IO.Path]::GetFileName($archive))" | Set-Content "$archive.sha256"
+
+      - name: Package Linux build
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          ASSET_VERSION: ${{ needs.prepare.outputs.asset_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          archive_name="LunaLauncher-Linux-x64-${ASSET_VERSION}.tar.gz"
+          archive="release-assets/$archive_name"
+          tar -czf "$archive" -C install-release .
+          (cd release-assets && sha256sum "$archive_name" > "$archive_name.sha256")
+
+      - name: Validate and sign macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="install-release/LunaLauncher.app"
+          executable="$app/Contents/MacOS/lunalauncher"
+          plist="$app/Contents/Info.plist"
+
+          test -x "$executable"
+          plutil -lint "$plist"
+          lipo -verify_arch arm64 "$executable"
+          otool -L "$executable"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+      - name: Package macOS build
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ASSET_VERSION: ${{ needs.prepare.outputs.asset_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          zip_name="LunaLauncher-macOS-arm64-${ASSET_VERSION}.zip"
+          dmg_name="LunaLauncher-macOS-arm64-${ASSET_VERSION}.dmg"
+
+          ditto -c -k --sequesterRsrc --keepParent \
+            install-release/LunaLauncher.app "release-assets/$zip_name"
+          hdiutil create \
+            -volname "Luna Launcher" \
+            -srcfolder install-release/LunaLauncher.app \
+            -ov \
+            -format UDZO \
+            "release-assets/$dmg_name"
+          (
+            cd release-assets
+            shasum -a 256 "$zip_name" > "$zip_name.sha256"
+            shasum -a 256 "$dmg_name" > "$dmg_name.sha256"
+          )
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: LunaLauncher-${{ matrix.target }}-${{ needs.prepare.outputs.asset_version }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
     needs:
-      - build_linux
-      - build_windows
-      - build_windows_gcc
+      - prepare
+      - build
+    if: ${{ needs.prepare.outputs.publish_release == 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-      - name: Prepare release metadata
-        id: meta
-        shell: bash
-        run: |
-          short_sha="${GITHUB_SHA::7}"
-          version="${{ inputs.version }}"
-          if [ -z "$version" ]; then
-            version="$short_sha"
-          fi
-          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          msg="$(git log -1 --pretty=%B)"
-          {
-            echo "message<<EOF"
-            echo "$msg"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
       - name: Download build artifacts
-        uses: actions/download-artifact@v7
-      - name: Package artifacts
-        id: package
-        shell: bash
-        run: |
-          version="${{ steps.meta.outputs.version }}"
-          build_type="${{ inputs.build_type || 'Release' }}"
-
-          files=()
-
-          if [ "${{ inputs.enable_linux_gcc }}" = "true" ]; then
-            linux_dir="$(ls -d Linux-GCC-* | head -n 1)"
-            test -n "$linux_dir"
-            tar -czf "PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz" -C "$linux_dir" install
-            tar -czf "PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz" -C "$linux_dir" install-portable
-            files+=("PrismLauncher-Linux-GCC-${version}-${build_type}.tar.gz")
-            files+=("PrismLauncher-Linux-GCC-Portable-${version}-${build_type}.tar.gz")
-          fi
-
-          if [ "${{ inputs.enable_windows_msvc }}" = "true" ]; then
-            windows_dir="$(ls -d Windows-MSVC-* | head -n 1)"
-            test -n "$windows_dir"
-            (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-${version}-${build_type}.zip" install)
-            (cd "$windows_dir" && zip -r -9 "../PrismLauncher-Windows-MSVC-Portable-${version}-${build_type}.zip" install-portable)
-            files+=("PrismLauncher-Windows-MSVC-${version}-${build_type}.zip")
-            files+=("PrismLauncher-Windows-MSVC-Portable-${version}-${build_type}.zip")
-          fi
-
-          if [ "${{ inputs.enable_windows_gcc }}" = "true" ]; then
-            windows_gcc_dir="$(ls -d Windows-GCC-* | head -n 1)"
-            test -n "$windows_gcc_dir"
-            (cd "$windows_gcc_dir" && zip -r -9 "../PrismLauncher-Windows-GCC-${version}-${build_type}.zip" install)
-            (cd "$windows_gcc_dir" && zip -r -9 "../PrismLauncher-Windows-GCC-Portable-${version}-${build_type}.zip" install-portable)
-            files+=("PrismLauncher-Windows-GCC-${version}-${build_type}.zip")
-            files+=("PrismLauncher-Windows-GCC-Portable-${version}-${build_type}.zip")
-          fi
-
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No targets enabled; nothing to publish."
-            exit 1
-          fi
-
-          {
-            echo "files<<EOF"
-            printf "%s\n" "${files[@]}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/download-artifact@v8
         with:
-          tag_name: ${{ steps.meta.outputs.version }}
+          pattern: LunaLauncher-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
-          name: Prism Launcher ${{ steps.meta.outputs.version }}
-          body: ${{ steps.meta.outputs.message }}
-          prerelease: ${{ inputs.prerelease }}
-          files: ${{ steps.package.outputs.files }}
+          name: Luna Launcher ${{ needs.prepare.outputs.release_tag }}
+          prerelease: ${{ needs.prepare.outputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release-assets/*

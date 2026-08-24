@@ -10,6 +10,46 @@ if not is_windows
   launcher_logic_sources = _filtered
 endif
 
+if is_macos
+  _macos_logic_sources = []
+  foreach src : launcher_logic_sources
+    if src != 'ui/dialogs/UpdateAvailableDialog.cpp' and src != 'ui/dialogs/UpdateAvailableDialog.h'
+      _macos_logic_sources += [src]
+    endif
+  endforeach
+  launcher_logic_sources = _macos_logic_sources
+
+  _macos_moc_headers = []
+  foreach header : launcher_moc_headers
+    if header != 'ui/dialogs/UpdateAvailableDialog.h'
+      _macos_moc_headers += [header]
+    endif
+  endforeach
+  launcher_moc_headers = _macos_moc_headers
+
+  _macos_ui_sources = []
+  foreach ui_source : launcher_ui_sources
+    if ui_source != 'ui/dialogs/UpdateAvailableDialog.ui'
+      _macos_ui_sources += [ui_source]
+    endif
+  endforeach
+  launcher_ui_sources = _macos_ui_sources
+
+  launcher_logic_sources += [
+    'macsandbox/SecurityBookmarkFileAccess.h',
+    'macsandbox/SecurityBookmarkFileAccess.mm',
+    'ui/themes/ThemeManager.mm',
+  ]
+  macos_frameworks_dep = dependency(
+    'appleframeworks',
+    modules: ['AppKit', 'Carbon', 'Foundation', 'ApplicationServices'],
+  )
+  macos_moc_dep = declare_dependency(compile_args: ['-DQ_OS_MACOS'])
+else
+  macos_frameworks_dep = dependency('', required: false)
+  macos_moc_dep = dependency('', required: false)
+endif
+
 launcher_inc = include_directories('.', 'include')
 launcher_minecraft_inc = include_directories('minecraft')
 
@@ -67,6 +107,7 @@ launcher_moc_header_generated = qt.preprocess(
     libarchive_dep,
     tomlplusplus_dep,
     libqrencode_dep,
+    macos_moc_dep,
   ],
   preserve_paths: true,
 )
@@ -99,6 +140,7 @@ launcher_moc_source_generated = qt.preprocess(
     libarchive_dep,
     tomlplusplus_dep,
     libqrencode_dep,
+    macos_moc_dep,
   ],
 )
 
@@ -144,6 +186,7 @@ launcher_logic = static_library(
     tomlplusplus_dep,
     libqrencode_dep,
     gamemode_dep,
+    macos_frameworks_dep,
   ],
   include_directories: [
     launcher_inc,
@@ -198,9 +241,11 @@ else
       qt_gui_dep,
       qt_widgets_dep,
       qt_network_dep,
+      macos_frameworks_dep,
     ],
     install: true,
     install_dir: binary_dest_dir,
+    install_rpath: is_macos ? '@loader_path/../Frameworks' : '',
   )
 endif
 
@@ -268,6 +313,11 @@ if is_windows and get_option('build_filelinker')
 endif
 
 install_data('qtlogging.ini', install_dir: resources_dest_dir)
+
+if is_macos
+  install_data(launcher_macos_info_plist, install_dir: app_bundle_dir)
+  install_data(launcher_icns_file, install_dir: resources_dest_dir, rename: launcher_name + '.icns')
+endif
 
 if launcher_bundle_aria2c and launcher_aria2c_path != ''
   install_data(launcher_aria2c_path, install_dir: 'tools/aria2')

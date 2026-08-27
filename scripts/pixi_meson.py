@@ -363,7 +363,7 @@ def deploy(root: Path, profile: str) -> None:
     if not windeployqt.exists():
         raise SystemExit(f"missing windeployqt: {windeployqt}")
 
-    for exe_name in ["lunalauncher.exe", "lunalauncher_filelink.exe"]:
+    for exe_name in ["lunalauncher.exe", "lunalauncher-cli.exe", "lunalauncher_filelink.exe"]:
         exe = idir / exe_name
         if not exe.exists():
             continue
@@ -375,6 +375,8 @@ def deploy(root: Path, profile: str) -> None:
                 "--no-quick-import",
                 "--no-system-d3d-compiler",
                 "--no-system-dxc-compiler",
+                "--include-plugins",
+                "qoffscreen",
                 str(exe),
             ],
             cwd=idir,

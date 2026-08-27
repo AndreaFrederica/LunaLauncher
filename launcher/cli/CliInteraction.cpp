@@ -63,13 +63,15 @@ std::optional<QString> CliInteraction::input(const QString& prompt, bool secret)
 {
     if (secret && m_passwordStdin && !m_passwordConsumed) {
         m_passwordConsumed = true;
-        return readLine(false);
+        const auto value = readLine(false);
+        return value.isNull() ? std::nullopt : std::optional<QString>(value);
     }
     if (m_nonInteractive)
         return std::nullopt;
 
     QTextStream(stderr) << prompt << (secret ? ": " : ": ") << Qt::flush;
-    return readLine(secret);
+    const auto value = readLine(secret);
+    return value.isNull() ? std::nullopt : std::optional<QString>(value);
 }
 
 std::optional<int> CliInteraction::select(const QString& prompt, const QJsonArray& choices)

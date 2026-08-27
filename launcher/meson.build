@@ -226,6 +226,28 @@ if is_windows
     win_subsystem: 'windows',
     name_suffix: 'exe',
   )
+
+  launcher_cli_exe = executable(
+    launcher_app_binary_name + '-cli',
+    launcher_main_sources,
+    link_with: launcher_logic,
+    include_directories: [
+      launcher_inc,
+      launcher_minecraft_inc,
+    ],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+    ],
+    cpp_args: ['-DLAUNCHER_HEADLESS_ENTRYPOINT'],
+    install: true,
+    install_dir: binary_dest_dir,
+    win_subsystem: 'console',
+    name_suffix: 'exe',
+  )
 else
   launcher_exe = executable(
     launcher_app_binary_name,

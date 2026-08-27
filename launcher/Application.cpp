@@ -1226,7 +1226,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "Loading accounts...";
         m_accounts->setListFilePath("accounts.json", true);
         m_accounts->loadList();
-        m_accounts->fillQueue();
+        if (!m_cliOptions.isHeadless())
+            m_accounts->fillQueue();
         qInfo() << "<> Accounts loaded.";
     }
 

@@ -51,6 +51,12 @@ int main(int argc, char* argv[])
             break;
         }
     }
+#ifdef LAUNCHER_HEADLESS_ENTRYPOINT
+    if (!headless) {
+        std::cerr << "lunalauncher-cli requires one of --cli, --tui, or --mcp." << std::endl;
+        return 2;
+    }
+#endif
     if (headless && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
         qputenv("QT_QPA_PLATFORM", "offscreen");
 

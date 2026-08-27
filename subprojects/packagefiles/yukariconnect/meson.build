@@ -47,10 +47,23 @@ dotnet_configuration = get_option('buildtype') == 'debug' ? 'Debug' : 'Release'
 source_root = meson.current_source_dir()
 project_file = source_root / 'YukariConnect/YukariConnect.csproj'
 
+source_list_script = (
+  'import os, sys\n'
+  + 'root = sys.argv[1]\n'
+  + 'project = os.path.join(root, "YukariConnect")\n'
+  + 'extensions = {".cs", ".csproj", ".json", ".razor", ".cshtml", ".resx", ".props", ".targets"}\n'
+  + 'for path, dirs, names in os.walk(project):\n'
+  + '    dirs[:] = [name for name in dirs if name not in {"bin", "obj"}]\n'
+  + '    relative_dir = os.path.relpath(path, project)\n'
+  + '    for name in names:\n'
+  + '        if os.path.splitext(name)[1].lower() in extensions or relative_dir == "wwwroot" or relative_dir.startswith("wwwroot" + os.sep):\n'
+  + '            print(os.path.relpath(os.path.join(path, name), root))\n'
+)
+
 source_paths = run_command(
   python,
   '-c',
-  'import os, sys; root = sys.argv[1]; [print(os.path.relpath(os.path.join(path, name), root)) for path, dirs, names in os.walk(root) if ".git" not in path.split(os.sep) for name in names if name.endswith((".cs", ".csproj", ".json", ".html"))]',
+  source_list_script,
   source_root,
   check: true,
 ).stdout().strip().split('\n')

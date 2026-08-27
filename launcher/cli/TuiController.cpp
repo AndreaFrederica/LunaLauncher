@@ -78,6 +78,10 @@ void TuiController::run()
                "  5. Launch instance\n"
                "  6. Launcher settings\n"
                "  7. Instance settings\n"
+               "  8. Manage instances\n"
+               "  9. Manage accounts\n"
+               " 10. Manage resources\n"
+               " 11. Java installations\n"
                "  0. Exit\n"
             << Qt::flush;
         const auto choice = m_interaction.input(tr("Choice"), false);
@@ -99,6 +103,14 @@ void TuiController::run()
             pause = manageSettings(service, false);
         else if (*choice == "7")
             pause = manageSettings(service, true);
+        else if (*choice == "8")
+            pause = manageInstances(service);
+        else if (*choice == "9")
+            pause = manageAccounts(service);
+        else if (*choice == "10")
+            pause = manageResources(service);
+        else if (*choice == "11")
+            pause = showJava(service);
         else if (*choice == "0" || choice->compare("q", Qt::CaseInsensitive) == 0)
             running = false;
         else
@@ -311,6 +323,173 @@ bool TuiController::manageSettings(OperationService& service, bool instanceScope
     }
 }
 
+bool TuiController::manageInstances(OperationService& service)
+{
+    const QJsonArray actions{ QJsonObject{ { "name", "Show details" }, { "id", "info" } },
+                              QJsonObject{ { "name", "Rename" }, { "id", "rename" } },
+                              QJsonObject{ { "name", "Change group" }, { "id", "group" } },
+                              QJsonObject{ { "name", "Copy" }, { "id", "copy" } },
+                              QJsonObject{ { "name", "Update game files" }, { "id", "update" } },
+                              QJsonObject{ { "name", "Delete" }, { "id", "delete" } },
+                              QJsonObject{ { "name", "Undo last deletion" }, { "id", "undo-delete" } } };
+    const auto selectedAction = m_interaction.select(tr("Instance action"), actions);
+    if (!selectedAction)
+        return false;
+    const auto action = actions.at(*selectedAction).toObject().value("id").toString();
+    if (action == "undo-delete")
+        return printResult("instance.undo-delete", service.execute("instance.undo-delete", {}, m_interaction));
+
+    const auto instancesResult = service.execute("instance.list", {}, m_interaction);
+    if (!instancesResult.value("ok").toBool())
+        return printResult("instance.list", instancesResult);
+    const auto instances = instancesResult.value("data").toArray();
+    if (instances.isEmpty()) {
+        QTextStream(stdout) << "No instances are installed.\n";
+        return true;
+    }
+    const auto choices = choicesFromItems(instances, "name", "id", "id");
+    const auto selected = m_interaction.select(tr("Instance"), choices);
+    if (!selected)
+        return false;
+    QJsonObject parameters{ { "instance", choices.at(*selected).toObject().value("id") } };
+    QString operation = "instance." + action;
+    if (action == "rename" || action == "copy") {
+        const auto name = m_interaction.input(action == "rename" ? tr("New name") : tr("Copied instance name"), false);
+        if (!name || name->trimmed().isEmpty())
+            return false;
+        parameters.insert("name", name->trimmed());
+    } else if (action == "group") {
+        const auto group = m_interaction.input(tr("Group name (empty for no group)"), false);
+        if (!group)
+            return false;
+        parameters.insert("group", group->trimmed());
+    } else if (action == "delete") {
+        if (!confirm(tr("Delete this instance")))
+            return false;
+        parameters.insert("confirm", true);
+        parameters.insert("permanent", confirm(tr("Delete permanently instead of moving to trash")));
+        parameters.insert("force", confirm(tr("Force deletion if other instances link to this instance")));
+    }
+    return printResult(operation, service.execute(operation, parameters, m_interaction));
+}
+
+bool TuiController::manageAccounts(OperationService& service)
+{
+    const QJsonArray actions{ QJsonObject{ { "name", "Set default" }, { "id", "set-default" } },
+                              QJsonObject{ { "name", "Clear default" }, { "id", "clear-default" } },
+                              QJsonObject{ { "name", "Refresh" }, { "id", "refresh" } },
+                              QJsonObject{ { "name", "Remove" }, { "id", "remove" } } };
+    const auto selectedAction = m_interaction.select(tr("Account action"), actions);
+    if (!selectedAction)
+        return false;
+    const auto action = actions.at(*selectedAction).toObject().value("id").toString();
+    if (action == "clear-default")
+        return printResult("account.set-default", service.execute("account.set-default", QJsonObject{ { "account", "-" } }, m_interaction));
+
+    const auto accountsResult = service.execute("account.list", {}, m_interaction);
+    if (!accountsResult.value("ok").toBool())
+        return printResult("account.list", accountsResult);
+    const auto accounts = accountsResult.value("data").toArray();
+    if (accounts.isEmpty()) {
+        QTextStream(stdout) << "No accounts are configured.\n";
+        return true;
+    }
+    const auto choices = choicesFromItems(accounts, "profileName", "id", "type");
+    const auto selected = m_interaction.select(tr("Account"), choices);
+    if (!selected)
+        return false;
+    QJsonObject parameters{ { "account", choices.at(*selected).toObject().value("id") } };
+    QString operation;
+    if (action == "set-default") {
+        operation = "account.set-default";
+    } else if (action == "refresh") {
+        operation = "account.refresh";
+    } else {
+        if (!confirm(tr("Remove this account")))
+            return false;
+        operation = "account.remove";
+        parameters.insert("confirm", true);
+    }
+    return printResult(operation, service.execute(operation, parameters, m_interaction));
+}
+
+bool TuiController::manageResources(OperationService& service)
+{
+    const auto instancesResult = service.execute("instance.list", {}, m_interaction);
+    if (!instancesResult.value("ok").toBool())
+        return printResult("instance.list", instancesResult);
+    const auto instances = instancesResult.value("data").toArray();
+    if (instances.isEmpty()) {
+        QTextStream(stdout) << "No instances are installed.\n";
+        return true;
+    }
+    const auto instanceChoices = choicesFromItems(instances, "name", "id", "id");
+    const auto selectedInstance = m_interaction.select(tr("Instance"), instanceChoices);
+    if (!selectedInstance)
+        return false;
+
+    const QJsonArray kinds{ QJsonObject{ { "name", "Mods" }, { "id", "mods" } },
+                            QJsonObject{ { "name", "Core mods" }, { "id", "coremods" } },
+                            QJsonObject{ { "name", "NilLoader mods" }, { "id", "nilmods" } },
+                            QJsonObject{ { "name", "Resource packs" }, { "id", "resourcepacks" } },
+                            QJsonObject{ { "name", "Texture packs" }, { "id", "texturepacks" } },
+                            QJsonObject{ { "name", "Shader packs" }, { "id", "shaderpacks" } },
+                            QJsonObject{ { "name", "Data packs" }, { "id", "datapacks" } },
+                            QJsonObject{ { "name", "Schematics" }, { "id", "schematics" } },
+                            QJsonObject{ { "name", "Custom player models" }, { "id", "customplayermodels" } },
+                            QJsonObject{ { "name", "Yes Steve models" }, { "id", "yesstevemodels" } } };
+    const auto selectedKind = m_interaction.select(tr("Resource type"), kinds);
+    if (!selectedKind)
+        return false;
+    QJsonObject parameters{ { "instance", instanceChoices.at(*selectedInstance).toObject().value("id") },
+                            { "kind", kinds.at(*selectedKind).toObject().value("id") } };
+
+    const QJsonArray actions{ QJsonObject{ { "name", "List" }, { "id", "list" } },
+                              QJsonObject{ { "name", "Install local file or direct URL" }, { "id", "install" } },
+                              QJsonObject{ { "name", "Enable" }, { "id", "enable" } },
+                              QJsonObject{ { "name", "Disable" }, { "id", "disable" } },
+                              QJsonObject{ { "name", "Remove" }, { "id", "remove" } } };
+    const auto selectedAction = m_interaction.select(tr("Resource action"), actions);
+    if (!selectedAction)
+        return false;
+    const auto action = actions.at(*selectedAction).toObject().value("id").toString();
+    if (action == "list")
+        return printResult("resource.list", service.execute("resource.list", parameters, m_interaction));
+    if (action == "install") {
+        const auto source = m_interaction.input(tr("Local path or direct URL"), false);
+        if (!source || source->trimmed().isEmpty())
+            return false;
+        parameters.insert("source", source->trimmed());
+        return printResult("resource.install", service.execute("resource.install", parameters, m_interaction));
+    }
+
+    const auto resourcesResult = service.execute("resource.list", parameters, m_interaction);
+    if (!resourcesResult.value("ok").toBool())
+        return printResult("resource.list", resourcesResult);
+    const auto resources = resourcesResult.value("data").toArray();
+    if (resources.isEmpty()) {
+        QTextStream(stdout) << "No resources are installed.\n";
+        return true;
+    }
+    const auto resourceChoices = choicesFromItems(resources, "name", "fileName", "fileName");
+    const auto selectedResource = m_interaction.select(tr("Resource"), resourceChoices);
+    if (!selectedResource)
+        return false;
+    parameters.insert("resource", resourceChoices.at(*selectedResource).toObject().value("id"));
+    if (action == "remove") {
+        if (!confirm(tr("Remove this resource")))
+            return false;
+        parameters.insert("confirm", true);
+    }
+    const auto operation = "resource." + action;
+    return printResult(operation, service.execute(operation, parameters, m_interaction));
+}
+
+bool TuiController::showJava(OperationService& service)
+{
+    return printResult("java.list", service.execute("java.list", {}, m_interaction));
+}
+
 bool TuiController::printResult(const QString& operation, const QJsonObject& result)
 {
     auto out = QTextStream(stdout);
@@ -345,6 +524,9 @@ bool TuiController::printResult(const QString& operation, const QJsonObject& res
             out << setting.value("key").toString() << " = " << jsonValueText(setting.value("value")) << "  ["
                 << setting.value("type").toString() << "]" << Qt::endl;
         }
+    } else if (data.isArray()) {
+        for (const auto& value : data.toArray())
+            out << QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact) << Qt::endl;
     } else {
         out << "Done: " << QJsonDocument(data.toObject()).toJson(QJsonDocument::Compact) << Qt::endl;
     }

@@ -3,6 +3,7 @@
 #include "OperationService.h"
 
 #include <QCryptographicHash>
+#include <QDir>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -10,28 +11,39 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrlQuery>
 #include <QVariant>
 
 #include "Application.h"
 #include "BaseInstance.h"
 #include "FileSystem.h"
+#include "InstanceCopyPrefs.h"
+#include "InstanceCopyTask.h"
 #include "InstanceImportTask.h"
 #include "InstanceList.h"
 #include "LaunchController.h"
+#include "java/JavaInstall.h"
+#include "java/JavaInstallList.h"
+#include "minecraft/MinecraftInstance.h"
+#include "minecraft/PackProfile.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/AuthFlow.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/launch/MinecraftTarget.h"
+#include "minecraft/mod/Resource.h"
+#include "minecraft/mod/ResourceFolderModel.h"
 #include "modplatform/ModApiMirror.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "net/ApiDownload.h"
+#include "net/Download.h"
 #include "net/NetJob.h"
 #include "net/RawHeaderProxy.h"
 #include "net/Upload.h"
 #include "settings/Setting.h"
 #include "settings/SettingsObject.h"
+#include "tasks/SequentialTask.h"
 #include "tasks/Task.h"
 
 namespace {
@@ -99,6 +111,67 @@ BaseInstance* findInstance(const QString& reference)
         }
     }
     return instance;
+}
+
+MinecraftAccountPtr findAccount(const QString& reference, int* row = nullptr)
+{
+    const auto accounts = APPLICATION->accounts();
+    for (int i = 0; i < accounts->count(); ++i) {
+        const auto account = accounts->at(i);
+        if (account->profileId() == reference || account->internalId() == reference ||
+            account->profileName().compare(reference, Qt::CaseInsensitive) == 0) {
+            if (row)
+                *row = i;
+            return account;
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<ResourceFolderModel> findResourceModel(MinecraftInstance* instance, QString kind)
+{
+    kind = kind.toLower().remove('-').remove('_');
+    static const QMap<QString, int> indexes{ { "mods", 0 },           { "coremods", 1 },           { "nilmods", 2 },
+                                             { "resourcepacks", 3 },  { "texturepacks", 4 },       { "shaderpacks", 5 },
+                                             { "yesstevemodels", 6 }, { "customplayermodels", 7 }, { "schematics", 8 },
+                                             { "datapacks", 9 } };
+    if (!indexes.contains(kind))
+        return nullptr;
+    const auto lists = instance->resourceLists();
+    const auto index = indexes.value(kind);
+    return index < lists.size() ? lists.at(index) : nullptr;
+}
+
+QString resourceTypeName(ResourceType type)
+{
+    switch (type) {
+        case ResourceType::ZIPFILE:
+            return "archive";
+        case ResourceType::SINGLEFILE:
+            return "file";
+        case ResourceType::FOLDER:
+            return "folder";
+        case ResourceType::LITEMOD:
+            return "litemod";
+        case ResourceType::UNKNOWN:
+            return "unknown";
+    }
+    return "unknown";
+}
+
+std::unique_ptr<Resource> findResource(const std::shared_ptr<ResourceFolderModel>& model, const QString& reference)
+{
+    const auto entries = model->dir().entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const auto& entry : entries) {
+        if (entry.fileName() == ".index")
+            continue;
+        auto resource = std::make_unique<Resource>(entry);
+        if (resource->internal_id() == reference || resource->fileinfo().fileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->getOriginalFileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->name().compare(reference, Qt::CaseInsensitive) == 0)
+            return resource;
+    }
+    return {};
 }
 
 bool isSensitiveSetting(const QString& id)
@@ -246,6 +319,38 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         return listInstances();
     if (operation == "account.list")
         return listAccounts();
+    if (operation == "account.set-default")
+        return setDefaultAccount(parameters);
+    if (operation == "account.remove")
+        return removeAccount(parameters);
+    if (operation == "account.refresh")
+        return refreshAccount(parameters, interaction);
+    if (operation == "instance.info")
+        return instanceInfo(parameters);
+    if (operation == "instance.rename")
+        return renameInstance(parameters);
+    if (operation == "instance.group")
+        return groupInstance(parameters);
+    if (operation == "instance.copy")
+        return copyInstance(parameters, interaction);
+    if (operation == "instance.update")
+        return updateInstance(parameters, interaction);
+    if (operation == "instance.delete")
+        return deleteInstance(parameters);
+    if (operation == "instance.undo-delete")
+        return undoDeleteInstance();
+    if (operation == "resource.list")
+        return listResources(parameters);
+    if (operation == "resource.install")
+        return installResource(parameters, interaction);
+    if (operation == "resource.enable")
+        return setResourceEnabled(parameters, true);
+    if (operation == "resource.disable")
+        return setResourceEnabled(parameters, false);
+    if (operation == "resource.remove")
+        return removeResource(parameters);
+    if (operation == "java.list")
+        return listJava(interaction);
     if (operation == "settings.list")
         return listSettings(parameters);
     if (operation == "settings.get")
@@ -294,6 +399,345 @@ QJsonObject OperationService::listAccounts()
                                      { "ownsMinecraft", account->ownsMinecraft() } });
     }
     return success(accounts);
+}
+
+QJsonObject OperationService::setDefaultAccount(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("account").toString();
+    auto accounts = APPLICATION->accounts();
+    if (reference.isEmpty() || reference == "-") {
+        accounts->setDefaultAccount(nullptr);
+        accounts->saveList();
+        return success(QJsonObject{ { "default", QJsonValue::Null } });
+    }
+    const auto account = findAccount(reference);
+    if (!account)
+        return failure(tr("Account not found: %1").arg(reference), 2);
+    accounts->setDefaultAccount(account);
+    accounts->saveList();
+    return success(QJsonObject{ { "id", account->profileId() }, { "profileName", account->profileName() }, { "default", true } });
+}
+
+QJsonObject OperationService::removeAccount(const QJsonObject& parameters)
+{
+    if (!parameters.value("confirm").toBool())
+        return failure(tr("Account removal requires confirm=true."), 2);
+    int row = -1;
+    const auto reference = parameters.value("account").toString();
+    const auto account = findAccount(reference, &row);
+    if (!account)
+        return failure(tr("Account not found: %1").arg(reference), 2);
+    const auto profileName = account->profileName();
+    auto accounts = APPLICATION->accounts();
+    accounts->removeAccount(accounts->index(row, 0));
+    accounts->saveList();
+    return success(QJsonObject{ { "removed", profileName } });
+}
+
+QJsonObject OperationService::refreshAccount(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto reference = parameters.value("account").toString();
+    const auto account = findAccount(reference);
+    if (!account)
+        return failure(tr("Account not found: %1").arg(reference), 2);
+    auto task = account->refresh();
+    connect(task.get(), &AuthFlow::authorizeWithBrowserWithExtra, this,
+            [&interaction](const QString& url, const QString& code, int expiresIn) { interaction.deviceCode(url, code, expiresIn); });
+    connect(task.get(), &AuthFlow::authorizeWithBrowser, this,
+            [&interaction](const QUrl& url) { interaction.deviceCode(url.toString(), QString(), 0); });
+    QString error;
+    if (!waitForTask(task.get(), interaction, &error))
+        return failure(error);
+    APPLICATION->accounts()->saveList();
+    return success(QJsonObject{ { "id", account->profileId() },
+                                { "profileName", account->profileName() },
+                                { "state", accountStateName(account->accountState()) } });
+}
+
+QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = findInstance(reference);
+    if (!instance)
+        return failure(tr("Instance not found: %1").arg(reference), 2);
+    QJsonObject data{ { "id", instance->id() },
+                      { "name", instance->name() },
+                      { "type", instance->typeName() },
+                      { "group", APPLICATION->instances()->getInstanceGroup(instance->id()) },
+                      { "root", instance->instanceRoot() },
+                      { "gameRoot", instance->gameRoot() },
+                      { "modsRoot", instance->modsRoot() },
+                      { "icon", instance->iconKey() },
+                      { "notes", instance->notes() },
+                      { "running", instance->isRunning() },
+                      { "managed", instance->isManagedPack() },
+                      { "managedType", instance->getManagedPackType() },
+                      { "managedId", instance->getManagedPackID() },
+                      { "managedVersionId", instance->getManagedPackVersionID() },
+                      { "lastLaunch", instance->lastLaunch() },
+                      { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) } };
+    if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance))
+        data.insert("minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft"));
+    return success(data);
+}
+
+QJsonObject OperationService::renameInstance(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto name = parameters.value("name").toString().trimmed();
+    if (name.isEmpty())
+        return failure(tr("A non-empty instance name is required."), 2);
+    const auto instance = findInstance(reference);
+    if (!instance)
+        return failure(tr("Instance not found: %1").arg(reference), 2);
+    instance->setName(name);
+    instance->saveNow();
+    return success(QJsonObject{ { "id", instance->id() }, { "name", instance->name() } });
+}
+
+QJsonObject OperationService::groupInstance(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = findInstance(reference);
+    if (!instance)
+        return failure(tr("Instance not found: %1").arg(reference), 2);
+    auto group = parameters.value("group").toString().simplified();
+    if (group == "-")
+        group.clear();
+    APPLICATION->instances()->setInstanceGroup(instance->id(), group);
+    return success(QJsonObject{ { "id", instance->id() }, { "group", group } });
+}
+
+QJsonObject OperationService::copyInstance(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = findInstance(reference);
+    if (!instance)
+        return failure(tr("Instance not found: %1").arg(reference), 2);
+    const auto name = parameters.value("name").toString().trimmed();
+    if (name.isEmpty())
+        return failure(tr("A name for the copied instance is required."), 2);
+
+    InstanceCopyPrefs prefs;
+    if (parameters.contains("copySaves"))
+        prefs.enableCopySaves(parameters.value("copySaves").toBool());
+    if (parameters.contains("keepPlaytime"))
+        prefs.enableKeepPlaytime(parameters.value("keepPlaytime").toBool());
+    if (parameters.contains("copyMods"))
+        prefs.enableCopyMods(parameters.value("copyMods").toBool());
+    if (parameters.contains("copyResourcePacks"))
+        prefs.enableCopyResourcePacks(parameters.value("copyResourcePacks").toBool());
+    if (parameters.contains("copyShaderPacks"))
+        prefs.enableCopyShaderPacks(parameters.value("copyShaderPacks").toBool());
+    if (parameters.contains("copyScreenshots"))
+        prefs.enableCopyScreenshots(parameters.value("copyScreenshots").toBool());
+
+    QSet<QString> previousIds;
+    for (int i = 0; i < APPLICATION->instances()->count(); ++i)
+        previousIds.insert(APPLICATION->instances()->at(i)->id());
+    auto copyTask = new InstanceCopyTask(instance, prefs);
+    copyTask->setName(name);
+    copyTask->setIcon(parameters.value("icon").toString(instance->iconKey()));
+    copyTask->setGroup(parameters.value("group").toString(APPLICATION->instances()->getInstanceGroup(instance->id())));
+    auto task = APPLICATION->instances()->wrapInstanceTask(copyTask);
+    QString error;
+    if (!waitForTask(task, interaction, &error))
+        return failure(error);
+    for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+        const auto copied = APPLICATION->instances()->at(i);
+        if (!previousIds.contains(copied->id()))
+            return success(QJsonObject{ { "id", copied->id() }, { "name", copied->name() } });
+    }
+    return success(QJsonObject{ { "name", name } });
+}
+
+QJsonObject OperationService::updateInstance(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = findInstance(reference);
+    if (!instance)
+        return failure(tr("Instance not found: %1").arg(reference), 2);
+    if (instance->isRunning())
+        return failure(tr("A running instance cannot be updated."), 2);
+    const auto updateTasks = instance->createUpdateTask();
+    if (updateTasks.isEmpty())
+        return success(QJsonObject{ { "id", instance->id() }, { "updated", false } });
+    auto task = makeShared<SequentialTask>(tr("Update instance %1").arg(instance->name()));
+    for (const auto& updateTask : updateTasks)
+        task->addTask(updateTask);
+    QString error;
+    if (!waitForTask(task.get(), interaction, &error))
+        return failure(error);
+    return success(QJsonObject{ { "id", instance->id() }, { "updated", true } });
+}
+
+QJsonObject OperationService::deleteInstance(const QJsonObject& parameters)
+{
+    if (!parameters.value("confirm").toBool())
+        return failure(tr("Instance deletion requires confirm=true."), 2);
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = findInstance(reference);
+    if (!instance)
+        return failure(tr("Instance not found: %1").arg(reference), 2);
+    if (instance->isRunning())
+        return failure(tr("A running instance cannot be deleted."), 2);
+    const auto linked = APPLICATION->instances()->getLinkedInstancesById(instance->id());
+    if (!linked.isEmpty() && !parameters.value("force").toBool())
+        return failure(tr("The instance is linked by: %1. Use force=true to continue.").arg(linked.join(", ")), 2);
+    const auto id = instance->id();
+    const auto name = instance->name();
+    if (parameters.value("permanent").toBool()) {
+        const auto root = instance->instanceRoot();
+        APPLICATION->instances()->deleteInstance(id);
+        if (QFileInfo::exists(root))
+            return failure(tr("The instance could not be completely deleted."));
+        return success(QJsonObject{ { "id", id }, { "name", name }, { "permanent", true } });
+    }
+    if (!APPLICATION->instances()->trashInstance(id))
+        return failure(tr("The instance could not be moved to the trash. Use permanent=true to delete it permanently."));
+    return success(QJsonObject{ { "id", id }, { "name", name }, { "permanent", false } });
+}
+
+QJsonObject OperationService::undoDeleteInstance()
+{
+    if (!APPLICATION->instances()->trashedSomething())
+        return failure(tr("There is no trashed instance to restore."), 2);
+    if (!APPLICATION->instances()->undoTrashInstance())
+        return failure(tr("The trashed instance or its shortcuts could not be completely restored."));
+    return success(QJsonObject{ { "restored", true } });
+}
+
+QJsonObject OperationService::listResources(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    if (!instance)
+        return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
+    const auto kind = parameters.value("kind").toString();
+    const auto model = findResourceModel(instance, kind);
+    if (!model)
+        return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
+
+    QJsonArray resources;
+    const auto entries = model->dir().entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+    for (const auto& entry : entries) {
+        if (entry.fileName() == ".index")
+            continue;
+        Resource resource(entry);
+        resources.append(QJsonObject{ { "id", resource.internal_id() },
+                                      { "name", resource.name() },
+                                      { "fileName", resource.fileinfo().fileName() },
+                                      { "enabled", resource.enabled() },
+                                      { "type", resourceTypeName(resource.type()) },
+                                      { "size", resource.sizeInfo() },
+                                      { "path", resource.fileinfo().absoluteFilePath() } });
+    }
+    return success(resources);
+}
+
+QJsonObject OperationService::installResource(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    if (!instance)
+        return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
+    if (instance->isRunning())
+        return failure(tr("Resources cannot be installed while the instance is running."), 2);
+    const auto kind = parameters.value("kind").toString();
+    const auto model = findResourceModel(instance, kind);
+    if (!model)
+        return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
+    const auto source = parameters.value("source").toString();
+    if (source.isEmpty())
+        return failure(tr("A local path or direct URL is required."), 2);
+
+    QString localPath;
+    const QUrl url(source, QUrl::TolerantMode);
+    if (url.isLocalFile()) {
+        localPath = url.toLocalFile();
+    } else if (QFileInfo::exists(source)) {
+        localPath = QFileInfo(source).absoluteFilePath();
+    } else if (url.isValid() && (url.scheme() == "http" || url.scheme() == "https")) {
+        auto fileName = QFileInfo(url.path()).fileName();
+        if (fileName.isEmpty())
+            return failure(tr("The resource URL does not contain a file name."), 2);
+        localPath = FS::getUniqueResourceName(QDir(m_downloads.path()).filePath(fileName));
+        auto job = makeShared<NetJob>("CLI::DownloadResource", APPLICATION->network());
+        job->addNetAction(Net::Download::makeFile(url, localPath));
+        QString error;
+        if (!waitForTask(job.get(), interaction, &error))
+            return failure(error);
+    } else {
+        return failure(tr("Resource source is neither a local file nor a direct URL: %1").arg(source), 2);
+    }
+    if (!model->installResource(localPath))
+        return failure(tr("The resource could not be installed."));
+    return success(QJsonObject{ { "instance", instance->id() }, { "kind", kind }, { "fileName", QFileInfo(localPath).fileName() } });
+}
+
+QJsonObject OperationService::setResourceEnabled(const QJsonObject& parameters, bool enabled)
+{
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    if (!instance)
+        return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
+    if (instance->isRunning())
+        return failure(tr("Resources cannot be changed while the instance is running."), 2);
+    const auto kind = parameters.value("kind").toString();
+    const auto model = findResourceModel(instance, kind);
+    if (!model)
+        return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
+    const auto resource = findResource(model, parameters.value("resource").toString());
+    if (!resource)
+        return failure(tr("Resource not found: %1").arg(parameters.value("resource").toString()), 2);
+    if (resource->enabled() == enabled)
+        return success(QJsonObject{ { "fileName", resource->fileinfo().fileName() }, { "enabled", enabled }, { "changed", false } });
+    if (!resource->enable(enabled ? EnableAction::ENABLE : EnableAction::DISABLE))
+        return failure(tr("The resource could not be %1.").arg(enabled ? tr("enabled") : tr("disabled")));
+    return success(QJsonObject{ { "fileName", resource->fileinfo().fileName() }, { "enabled", enabled }, { "changed", true } });
+}
+
+QJsonObject OperationService::removeResource(const QJsonObject& parameters)
+{
+    if (!parameters.value("confirm").toBool())
+        return failure(tr("Resource removal requires confirm=true."), 2);
+    const auto reference = parameters.value("instance").toString();
+    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    if (!instance)
+        return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
+    if (instance->isRunning())
+        return failure(tr("Resources cannot be removed while the instance is running."), 2);
+    const auto kind = parameters.value("kind").toString();
+    const auto model = findResourceModel(instance, kind);
+    if (!model)
+        return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
+    const auto resource = findResource(model, parameters.value("resource").toString());
+    if (!resource)
+        return failure(tr("Resource not found: %1").arg(parameters.value("resource").toString()), 2);
+    const auto fileName = resource->fileinfo().fileName();
+    if (!resource->destroy(model->indexDir(), parameters.value("preserveMetadata").toBool(), true))
+        return failure(tr("The resource could not be removed."));
+    return success(QJsonObject{ { "fileName", fileName }, { "removed", true } });
+}
+
+QJsonObject OperationService::listJava(UserInteraction& interaction)
+{
+    auto list = APPLICATION->javalist();
+    if (!list->isLoaded()) {
+        auto task = list->getLoadTask();
+        QString error;
+        if (task && !waitForTask(task.get(), interaction, &error))
+            return failure(error);
+    }
+    QJsonArray installations;
+    for (int i = 0; i < list->count(); ++i) {
+        const auto java = std::dynamic_pointer_cast<JavaInstall>(list->at(i));
+        if (!java)
+            continue;
+        installations.append(QJsonObject{
+            { "version", java->id.toString() }, { "architecture", java->arch }, { "path", java->path }, { "is64Bit", java->is_64bit } });
+    }
+    return success(installations);
 }
 
 SettingsObject* OperationService::resolveSettings(const QJsonObject& parameters, QString* error, BaseInstance** instance) const

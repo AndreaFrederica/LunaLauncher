@@ -25,6 +25,10 @@ class TuiController final : public QObject {
     bool importInstance(OperationService& service);
     bool launchInstance(OperationService& service);
     bool manageSettings(OperationService& service, bool instanceScope);
+    bool manageInstances(OperationService& service);
+    bool manageAccounts(OperationService& service);
+    bool manageResources(OperationService& service);
+    bool showJava(OperationService& service);
     bool printResult(const QString& operation, const QJsonObject& result);
     bool confirm(const QString& prompt, bool defaultValue = false);
     void waitForEnter();

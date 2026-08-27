@@ -369,6 +369,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { "wait", "Wait for the launched game to exit" },
           { "detach", "Detach after the game process starts (the default)" },
           { "reveal-secrets", "Include sensitive values in headless settings output" },
+          { "yes", "Confirm a destructive headless operation" },
+          { "permanent", "Permanently delete an instance instead of moving it to the trash" },
+          { "force", "Allow a destructive operation despite linked instances" },
           { "name", "Override the imported instance name", "name" },
           { "username", "Account username", "username" },
           { "auth-url", "Yggdrasil authentication server URL", "url" },
@@ -395,6 +398,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_cliOptions.wait = parser.isSet("wait");
     m_cliOptions.detach = parser.isSet("detach");
     m_cliOptions.revealSecrets = parser.isSet("reveal-secrets");
+    m_cliOptions.yes = parser.isSet("yes");
+    m_cliOptions.permanent = parser.isSet("permanent");
+    m_cliOptions.force = parser.isSet("force");
     m_cliOptions.command = parser.positionalArguments();
     m_cliOptions.name = parser.value("name");
     m_cliOptions.profile = parser.value("profile");

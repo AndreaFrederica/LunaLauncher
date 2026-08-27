@@ -71,6 +71,51 @@ void CliController::run()
                        { "serverId", m_options.serverId },
                        { "profileId", m_options.profileId },
                        { "minecraftProfileName", m_options.minecraftProfileName } };
+    } else if (command.size() >= 3 && command.at(0) == "account" && command.at(1) == "default") {
+        operation = "account.set-default";
+        parameters = { { "account", command.at(2) } };
+    } else if (command.size() >= 3 && command.at(0) == "account" && command.at(1) == "remove") {
+        operation = "account.remove";
+        parameters = { { "account", command.at(2) }, { "confirm", m_options.yes } };
+    } else if (command.size() >= 3 && command.at(0) == "account" && command.at(1) == "refresh") {
+        operation = "account.refresh";
+        parameters = { { "account", command.at(2) } };
+    } else if (command.size() >= 3 && command.at(0) == "instance" && command.at(1) == "info") {
+        operation = "instance.info";
+        parameters = { { "instance", command.at(2) } };
+    } else if (command.size() >= 4 && command.at(0) == "instance" && command.at(1) == "rename") {
+        operation = "instance.rename";
+        parameters = { { "instance", command.at(2) }, { "name", command.at(3) } };
+    } else if (command.size() >= 3 && command.at(0) == "instance" && command.at(1) == "group") {
+        operation = "instance.group";
+        parameters = { { "instance", command.at(2) }, { "group", command.size() >= 4 ? command.at(3) : QString("-") } };
+    } else if (command.size() >= 4 && command.at(0) == "instance" && command.at(1) == "copy") {
+        operation = "instance.copy";
+        parameters = { { "instance", command.at(2) }, { "name", command.at(3) } };
+    } else if (command.size() >= 3 && command.at(0) == "instance" && command.at(1) == "update") {
+        operation = "instance.update";
+        parameters = { { "instance", command.at(2) } };
+    } else if (command.size() >= 3 && command.at(0) == "instance" && command.at(1) == "delete") {
+        operation = "instance.delete";
+        parameters = {
+            { "instance", command.at(2) }, { "confirm", m_options.yes }, { "permanent", m_options.permanent }, { "force", m_options.force }
+        };
+    } else if (command.size() >= 2 && command.at(0) == "instance" && command.at(1) == "undo-delete") {
+        operation = "instance.undo-delete";
+    } else if (command.size() >= 4 && command.at(0) == "resource" && command.at(1) == "list") {
+        operation = "resource.list";
+        parameters = { { "instance", command.at(2) }, { "kind", command.at(3) } };
+    } else if (command.size() >= 5 && command.at(0) == "resource" && command.at(1) == "install") {
+        operation = "resource.install";
+        parameters = { { "instance", command.at(2) }, { "kind", command.at(3) }, { "source", command.at(4) } };
+    } else if (command.size() >= 5 && command.at(0) == "resource" &&
+               (command.at(1) == "enable" || command.at(1) == "disable" || command.at(1) == "remove")) {
+        operation = "resource." + command.at(1);
+        parameters = {
+            { "instance", command.at(2) }, { "kind", command.at(3) }, { "resource", command.at(4) }, { "confirm", m_options.yes }
+        };
+    } else if (command.size() >= 2 && command.at(0) == "java" && command.at(1) == "list") {
+        operation = "java.list";
     } else if (command.size() >= 2 && command.at(0) == "import") {
         operation = "instance.import";
         parameters = { { "source", command.at(1) }, { "name", m_options.name } };
@@ -118,8 +163,23 @@ void CliController::run()
                                "  --cli account login offline --username NAME\n"
                                "  --cli account login yggdrasil --username USER --auth-url URL --session-url URL\n"
                                "  --cli account login unified-pass --username USER --server-id ID\n"
+                               "  --cli account default ACCOUNT|-\n"
+                               "  --cli account refresh ACCOUNT\n"
+                               "  --cli account remove ACCOUNT --yes\n"
+                               "  --cli instance info INSTANCE\n"
+                               "  --cli instance rename INSTANCE NAME\n"
+                               "  --cli instance group INSTANCE [GROUP]\n"
+                               "  --cli instance copy INSTANCE NAME\n"
+                               "  --cli instance update INSTANCE\n"
+                               "  --cli instance delete INSTANCE --yes [--permanent] [--force]\n"
+                               "  --cli instance undo-delete\n"
                                "  --cli import SOURCE [--name NAME]\n"
                                "  --cli launch INSTANCE [--profile NAME | --offline NAME] [--wait]\n"
+                               "  --cli resource list INSTANCE KIND\n"
+                               "  --cli resource install INSTANCE KIND SOURCE\n"
+                               "  --cli resource enable|disable INSTANCE KIND RESOURCE\n"
+                               "  --cli resource remove INSTANCE KIND RESOURCE --yes\n"
+                               "  --cli java list\n"
                                "  --cli settings list SCOPE [INSTANCE] [FILTER]\n"
                                "  --cli settings get SCOPE [INSTANCE] KEY [--reveal-secrets]\n"
                                "  --cli settings set SCOPE [INSTANCE] KEY [VALUE]\n"
@@ -185,6 +245,9 @@ void CliController::printHuman(const QString& operation, const QJsonObject& resu
             out << setting.value("key").toString() << '\t' << setting.value("type").toString() << '\t'
                 << QString::fromUtf8(encoded.mid(1, encoded.size() - 2)) << Qt::endl;
         }
+    } else if (data.isArray()) {
+        for (const auto& value : data.toArray())
+            out << QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact) << Qt::endl;
     } else {
         out << QJsonDocument(data.toObject()).toJson(QJsonDocument::Compact) << Qt::endl;
     }

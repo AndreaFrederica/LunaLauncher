@@ -29,6 +29,21 @@ class OperationService final : public QObject {
    private:
     QJsonObject listInstances();
     QJsonObject listAccounts();
+    QJsonObject setDefaultAccount(const QJsonObject& parameters);
+    QJsonObject removeAccount(const QJsonObject& parameters);
+    QJsonObject refreshAccount(const QJsonObject& parameters, UserInteraction& interaction);
+    QJsonObject instanceInfo(const QJsonObject& parameters);
+    QJsonObject renameInstance(const QJsonObject& parameters);
+    QJsonObject groupInstance(const QJsonObject& parameters);
+    QJsonObject copyInstance(const QJsonObject& parameters, UserInteraction& interaction);
+    QJsonObject updateInstance(const QJsonObject& parameters, UserInteraction& interaction);
+    QJsonObject deleteInstance(const QJsonObject& parameters);
+    QJsonObject undoDeleteInstance();
+    QJsonObject listResources(const QJsonObject& parameters);
+    QJsonObject installResource(const QJsonObject& parameters, UserInteraction& interaction);
+    QJsonObject setResourceEnabled(const QJsonObject& parameters, bool enabled);
+    QJsonObject removeResource(const QJsonObject& parameters);
+    QJsonObject listJava(UserInteraction& interaction);
     QJsonObject listSettings(const QJsonObject& parameters);
     QJsonObject getSetting(const QJsonObject& parameters);
     QJsonObject setSetting(const QJsonObject& parameters, UserInteraction& interaction);

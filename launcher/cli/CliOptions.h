@@ -15,6 +15,9 @@ struct CliOptions {
     bool wait = false;
     bool detach = false;
     bool revealSecrets = false;
+    bool yes = false;
+    bool permanent = false;
+    bool force = false;
 
     QStringList command;
     QString name;

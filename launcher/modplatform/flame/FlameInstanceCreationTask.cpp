@@ -502,7 +502,7 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
         }
     }
 
-    if (!optionalFiles.empty()) {
+    if (!optionalFiles.empty() && !APPLICATION->isHeadless()) {
         OptionalModDialog optionalModDialog(m_parent, optionalFiles);
         if (optionalModDialog.exec() == QDialog::Rejected) {
             emitAborted();
@@ -550,13 +550,15 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
 
         message_dialog.setModal(true);
 
-        if (message_dialog.exec()) {
+        QString headlessError;
+        const bool accepted = APPLICATION->isHeadless() ? message_dialog.execHeadless(&headlessError) : message_dialog.exec();
+        if (accepted) {
             qDebug() << "Post dialog blocked mods list:" << blocked_mods;
             copyBlockedMods(blocked_mods);
             setupDownloadJob(loop);
         } else {
             m_modIdResolver.reset();
-            setError("Canceled");
+            setError(headlessError.isEmpty() ? "Canceled" : headlessError);
             loop.quit();
         }
     } else {

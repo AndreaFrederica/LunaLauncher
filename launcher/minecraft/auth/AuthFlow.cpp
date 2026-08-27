@@ -22,7 +22,7 @@
 
 #include <Application.h>
 
-AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
+AuthFlow::AuthFlow(AccountData* data, Action action, ProfileSelector selector) : Task(), m_data(data)
 {
     if (data->type == AccountType::MSA) {
         if (action == Action::DeviceCode) {
@@ -50,7 +50,9 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
             m_steps.append(makeShared<YggdrasilAuthStep>(m_data, YggdrasilAuthStep::RequestType::Authenticate));
         }
         // Profile selection step - it will auto-select if only one profile, show dialog if multiple
-        m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
+        auto profileSelectStep = makeShared<YggdrasilProfileSelectStep>(m_data);
+        profileSelectStep->setSelector(selector);
+        m_steps.append(profileSelectStep);
         m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
     } else if (data->type == AccountType::UnifiedPass) {
@@ -64,7 +66,9 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
             m_steps.append(makeShared<UnifiedPassAuthStep>(m_data, UnifiedPassAuthStep::RequestType::Authenticate));
         }
         // Reuse Yggdrasil profile steps (API compatible)
-        m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
+        auto profileSelectStep = makeShared<YggdrasilProfileSelectStep>(m_data);
+        profileSelectStep->setSelector(selector);
+        m_steps.append(profileSelectStep);
         m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
     }

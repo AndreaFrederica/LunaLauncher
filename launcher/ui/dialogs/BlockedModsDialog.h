@@ -51,6 +51,8 @@ class BlockedModsDialog : public QDialog {
 
     ~BlockedModsDialog() override;
 
+    bool execHeadless(QString* error = nullptr);
+
    protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
@@ -67,6 +69,8 @@ class BlockedModsDialog : public QDialog {
     bool m_rehashPending;
     QString m_hashType;
     CurseForgeDownloadPageService* m_curseForgeDownloadPages = nullptr;
+    bool m_headless = false;
+    QString m_headlessError;
 
     void openAll(bool missingOnly);
     void openAllInSystemBrowser(bool missingOnly);

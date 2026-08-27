@@ -183,6 +183,9 @@
 #endif
 
 #include "console/Console.h"
+#include "cli/CliController.h"
+#include "cli/McpServer.h"
+#include "cli/TuiController.h"
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
@@ -356,7 +359,24 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { "alive", "Write a small '" + liveCheckFile + "' file after the launcher starts" },
           { "show-window", "Show the main launcher window (useful in combination with --launch)" },
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
-          { "show", "Opens the window for the specified instance (by instance ID)", "show" } });
+          { "show", "Opens the window for the specified instance (by instance ID)", "show" },
+          { "cli", "Run one command without displaying the GUI" },
+          { "mcp", "Run an MCP server over standard input/output" },
+          { "tui", "Run the interactive terminal interface" },
+          { "json", "Print CLI results as JSON" },
+          { "non-interactive", "Fail instead of prompting for missing CLI input" },
+          { "password-stdin", "Read one account password from standard input" },
+          { "wait", "Wait for the launched game to exit" },
+          { "detach", "Detach after the game process starts (the default)" },
+          { "name", "Override the imported instance name", "name" },
+          { "username", "Account username", "username" },
+          { "auth-url", "Yggdrasil authentication server URL", "url" },
+          { "session-url", "Yggdrasil session server URL", "url" },
+          { "source-name", "Yggdrasil service display name", "name" },
+          { "server-id", "UnifiedPass server ID", "id" },
+          { "profile-id", "Select a specific third-party game profile", "id" },
+          { "minecraft-profile-name", "Create a missing Microsoft Java profile with this name", "name" } });
+
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 
@@ -364,6 +384,34 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     parser.addVersionOption();
 
     parser.process(arguments());
+
+    m_cliOptions.cli = parser.isSet("cli");
+    m_cliOptions.mcp = parser.isSet("mcp");
+    m_cliOptions.tui = parser.isSet("tui");
+    m_cliOptions.json = parser.isSet("json");
+    m_cliOptions.nonInteractive = parser.isSet("non-interactive");
+    m_cliOptions.passwordStdin = parser.isSet("password-stdin");
+    m_cliOptions.wait = parser.isSet("wait");
+    m_cliOptions.detach = parser.isSet("detach");
+    m_cliOptions.command = parser.positionalArguments();
+    m_cliOptions.name = parser.value("name");
+    m_cliOptions.profile = parser.value("profile");
+    m_cliOptions.offlineName = parser.value("offline");
+    m_cliOptions.server = parser.value("server");
+    m_cliOptions.world = parser.value("world");
+    m_cliOptions.username = parser.value("username");
+    m_cliOptions.authUrl = parser.value("auth-url");
+    m_cliOptions.sessionUrl = parser.value("session-url");
+    m_cliOptions.sourceName = parser.value("source-name");
+    m_cliOptions.serverId = parser.value("server-id");
+    m_cliOptions.profileId = parser.value("profile-id");
+    m_cliOptions.minecraftProfileName = parser.value("minecraft-profile-name");
+    const int headlessModes = static_cast<int>(m_cliOptions.cli) + static_cast<int>(m_cliOptions.mcp) + static_cast<int>(m_cliOptions.tui);
+    if (headlessModes > 1) {
+        std::cerr << "--cli, --mcp and --tui are mutually exclusive\n";
+        m_status = Application::Failed;
+        return;
+    }
 
     m_instanceIdToLaunch = parser.value("launch");
     m_serverToJoin = parser.value("server");
@@ -378,17 +426,20 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_instanceIdToShowWindowOf = parser.value("show");
     m_showMainWindow = parser.isSet("show-window");
 
-    for (auto url : parser.values("import")) {
-        m_urlsToImport.append(normalizeImportUrl(url));
-    }
+    if (!m_cliOptions.isHeadless()) {
+        for (auto url : parser.values("import")) {
+            m_urlsToImport.append(normalizeImportUrl(url));
+        }
 
-    // treat unspecified positional arguments as import urls
-    for (auto url : parser.positionalArguments()) {
-        m_urlsToImport.append(normalizeImportUrl(url));
+        // treat unspecified positional arguments as import urls
+        for (auto url : parser.positionalArguments()) {
+            m_urlsToImport.append(normalizeImportUrl(url));
+        }
     }
 
     // error if --launch is missing with --server or --profile
-    if ((!m_serverToJoin.isEmpty() || !m_worldToJoin.isEmpty() || !m_profileToUse.isEmpty() || m_launchOffline) &&
+    if (!m_cliOptions.isHeadless() &&
+        (!m_serverToJoin.isEmpty() || !m_worldToJoin.isEmpty() || !m_profileToUse.isEmpty() || m_launchOffline) &&
         m_instanceIdToLaunch.isEmpty()) {
         std::cerr << "--server, --profile and --offline can only be used in combination with --launch!" << std::endl;
         m_status = Application::Failed;
@@ -518,6 +569,11 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_peerInstance = new LocalPeer(this, appID);
         connect(m_peerInstance, &LocalPeer::messageReceived, this, &Application::messageReceived);
         if (m_peerInstance->isClient()) {
+            if (m_cliOptions.isHeadless()) {
+                std::cerr << "The launcher data directory is already in use by another process.\n";
+                m_status = Application::Failed;
+                return;
+            }
             bool sentMessage = false;
             int timeout = 2000;
 
@@ -1242,6 +1298,21 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     detectLibraries();
 
+    if (m_cliOptions.isHeadless()) {
+        m_status = Application::Initialized;
+        if (m_cliOptions.mcp) {
+            auto server = new McpServer(this);
+            QMetaObject::invokeMethod(server, &McpServer::start, Qt::QueuedConnection);
+        } else if (m_cliOptions.tui) {
+            auto controller = new TuiController(this);
+            QMetaObject::invokeMethod(controller, &TuiController::run, Qt::QueuedConnection);
+        } else {
+            auto controller = new CliController(m_cliOptions, this);
+            QMetaObject::invokeMethod(controller, &CliController::run, Qt::QueuedConnection);
+        }
+        return;
+    }
+
     // check update locks
     {
         auto update_log_path = FS::PathCombine(m_dataPath, "logs", "prism_launcher_update.log");
@@ -1590,6 +1661,10 @@ void Application::performMainStartupAction()
 void Application::showFatalErrorMessage(const QString& title, const QString& content)
 {
     m_status = Application::Failed;
+    if (m_cliOptions.isHeadless()) {
+        std::cerr << title.toStdString() << "\n" << content.toStdString() << "\n";
+        return;
+    }
     auto dialog = CustomMessageBox::selectable(nullptr, title, content, QMessageBox::Critical);
     dialog->exec();
 }

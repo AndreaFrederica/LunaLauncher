@@ -43,6 +43,17 @@
 
 int main(int argc, char* argv[])
 {
+    bool headless = false;
+    for (int i = 1; i < argc; ++i) {
+        const QByteArray argument(argv[i]);
+        if (argument == "--cli" || argument == "--mcp" || argument == "--tui") {
+            headless = true;
+            break;
+        }
+    }
+    if (headless && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+
 #if defined Q_OS_WIN32
     // used on Windows to attach the standard IO streams
     console::WindowsConsoleGuard _consoleGuard;

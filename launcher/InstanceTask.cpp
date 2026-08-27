@@ -9,6 +9,8 @@
 
 InstanceNameChange askForChangingInstanceName(QWidget* parent, const QString& old_name, const QString& new_name)
 {
+    if (APPLICATION->isHeadless())
+        return InstanceNameChange::ShouldKeep;
     auto dialog =
         CustomMessageBox::selectable(parent, QObject::tr("Change instance name"),
                                      QObject::tr("The instance's name seems to include the old version. Would you like to update it?\n\n"
@@ -25,6 +27,8 @@ InstanceNameChange askForChangingInstanceName(QWidget* parent, const QString& ol
 
 ShouldUpdate askIfShouldUpdate(QWidget* parent, QString original_version_name)
 {
+    if (APPLICATION->isHeadless())
+        return ShouldUpdate::Cancel;
     if (APPLICATION->settings()->get("SkipModpackUpdatePrompt").toBool())
         return ShouldUpdate::SkipUpdating;
 
@@ -86,6 +90,8 @@ InstanceTask::InstanceTask() : Task(), InstanceName() {}
 
 ShouldDeleteSaves askIfShouldDeleteSaves(QWidget* parent)
 {
+    if (APPLICATION->isHeadless())
+        return ShouldDeleteSaves::No;
     auto dialog = CustomMessageBox::selectable(parent, QObject::tr("Delete Existing Save Files"),
                                                QObject::tr("An earlier version of this mod pack installed save files.\n"
                                                            "Would you like to remove those existing saves as part of this update?"),

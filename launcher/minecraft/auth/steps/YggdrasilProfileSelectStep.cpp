@@ -78,6 +78,17 @@ void YggdrasilProfileSelectStep::perform()
         return;
     }
 
+    if (m_selector) {
+        const auto selected = m_selector(profilesArray);
+        if (selected && *selected >= 0 && *selected < m_availableProfiles.size()) {
+            const auto profile = m_availableProfiles.at(*selected);
+            setSelectedProfile(profile.value("id").toString(), profile.value("name").toString());
+        } else {
+            emit finished(AccountTaskState::STATE_FAILED_SOFT, tr("Profile selection cancelled"));
+        }
+        return;
+    }
+
     // Multiple profiles - show dialog
     QPointer<YggdrasilProfileSelectDialog> dialog = new YggdrasilProfileSelectDialog(m_availableProfiles);
     int result = dialog->exec();

@@ -50,6 +50,7 @@
 #include "QObjectPtr.h"
 
 #include "minecraft/auth/MinecraftAccount.h"
+#include "cli/CliOptions.h"
 
 class LaunchController;
 class LocalPeer;
@@ -142,6 +143,8 @@ class Application : public QApplication {
     AccountList* accounts() const { return m_accounts.get(); }
 
     Status status() const { return m_status; }
+
+    bool isHeadless() const { return m_cliOptions.isHeadless(); }
 
     const QMap<QString, std::shared_ptr<BaseProfilerFactory>>& profilers() const { return m_profilers; }
 
@@ -275,6 +278,7 @@ class Application : public QApplication {
     Status m_status = Application::StartingUp;
     Capabilities m_capabilities;
     bool m_portable = false;
+    CliOptions m_cliOptions;
 
 #ifdef Q_OS_MACOS
     Qt::ApplicationState m_prevAppState = Qt::ApplicationInactive;

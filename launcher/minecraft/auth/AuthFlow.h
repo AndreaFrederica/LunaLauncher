@@ -5,6 +5,9 @@
 #include <QObject>
 #include <QSet>
 
+#include <functional>
+#include <optional>
+
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AuthStep.h"
 #include "tasks/Task.h"
@@ -15,7 +18,9 @@ class AuthFlow : public Task {
    public:
     enum class Action { Refresh, Login, DeviceCode };
 
-    explicit AuthFlow(AccountData* data, Action action = Action::Refresh);
+    using ProfileSelector = std::function<std::optional<int>(const QJsonArray&)>;
+
+    explicit AuthFlow(AccountData* data, Action action = Action::Refresh, ProfileSelector selector = {});
     virtual ~AuthFlow() = default;
 
     void executeTask() override;

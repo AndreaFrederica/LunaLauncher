@@ -40,6 +40,7 @@
 #include <QDragEnterEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QEventLoop>
 #include <QMimeData>
 #include <QPushButton>
 #include <QStandardPaths>
@@ -67,6 +68,11 @@ BlockedModsDialog::BlockedModsDialog(QWidget* parent, const QString& title, cons
     m_curseForgeDownloadPages = new CurseForgeDownloadPageService(downloadProvider, this);
     connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::failed, this, [this](const QString& reason) {
         qWarning() << "[Blocked Mods Dialog] CurseForge download provider failed:" << reason;
+        if (m_headless) {
+            m_headlessError = reason;
+            reject();
+            return;
+        }
         ui->curseForgeDownloadProgressBar->hide();
         ui->labelModsFound->setText(tr("The CurseForge download provider failed. Missing pages were opened in your system browser."));
         openAllInSystemBrowser(true);
@@ -134,6 +140,32 @@ BlockedModsDialog::~BlockedModsDialog()
     delete ui;
 }
 
+bool BlockedModsDialog::execHeadless(QString* error)
+{
+    m_headless = true;
+    bool supportsHeadless = false;
+    QString probeError;
+    const auto configuredPath = APPLICATION->settings()->get("CurseForgeExternalToolPath").toString();
+    if (APPLICATION->settings()->get("CurseForgeDownloadBrowser").toString() != "External" ||
+        !CurseForgeDownloadPageService::probeExternalTool(configuredPath, &probeError, &supportsHeadless) || !supportsHeadless) {
+        m_headlessError = probeError.isEmpty() ? tr("A headless-capable CurseForge external tool is required for restricted files.")
+                                               : probeError;
+        if (error)
+            *error = m_headlessError;
+        return false;
+    }
+
+    QEventLoop loop;
+    connect(this, &QDialog::accepted, &loop, &QEventLoop::quit);
+    connect(this, &QDialog::rejected, &loop, &QEventLoop::quit);
+    openAll(true);
+    if (!allModsMatched() && m_headlessError.isEmpty())
+        loop.exec();
+    if (error)
+        *error = m_headlessError;
+    return allModsMatched();
+}
+
 void BlockedModsDialog::dragEnterEvent(QDragEnterEvent* e)
 {
     if (e->mimeData()->hasUrls()) {
@@ -198,10 +230,15 @@ void BlockedModsDialog::openAll(bool missingOnly)
     ui->curseForgeDownloadProgressBar->setValue(0);
     ui->curseForgeDownloadProgressBar->setFormat(tr("Waiting for CurseForge download..."));
     ui->curseForgeDownloadProgressBar->show();
-    if (!m_curseForgeDownloadPages->open(curseForgePages)) {
+    if (!m_curseForgeDownloadPages->open(curseForgePages, m_headless ? "cli" : "gui")) {
         ui->curseForgeDownloadProgressBar->hide();
         qWarning() << "[Blocked Mods Dialog] Could not start CurseForge download provider:" << m_curseForgeDownloadPages->errorString();
-        openAllInSystemBrowser(missingOnly);
+        if (m_headless) {
+            m_headlessError = m_curseForgeDownloadPages->errorString();
+            reject();
+        } else {
+            openAllInSystemBrowser(missingOnly);
+        }
         return;
     }
 
@@ -264,6 +301,8 @@ void BlockedModsDialog::update()
         ui->labelModsFound->setText("<span style=\"color:green\">✔</span>" + tr("All mods found"));
         ui->openMissingButton->setDisabled(true);
         ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("OK"));
+        if (m_headless)
+            accept();
     } else {
         ui->labelModsFound->setText(tr("Please download the missing mods."));
         ui->openMissingButton->setDisabled(false);

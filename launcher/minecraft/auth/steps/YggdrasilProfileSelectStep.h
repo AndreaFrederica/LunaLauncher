@@ -21,6 +21,9 @@
 #include <QJsonObject>
 #include <QObject>
 
+#include <functional>
+#include <optional>
+
 #include "minecraft/auth/AuthStep.h"
 
 /**
@@ -38,7 +41,9 @@ class YggdrasilProfileSelectStep : public AuthStep {
     QString describe() override;
 
     void setSelectedProfile(const QString& profileId, const QString& profileName);
+    void setSelector(std::function<std::optional<int>(const QJsonArray&)> selector) { m_selector = std::move(selector); }
 
    private:
     QVector<QJsonObject> m_availableProfiles;
+    std::function<std::optional<int>(const QJsonArray&)> m_selector;
 };

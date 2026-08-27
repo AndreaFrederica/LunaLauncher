@@ -117,10 +117,6 @@ void YggdrasilAuthStep::perform()
             requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
 
             qDebug() << "Yggdrasil authenticate request to:" << url.toString();
-            qDebug() << "Username:" << username;
-            qDebug() << "Password length:" << password.length();
-            qDebug() << "ClientToken:" << clientToken;
-            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             break;
         }
         case RequestType::Refresh: {
@@ -146,7 +142,6 @@ void YggdrasilAuthStep::perform()
                 }
 
                 qDebug() << "OAuth refresh request to:" << url.toString();
-                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             } else if (m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken) {
                 // OAuth without refresh_token (like LittleSkin) - use standard authenticate endpoint with password
                 QString password = m_data->yggdrasilToken.extra["credentials"].toString();
@@ -177,7 +172,6 @@ void YggdrasilAuthStep::perform()
 
                 requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
                 qDebug() << "OAuth re-authentication request to:" << url.toString();
-                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             } else {
                 // Standard Yggdrasil token refresh
                 QString endpoint = m_data->yggdrasilConfig.refreshEndpoint.isEmpty()
@@ -195,7 +189,6 @@ void YggdrasilAuthStep::perform()
 
                 requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
                 qDebug() << "Yggdrasil refresh request to:" << url.toString();
-                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             }
             qDebug() << "accessToken length:" << accessToken.length();
             qDebug() << "clientToken length:" << clientToken.length();
@@ -305,11 +298,6 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
 
     // Debug: log the authenticate response to see what fields are present
     qDebug() << "Authenticate response keys:" << obj.keys();
-    if (obj.contains("refresh_token")) {
-        qDebug() << "Has refresh_token:" << obj.value("refresh_token").toString();
-    }
-    QJsonDocument debugDoc(obj);
-    qDebug() << "Full authenticate response:" << QString::fromUtf8(debugDoc.toJson(QJsonDocument::Compact));
 
     // Check for error
     if (obj.contains("error")) {

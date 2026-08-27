@@ -241,7 +241,8 @@ void NetJob::emitFailed(QString reason)
 {
 #if defined(LAUNCHER_APPLICATION)
 
-    if (APPLICATION_DYN && m_ask_retry && m_manual_try < APPLICATION->settings()->get("NumberOfManualRetries").toInt() && isOnline()) {
+    if (APPLICATION_DYN && !APPLICATION->isHeadless() && m_ask_retry &&
+        m_manual_try < APPLICATION->settings()->get("NumberOfManualRetries").toInt() && isOnline()) {
         m_manual_try++;
         auto failed = getFailedActions();
         auto dialog = new NetworkJobFailedDialog(objectName(), m_try, m_done.size(), failed.size(), nullptr);

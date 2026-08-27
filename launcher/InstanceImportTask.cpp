@@ -207,6 +207,10 @@ void InstanceImportTask::processZipPack()
     auto requestArchivePassphrase = [this, &encryptedValidationPath]() {
         if (encryptedValidationPath.isEmpty() || !m_archivePassphrase.isEmpty())
             return true;
+        if (APPLICATION->isHeadless()) {
+            emitFailed(tr("Encrypted modpacks require an archive password, which is not supported by this command yet."));
+            return false;
+        }
         while (true) {
             bool accepted = false;
             const auto passphrase = QInputDialog::getText(m_parent, tr("Encrypted modpack"), tr("Enter the archive password:"),
@@ -285,18 +289,23 @@ void InstanceImportTask::processZipPack()
         if (!candidates.isEmpty()) {
             int selectedIndex = 0;
             if (candidates.size() > 1) {
-                QStringList labels;
-                for (const auto& candidate : candidates)
-                    labels.append(QString("%1 (%2)").arg(candidate.version, candidate.root.isEmpty() ? tr("archive root") : candidate.root));
-                bool accepted = false;
-                const auto selected = QInputDialog::getItem(m_parent, tr("Select PCL version"),
-                                                            tr("This archive contains multiple PCL versions. Select the one to import:"), labels, 0,
-                                                            false, &accepted);
-                if (!accepted) {
-                    emitAborted();
-                    return;
+                if (APPLICATION->isHeadless()) {
+                    setStatus(tr("The archive contains multiple PCL versions; selecting the first one."));
+                } else {
+                    QStringList labels;
+                    for (const auto& candidate : candidates)
+                        labels.append(
+                            QString("%1 (%2)").arg(candidate.version, candidate.root.isEmpty() ? tr("archive root") : candidate.root));
+                    bool accepted = false;
+                    const auto selected = QInputDialog::getItem(m_parent, tr("Select PCL version"),
+                                                                tr("This archive contains multiple PCL versions. Select the one to import:"),
+                                                                labels, 0, false, &accepted);
+                    if (!accepted) {
+                        emitAborted();
+                        return;
+                    }
+                    selectedIndex = labels.indexOf(selected);
                 }
-                selectedIndex = labels.indexOf(selected);
             }
 
             const auto candidate = candidates.at(selectedIndex);

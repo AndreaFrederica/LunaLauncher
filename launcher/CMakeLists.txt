@@ -985,6 +985,18 @@ SET(LAUNCHER_SOURCES
     DataMigrationTask.cpp
     ApplicationMessage.h
     ApplicationMessage.cpp
+    cli/CliController.cpp
+    cli/CliController.h
+    cli/CliInteraction.cpp
+    cli/CliInteraction.h
+    cli/CliOptions.h
+    cli/McpServer.cpp
+    cli/McpServer.h
+    cli/OperationService.cpp
+    cli/OperationService.h
+    cli/TuiController.cpp
+    cli/TuiController.h
+    cli/UserInteraction.h
     SysInfo.h
     SysInfo.cpp
     HardwareInfo.cpp

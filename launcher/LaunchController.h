@@ -37,6 +37,8 @@
 #include <BaseInstance.h>
 #include <tools/BaseProfiler.h>
 
+#include <functional>
+
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/launch/MinecraftTarget.h"
 
@@ -68,6 +70,12 @@ class LaunchController : public Task {
 
     void setAccountToUse(MinecraftAccountPtr accountToUse) { m_accountToUse = std::move(accountToUse); }
 
+    void setHeadless(bool headless) { m_headless = headless; }
+    void setReauthenticateHandler(std::function<MinecraftAccountPtr(const MinecraftAccountPtr&, const QString&)> handler)
+    {
+        m_reauthenticateHandler = std::move(handler);
+    }
+
     QString id() const { return m_instance->id(); }
 
     bool abort() override;
@@ -88,6 +96,10 @@ class LaunchController : public Task {
     void onFailed(QString reason);
     void onProgressRequested(Task* task) const;
 
+   signals:
+    void gameStarted(qint64 pid);
+    void logLine(const QString& line);
+
    private:
     LaunchMode m_wantedLaunchMode = LaunchMode::Normal;
     LaunchMode m_actualLaunchMode = LaunchMode::Normal;
@@ -100,4 +112,6 @@ class LaunchController : public Task {
     AuthSessionPtr m_session = nullptr;
     LaunchTask* m_launcher = nullptr;
     MinecraftTarget::Ptr m_targetToJoin = nullptr;
+    bool m_headless = false;
+    std::function<MinecraftAccountPtr(const MinecraftAccountPtr&, const QString&)> m_reauthenticateHandler;
 };

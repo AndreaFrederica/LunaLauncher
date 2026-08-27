@@ -89,7 +89,6 @@ void UnifiedPassAuthStep::perform()
 
             qDebug() << "UnifiedPass authenticate request to:" << url.toString();
             qDebug() << "Username:" << username;
-            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             break;
         }
         case RequestType::Refresh: {
@@ -107,7 +106,6 @@ void UnifiedPassAuthStep::perform()
             requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
 
             qDebug() << "UnifiedPass refresh request to:" << url.toString();
-            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             break;
         }
         case RequestType::Validate: {
@@ -124,7 +122,6 @@ void UnifiedPassAuthStep::perform()
             requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
 
             qDebug() << "UnifiedPass validate request to:" << url.toString();
-            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             break;
         }
     }
@@ -194,8 +191,6 @@ void UnifiedPassAuthStep::processAuthenticateResponse(QByteArray& data)
     }
 
     auto obj = doc.object();
-
-    qDebug() << "UnifiedPass authenticate response:" << QString::fromUtf8(data);
 
     // Check for error
     if (obj.contains("error")) {

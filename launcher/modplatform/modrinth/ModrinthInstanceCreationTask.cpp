@@ -416,7 +416,7 @@ bool ModrinthCreationTask::parseManifest(const QString& index_path,
             }
 
             if (!optionalFiles.empty()) {
-                if (show_optional_dialog) {
+                if (show_optional_dialog && !APPLICATION->isHeadless()) {
                     QStringList oFiles;
                     for (auto file : optionalFiles)
                         oFiles.push_back(file.path);

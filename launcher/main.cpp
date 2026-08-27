@@ -43,6 +43,12 @@
 
 int main(int argc, char* argv[])
 {
+#if defined Q_OS_WIN32
+    // Attach before validating the entry point so Windows GUI builds can report
+    // an actionable error to the terminal that launched them.
+    console::WindowsConsoleGuard _consoleGuard;
+#endif
+
     bool headless = false;
     for (int i = 1; i < argc; ++i) {
         const QByteArray argument(argv[i]);
@@ -56,14 +62,14 @@ int main(int argc, char* argv[])
         std::cerr << "lunalauncher-cli requires one of --cli, --tui, or --mcp." << std::endl;
         return 2;
     }
+#elif defined Q_OS_WIN32
+    if (headless) {
+        std::cerr << "Headless modes on Windows require lunalauncher-cli.exe." << std::endl;
+        return 2;
+    }
 #endif
     if (headless && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
         qputenv("QT_QPA_PLATFORM", "offscreen");
-
-#if defined Q_OS_WIN32
-    // used on Windows to attach the standard IO streams
-    console::WindowsConsoleGuard _consoleGuard;
-#endif
 
     // initialize Qt
     Application app(argc, argv);

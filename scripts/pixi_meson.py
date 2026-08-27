@@ -92,10 +92,18 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
     ]
     env["PATH"] = os.pathsep.join([str(qt_tools / "bin")] + path_entries)
     cmake_prefix_paths = [str(qt_target / "lib" / "cmake")]
-    if platform.system().lower() == "linux" and env.get("CONDA_PREFIX"):
+    if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
         cmake_prefix_paths.append(env["CONDA_PREFIX"])
     env["CMAKE_PREFIX_PATH"] = os.pathsep.join(cmake_prefix_paths)
-    if profile_system(profile) == "windows" or is_cross_profile(profile):
+    if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
+        env["PKG_CONFIG_PATH"] = os.pathsep.join(
+            [
+                str(Path(env["CONDA_PREFIX"]) / "lib" / "pkgconfig"),
+                str(Path(env["CONDA_PREFIX"]) / "share" / "pkgconfig"),
+            ]
+        )
+        env["PKG_CONFIG_LIBDIR"] = env["PKG_CONFIG_PATH"]
+    elif profile_system(profile) == "windows" or is_cross_profile(profile):
         env["PKG_CONFIG_PATH"] = ""
         env["PKG_CONFIG_LIBDIR"] = str(root / ".meson-empty-pkgconfig")
     if profile_system(profile) == "windows":

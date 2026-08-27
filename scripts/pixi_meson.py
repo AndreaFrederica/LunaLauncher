@@ -91,7 +91,10 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
         if "msys64" not in entry.lower()
     ]
     env["PATH"] = os.pathsep.join([str(qt_tools / "bin")] + path_entries)
-    env["CMAKE_PREFIX_PATH"] = str(qt_target / "lib" / "cmake")
+    cmake_prefix_paths = [str(qt_target / "lib" / "cmake")]
+    if platform.system().lower() == "linux" and env.get("CONDA_PREFIX"):
+        cmake_prefix_paths.append(env["CONDA_PREFIX"])
+    env["CMAKE_PREFIX_PATH"] = os.pathsep.join(cmake_prefix_paths)
     if profile_system(profile) == "windows" or is_cross_profile(profile):
         env["PKG_CONFIG_PATH"] = ""
         env["PKG_CONFIG_LIBDIR"] = str(root / ".meson-empty-pkgconfig")

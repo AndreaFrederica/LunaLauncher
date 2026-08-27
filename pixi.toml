@@ -26,6 +26,7 @@ powershell = ">=7.5.4,<8"
 c-compiler = ">=1.11.0,<2"
 cxx-compiler = ">=1.11.0,<2"
 pkg-config = ">=0.29.2,<0.30"
+libgl-devel = ">=1.7.0,<2"
 
 [pypi-dependencies]
 aqtinstall = ">=3.3.0, <4"

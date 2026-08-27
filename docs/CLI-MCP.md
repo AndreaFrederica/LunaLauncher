@@ -13,11 +13,21 @@ lunalauncher --cli account login yggdrasil --username USER --auth-url URL --sess
 lunalauncher --cli account login unified-pass --username USER --server-id ID [--password-stdin]
 lunalauncher --cli import PATH_OR_URL [--name NAME]
 lunalauncher --cli launch INSTANCE [--profile NAME | --offline NAME] [--server ADDRESS | --world WORLD] [--wait]
+lunalauncher --cli settings list launcher [FILTER]
+lunalauncher --cli settings get launcher KEY [--reveal-secrets]
+lunalauncher --cli settings set launcher KEY [VALUE]
+lunalauncher --cli settings reset launcher KEY
+lunalauncher --cli settings list instance INSTANCE [FILTER]
+lunalauncher --cli settings get instance INSTANCE KEY [--reveal-secrets]
+lunalauncher --cli settings set instance INSTANCE KEY [VALUE]
+lunalauncher --cli settings reset instance INSTANCE KEY
 ```
 
-Passwords are never accepted as command-line arguments. Use hidden terminal input or `--password-stdin`. `--non-interactive` makes missing input an error. Launches detach after the game starts unless `--wait` is present. Ctrl-C aborts the active task.
+Authentication passwords and sensitive setting values are never accepted as command-line arguments. Use hidden terminal input or `--password-stdin`. `--non-interactive` makes missing input an error. Launches detach after the game starts unless `--wait` is present. Ctrl-C aborts the active task.
 
 Normal archive URLs and local packs are handled by `InstanceImportTask`. Modrinth and CurseForge project file pages are resolved through their APIs. Restricted CurseForge files require an enabled external tool that reports `headless: true` during its protocol probe.
+
+Settings commands expose every setting registered by the launcher or selected instance, including instance override gates. Values retain their existing type. CLI values may use JSON syntax for booleans, numbers, lists, and objects; omit `VALUE` to enter it interactively. Passwords, tokens, and API keys are redacted unless `--reveal-secrets` is explicitly used. Changes that configure process-wide services take full effect on the next headless invocation.
 
 ## TUI
 
@@ -27,7 +37,7 @@ Start the interactive terminal interface with:
 lunalauncher --tui
 ```
 
-The numbered menus expose instance and account lists, all supported login types, local or URL pack imports, and instance launches. Passwords use hidden terminal input, Microsoft device codes are printed in the terminal, and Ctrl-C aborts the active task. Launches detach by default unless the wait option is selected.
+The numbered menus expose instance and account lists, all supported login types, local or URL pack imports, instance launches, launcher settings, and instance settings. The settings editors filter and edit every registered setting while preserving the existing setting type and inheritance behavior. Passwords use hidden terminal input, Microsoft device codes are printed in the terminal, and Ctrl-C aborts the active task. Launches detach by default unless the wait option is selected.
 
 ## MCP
 
@@ -46,5 +56,9 @@ Tools:
 - `lunalauncher_account_login`
 - `lunalauncher_instance_import`
 - `lunalauncher_instance_launch`
+- `lunalauncher_settings_list`
+- `lunalauncher_settings_get`
+- `lunalauncher_settings_set`
+- `lunalauncher_settings_reset`
 
-Authentication and task status events use `notifications/progress` when the request supplies a progress token, and `notifications/message` otherwise. Microsoft authentication includes the verification URL, device code, and expiry in the notification payload. MCP calls are serialized because launcher instance and account tasks mutate shared on-disk state.
+Authentication and task status events use `notifications/progress` when the request supplies a progress token, and `notifications/message` otherwise. Microsoft authentication includes the verification URL, device code, and expiry in the notification payload. Settings tools use `scope: "launcher"` or `scope: "instance"`; instance scope also requires `instance`. Sensitive values are redacted unless `reveal: true` is explicitly supplied. MCP calls are serialized because launcher instance, account, and settings operations mutate shared on-disk state.

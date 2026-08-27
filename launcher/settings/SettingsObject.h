@@ -165,6 +165,9 @@ class SettingsObject : public QObject {
      */
     bool contains(const QString& id);
 
+    /*! Return the canonical IDs of all registered settings. */
+    QStringList settingIds() const { return m_settings.keys(); }
+
     /*! Import values for registered settings from a sectionless INI file.
      *  Unknown keys are ignored and setting aliases are honored.
      *  \return The number of settings imported.

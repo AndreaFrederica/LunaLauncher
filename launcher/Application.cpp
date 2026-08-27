@@ -368,6 +368,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { "password-stdin", "Read one account password from standard input" },
           { "wait", "Wait for the launched game to exit" },
           { "detach", "Detach after the game process starts (the default)" },
+          { "reveal-secrets", "Include sensitive values in headless settings output" },
           { "name", "Override the imported instance name", "name" },
           { "username", "Account username", "username" },
           { "auth-url", "Yggdrasil authentication server URL", "url" },
@@ -393,6 +394,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_cliOptions.passwordStdin = parser.isSet("password-stdin");
     m_cliOptions.wait = parser.isSet("wait");
     m_cliOptions.detach = parser.isSet("detach");
+    m_cliOptions.revealSecrets = parser.isSet("reveal-secrets");
     m_cliOptions.command = parser.positionalArguments();
     m_cliOptions.name = parser.value("name");
     m_cliOptions.profile = parser.value("profile");

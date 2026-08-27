@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QUrlQuery>
+#include <QVariant>
 
 #include "Application.h"
 #include "BaseInstance.h"
@@ -29,6 +30,8 @@
 #include "net/NetJob.h"
 #include "net/RawHeaderProxy.h"
 #include "net/Upload.h"
+#include "settings/Setting.h"
+#include "settings/SettingsObject.h"
 #include "tasks/Task.h"
 
 namespace {
@@ -81,6 +84,142 @@ QCryptographicHash::Algorithm hashAlgorithm(const QString& name)
     return name == "md5" ? QCryptographicHash::Md5 : QCryptographicHash::Sha1;
 }
 
+BaseInstance* findInstance(const QString& reference)
+{
+    auto list = APPLICATION->instances();
+    auto instance = list->getInstanceById(reference);
+    if (!instance)
+        instance = list->getInstanceByManagedName(reference);
+    if (!instance) {
+        for (int i = 0; i < list->count(); ++i) {
+            if (list->at(i)->name().compare(reference, Qt::CaseInsensitive) == 0) {
+                instance = list->at(i);
+                break;
+            }
+        }
+    }
+    return instance;
+}
+
+bool isSensitiveSetting(const QString& id)
+{
+    const auto lower = id.toLower();
+    return lower.endsWith("password") || lower.endsWith("proxypass") || lower.contains("token") || lower.contains("secret") ||
+           lower.endsWith("keyoverride");
+}
+
+QJsonValue variantToJson(const QVariant& value)
+{
+    if (!value.isValid() || value.isNull())
+        return QJsonValue::Null;
+    if (value.metaType().flags().testFlag(QMetaType::IsEnumeration))
+        return value.toInt();
+    if (value.metaType().id() == QMetaType::QByteArray)
+        return QString::fromLatin1(value.toByteArray().toBase64());
+    const auto converted = QJsonValue::fromVariant(value);
+    return converted.isUndefined() ? QJsonValue(value.toString()) : converted;
+}
+
+QString variantTypeName(const QVariant& value, const QVariant& fallback)
+{
+    const auto type = value.isValid() ? value.metaType() : fallback.metaType();
+    return type.isValid() && type.name() ? QString::fromLatin1(type.name()) : QStringLiteral("QVariant");
+}
+
+QJsonObject describeSetting(SettingsObject* settings, const std::shared_ptr<Setting>& setting, bool reveal)
+{
+    const auto value = settings->get(setting->id());
+    const auto defaultValue = setting->defValue();
+    const bool sensitive = isSensitiveSetting(setting->id());
+    const bool redacted = sensitive && !reveal;
+    return { { "key", setting->id() },
+             { "type", variantTypeName(value, defaultValue) },
+             { "value", redacted ? QJsonValue(QStringLiteral("***")) : variantToJson(value) },
+             { "default", redacted ? QJsonValue(QStringLiteral("***")) : variantToJson(defaultValue) },
+             { "isDefault", value == defaultValue },
+             { "sensitive", sensitive },
+             { "redacted", redacted } };
+}
+
+bool convertSettingValue(const QJsonValue& input, const QVariant& reference, QVariant* output, QString* error)
+{
+    if (!reference.isValid()) {
+        *output = input.toVariant();
+        return true;
+    }
+
+    const auto type = reference.metaType();
+    const auto fail = [error, type] {
+        if (error)
+            *error = QObject::tr("The value cannot be converted to %1.").arg(QString::fromLatin1(type.name()));
+        return false;
+    };
+
+    if (type.id() == QMetaType::QString) {
+        if (input.isString()) {
+            *output = input.toString();
+        } else if (input.isBool()) {
+            *output = input.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+        } else if (input.isDouble()) {
+            *output = QString::number(input.toDouble(), 'g', 16);
+        } else {
+            return fail();
+        }
+        return true;
+    }
+    if (type.id() == QMetaType::Bool) {
+        if (input.isBool()) {
+            *output = input.toBool();
+            return true;
+        }
+        if (input.isDouble() && (input.toDouble() == 0 || input.toDouble() == 1)) {
+            *output = input.toDouble() == 1;
+            return true;
+        }
+        const auto text = input.toString().trimmed().toLower();
+        if (text == "true" || text == "yes" || text == "on" || text == "1") {
+            *output = true;
+            return true;
+        }
+        if (text == "false" || text == "no" || text == "off" || text == "0") {
+            *output = false;
+            return true;
+        }
+        return fail();
+    }
+    if (type.id() == QMetaType::QStringList) {
+        if (!input.isArray())
+            return fail();
+        QStringList values;
+        for (const auto& item : input.toArray()) {
+            if (!item.isString())
+                return fail();
+            values.append(item.toString());
+        }
+        *output = values;
+        return true;
+    }
+    if (type.id() == QMetaType::QByteArray) {
+        if (!input.isString())
+            return fail();
+        *output = QByteArray::fromBase64(input.toString().toLatin1());
+        return true;
+    }
+
+    QVariant converted = input.toVariant();
+    if (type.flags().testFlag(QMetaType::IsEnumeration)) {
+        bool ok = input.isDouble();
+        const auto value = input.isDouble() ? static_cast<int>(input.toDouble()) : input.toString().toInt(&ok);
+        if (!ok)
+            return fail();
+        converted = value;
+    }
+    if (!converted.convert(type))
+        return fail();
+    *output = converted;
+    return true;
+}
+
 }  // namespace
 
 OperationService::OperationService(QObject* parent) : QObject(parent) {}
@@ -107,6 +246,14 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         return listInstances();
     if (operation == "account.list")
         return listAccounts();
+    if (operation == "settings.list")
+        return listSettings(parameters);
+    if (operation == "settings.get")
+        return getSetting(parameters);
+    if (operation == "settings.set")
+        return setSetting(parameters, interaction);
+    if (operation == "settings.reset")
+        return resetSetting(parameters);
     if (operation == "account.login")
         return loginAccount(parameters, interaction);
     if (operation == "instance.import")
@@ -147,6 +294,114 @@ QJsonObject OperationService::listAccounts()
                                      { "ownsMinecraft", account->ownsMinecraft() } });
     }
     return success(accounts);
+}
+
+SettingsObject* OperationService::resolveSettings(const QJsonObject& parameters, QString* error, BaseInstance** instance) const
+{
+    if (instance)
+        *instance = nullptr;
+    const auto scope = parameters.value("scope").toString("launcher").toLower();
+    if (scope == "launcher" || scope == "global")
+        return APPLICATION->settings();
+    if (scope != "instance") {
+        *error = tr("Unknown settings scope: %1").arg(scope);
+        return nullptr;
+    }
+
+    const auto reference = parameters.value("instance").toString();
+    if (reference.isEmpty()) {
+        *error = tr("Instance settings require an instance ID or name.");
+        return nullptr;
+    }
+    auto resolved = findInstance(reference);
+    if (!resolved) {
+        *error = tr("Instance not found: %1").arg(reference);
+        return nullptr;
+    }
+    if (instance)
+        *instance = resolved;
+    return resolved->settings();
+}
+
+QJsonObject OperationService::listSettings(const QJsonObject& parameters)
+{
+    QString error;
+    auto settings = resolveSettings(parameters, &error);
+    if (!settings)
+        return failure(error, 2);
+
+    const auto filter = parameters.value("filter").toString();
+    const bool reveal = parameters.value("reveal").toBool(false);
+    QJsonArray values;
+    for (const auto& key : settings->settingIds()) {
+        if (!filter.isEmpty() && !key.contains(filter, Qt::CaseInsensitive))
+            continue;
+        values.append(describeSetting(settings, settings->getSetting(key), reveal));
+    }
+    return success(values);
+}
+
+QJsonObject OperationService::getSetting(const QJsonObject& parameters)
+{
+    QString error;
+    auto settings = resolveSettings(parameters, &error);
+    if (!settings)
+        return failure(error, 2);
+    const auto key = parameters.value("key").toString();
+    const auto setting = settings->getSetting(key);
+    if (!setting)
+        return failure(tr("Unknown setting: %1").arg(key), 2);
+    return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));
+}
+
+QJsonObject OperationService::setSetting(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    QString error;
+    BaseInstance* instance = nullptr;
+    auto settings = resolveSettings(parameters, &error, &instance);
+    if (!settings)
+        return failure(error, 2);
+    const auto key = parameters.value("key").toString();
+    const auto setting = settings->getSetting(key);
+    if (!setting)
+        return failure(tr("Unknown setting: %1").arg(key), 2);
+    if (isSensitiveSetting(key) && parameters.value("valueFromCommandLine").toBool())
+        return failure(tr("Sensitive settings must be entered interactively or with --password-stdin."), 2);
+
+    QJsonValue input = parameters.value("value");
+    if (input.isUndefined()) {
+        const auto value = interaction.input(tr("Value for %1").arg(key), isSensitiveSetting(key));
+        if (!value)
+            return failure(tr("A value is required."), 2);
+        input = *value;
+    }
+    const auto current = settings->get(key);
+    const auto reference = current.isValid() ? current : setting->defValue();
+    QVariant converted;
+    if (!convertSettingValue(input, reference, &converted, &error))
+        return failure(error, 2);
+    if (!settings->set(key, converted))
+        return failure(tr("Could not set %1.").arg(key));
+    if (instance)
+        instance->saveNow();
+    return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));
+}
+
+QJsonObject OperationService::resetSetting(const QJsonObject& parameters)
+{
+    QString error;
+    BaseInstance* instance = nullptr;
+    auto settings = resolveSettings(parameters, &error, &instance);
+    if (!settings)
+        return failure(error, 2);
+    const auto key = parameters.value("key").toString();
+    const auto setting = settings->getSetting(key);
+    if (!setting)
+        return failure(tr("Unknown setting: %1").arg(key), 2);
+    settings->reset(key);
+    if (instance)
+        instance->saveNow();
+    return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));
 }
 
 bool OperationService::waitForTask(Task* task, UserInteraction& interaction, QString* error)
@@ -430,17 +685,7 @@ QJsonObject OperationService::importInstance(const QJsonObject& parameters, User
 QJsonObject OperationService::launchInstance(const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto instanceId = parameters.value("instance").toString();
-    auto instance = APPLICATION->instances()->getInstanceById(instanceId);
-    if (!instance)
-        instance = APPLICATION->instances()->getInstanceByManagedName(instanceId);
-    if (!instance) {
-        for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
-            if (APPLICATION->instances()->at(i)->name().compare(instanceId, Qt::CaseInsensitive) == 0) {
-                instance = APPLICATION->instances()->at(i);
-                break;
-            }
-        }
-    }
+    auto instance = findInstance(instanceId);
     if (!instance)
         return failure(tr("Instance not found: %1").arg(instanceId), 2);
 

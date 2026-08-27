@@ -14,6 +14,7 @@ struct CliOptions {
     bool passwordStdin = false;
     bool wait = false;
     bool detach = false;
+    bool revealSecrets = false;
 
     QStringList command;
     QString name;

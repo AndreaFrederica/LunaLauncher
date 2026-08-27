@@ -149,11 +149,13 @@ void McpServer::handleMessage(const QJsonObject& request)
         }
         const auto name = parameters.value("name").toString();
         const auto arguments = parameters.value("arguments").toObject();
-        static const QMap<QString, QString> operations{ { "lunalauncher_instance_list", "instance.list" },
-                                                        { "lunalauncher_account_list", "account.list" },
-                                                        { "lunalauncher_account_login", "account.login" },
-                                                        { "lunalauncher_instance_import", "instance.import" },
-                                                        { "lunalauncher_instance_launch", "instance.launch" } };
+        static const QMap<QString, QString> operations{
+            { "lunalauncher_instance_list", "instance.list" },     { "lunalauncher_account_list", "account.list" },
+            { "lunalauncher_account_login", "account.login" },     { "lunalauncher_instance_import", "instance.import" },
+            { "lunalauncher_instance_launch", "instance.launch" }, { "lunalauncher_settings_list", "settings.list" },
+            { "lunalauncher_settings_get", "settings.get" },       { "lunalauncher_settings_set", "settings.set" },
+            { "lunalauncher_settings_reset", "settings.reset" }
+        };
         if (!operations.contains(name)) {
             writeError(id, -32602, QStringLiteral("Unknown tool: %1").arg(name));
             return;
@@ -241,6 +243,43 @@ QJsonArray McpServer::tools() const
                                                        { "server", stringProperty("Server address to join.") },
                                                        { "world", stringProperty("World to open.") },
                                                        { "wait", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                                          QJsonArray{ "instance" }) } }
+                                          QJsonArray{ "instance" }) } },
+        QJsonObject{
+            { "name", "lunalauncher_settings_list" },
+            { "description", "List every registered launcher or instance setting. Sensitive values are redacted unless reveal is true." },
+            { "inputSchema",
+              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
+                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
+                                        { "filter", stringProperty("Optional case-insensitive setting name filter.") },
+                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
+                           QJsonArray{ "scope" }) } },
+        QJsonObject{
+            { "name", "lunalauncher_settings_get" },
+            { "description", "Read one registered launcher or instance setting." },
+            { "inputSchema",
+              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
+                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
+                                        { "key", stringProperty("Canonical setting ID.") },
+                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
+                           QJsonArray{ "scope", "key" }) } },
+        QJsonObject{
+            { "name", "lunalauncher_settings_set" },
+            { "description", "Set one registered launcher or instance setting using its existing value type." },
+            { "inputSchema",
+              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
+                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
+                                        { "key", stringProperty("Canonical setting ID.") },
+                                        { "value", QJsonObject{ { "description", "JSON value to store." } } },
+                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
+                           QJsonArray{ "scope", "key", "value" }) } },
+        QJsonObject{
+            { "name", "lunalauncher_settings_reset" },
+            { "description", "Reset one registered launcher or instance setting to its default or inherited value." },
+            { "inputSchema",
+              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
+                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
+                                        { "key", stringProperty("Canonical setting ID.") },
+                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
+                           QJsonArray{ "scope", "key" }) } }
     };
 }

@@ -10,6 +10,8 @@
 #include "cli/UserInteraction.h"
 #include "minecraft/auth/MinecraftAccount.h"
 
+class BaseInstance;
+class SettingsObject;
 class Task;
 
 class OperationService final : public QObject {
@@ -27,6 +29,10 @@ class OperationService final : public QObject {
    private:
     QJsonObject listInstances();
     QJsonObject listAccounts();
+    QJsonObject listSettings(const QJsonObject& parameters);
+    QJsonObject getSetting(const QJsonObject& parameters);
+    QJsonObject setSetting(const QJsonObject& parameters, UserInteraction& interaction);
+    QJsonObject resetSetting(const QJsonObject& parameters);
     QJsonObject loginAccount(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject importInstance(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject launchInstance(const QJsonObject& parameters, UserInteraction& interaction);
@@ -34,6 +40,7 @@ class OperationService final : public QObject {
     QJsonObject resolvePackSource(const QString& source, UserInteraction& interaction);
     QJsonObject fetchJson(const QUrl& url, const QString& taskName, QJsonDocument* document, UserInteraction& interaction);
     bool waitForTask(Task* task, UserInteraction& interaction, QString* error);
+    SettingsObject* resolveSettings(const QJsonObject& parameters, QString* error, BaseInstance** instance = nullptr) const;
 
     QTemporaryDir m_downloads;
     QPointer<Task> m_currentTask;

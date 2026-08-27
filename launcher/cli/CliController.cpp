@@ -23,6 +23,15 @@ void handleInterrupt(int)
 {
     interrupted.store(true);
 }
+
+QJsonValue parseCliValue(const QString& value)
+{
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(("[" + value + "]").toUtf8(), &error);
+    if (error.error == QJsonParseError::NoError && document.isArray() && document.array().size() == 1)
+        return document.array().first();
+    return value;
+}
 }  // namespace
 
 CliController::CliController(CliOptions options, QObject* parent) : QObject(parent), m_options(std::move(options)) {}
@@ -32,6 +41,22 @@ void CliController::run()
     QString operation;
     QJsonObject parameters;
     const auto command = m_options.command;
+    const auto parseSettingsTarget = [&command](QJsonObject* target, int* next) {
+        if (command.size() < 3)
+            return false;
+        const auto scope = command.at(2).toLower();
+        target->insert("scope", scope);
+        if (scope == "launcher" || scope == "global") {
+            *next = 3;
+            return true;
+        }
+        if (scope == "instance" && command.size() >= 4) {
+            target->insert("instance", command.at(3));
+            *next = 4;
+            return true;
+        }
+        return false;
+    };
     if (command.size() >= 2 && command.at(0) == "instance" && command.at(1) == "list") {
         operation = "instance.list";
     } else if (command.size() >= 2 && command.at(0) == "account" && command.at(1) == "list") {
@@ -59,6 +84,32 @@ void CliController::run()
                        { "username", m_options.username },
                        { "profileId", m_options.profileId },
                        { "wait", m_options.wait && !m_options.detach } };
+    } else if (command.size() >= 2 && command.at(0) == "settings") {
+        const auto action = command.at(1).toLower();
+        int next = 0;
+        if (parseSettingsTarget(&parameters, &next)) {
+            parameters.insert("reveal", m_options.revealSecrets);
+            if (action == "list") {
+                operation = "settings.list";
+                if (command.size() > next)
+                    parameters.insert("filter", command.at(next));
+            } else if ((action == "get" || action == "reset") && command.size() > next) {
+                operation = "settings." + action;
+                parameters.insert("key", command.at(next));
+            } else if (action == "set" && command.size() > next) {
+                operation = "settings.set";
+                parameters.insert("key", command.at(next));
+                if (command.size() > next + 1) {
+                    parameters.insert("value", parseCliValue(command.at(next + 1)));
+                    parameters.insert("valueFromCommandLine", true);
+                }
+            }
+        }
+        if (operation.isEmpty()) {
+            QTextStream(stderr) << "Invalid settings command.\n";
+            QCoreApplication::exit(2);
+            return;
+        }
     } else {
         QTextStream(stderr) << "Usage:\n"
                                "  --cli instance list [--json]\n"
@@ -69,6 +120,11 @@ void CliController::run()
                                "  --cli account login unified-pass --username USER --server-id ID\n"
                                "  --cli import SOURCE [--name NAME]\n"
                                "  --cli launch INSTANCE [--profile NAME | --offline NAME] [--wait]\n"
+                               "  --cli settings list SCOPE [INSTANCE] [FILTER]\n"
+                               "  --cli settings get SCOPE [INSTANCE] KEY [--reveal-secrets]\n"
+                               "  --cli settings set SCOPE [INSTANCE] KEY [VALUE]\n"
+                               "  --cli settings reset SCOPE [INSTANCE] KEY\n"
+                               "    SCOPE is launcher or instance.\n"
                                "  --mcp\n";
         QCoreApplication::exit(2);
         return;
@@ -121,6 +177,13 @@ void CliController::printHuman(const QString& operation, const QJsonObject& resu
             if (account.value("default").toBool())
                 out << "\tdefault";
             out << Qt::endl;
+        }
+    } else if (operation == "settings.list") {
+        for (const auto& value : data.toArray()) {
+            const auto setting = value.toObject();
+            const auto encoded = QJsonDocument(QJsonArray{ setting.value("value") }).toJson(QJsonDocument::Compact);
+            out << setting.value("key").toString() << '\t' << setting.value("type").toString() << '\t'
+                << QString::fromUtf8(encoded.mid(1, encoded.size() - 2)) << Qt::endl;
         }
     } else {
         out << QJsonDocument(data.toObject()).toJson(QJsonDocument::Compact) << Qt::endl;

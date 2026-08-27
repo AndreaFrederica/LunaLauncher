@@ -35,6 +35,21 @@ QJsonArray choicesFromItems(const QJsonArray& items, const QString& nameKey, con
     }
     return choices;
 }
+
+QJsonValue parseTerminalValue(const QString& value)
+{
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(("[" + value + "]").toUtf8(), &error);
+    if (error.error == QJsonParseError::NoError && document.isArray() && document.array().size() == 1)
+        return document.array().first();
+    return value;
+}
+
+QString jsonValueText(const QJsonValue& value)
+{
+    const auto encoded = QJsonDocument(QJsonArray{ value }).toJson(QJsonDocument::Compact);
+    return QString::fromUtf8(encoded.mid(1, encoded.size() - 2));
+}
 }  // namespace
 
 TuiController::TuiController(QObject* parent) : QObject(parent) {}
@@ -61,6 +76,8 @@ void TuiController::run()
                "  3. Log in\n"
                "  4. Import pack\n"
                "  5. Launch instance\n"
+               "  6. Launcher settings\n"
+               "  7. Instance settings\n"
                "  0. Exit\n"
             << Qt::flush;
         const auto choice = m_interaction.input(tr("Choice"), false);
@@ -78,6 +95,10 @@ void TuiController::run()
             pause = importInstance(service);
         else if (*choice == "5")
             pause = launchInstance(service);
+        else if (*choice == "6")
+            pause = manageSettings(service, false);
+        else if (*choice == "7")
+            pause = manageSettings(service, true);
         else if (*choice == "0" || choice->compare("q", Qt::CaseInsensitive) == 0)
             running = false;
         else
@@ -211,6 +232,85 @@ bool TuiController::launchInstance(OperationService& service)
     return printResult("instance.launch", service.execute("instance.launch", parameters, m_interaction));
 }
 
+bool TuiController::manageSettings(OperationService& service, bool instanceScope)
+{
+    QJsonObject target{ { "scope", instanceScope ? "instance" : "launcher" } };
+    if (instanceScope) {
+        const auto instancesResult = service.execute("instance.list", {}, m_interaction);
+        if (!instancesResult.value("ok").toBool())
+            return printResult("instance.list", instancesResult);
+        const auto instances = instancesResult.value("data").toArray();
+        if (instances.isEmpty()) {
+            QTextStream(stdout) << "No instances are installed.\n";
+            return true;
+        }
+        const auto choices = choicesFromItems(instances, "name", "id", "id");
+        const auto selected = m_interaction.select(tr("Instance"), choices);
+        if (!selected)
+            return false;
+        target.insert("instance", choices.at(*selected).toObject().value("id"));
+    }
+
+    while (true) {
+        const auto filter = m_interaction.input(tr("Setting name or filter (empty to return)"), false);
+        if (!filter || filter->trimmed().isEmpty())
+            return false;
+        auto listParameters = target;
+        listParameters.insert("filter", filter->trimmed());
+        const auto result = service.execute("settings.list", listParameters, m_interaction);
+        if (!result.value("ok").toBool())
+            return printResult("settings.list", result);
+        const auto settings = result.value("data").toArray();
+        if (settings.isEmpty()) {
+            QTextStream(stdout) << "No matching settings.\n";
+            continue;
+        }
+
+        int selectedIndex = -1;
+        for (int i = 0; i < settings.size(); ++i) {
+            if (settings.at(i).toObject().value("key").toString().compare(filter->trimmed(), Qt::CaseInsensitive) == 0) {
+                selectedIndex = i;
+                break;
+            }
+        }
+        if (selectedIndex < 0 && settings.size() > 1) {
+            const auto choices = choicesFromItems(settings, "key", "key", "type");
+            const auto selected = m_interaction.select(tr("Setting"), choices);
+            if (!selected)
+                continue;
+            selectedIndex = *selected;
+        }
+        if (selectedIndex < 0)
+            selectedIndex = 0;
+
+        const auto setting = settings.at(selectedIndex).toObject();
+        auto out = QTextStream(stdout);
+        out << setting.value("key").toString() << " = " << jsonValueText(setting.value("value")) << "  ["
+            << setting.value("type").toString() << "]\nDefault: " << jsonValueText(setting.value("default")) << Qt::endl;
+        const QJsonArray actions{ QJsonObject{ { "name", "Set value" }, { "id", "set" } },
+                                  QJsonObject{ { "name", "Reset to default/inherited value" }, { "id", "reset" } },
+                                  QJsonObject{ { "name", "Back" }, { "id", "back" } } };
+        const auto selectedAction = m_interaction.select(tr("Action"), actions);
+        if (!selectedAction || *selectedAction == 2)
+            continue;
+
+        auto parameters = target;
+        parameters.insert("key", setting.value("key"));
+        QString operation;
+        if (*selectedAction == 0) {
+            const auto value = m_interaction.input(tr("New value"), setting.value("sensitive").toBool());
+            if (!value)
+                continue;
+            operation = "settings.set";
+            parameters.insert("value", parseTerminalValue(*value));
+        } else {
+            operation = "settings.reset";
+        }
+        printResult(operation, service.execute(operation, parameters, m_interaction));
+        waitForEnter();
+    }
+}
+
 bool TuiController::printResult(const QString& operation, const QJsonObject& result)
 {
     auto out = QTextStream(stdout);
@@ -238,6 +338,12 @@ bool TuiController::printResult(const QString& operation, const QJsonObject& res
             if (account.value("default").toBool())
                 out << "  default";
             out << Qt::endl;
+        }
+    } else if (operation == "settings.list") {
+        for (const auto& value : data.toArray()) {
+            const auto setting = value.toObject();
+            out << setting.value("key").toString() << " = " << jsonValueText(setting.value("value")) << "  ["
+                << setting.value("type").toString() << "]" << Qt::endl;
         }
     } else {
         out << "Done: " << QJsonDocument(data.toObject()).toJson(QJsonDocument::Compact) << Qt::endl;

@@ -22,6 +22,7 @@ else
     else
       dotnet_rid = 'win-x86'
     endif
+    pcl_download_target_name = 'PCL.Download'
     pcl_download_lib_name = 'PCL.Download.dll'
   elif is_linux
     if host_machine.cpu_family() == 'x86_64'
@@ -33,6 +34,7 @@ else
     else
       error('Unsupported Linux architecture for PCL.Download: ' + host_machine.cpu_family())
     endif
+    pcl_download_target_name = 'libPCL.Download'
     pcl_download_lib_name = 'libPCL.Download.so'
   else
     # macOS
@@ -41,6 +43,7 @@ else
     else
       dotnet_rid = 'osx-arm64'
     endif
+    pcl_download_target_name = 'libPCL.Download'
     pcl_download_lib_name = 'libPCL.Download.dylib'
   endif
 
@@ -75,6 +78,7 @@ else
       '-c', dotnet_config,
       '-r', dotnet_rid,
       '--self-contained', 'true',
+      '-p:TargetName=' + pcl_download_target_name,
       '-o', meson.current_build_dir(),
       '--nologo',
       '-v', 'quiet',
@@ -94,6 +98,7 @@ else
       '-c', dotnet_config,
       '-r', dotnet_rid,
       '--self-contained', 'true',
+      '-p:TargetName=' + pcl_download_target_name,
       '--nologo',
     ],
   )

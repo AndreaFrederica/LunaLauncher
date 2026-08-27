@@ -39,6 +39,67 @@
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
+        <widget class="QGroupBox" name="curseForgeExternalToolBox">
+         <property name="title">
+          <string>CurseForge restricted downloads</string>
+         </property>
+         <layout class="QVBoxLayout" name="curseForgeExternalToolLayout">
+          <item>
+           <widget class="QCheckBox" name="curseForgeExternalToolEnabledCheckBox">
+            <property name="text">
+             <string>Allow the launcher to invoke an external download tool</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="curseForgeExternalToolPathLabel">
+            <property name="text">
+             <string>Tool executable:</string>
+            </property>
+            <property name="buddy">
+             <cstring>curseForgeExternalToolPathEdit</cstring>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="curseForgeExternalToolPathLayout">
+            <item>
+             <widget class="QLineEdit" name="curseForgeExternalToolPathEdit">
+              <property name="clearButtonEnabled">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="curseForgeExternalToolBrowseBtn">
+              <property name="text">
+               <string>Browse</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="curseForgeExternalToolCheckBtn">
+              <property name="text">
+               <string>Check</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="curseForgeExternalToolNote">
+            <property name="text">
+             <string>The configured program is user-controlled code. It receives CurseForge page URLs and a temporary output directory.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="editorsBox">
          <property name="title">
           <string>&amp;Editors</string>

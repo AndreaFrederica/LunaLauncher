@@ -79,4 +79,7 @@ class ExternalToolsPage : public QWidget, public BasePage {
     void on_mceditPathBtn_clicked();
     void on_mceditCheckBtn_clicked();
     void on_jsonEditorBrowseBtn_clicked();
+    void on_curseForgeExternalToolBrowseBtn_clicked();
+    void on_curseForgeExternalToolCheckBtn_clicked();
+    void on_curseForgeExternalToolEnabledCheckBox_toggled(bool enabled);
 };

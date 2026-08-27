@@ -12,16 +12,24 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QUrl>
+#include <QUuid>
 
-#include "BuildConfig.h"
 #include "Application.h"
+#include "BuildConfig.h"
+#include "modplatform/flame/CurseForgeExternalTool.h"
 #include "settings/SettingsObject.h"
 
-CurseForgeDownloadPageService::CurseForgeDownloadPageService(QObject* parent)
-    : QObject(parent), m_downloadDirectory(QDir::tempPath() + "/luna-curseforge-download-XXXXXX")
+CurseForgeDownloadPageService::CurseForgeDownloadPageService(Provider provider, QObject* parent)
+    : QObject(parent), m_provider(provider), m_downloadDirectory(QDir::tempPath() + "/luna-curseforge-download-XXXXXX")
 {
     connect(&m_process, &QProcess::readyReadStandardOutput, this, [this] {
         m_stdoutBuffer += m_process.readAllStandardOutput();
+        constexpr qsizetype maxBufferedLine = 1024 * 1024;
+        if (m_stdoutBuffer.size() > maxBufferedLine && !m_stdoutBuffer.contains('\n')) {
+            reportFailure(tr("The CurseForge download tool produced an oversized protocol message."));
+            m_process.kill();
+            return;
+        }
         while (true) {
             const auto newline = m_stdoutBuffer.indexOf('\n');
             if (newline < 0)
@@ -37,7 +45,7 @@ CurseForgeDownloadPageService::CurseForgeDownloadPageService(QObject* parent)
     connect(&m_process, &QProcess::readyReadStandardError, this, [this] {
         const auto output = QString::fromUtf8(m_process.readAllStandardError()).trimmed();
         if (!output.isEmpty()) {
-            qWarning().noquote() << "[CurseForge WebView]" << output;
+            qWarning().noquote() << "[CurseForge Download Tool]" << output;
         }
     });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
@@ -47,6 +55,8 @@ CurseForgeDownloadPageService::CurseForgeDownloadPageService(QObject* parent)
     });
     connect(&m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
             [this](int exitCode, QProcess::ExitStatus exitStatus) {
+                if (m_failureReported)
+                    return;
                 if (exitStatus == QProcess::NormalExit && exitCode == 3 && m_restartRequested) {
                     m_restartRequested = false;
                     if (!restartCurrentDownload()) {
@@ -55,7 +65,12 @@ CurseForgeDownloadPageService::CurseForgeDownloadPageService(QObject* parent)
                     return;
                 }
                 if (exitStatus == QProcess::CrashExit || exitCode != 0) {
-                    reportFailure(tr("The embedded CurseForge browser exited unexpectedly (code %1).").arg(exitCode));
+                    reportFailure(tr("The %1 exited unexpectedly (code %2).").arg(providerDisplayName()).arg(exitCode));
+                } else if (m_acceptedIndexes.size() != m_pages.size()) {
+                    reportFailure(tr("The %1 exited before all files were verified (%2 of %3 verified).")
+                                      .arg(providerDisplayName())
+                                      .arg(m_acceptedIndexes.size())
+                                      .arg(m_pages.size()));
                 } else {
                     emit completed();
                 }
@@ -110,7 +125,30 @@ bool CurseForgeDownloadPageService::isAvailable()
     return BuildConfig.CURSEFORGE_WEBVIEW_ENABLED && !helperPath().isEmpty();
 }
 
-bool CurseForgeDownloadPageService::open(const QVector<CurseForgeDownloadPage>& pages)
+QString CurseForgeDownloadPageService::resolveExternalToolPath(const QString& configuredPath)
+{
+    return CurseForgeExternalTool::resolveExecutable(configuredPath);
+}
+
+QString CurseForgeDownloadPageService::externalToolPath()
+{
+    const auto settings = APPLICATION->settings();
+    if (!settings->get("CurseForgeExternalToolEnabled").toBool())
+        return {};
+    return resolveExternalToolPath(settings->get("CurseForgeExternalToolPath").toString());
+}
+
+bool CurseForgeDownloadPageService::isAvailable(Provider provider)
+{
+    return provider == Provider::Embedded ? isAvailable() : !externalToolPath().isEmpty();
+}
+
+bool CurseForgeDownloadPageService::probeExternalTool(const QString& configuredPath, QString* error, bool* supportsHeadless)
+{
+    return CurseForgeExternalTool::probe(configuredPath, error, supportsHeadless);
+}
+
+bool CurseForgeDownloadPageService::open(const QVector<CurseForgeDownloadPage>& pages, const QString& clientMode)
 {
     if (isRunning())
         return true;
@@ -123,9 +161,9 @@ bool CurseForgeDownloadPageService::open(const QVector<CurseForgeDownloadPage>& 
         return false;
     }
 
-    const auto executable = helperPath();
+    const auto executable = programPath();
     if (executable.isEmpty()) {
-        m_error = tr("The embedded CurseForge browser is not available.");
+        m_error = tr("The %1 is not available.").arg(providerDisplayName());
         return false;
     }
 
@@ -138,11 +176,18 @@ bool CurseForgeDownloadPageService::open(const QVector<CurseForgeDownloadPage>& 
             m_error = tr("Invalid CurseForge file name: %1").arg(page.fileName);
             return false;
         }
+        if (page.hashAlgorithm.isEmpty() || page.hash.isEmpty()) {
+            m_error = tr("Missing hash metadata for CurseForge file: %1").arg(page.fileName);
+            return false;
+        }
     }
 
     m_pages = pages;
+    m_acceptedIndexes.clear();
     m_currentIndex = 1;
     m_restartRequested = false;
+    m_clientMode = clientMode == "cli" ? "cli" : "gui";
+    m_requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_requestPath = QDir(m_downloadDirectory.path()).filePath("request.json");
     if (!writeRequest(m_pages, 1, m_pages.size()))
         return false;
@@ -153,8 +198,10 @@ bool CurseForgeDownloadPageService::open(const QVector<CurseForgeDownloadPage>& 
 bool CurseForgeDownloadPageService::writeRequest(const QVector<CurseForgeDownloadPage>& pages, int startIndex, int totalItems)
 {
     QJsonArray items;
-    for (const auto& page : pages)
-        items.append(QJsonObject{ { "url", page.url }, { "fileName", page.fileName } });
+    for (const auto& page : pages) {
+        items.append(QJsonObject{
+            { "url", page.url }, { "fileName", page.fileName }, { "hashAlgorithm", page.hashAlgorithm }, { "hash", page.hash } });
+    }
 
     QSaveFile requestFile(m_requestPath);
     if (!requestFile.open(QIODevice::WriteOnly)) {
@@ -165,7 +212,10 @@ bool CurseForgeDownloadPageService::writeRequest(const QVector<CurseForgeDownloa
     const QJsonObject proxy{ { "type", settings->get("ProxyType").toString() },
                              { "host", settings->get("ProxyAddr").toString() },
                              { "port", settings->get("ProxyPort").toInt() } };
-    const QJsonObject request{ { "downloadDirectory", QDir::toNativeSeparators(m_downloadDirectory.path()) },
+    const QJsonObject request{ { "protocolVersion", ProtocolVersion },
+                               { "requestId", m_requestId },
+                               { "mode", m_clientMode },
+                               { "downloadDirectory", QDir::toNativeSeparators(m_downloadDirectory.path()) },
                                { "items", items },
                                { "startIndex", startIndex },
                                { "totalItems", totalItems },
@@ -180,9 +230,9 @@ bool CurseForgeDownloadPageService::writeRequest(const QVector<CurseForgeDownloa
 
 bool CurseForgeDownloadPageService::startHelper()
 {
-    const auto executable = helperPath();
+    const auto executable = programPath();
     if (executable.isEmpty()) {
-        m_error = tr("The embedded CurseForge browser is not available.");
+        m_error = tr("The %1 is not available.").arg(providerDisplayName());
         return false;
     }
 
@@ -191,6 +241,7 @@ bool CurseForgeDownloadPageService::startHelper()
     m_failureReported = false;
     m_process.setProgram(executable);
     m_process.setArguments({ "--request", m_requestPath });
+    m_process.setWorkingDirectory(m_downloadDirectory.path());
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
     m_process.start();
     if (!m_process.waitForStarted(3000)) {
@@ -224,7 +275,7 @@ bool CurseForgeDownloadPageService::isRunning() const
     return m_process.state() != QProcess::NotRunning;
 }
 
-QString CurseForgeDownloadPageService::acceptDownloadedFile(const QString& filePath)
+QString CurseForgeDownloadPageService::acceptDownloadedFile(const QString& filePath, const QString& verifiedHash)
 {
     const QFileInfo source(filePath);
     if (!isRunning() || m_restartRequested || m_currentIndex < 1 || m_currentIndex > m_pages.size() ||
@@ -234,6 +285,12 @@ QString CurseForgeDownloadPageService::acceptDownloadedFile(const QString& fileP
     const QFileInfo expectedSource(QDir(m_downloadDirectory.path()).filePath(m_pages.at(m_currentIndex - 1).fileName));
     if (source.canonicalFilePath() != expectedSource.canonicalFilePath())
         return {};
+
+    if (verifiedHash.compare(m_pages.at(m_currentIndex - 1).hash, Qt::CaseInsensitive) != 0) {
+        reportFailure(tr("Hash verification failed for CurseForge file: %1").arg(source.fileName()));
+        m_process.terminate();
+        return {};
+    }
 
     QDir verifiedDirectory(QDir(m_downloadDirectory.path()).filePath("verified"));
     if (!verifiedDirectory.exists() && !QDir().mkpath(verifiedDirectory.path())) {
@@ -251,7 +308,12 @@ QString CurseForgeDownloadPageService::acceptDownloadedFile(const QString& fileP
     }
 
     const QJsonObject command{ { "command", "acceptCurrent" }, { "fileName", m_pages.at(m_currentIndex - 1).fileName } };
-    m_process.write(QJsonDocument(command).toJson(QJsonDocument::Compact) + '\n');
+    if (m_process.write(QJsonDocument(command).toJson(QJsonDocument::Compact) + '\n') < 0) {
+        QFile::remove(verifiedPath);
+        reportFailure(tr("Could not acknowledge a verified CurseForge download: %1").arg(m_process.errorString()));
+        return {};
+    }
+    m_acceptedIndexes.insert(m_currentIndex - 1);
     return verifiedPath;
 }
 
@@ -279,6 +341,21 @@ void CurseForgeDownloadPageService::handleOutputLine(const QByteArray& line)
     const auto fileName = object.value("fileName").toString();
     const auto fileIndex = object.value("fileIndex").toInt();
     const auto fileCount = object.value("fileCount").toInt();
+    if (event == "error") {
+        reportFailure(object.value("message").toString(tr("The CurseForge download tool reported an error.")));
+        m_process.terminate();
+        return;
+    }
+    if (event != "downloadProgress" && event != "downloadStarted" && event != "downloadFailed" && event != "fileComplete" &&
+        event != "retryRequested" && event != "downloadFinished") {
+        return;
+    }
+    if (fileIndex < 1 || fileIndex > m_pages.size() || fileCount != m_pages.size() ||
+        fileName.compare(m_pages.at(fileIndex - 1).fileName, Qt::CaseInsensitive) != 0) {
+        reportFailure(tr("The CurseForge download tool returned an invalid progress event."));
+        m_process.terminate();
+        return;
+    }
     if (event == "downloadStarted") {
         m_currentIndex = fileIndex;
         emit downloadStarted(fileName, fileIndex, fileCount);
@@ -288,6 +365,9 @@ void CurseForgeDownloadPageService::handleOutputLine(const QByteArray& line)
     } else if (event == "downloadFailed") {
         m_currentIndex = fileIndex;
         emit downloadFailed(fileName, fileIndex, fileCount);
+    } else if (event == "fileComplete") {
+        m_currentIndex = fileIndex;
+        emit fileReady(fileName, fileIndex, fileCount);
     } else if (event == "retryRequested") {
         m_currentIndex = fileIndex;
         m_restartRequested = true;
@@ -305,4 +385,14 @@ void CurseForgeDownloadPageService::reportFailure(const QString& reason)
     m_failureReported = true;
     m_error = reason;
     emit failed(reason);
+}
+
+QString CurseForgeDownloadPageService::programPath() const
+{
+    return m_provider == Provider::Embedded ? helperPath() : externalToolPath();
+}
+
+QString CurseForgeDownloadPageService::providerDisplayName() const
+{
+    return m_provider == Provider::Embedded ? tr("embedded CurseForge browser") : tr("external CurseForge download tool");
 }

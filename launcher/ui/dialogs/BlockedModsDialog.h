@@ -31,21 +31,11 @@
 
 #include <QFileSystemWatcher>
 
+#include "modplatform/BlockedMod.h"
 #include "tasks/ConcurrentTask.h"
 
 class QPushButton;
 class CurseForgeDownloadPageService;
-
-struct BlockedMod {
-    QString name;
-    QString websiteUrl;
-    QString hash;
-    bool matched;
-    QString localPath;
-    QString targetFolder;
-    bool disabled = false;
-    bool move = false;
-};
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -97,5 +87,3 @@ class BlockedModsDialog : public QDialog {
     bool checkValidPath(QString path);
     bool allModsMatched();
 };
-
-QDebug operator<<(QDebug debug, const BlockedMod& m);

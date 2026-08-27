@@ -56,3 +56,20 @@ foreach test_source : test_sources
   )
   test(test_name, test_exe)
 endforeach
+
+curseforge_external_tool_test_source = 'CurseForgeDownloadPageService_test.cpp'
+curseforge_external_tool_test_moc = qt.preprocess(
+  moc_sources: files(curseforge_external_tool_test_source),
+  include_directories: [test_inc],
+  dependencies: [qt_core_dep, qt_test_dep],
+)
+curseforge_external_tool_test = executable(
+  'CurseForgeDownloadPageService_test',
+  files(
+    curseforge_external_tool_test_source,
+    '../launcher/modplatform/flame/CurseForgeExternalTool.cpp',
+  ) + curseforge_external_tool_test_moc,
+  include_directories: [test_inc],
+  dependencies: [qt_core_dep, qt_test_dep],
+)
+test('CurseForgeDownloadPageService_test', curseforge_external_tool_test)

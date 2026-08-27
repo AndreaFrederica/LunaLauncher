@@ -1287,6 +1287,9 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/ThemeDownloadDialog.h
     ui/dialogs/BlockedModsDialog.cpp
     ui/dialogs/BlockedModsDialog.h
+    modplatform/BlockedMod.h
+    modplatform/flame/CurseForgeExternalTool.cpp
+    modplatform/flame/CurseForgeExternalTool.h
     modplatform/flame/CurseForgeDownloadPageService.cpp
     modplatform/flame/CurseForgeDownloadPageService.h
     ui/dialogs/ChooseProviderDialog.h

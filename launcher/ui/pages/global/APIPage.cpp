@@ -89,11 +89,17 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 
     ui->curseForgeDownloadBrowserComboBox->addItem(tr("Embedded browser"), "Embedded");
     ui->curseForgeDownloadBrowserComboBox->addItem(tr("System browser"), "System");
+    ui->curseForgeDownloadBrowserComboBox->addItem(tr("External tool"), "External");
     if (!CurseForgeDownloadPageService::isAvailable()) {
         const auto embeddedIndex = ui->curseForgeDownloadBrowserComboBox->findData("Embedded");
         ui->curseForgeDownloadBrowserComboBox->setItemData(embeddedIndex, false, Qt::UserRole - 1);
         ui->curseForgeDownloadBrowserComboBox->setItemData(
             embeddedIndex, tr("The embedded CurseForge browser was not built or is unavailable."), Qt::ToolTipRole);
+    }
+    if (!CurseForgeDownloadPageService::isAvailable(CurseForgeDownloadPageService::Provider::External)) {
+        const auto externalIndex = ui->curseForgeDownloadBrowserComboBox->findData("External");
+        ui->curseForgeDownloadBrowserComboBox->setItemData(
+            externalIndex, tr("Configure and enable the CurseForge external download tool on the Tools settings page."), Qt::ToolTipRole);
     }
 
     // Add download backend dropdown

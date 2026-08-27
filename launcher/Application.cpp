@@ -804,6 +804,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("DownloadsDirWatchRecursive", false);
         m_settings->registerSetting("MoveModsFromDownloadsDir", false);
         m_settings->registerSetting("CurseForgeDownloadBrowser", "Embedded");
+        m_settings->registerSetting("CurseForgeExternalToolEnabled", false);
+        m_settings->registerSetting("CurseForgeExternalToolPath", "");
         m_settings->registerSetting("SkinsDir", "skins");
         m_settings->registerSetting("JavaDir", "java");
 

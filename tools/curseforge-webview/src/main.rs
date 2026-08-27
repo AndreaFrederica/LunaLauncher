@@ -574,8 +574,32 @@ fn handle_download(
                 });
                 return true;
             }
+            let file_index = state.current_index;
+            let file_count = state.total_items;
             drop(state);
-            finish_current(&webview, toolbar, queue);
+            update_toolbar(
+                toolbar,
+                ToolbarState {
+                    status: "waiting",
+                    file_name: &completed_name,
+                    file_index,
+                    file_count,
+                    bytes_received: 0,
+                    bytes_per_second: 0,
+                },
+            );
+            let _ = webview.window().set_title(&format!(
+                "Verifying {file_index}/{file_count}: {completed_name}"
+            ));
+            emit_event(HelperEvent {
+                event: "fileComplete",
+                file_name: Some(&completed_name),
+                message: None,
+                file_index: Some(file_index),
+                file_count: Some(file_count),
+                bytes_received: None,
+                bytes_per_second: None,
+            });
             true
         }
         _ => true,

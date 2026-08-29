@@ -24,14 +24,14 @@ struct AssetObject {
     QString getRelPath();
     QUrl getUrl();
     QString getLocalPath();
-    Net::NetRequest::Ptr getDownloadAction();
+    Net::NetRequest::Ptr getDownloadAction(bool verifyIntegrity = false);
 
     QString hash;
     qint64 size;
 };
 
 struct AssetsIndex {
-    NetJob::Ptr getDownloadJob();
+    NetJob::Ptr getDownloadJob(bool verifyIntegrity = false);
 
     QString id;
     QMap<QString, AssetObject> objects;

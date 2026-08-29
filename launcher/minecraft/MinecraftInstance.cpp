@@ -240,6 +240,11 @@ void MinecraftInstance::loadSpecificSettings()
         auto envSetting = m_settings->registerSetting("OverrideEnv", false);
         m_settings->registerOverride(global_settings->getSetting("Env"), envSetting);
 
+        // Asset cache policy
+        auto assetVerificationOverride = m_settings->registerSetting("OverrideAssetVerification", false);
+        m_settings->registerOverride(global_settings->getSetting("AssetVerificationMode"), assetVerificationOverride);
+        m_settings->registerOverride(global_settings->getSetting("AssetCacheExpiryDays"), assetVerificationOverride);
+
         m_settings->set("InstanceType", "OneSix");
     }
 

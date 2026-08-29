@@ -15,9 +15,9 @@
 
 #include <QFileInfo>
 
-AssetUpdateTask::AssetUpdateTask(MinecraftInstance* inst)
+AssetUpdateTask::AssetUpdateTask(MinecraftInstance* inst, bool forceIntegrityCheck)
+    : m_inst(inst), m_forceIntegrityCheck(forceIntegrityCheck)
 {
-    m_inst = inst;
 }
 
 void AssetUpdateTask::executeTask()
@@ -70,9 +70,31 @@ void AssetUpdateTask::executeTask()
     QString localPath = assets->id + ".json";
     auto job = makeShared<NetJob>(tr("Asset index for %1").arg(m_inst->name()), APPLICATION->network());
 
+    m_verificationMode = m_inst->settings()->get("AssetVerificationMode").toInt();
+    if (m_verificationMode < AssetVerificationMode::AlwaysVerify || m_verificationMode > AssetVerificationMode::SkipVerification)
+        m_verificationMode = AssetVerificationMode::CheckExistence;
+    m_cacheExpiryDays = qBound(1, m_inst->settings()->get("AssetCacheExpiryDays").toInt(), 365);
+
     auto metacache = APPLICATION->metacache();
+    if (m_verificationMode == AssetVerificationMode::CacheWithExpiry) {
+        // resolveEntry() checks age immediately; apply the policy first.
+        if (auto cachedEntry = metacache->getEntry("asset_indexes", localPath)) {
+            cachedEntry->setMaximumAge(static_cast<qint64>(m_cacheExpiryDays) * 86400LL);
+            metacache->updateEntry(cachedEntry);
+        }
+    }
     auto entry = metacache->resolveEntry("asset_indexes", localPath);
-    entry->setStale(true);
+
+    if (m_verificationMode == AssetVerificationMode::AlwaysVerify) {
+        entry->setStale(true);
+    } else if (m_verificationMode == AssetVerificationMode::SkipVerification && QFileInfo(entry->getFullPath()).isFile()) {
+        // Skip all asset checks when the local index is available.
+        emitSucceeded();
+        return;
+    } else if (m_verificationMode == AssetVerificationMode::SkipVerification) {
+        // Without an index there is nothing safe to skip; repair it normally.
+        m_verificationMode = AssetVerificationMode::CheckExistence;
+    }
     auto hexSha1 = assets->sha1.toLatin1();
     qDebug() << "Asset index SHA1:" << hexSha1;
     auto dl = Net::ApiDownload::makeCached(indexUrl, entry);
@@ -98,6 +120,16 @@ bool AssetUpdateTask::canAbort() const
 
 void AssetUpdateTask::assetIndexFinished()
 {
+    if (m_verificationMode == AssetVerificationMode::CacheWithExpiry) {
+        auto assets = m_inst->getPackProfile()->getProfile()->getMinecraftAssets();
+        if (auto entry = APPLICATION->metacache()->getEntry("asset_indexes", assets->id + ".json")) {
+            entry->setMaximumAge(static_cast<qint64>(m_cacheExpiryDays) * 86400LL);
+            entry->setCurrentAge(0);
+            entry->setStale(false);
+            APPLICATION->metacache()->updateEntry(entry);
+        }
+    }
+
     AssetsIndex index;
     qDebug() << "Finished asset index download for" << m_inst->name();
 
@@ -115,7 +147,7 @@ void AssetUpdateTask::assetIndexFinished()
         return;
     }
 
-    auto job = index.getDownloadJob();
+    auto job = index.getDownloadJob(m_forceIntegrityCheck || m_verificationMode == AssetVerificationMode::AlwaysVerify);
     if (job) {
         QString resourceURL = resourceUrl();
         QString source = tr("Mojang");

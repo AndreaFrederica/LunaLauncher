@@ -124,6 +124,7 @@
 #include "ui/widgets/WideBar.h"
 
 #include "minecraft/PackProfile.h"
+#include "minecraft/update/AssetUpdateTask.h"
 #include "minecraft/VersionFile.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/mod/ModFolderModel.h"
@@ -622,6 +623,13 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         QAction* actionVoid = new QAction(m_selectedInstance->name(), this);
         actionVoid->setEnabled(false);
         actions.prepend(actionVoid);
+
+        QAction* actionSep2 = new QAction("", this);
+        actionSep2->setSeparator(true);
+        QAction* actionVerifyAssets = new QAction(tr("Verify asset integrity..."), this);
+        connect(actionVerifyAssets, &QAction::triggered, this, &MainWindow::on_actionVerifyAssets_triggered);
+        actions.append(actionSep2);
+        actions.append(actionVerifyAssets);
     } else {
         auto group = view->groupNameAt(pos);
 
@@ -1398,6 +1406,41 @@ void MainWindow::on_actionEditInstance_triggered()
                                      QMessageBox::Critical)
             ->show();
     }
+}
+
+void MainWindow::on_actionVerifyAssets_triggered()
+{
+    if (!m_selectedInstance)
+        return;
+
+    auto* mcInst = dynamic_cast<MinecraftInstance*>(m_selectedInstance);
+    if (!mcInst) {
+        CustomMessageBox::selectable(this, tr("Unsupported"), tr("Asset integrity checks are only available for Minecraft instances."),
+                                     QMessageBox::Warning)
+            ->show();
+        return;
+    }
+
+    auto* instSettings = mcInst->settings();
+    const bool hadOverride = instSettings->get("OverrideAssetVerification").toBool();
+    const int savedMode = instSettings->get("AssetVerificationMode").toInt();
+
+    instSettings->set("OverrideAssetVerification", true);
+    instSettings->set("AssetVerificationMode", static_cast<int>(AssetVerificationMode::AlwaysVerify));
+
+    unique_qobject_ptr<Task> task(new AssetUpdateTask(mcInst, true));
+    ProgressDialog dlg(this);
+    dlg.setSkipButton(true, tr("Abort"));
+    const int result = dlg.execWithTask(task.get());
+
+    instSettings->set("OverrideAssetVerification", hadOverride);
+    if (hadOverride)
+        instSettings->set("AssetVerificationMode", savedMode);
+    else
+        instSettings->reset("AssetVerificationMode");
+
+    if (result == QDialog::Accepted)
+        QMessageBox::information(this, tr("Integrity check complete"), tr("Missing or corrupted asset files were repaired."));
 }
 
 void MainWindow::on_actionManageAccounts_triggered()

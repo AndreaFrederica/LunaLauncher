@@ -60,6 +60,8 @@ class MinecraftSettingsWidget : public QWidget {
     void saveSelectedLoaders();
     void saveDataPacksPath();
     void selectDataPacksFolder();
+    void onAssetModeChanged(int index);
+    void triggerVerifyAssets();
 
     MinecraftInstance* m_instance;
     Ui::MinecraftSettingsWidget* m_ui;

@@ -40,13 +40,16 @@
 #include "ui_MinecraftSettingsWidget.h"
 
 #include <QFileDialog>
+#include <QMessageBox>
 #include "Application.h"
 #include "BuildConfig.h"
 #include "Json.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/auth/AccountList.h"
+#include "minecraft/update/AssetUpdateTask.h"
 #include "settings/Setting.h"
+#include "ui/dialogs/ProgressDialog.h"
 
 MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QWidget* parent)
     : QWidget(parent), m_instance(std::move(instance)), m_ui(new Ui::MinecraftSettingsWidget)
@@ -61,6 +64,7 @@ MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QW
         m_ui->serverJoinGroupBox->hide();
         m_ui->globalDataPacksGroupBox->hide();
         m_ui->loaderGroup->hide();
+        m_ui->assetVerificationGroupBox->hide();
     } else {
         m_javaSettings = new JavaSettingsWidget(m_instance, this);
         m_ui->javaScrollArea->setWidget(m_javaSettings);
@@ -80,6 +84,7 @@ MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QW
         m_ui->perfomanceGroupBox->setCheckable(true);
         m_ui->gameTimeGroupBox->setCheckable(true);
         m_ui->legacySettingsGroupBox->setCheckable(true);
+        m_ui->assetVerificationGroupBox->setCheckable(true);
 
         m_quickPlaySingleplayer = m_instance->traits().contains("feature:is_quick_play_singleplayer");
         if (m_quickPlaySingleplayer) {
@@ -143,6 +148,15 @@ MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QW
 
     connect(m_ui->useNativeOpenALCheck, &QAbstractButton::toggled, m_ui->lineEditOpenALPath, &QWidget::setEnabled);
     connect(m_ui->useNativeGLFWCheck, &QAbstractButton::toggled, m_ui->lineEditGLFWPath, &QWidget::setEnabled);
+
+    void (QComboBox::*currentIndexChangedSignal)(int)(&QComboBox::currentIndexChanged);
+    m_ui->assetVerificationModeComboBox->addItem(tr("Always verify"), AssetVerificationMode::AlwaysVerify);
+    m_ui->assetVerificationModeComboBox->addItem(tr("Check existence"), AssetVerificationMode::CheckExistence);
+    m_ui->assetVerificationModeComboBox->addItem(tr("Cache with expiry"), AssetVerificationMode::CacheWithExpiry);
+    m_ui->assetVerificationModeComboBox->addItem(tr("Skip verification"), AssetVerificationMode::SkipVerification);
+    connect(m_ui->assetVerificationModeComboBox, currentIndexChangedSignal, this, &MinecraftSettingsWidget::onAssetModeChanged);
+    if (m_instance != nullptr)
+        connect(m_ui->verifyAssetsButton, &QPushButton::clicked, this, &MinecraftSettingsWidget::triggerVerifyAssets);
 
     loadSettings();
 }
@@ -304,6 +318,19 @@ void MinecraftSettingsWidget::loadSettings()
     m_ui->dataPacksPathEdit->setText(settings->get("GlobalDataPacksPath").toString().trimmed());
     m_ui->globalDataPacksGroupBox->blockSignals(false);
     m_ui->dataPacksPathEdit->blockSignals(false);
+
+    // Asset verification policy
+    if (m_instance != nullptr) {
+        const bool overrideAsset = settings->get("OverrideAssetVerification").toBool();
+        m_ui->assetVerificationGroupBox->setChecked(overrideAsset);
+    }
+    const int mode = settings->get("AssetVerificationMode").toInt();
+    int modeIndex = m_ui->assetVerificationModeComboBox->findData(mode);
+    if (modeIndex == -1)
+        modeIndex = m_ui->assetVerificationModeComboBox->findData(AssetVerificationMode::CheckExistence);
+    m_ui->assetVerificationModeComboBox->setCurrentIndex(modeIndex);
+    m_ui->assetExpiryDaysSpinBox->setValue(settings->get("AssetCacheExpiryDays").toInt());
+    onAssetModeChanged(m_ui->assetVerificationModeComboBox->currentIndex());
 }
 
 void MinecraftSettingsWidget::saveSettings()
@@ -481,6 +508,18 @@ void MinecraftSettingsWidget::saveSettings()
         } else {
             settings->reset("OnlineFixes");
         }
+
+        if (m_instance != nullptr) {
+            const bool overrideAsset = m_ui->assetVerificationGroupBox->isChecked();
+            settings->set("OverrideAssetVerification", overrideAsset);
+            if (overrideAsset) {
+                settings->set("AssetVerificationMode", m_ui->assetVerificationModeComboBox->currentData().toInt());
+                settings->set("AssetCacheExpiryDays", m_ui->assetExpiryDaysSpinBox->value());
+            } else {
+                settings->reset("AssetVerificationMode");
+                settings->reset("AssetCacheExpiryDays");
+            }
+        }
     }
 
     if (m_javaSettings != nullptr)
@@ -578,4 +617,39 @@ void MinecraftSettingsWidget::selectDataPacksFolder()
 
     m_ui->dataPacksPathEdit->setText(path);
     m_instance->settings()->set("GlobalDataPacksPath", path);
+}
+
+void MinecraftSettingsWidget::onAssetModeChanged(int index)
+{
+    const bool showExpiry = m_ui->assetVerificationModeComboBox->itemData(index).toInt() == AssetVerificationMode::CacheWithExpiry;
+    m_ui->assetExpiryDaysSpinBox->setEnabled(showExpiry);
+    m_ui->assetExpiryLabelInst->setEnabled(showExpiry);
+}
+
+void MinecraftSettingsWidget::triggerVerifyAssets()
+{
+    if (!m_instance)
+        return;
+
+    saveSettings();
+
+    auto* settings = m_instance->settings();
+    const bool hadOverride = settings->get("OverrideAssetVerification").toBool();
+    const int savedMode = settings->get("AssetVerificationMode").toInt();
+    settings->set("OverrideAssetVerification", true);
+    settings->set("AssetVerificationMode", static_cast<int>(AssetVerificationMode::AlwaysVerify));
+
+    unique_qobject_ptr<Task> task(new AssetUpdateTask(m_instance, true));
+    ProgressDialog dlg(this);
+    dlg.setSkipButton(true, tr("Abort"));
+    const int result = dlg.execWithTask(task.get());
+
+    settings->set("OverrideAssetVerification", hadOverride);
+    if (hadOverride)
+        settings->set("AssetVerificationMode", savedMode);
+    else
+        settings->reset("AssetVerificationMode");
+
+    if (result == QDialog::Accepted)
+        QMessageBox::information(this, tr("Integrity check complete"), tr("Missing or corrupted asset files were repaired."));
 }

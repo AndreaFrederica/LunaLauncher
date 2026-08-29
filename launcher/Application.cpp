@@ -52,6 +52,7 @@
 #include "java/JavaInstallList.h"
 #include "meta/MetadataProvider.h"
 #include "minecraft/MirrorDownload.h"
+#include "minecraft/update/AssetUpdateTask.h"
 #include "modplatform/ModApiMirror.h"
 #include "net/Aria2Manager.h"
 #include "net/PasteUpload.h"
@@ -68,6 +69,7 @@
 
 #include "ui/pages/BasePageProvider.h"
 #include "ui/pages/global/APIPage.h"
+#include "ui/pages/global/AssetsPage.h"
 #include "ui/pages/global/AccountListPage.h"
 #include "ui/pages/global/AppearancePage.h"
 #include "ui/pages/global/Aria2Page.h"
@@ -1087,6 +1089,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("Env", "{}");
 
+        m_settings->registerSetting("AssetVerificationMode", AssetVerificationMode::CheckExistence);
+        m_settings->registerSetting("AssetCacheExpiryDays", 7);
+
         // Custom Microsoft Authentication Client ID
         m_settings->registerSetting("MSAClientIDOverride", "");
 
@@ -1134,6 +1139,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
             m_globalSettingsProvider->addPage<APIPage>();
+            m_globalSettingsProvider->addPage<AssetsPage>();
             m_globalSettingsProvider->addPage<Aria2Page>();
             m_globalSettingsProvider->addPage<PclDownloadPage>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();

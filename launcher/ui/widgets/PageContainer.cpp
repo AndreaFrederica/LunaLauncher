@@ -147,7 +147,7 @@ const QList<BasePage*>& PageContainer::getPages() const
 void PageContainer::refreshContainer()
 {
     m_proxyModel->invalidate();
-    if (!m_currentPage->shouldDisplay()) {
+    if (!m_currentPage || !m_currentPage->shouldDisplay()) {
         auto index = m_proxyModel->index(0, 0);
         if (index.isValid()) {
             m_pageList->setCurrentIndex(index);
@@ -246,9 +246,15 @@ void PageContainer::help()
 void PageContainer::currentChanged(const QModelIndex& current)
 {
     int selected_index = current.isValid() ? m_proxyModel->mapToSource(current).row() : -1;
-
-    auto* selected = m_model->pages().at(selected_index);
     auto* previous = m_currentPage;
+
+    // Selection can briefly become invalid while the proxy model is reset or
+    // filtered. Do not index the page list with -1 during dialog startup.
+    if (selected_index < 0 || selected_index >= m_model->pages().size()) {
+        showPage(-1);
+        return;
+    }
+    auto* selected = m_model->pages().at(selected_index);
 
     emit selectedPageChanged(previous, selected);
 

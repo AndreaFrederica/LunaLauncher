@@ -40,7 +40,7 @@ QString CliInteraction::readLine(bool secret)
     const auto value = in.readLine();
     if (terminal) {
         SetConsoleMode(handle, oldMode);
-        QTextStream(stderr) << Qt::endl;
+        QTextStream(stderr) << '\n' << Qt::flush;
     }
 #else
     termios oldState{};
@@ -53,7 +53,7 @@ QString CliInteraction::readLine(bool secret)
     const auto value = in.readLine();
     if (terminal) {
         tcsetattr(STDIN_FILENO, TCSANOW, &oldState);
-        QTextStream(stderr) << Qt::endl;
+        QTextStream(stderr) << '\n' << Qt::flush;
     }
 #endif
     return value;

@@ -1054,6 +1054,10 @@ std::optional<ModPlatform::ModLoaderTypes> PackProfile::getSupportedModLoaders()
         loaders |= ModPlatform::Fabric;
     if (getComponentVersion("net.minecraft") == "1.20.1" && (loaders & ModPlatform::NeoForge))
         loaders |= ModPlatform::Forge;
+    // Cleanroom is a Forge fork and mod platforms do not expose a separate
+    // Cleanroom loader filter.
+    if (loaders & ModPlatform::Cleanroom)
+        loaders |= ModPlatform::Forge;
     return loaders;
 }
 
@@ -1072,6 +1076,9 @@ QList<ModPlatform::ModLoaderType> PackProfile::getModLoadersList()
     }
     if (getComponentVersion("net.minecraft") == "1.20.1" && result.contains(ModPlatform::NeoForge) &&
         !result.contains(ModPlatform::Forge)) {
+        result.append(ModPlatform::Forge);
+    }
+    if (result.contains(ModPlatform::Cleanroom) && !result.contains(ModPlatform::Forge)) {
         result.append(ModPlatform::Forge);
     }
     return result;

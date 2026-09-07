@@ -1553,7 +1553,6 @@ target_include_directories(Launcher_logic PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libraries/quickjs-ng
     ${CMAKE_SOURCE_DIR}/libraries/qtermwidget/lib
-    ${CMAKE_SOURCE_DIR}/libraries/simplewebp
 )
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 
@@ -1566,7 +1565,6 @@ target_link_libraries(Launcher_logic
     nbt++
     ${ZLIB_LIBRARIES}
     qdcss
-    simplewebp
     quickjs-interface
     BuildConfig
     Qt${QT_VERSION_MAJOR}::Widgets
@@ -1819,6 +1817,11 @@ endif()
 #### The bundle mess! ####
 # Bundle utilities are used to complete packages for different platforms - they add all the libraries that would otherwise be missing on the target system.
 # NOTE: it seems that this absolutely has to be here, and nowhere else.
+install(FILES "${QT_PLUGINS_DIR}/imageformats/${QT_WEBP_PLUGIN_NAME}"
+    DESTINATION "${PLUGIN_DEST_DIR}/imageformats"
+    COMPONENT bundle
+)
+
 if(WIN32 OR (UNIX AND APPLE))
     if(WIN32)
         set(QT_DEPLOY_TOOL_OPTIONS "--no-opengl-sw --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --skip-plugin-types generic,networkinformation")

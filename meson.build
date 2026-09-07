@@ -31,6 +31,7 @@ if meson.project_source_root() == meson.project_build_root()
 endif
 
 qt = import('qt6')
+fs = import('fs')
 if is_windows
   windows = import('windows')
 endif
@@ -86,6 +87,27 @@ qt_test_dep = dependency('Qt6Test', method: 'cmake', required: true)
 qt_opengl_dep = dependency('Qt6OpenGL', method: 'cmake', required: true)
 qt_multimedia_dep = dependency('Qt6Multimedia', method: 'cmake', required: true)
 qt_dbus_dep = dependency('Qt6DBus', method: 'cmake', required: false)
+qt_plugin_dir = run_command(
+  python_prog,
+  '-c',
+  'import os; print(os.environ.get("LUNA_QT_PLUGIN_DIR", ""))',
+  check: true,
+).stdout().strip()
+if qt_plugin_dir == ''
+  qtpaths_prog = find_program('qtpaths6', 'qtpaths', required: true)
+  qt_plugin_dir = run_command(qtpaths_prog, '--query', 'QT_INSTALL_PLUGINS', check: true).stdout().strip()
+endif
+if is_windows
+  qt_webp_plugin_name = get_option('buildtype') == 'debug' ? 'qwebpd.dll' : 'qwebp.dll'
+elif is_macos
+  qt_webp_plugin_name = 'libqwebp.dylib'
+else
+  qt_webp_plugin_name = 'libqwebp.so'
+endif
+qt_webp_plugin = join_paths(qt_plugin_dir, 'imageformats', qt_webp_plugin_name)
+if not fs.exists(qt_webp_plugin)
+  error('Qt WebP image plugin was not found: ' + qt_webp_plugin)
+endif
 if is_windows
   qt_entrypoint_dep = cpp.find_library(
     'Qt6EntryPoint',

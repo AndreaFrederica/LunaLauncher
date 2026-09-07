@@ -86,7 +86,6 @@ launcher_moc_header_generated = qt.preprocess(
     launcher_minecraft_inc,
     quickjs_inc,
     qtermwidget_inc,
-    simplewebp_inc,
   ],
   dependencies: [
     buildconfig_dep,
@@ -119,7 +118,6 @@ launcher_moc_source_generated = qt.preprocess(
     launcher_minecraft_inc,
     quickjs_inc,
     qtermwidget_inc,
-    simplewebp_inc,
   ],
   dependencies: [
     buildconfig_dep,
@@ -165,7 +163,6 @@ launcher_logic = static_library(
     murmur2_dep,
     libnbt_dep,
     qdcss_dep,
-    simplewebp_dep,
     quickjs_dep,
     buildconfig_dep,
     qt_core_dep,
@@ -193,7 +190,6 @@ launcher_logic = static_library(
     launcher_minecraft_inc,
     quickjs_inc,
     qtermwidget_inc,
-    simplewebp_inc,
   ],
   cpp_args: launcher_logic_args,
   cpp_pch: get_option('use_pch') ? ['include/base.pch.hpp', 'include/qtcore.pch.hpp', 'include/qtgui.pch.hpp'] : [],
@@ -335,6 +331,7 @@ if is_windows and get_option('build_filelinker')
 endif
 
 install_data('qtlogging.ini', install_dir: resources_dest_dir)
+install_data(qt_webp_plugin, install_dir: join_paths(plugin_dest_dir, 'imageformats'))
 
 if is_macos
   install_data(launcher_macos_info_plist, install_dir: app_bundle_dir)

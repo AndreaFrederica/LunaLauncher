@@ -65,6 +65,17 @@ def qt_config(root: Path, profile: str) -> Path:
     return qt_target_root(root, profile) / "lib" / "cmake" / "Qt6Core" / "Qt6CoreConfig.cmake"
 
 
+def qt_webp_plugin(root: Path, profile: str) -> Path:
+    system = profile_system(profile)
+    if system == "windows":
+        plugin_name = "qwebpd.dll" if profile_mode(profile) == "debug" else "qwebp.dll"
+    elif system == "macos":
+        plugin_name = "libqwebp.dylib"
+    else:
+        plugin_name = "libqwebp.so"
+    return qt_target_root(root, profile) / "plugins" / "imageformats" / plugin_name
+
+
 def build_dir(root: Path, profile: str) -> Path:
     env_override = os.environ.get("LUNA_BUILD_DIR")
     if env_override:
@@ -95,6 +106,7 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
     if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
         cmake_prefix_paths.append(env["CONDA_PREFIX"])
     env["CMAKE_PREFIX_PATH"] = os.pathsep.join(cmake_prefix_paths)
+    env["LUNA_QT_PLUGIN_DIR"] = str(qt_target / "plugins")
     if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
         env["PKG_CONFIG_PATH"] = os.pathsep.join(
             [
@@ -131,7 +143,11 @@ def validate_profile(profile: str) -> None:
 
 
 def install_qt_tools(root: Path) -> None:
-    if (qt_tools_root(root) / "lib" / "cmake" / "Qt6Core" / "Qt6CoreConfig.cmake").exists():
+    if (
+        (qt_tools_root(root) / "lib" / "cmake" / "Qt6Core" / "Qt6CoreConfig.cmake").exists()
+        and (qt_tools_root(root) / "plugins" / "imageformats" / "qwebp.dll").exists()
+        and (qt_tools_root(root) / "plugins" / "imageformats" / "qwebpd.dll").exists()
+    ):
         print("Qt build tools already installed")
         return
     run(
@@ -146,6 +162,7 @@ def install_qt_tools(root: Path) -> None:
             "qtwebsockets",
             "qtnetworkauth",
             "qtmultimedia",
+            "qtimageformats",
             "-O",
             str(root / "third_party" / "qt"),
         ],
@@ -157,7 +174,7 @@ def install_qt_target(root: Path, profile: str) -> None:
     validate_profile(profile)
     if is_cross_profile(profile):
         install_qt_tools(root)
-    if qt_config(root, profile).exists():
+    if qt_config(root, profile).exists() and qt_webp_plugin(root, profile).exists():
         print("Qt target already installed")
         return
     if profile_system(profile) == "windows":
@@ -176,6 +193,7 @@ def install_qt_target(root: Path, profile: str) -> None:
                 "qtwebsockets",
                 "qtnetworkauth",
                 "qtmultimedia",
+                "qtimageformats",
                 "-O",
                 str(root / "third_party" / "qt"),
             ],
@@ -194,6 +212,7 @@ def install_qt_target(root: Path, profile: str) -> None:
             "qtwebsockets",
             "qtnetworkauth",
             "qtmultimedia",
+            "qtimageformats",
             "-O",
             str(root / "third_party" / "qt"),
         ],

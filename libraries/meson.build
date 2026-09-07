@@ -2,7 +2,6 @@ rainbow_inc = include_directories('rainbow/include')
 localpeer_inc = include_directories('LocalPeer/include')
 murmur2_inc = include_directories('murmur2', 'murmur2/src')
 qdcss_inc = include_directories('qdcss/include')
-simplewebp_inc = include_directories('simplewebp')
 libnbt_inc = include_directories('libnbtplusplus/include', '.')
 quickjs_inc = include_directories('quickjs-ng')
 qtermwidget_inc = include_directories(
@@ -59,14 +58,6 @@ qdcss_lib = static_library(
 )
 
 qdcss_dep = declare_dependency(include_directories: qdcss_inc, link_with: qdcss_lib)
-
-simplewebp_lib = static_library(
-  'simplewebp',
-  ['simplewebp/simplewebp.c', 'simplewebp/simplewebp.h'],
-  include_directories: simplewebp_inc,
-)
-
-simplewebp_dep = declare_dependency(include_directories: simplewebp_inc, link_with: simplewebp_lib)
 
 libnbt_sources = [
   'libnbtplusplus/src/endian_str.cpp',

@@ -316,6 +316,17 @@ if(Launcher_QT_VERSION_MAJOR EQUAL 6)
     set(QT_LIBEXECS_DIR ${QT${QT_VERSION_MAJOR}_INSTALL_PREFIX}/${QT${QT_VERSION_MAJOR}_INSTALL_LIBEXECS})
 endif()
 
+if(WIN32)
+    set(QT_WEBP_PLUGIN_NAME qwebp.dll)
+elseif(APPLE)
+    set(QT_WEBP_PLUGIN_NAME libqwebp.dylib)
+else()
+    set(QT_WEBP_PLUGIN_NAME libqwebp.so)
+endif()
+if(NOT EXISTS "${QT_PLUGINS_DIR}/imageformats/${QT_WEBP_PLUGIN_NAME}")
+    message(FATAL_ERROR "Qt WebP image plugin was not found: ${QT_PLUGINS_DIR}/imageformats/${QT_WEBP_PLUGIN_NAME}")
+endif()
+
 find_package(cmark REQUIRED)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -510,7 +521,6 @@ add_subdirectory(libraries/rainbow) # Qt extension for colors
 add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
 add_subdirectory(libraries/murmur2) # Hash for usage with the CurseForge API
 add_subdirectory(libraries/qdcss) # css parser
-add_subdirectory(libraries/simplewebp) # WebP image decoder
 set(QJS_INSTALL OFF CACHE BOOL "Install QuickJS-NG development files and tools" FORCE)
 add_subdirectory(libraries/quickjs-ng) # JavaScript engine
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)

@@ -13,8 +13,8 @@
 #include <csignal>
 
 #include "Application.h"
+#include "api/LauncherApi.h"
 #include "cli/CliInteraction.h"
-#include "cli/OperationService.h"
 
 namespace {
 std::atomic_bool interrupted = false;
@@ -191,7 +191,7 @@ void CliController::run()
     }
 
     CliInteraction interaction(m_options.nonInteractive, m_options.passwordStdin);
-    OperationService service;
+    LauncherApi service;
     interrupted.store(false);
     const auto previousHandler = std::signal(SIGINT, handleInterrupt);
     QTimer interruptTimer;

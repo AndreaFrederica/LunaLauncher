@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QIODevice>
 #include <QTextStream>
 #include <QTimer>
 
@@ -20,7 +21,8 @@
 #endif
 
 #include "Application.h"
-#include "cli/OperationService.h"
+#include "api/LauncherApi.h"
+#include "cli/UserInteraction.h"
 
 namespace {
 
@@ -70,7 +72,7 @@ QJsonObject stringProperty(const QString& description)
 
 }  // namespace
 
-McpServer::McpServer(QObject* parent) : QObject(parent), m_input(stdin, QIODevice::ReadOnly) {}
+McpServer::McpServer(QObject* parent) : QObject(parent), m_input(stdin, QIODevice::ReadOnly), m_service() {}
 
 void McpServer::start()
 {
@@ -189,9 +191,8 @@ void McpServer::handleMessage(const QJsonObject& request)
                 writeMessage(QJsonObject{ { "jsonrpc", "2.0" }, { "method", "notifications/message" }, { "params", params } });
             }
         });
-        OperationService service;
-        m_activeService = &service;
-        const auto result = service.execute(operations.value(name), arguments, interaction);
+        m_activeService = &m_service;
+        const auto result = m_service.execute(operations.value(name), arguments, interaction);
         m_activeService = nullptr;
         const auto text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
         writeResult(id, QJsonObject{ { "content", QJsonArray{ QJsonObject{ { "type", "text" }, { "text", text } } } },

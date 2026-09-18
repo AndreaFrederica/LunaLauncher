@@ -12,7 +12,7 @@
 #include <atomic>
 #include <csignal>
 
-#include "cli/OperationService.h"
+#include "api/LauncherApi.h"
 
 namespace {
 std::atomic_bool interrupted = false;
@@ -56,7 +56,7 @@ TuiController::TuiController(QObject* parent) : QObject(parent) {}
 
 void TuiController::run()
 {
-    OperationService service;
+    LauncherApi service;
     interrupted.store(false);
     const auto previousHandler = std::signal(SIGINT, handleInterrupt);
     QTimer interruptTimer;
@@ -125,17 +125,17 @@ void TuiController::run()
     QCoreApplication::exit(0);
 }
 
-bool TuiController::showInstances(OperationService& service)
+bool TuiController::showInstances(LauncherApi& service)
 {
     return printResult("instance.list", service.execute("instance.list", {}, m_interaction));
 }
 
-bool TuiController::showAccounts(OperationService& service)
+bool TuiController::showAccounts(LauncherApi& service)
 {
     return printResult("account.list", service.execute("account.list", {}, m_interaction));
 }
 
-bool TuiController::loginAccount(OperationService& service)
+bool TuiController::loginAccount(LauncherApi& service)
 {
     const QJsonArray types{ QJsonObject{ { "name", "Microsoft" }, { "id", "microsoft" } },
                             QJsonObject{ { "name", "Offline" }, { "id", "offline" } },
@@ -173,7 +173,7 @@ bool TuiController::loginAccount(OperationService& service)
     return printResult("account.login", service.execute("account.login", parameters, m_interaction));
 }
 
-bool TuiController::importInstance(OperationService& service)
+bool TuiController::importInstance(LauncherApi& service)
 {
     const auto source = m_interaction.input(tr("Local pack path or CurseForge/Modrinth URL"), false);
     if (!source || source->trimmed().isEmpty())
@@ -183,7 +183,7 @@ bool TuiController::importInstance(OperationService& service)
     return printResult("instance.import", service.execute("instance.import", parameters, m_interaction));
 }
 
-bool TuiController::launchInstance(OperationService& service)
+bool TuiController::launchInstance(LauncherApi& service)
 {
     const auto instancesResult = service.execute("instance.list", {}, m_interaction);
     if (!instancesResult.value("ok").toBool())
@@ -244,7 +244,7 @@ bool TuiController::launchInstance(OperationService& service)
     return printResult("instance.launch", service.execute("instance.launch", parameters, m_interaction));
 }
 
-bool TuiController::manageSettings(OperationService& service, bool instanceScope)
+bool TuiController::manageSettings(LauncherApi& service, bool instanceScope)
 {
     QJsonObject target{ { "scope", instanceScope ? "instance" : "launcher" } };
     if (instanceScope) {
@@ -323,7 +323,7 @@ bool TuiController::manageSettings(OperationService& service, bool instanceScope
     }
 }
 
-bool TuiController::manageInstances(OperationService& service)
+bool TuiController::manageInstances(LauncherApi& service)
 {
     const QJsonArray actions{ QJsonObject{ { "name", "Show details" }, { "id", "info" } },
                               QJsonObject{ { "name", "Rename" }, { "id", "rename" } },
@@ -373,7 +373,7 @@ bool TuiController::manageInstances(OperationService& service)
     return printResult(operation, service.execute(operation, parameters, m_interaction));
 }
 
-bool TuiController::manageAccounts(OperationService& service)
+bool TuiController::manageAccounts(LauncherApi& service)
 {
     const QJsonArray actions{ QJsonObject{ { "name", "Set default" }, { "id", "set-default" } },
                               QJsonObject{ { "name", "Clear default" }, { "id", "clear-default" } },
@@ -413,7 +413,7 @@ bool TuiController::manageAccounts(OperationService& service)
     return printResult(operation, service.execute(operation, parameters, m_interaction));
 }
 
-bool TuiController::manageResources(OperationService& service)
+bool TuiController::manageResources(LauncherApi& service)
 {
     const auto instancesResult = service.execute("instance.list", {}, m_interaction);
     if (!instancesResult.value("ok").toBool())
@@ -485,7 +485,7 @@ bool TuiController::manageResources(OperationService& service)
     return printResult(operation, service.execute(operation, parameters, m_interaction));
 }
 
-bool TuiController::showJava(OperationService& service)
+bool TuiController::showJava(LauncherApi& service)
 {
     return printResult("java.list", service.execute("java.list", {}, m_interaction));
 }

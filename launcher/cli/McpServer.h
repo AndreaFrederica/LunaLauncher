@@ -6,7 +6,7 @@
 #include <QObject>
 #include <QTextStream>
 
-class OperationService;
+#include "api/LauncherApi.h"
 
 class McpServer final : public QObject {
     Q_OBJECT
@@ -29,5 +29,6 @@ class McpServer final : public QObject {
 
     QObject* m_notifier = nullptr;
     QTextStream m_input;
-    OperationService* m_activeService = nullptr;
+    LauncherApi m_service;
+    LauncherApi* m_activeService = nullptr;
 };

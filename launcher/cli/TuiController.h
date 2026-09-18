@@ -7,7 +7,7 @@
 
 #include "cli/CliInteraction.h"
 
-class OperationService;
+class LauncherApi;
 
 class TuiController final : public QObject {
     Q_OBJECT
@@ -19,16 +19,16 @@ class TuiController final : public QObject {
     void run();
 
    private:
-    bool showInstances(OperationService& service);
-    bool showAccounts(OperationService& service);
-    bool loginAccount(OperationService& service);
-    bool importInstance(OperationService& service);
-    bool launchInstance(OperationService& service);
-    bool manageSettings(OperationService& service, bool instanceScope);
-    bool manageInstances(OperationService& service);
-    bool manageAccounts(OperationService& service);
-    bool manageResources(OperationService& service);
-    bool showJava(OperationService& service);
+    bool showInstances(LauncherApi& service);
+    bool showAccounts(LauncherApi& service);
+    bool loginAccount(LauncherApi& service);
+    bool importInstance(LauncherApi& service);
+    bool launchInstance(LauncherApi& service);
+    bool manageSettings(LauncherApi& service, bool instanceScope);
+    bool manageInstances(LauncherApi& service);
+    bool manageAccounts(LauncherApi& service);
+    bool manageResources(LauncherApi& service);
+    bool showJava(LauncherApi& service);
     bool printResult(const QString& operation, const QJsonObject& result);
     bool confirm(const QString& prompt, bool defaultValue = false);
     void waitForEnter();

@@ -6,6 +6,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
+#include <QStringList>
 
 #include <functional>
 
@@ -13,6 +15,7 @@
 
 class OperationService;
 class UserInteraction;
+class Task;
 
 /**
  * Stable service boundary for alternate launcher user interfaces.
@@ -32,6 +35,9 @@ class LauncherApi final : public QObject {
     QJsonObject execute(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction);
     QJsonArray describe() const;
     void registerOperation(ApiOperation operation, Handler handler);
+    /** Track a domain task so CLI/MCP cancellation reaches non-legacy adapters. */
+    void trackTask(Task* task);
+    void clearTrackedTask(Task* task);
     void cancelCurrent();
 
    private:
@@ -40,6 +46,20 @@ class LauncherApi final : public QObject {
         Handler handler;
     };
 
+    struct TrackedTask {
+        QPointer<Task> task;
+        QJsonObject snapshot;
+    };
+
+    QJsonObject taskStatus(const QJsonObject& parameters) const;
+    QJsonObject taskList(const QJsonObject& parameters) const;
+    QJsonObject taskCancel(const QJsonObject& parameters);
+    QJsonObject snapshotTask(const QString& taskId, Task* task) const;
+    Task* currentTask() const;
+
     QHash<QString, RegisteredOperation> m_operations;
+    QHash<QString, TrackedTask> m_tasks;
+    QStringList m_taskOrder;
     OperationService* m_legacyService = nullptr;
+    QPointer<Task> m_externalTask;
 };

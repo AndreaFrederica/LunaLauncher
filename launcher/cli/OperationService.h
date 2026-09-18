@@ -22,9 +22,15 @@ class OperationService final : public QObject {
 
     QJsonObject execute(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction);
     void cancelCurrent();
+    /** The task currently owned by a synchronous operation, if any. */
+    Task* currentTask() const { return m_currentTask; }
 
     static QJsonObject success(const QJsonValue& data = QJsonObject());
     static QJsonObject failure(const QString& message, int exitCode = 1);
+
+   signals:
+    void taskStarted(Task* task);
+    void taskFinished(Task* task);
 
    private:
     QJsonObject listInstances();

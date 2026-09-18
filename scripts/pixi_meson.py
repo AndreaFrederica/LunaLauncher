@@ -102,6 +102,16 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
         if "msys64" not in entry.lower()
     ]
     env["PATH"] = os.pathsep.join([str(qt_tools / "bin")] + path_entries)
+    # Pixi/MSYS shells may export GCC include and library search paths.  When
+    # Meson activates MSVC, those paths are still inherited by `cl` and make
+    # it parse MSYS headers as if they were MSVC headers (`__asm__` errors).
+    # Keep the normal VS environment, but remove only MSYS entries from the
+    # inherited search variables so the Meson action remains reproducible.
+    for variable in ("INCLUDE", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH", "LIB"):
+        if variable in env:
+            env[variable] = os.pathsep.join(
+                entry for entry in env[variable].split(os.pathsep) if "msys64" not in entry.lower()
+            )
     cmake_prefix_paths = [str(qt_target / "lib" / "cmake")]
     if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
         cmake_prefix_paths.append(env["CONDA_PREFIX"])

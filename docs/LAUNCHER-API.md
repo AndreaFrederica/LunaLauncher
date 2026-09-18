@@ -41,6 +41,8 @@ existing launcher models and tasks
 The first implementation can continue to use Qt internally. Qt-free embedding is a
 separate later goal. A UI that launches `lunalauncher-cli --mcp` already avoids a Qt
 Widgets dependency and does not require changes to the existing GUI.
+The generic `--cli api OPERATION JSON_OBJECT` form can invoke any catalog entry while
+transport-specific aliases are added.
 
 ## Command contract
 
@@ -98,11 +100,11 @@ catalog, not a claim that every operation is implemented in this change.
 
 | Group | Required operations |
 | --- | --- |
-| Instances | list, info, create, import, rename, group, copy, delete, restore, shortcut, icon, update, verify, export, open-folder |
+| Instances | list, info, create, import, rename, group, copy, delete, restore, shortcut, icon, notes, update, verify, export, open-folder, stop, kill |
 | Minecraft components | list versions, select version, list/install/remove/reorder components, install loader, managed-pack actions |
 | Resources | list, inspect, search, list versions, install, update, dependency check, enable, disable, remove, metadata, batch actions |
 | Worlds and servers | list, inspect, create, rename, copy, delete, import/export, join, server properties, console, EULA, Java, loader, YAML, ops, whitelist, bans |
-| Accounts | list, login, refresh, remove, default, reorder, profiles, skins, capes |
+| Accounts | list, login, refresh, remove, default, reorder, profiles, skin library, skin upload/reset, capes |
 | Java | scan, install, remove, select, refresh |
 | Settings and appearance | list/get/set/reset, import/export, theme, language, layout, paths, proxy |
 | Launcher services | update check, metadata, assets, external-tool probes, Aria2, Terracotta, Yukari, diagnostics |
@@ -129,16 +131,23 @@ When upstream changes a task or page, the adapter is updated in its separate fil
 merge therefore adds a small adapter conflict only when the affected behavior changed;
 the upstream GUI implementation remains easy to merge.
 
-The first facade is synchronous because it delegates to the existing synchronous
-`OperationService`. Before long-running GUI domains are exposed, add an API task bridge
-and task registry around the existing `Task` signals. Do not make a new UI depend on
-the current synchronous behavior for operations that will later become asynchronous.
+The facade currently waits for existing tasks and forwards status/input events through
+`UserInteraction`, preserving CLI and MCP behavior. Before exposing a new long-running
+GUI domain, add an API task bridge and task registry around the existing `Task` signals
+so a future transport can track a request without blocking its event loop.
 
 ## Current baseline
 
-The current headless interface already covers basic instance/account/resource/settings
-operations, imports, launches, and Java scanning. It does not yet cover all groups
-above. In particular, instance creation, Minecraft component editing, platform resource
-search, stop/kill, export, worlds, servers, logs, screenshots, Java installation, and
-the launcher integrations still need adapters. See [CLI-MCP.md](CLI-MCP.md) for the
-current command list and limitations.
+The current headless interface covers basic instance/account/resource/settings
+operations, imports, launches, instance creation and lifecycle control, shortcuts,
+icons, notes, asset verification, Minecraft component editing, and zip export. It
+also covers world listing and editing, account ordering/profile and local skin library
+operations, skin upload/reset and cape selection, resource inspection/refresh, Java
+scanning/installation/removal/selection, server properties and EULA files, server
+operator/whitelist/ban lists, server console commands, bounded log reads, and
+screenshot listing/deletion. Optional domains such as platform search, resource
+dependency resolution and batch actions, server YAML/loader pages, and
+Aria2/Terracotta/Yukari controls still need dedicated adapters. They should be added
+beside the existing files and registered in the catalog so a client can distinguish
+an unsupported optional provider from an unknown operation.
+See [CLI-MCP.md](CLI-MCP.md) for the compatibility command list and limitations.

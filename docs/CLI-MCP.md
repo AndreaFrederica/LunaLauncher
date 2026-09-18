@@ -39,6 +39,7 @@ lunalauncher-cli --cli settings list instance INSTANCE [FILTER]
 lunalauncher-cli --cli settings get instance INSTANCE KEY [--reveal-secrets]
 lunalauncher-cli --cli settings set instance INSTANCE KEY [VALUE]
 lunalauncher-cli --cli settings reset instance INSTANCE KEY
+lunalauncher-cli --cli api OPERATION [JSON_OBJECT]
 ```
 
 Authentication passwords and sensitive setting values are never accepted as command-line arguments. Use hidden terminal input or `--password-stdin`. `--non-interactive` makes missing input an error. Launches detach after the game starts unless `--wait` is present. Ctrl-C aborts the active task.
@@ -46,6 +47,18 @@ Authentication passwords and sensitive setting values are never accepted as comm
 Normal archive URLs and local packs are handled by `InstanceImportTask`. Modrinth and CurseForge project file pages are resolved through their APIs. Restricted CurseForge files require an enabled external tool that reports `headless: true` during its protocol probe. Resource kinds are `mods`, `coremods`, `nilmods`, `resourcepacks`, `texturepacks`, `shaderpacks`, `datapacks`, `schematics`, `customplayermodels`, and `yesstevemodels`.
 
 Settings commands expose every setting registered by the launcher or selected instance, including instance override gates. Values retain their existing type. CLI values may use JSON syntax for booleans, numbers, lists, and objects; omit `VALUE` to enter it interactively. Passwords, tokens, and API keys are redacted unless `--reveal-secrets` is explicitly used. Changes that configure process-wide services take full effect on the next headless invocation.
+
+The generic API form accepts an operation from `api.describe` and an optional JSON
+object, for example:
+
+```text
+lunalauncher-cli --cli --json api runtime.info
+lunalauncher-cli --cli --json api instance.world.list {"instance":"INSTANCE"}
+```
+
+The result includes `apiVersion` and `operation` fields. `api.describe` returns the
+operation catalog and JSON Schemas, including optional capability names and destructive
+flags, so alternate UIs do not need to hard-code the GUI command set.
 
 ## TUI
 
@@ -67,7 +80,14 @@ lunalauncher-cli --mcp
 
 Transport is JSON-RPC 2.0 over newline-delimited standard input/output. Launcher logs remain on standard error. The server supports `initialize`, `ping`, `tools/list`, `tools/call`, cancellation notifications, and empty resource/prompt lists.
 
-Tools:
+The original compatibility tools remain available. `tools/list` also generates a
+`lunalauncher_<operation>` tool for every entry in the API catalog, with its schema
+copied from `api.describe`. This includes instance lifecycle and export, Minecraft
+components, worlds, servers, Java management, resource inspection/update, logs and
+screenshots, account profiles and skin/cape operations, runtime information, and task
+status/cancellation.
+
+Compatibility tools:
 
 - `lunalauncher_instance_list`
 - `lunalauncher_instance_info`
@@ -99,4 +119,8 @@ Authentication and task status events use `notifications/progress` when the requ
 
 Account, instance, resource, Java, import, launch, and settings operations share the same `OperationService` in CLI, TUI, and MCP. Destructive MCP tools require `confirm: true`; destructive CLI operations require `--yes`; the TUI asks interactively.
 
-This is broad headless coverage, not yet a complete terminal clone of every GUI page. Platform search and version selection for individual resources, pack export, Minecraft component editing, worlds, servers, screenshots, logs, and proxy/download diagnostics still require dedicated shared operations. Resource installation currently accepts a local path or direct URL; platform project pages are supported for whole-instance imports.
+This is broad headless coverage, while platform search and version selection for
+individual resources, resource dependency/batch actions, server YAML/loader pages, and
+proxy/download diagnostics still require dedicated shared operations. Resource
+installation currently accepts a local path or direct URL; platform project pages are
+supported for whole-instance imports.

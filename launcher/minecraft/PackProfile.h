@@ -88,6 +88,9 @@ class PackProfile : public QAbstractListModel {
     /// call this to explicitly mark the component list as loaded - this is used to build a new component list from scratch.
     void buildingFromScratch();
 
+    /// Returns whether the component list has been loaded from mmc-pack.json.
+    bool isLoaded() const;
+
     /// install more jar mods
     void installJarMods(QStringList selectedFiles);
 

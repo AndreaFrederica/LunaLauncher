@@ -155,6 +155,19 @@ void CliController::run()
             QCoreApplication::exit(2);
             return;
         }
+    } else if (command.size() >= 2 && command.at(0) == "api") {
+        // Generic escape hatch for alternate UI clients and newly registered
+        // domains. The optional third argument is a JSON object.
+        operation = command.at(1);
+        if (command.size() >= 3) {
+            const auto document = QJsonDocument::fromJson(command.mid(2).join(' ').toUtf8());
+            if (!document.isObject()) {
+                QTextStream(stderr) << "API parameters must be a JSON object.\n";
+                QCoreApplication::exit(2);
+                return;
+            }
+            parameters = document.object();
+        }
     } else {
         QTextStream(stderr) << "Usage:\n"
                                "  --cli instance list [--json]\n"
@@ -184,6 +197,7 @@ void CliController::run()
                                "  --cli settings get SCOPE [INSTANCE] KEY [--reveal-secrets]\n"
                                "  --cli settings set SCOPE [INSTANCE] KEY [VALUE]\n"
                                "  --cli settings reset SCOPE [INSTANCE] KEY\n"
+                               "  --cli api OPERATION [JSON_OBJECT]\n"
                                "    SCOPE is launcher or instance.\n"
                                "  --mcp\n";
         QCoreApplication::exit(2);

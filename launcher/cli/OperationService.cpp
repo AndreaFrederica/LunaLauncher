@@ -858,6 +858,7 @@ bool OperationService::waitForTask(Task* task, UserInteraction& interaction, QSt
     QEventLoop loop;
     const auto previousTask = m_currentTask;
     m_currentTask = task;
+    emit taskStarted(task);
     connect(task, &Task::status, this, [&interaction](const QString& status) { interaction.status(status); });
     connect(task, &Task::finished, &loop, &QEventLoop::quit);
     if (!task->isFinished()) {
@@ -869,6 +870,7 @@ bool OperationService::waitForTask(Task* task, UserInteraction& interaction, QSt
     if (!task->wasSuccessful() && error)
         *error = task->failReason().isEmpty() ? tr("The operation was aborted.") : task->failReason();
     m_currentTask = previousTask;
+    emit taskFinished(task);
     return task->wasSuccessful();
 }
 

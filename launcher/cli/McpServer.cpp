@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QIODevice>
+#include <QSet>
 #include <QTextStream>
 #include <QTimer>
 
@@ -68,6 +69,14 @@ QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
 QJsonObject stringProperty(const QString& description)
 {
     return { { "type", "string" }, { "description", description } };
+}
+
+QString toolNameForOperation(const QString& operation)
+{
+    QString tool = operation;
+    tool.replace('-', '_');
+    tool.replace('.', '_');
+    return QStringLiteral("lunalauncher_") + tool;
 }
 
 }  // namespace
@@ -176,7 +185,17 @@ void McpServer::handleMessage(const QJsonObject& request)
                                                         { "lunalauncher_settings_get", "settings.get" },
                                                         { "lunalauncher_settings_set", "settings.set" },
                                                         { "lunalauncher_settings_reset", "settings.reset" } };
-        if (!operations.contains(name)) {
+        QString operation = operations.value(name);
+        if (operation.isEmpty()) {
+            for (const auto& metadata : m_service.describe()) {
+                const auto candidate = metadata.toObject();
+                if (toolNameForOperation(candidate.value("name").toString()) == name) {
+                    operation = candidate.value("name").toString();
+                    break;
+                }
+            }
+        }
+        if (operation.isEmpty()) {
             writeError(id, -32602, QStringLiteral("Unknown tool: %1").arg(name));
             return;
         }
@@ -192,7 +211,7 @@ void McpServer::handleMessage(const QJsonObject& request)
             }
         });
         m_activeService = &m_service;
-        const auto result = m_service.execute(operations.value(name), arguments, interaction);
+        const auto result = m_service.execute(operation, arguments, interaction);
         m_activeService = nullptr;
         const auto text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
         writeResult(id, QJsonObject{ { "content", QJsonArray{ QJsonObject{ { "type", "text" }, { "text", text } } } },
@@ -221,7 +240,7 @@ void McpServer::writeError(const QJsonValue& id, int code, const QString& messag
 
 QJsonArray McpServer::tools() const
 {
-    return {
+    QJsonArray result = {
         QJsonObject{ { "name", "lunalauncher_instance_list" },
                      { "description", "List installed Minecraft instances." },
                      { "inputSchema", objectSchema({}) } },
@@ -400,4 +419,25 @@ QJsonArray McpServer::tools() const
                                         { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
                            QJsonArray{ "scope", "key" }) } }
     };
+
+    // Keep the hand-written schemas for compatibility, but expose every newly
+    // registered API adapter automatically. Alternate UIs can therefore use the
+    // same catalog without another MCP change for each domain.
+    QSet<QString> existing;
+    for (const auto& value : result)
+        existing.insert(value.toObject().value("name").toString());
+    for (const auto& metadata : m_service.describe()) {
+        const auto operation = metadata.toObject();
+        const auto tool = toolNameForOperation(operation.value("name").toString());
+        if (existing.contains(tool))
+            continue;
+        QJsonObject entry{ { "name", tool },
+                           { "description", operation.value("description") },
+                           { "inputSchema", operation.value("inputSchema").toObject() } };
+        if (entry.value("inputSchema").toObject().isEmpty())
+            entry.insert("inputSchema", objectSchema({}));
+        result.append(entry);
+        existing.insert(tool);
+    }
+    return result;
 }

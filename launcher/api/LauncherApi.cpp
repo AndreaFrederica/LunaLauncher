@@ -6,51 +6,141 @@
 #include <utility>
 
 #include <QList>
+#include <QSet>
 #include <QStringList>
 
 #include "cli/OperationService.h"
+#include "api/LauncherApiInstances.h"
+#include "api/LauncherApiDomains.h"
+#include "api/LauncherApiResources.h"
+#include "api/LauncherApiServer.h"
+#include "api/LauncherApiExports.h"
+#include "api/LauncherApiComponents.h"
+#include "tasks/Task.h"
 
 namespace {
 
+QJsonObject stringProperty(const QString& description)
+{
+    return { { "type", "string" }, { "description", description } };
+}
+
+QJsonObject boolProperty(const QString& description, bool defaultValue = false)
+{
+    return { { "type", "boolean" }, { "description", description }, { "default", defaultValue } };
+}
+
+QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
+{
+    QJsonObject schema{ { "type", "object" }, { "properties", properties }, { "additionalProperties", false } };
+    if (!required.isEmpty())
+        schema.insert("required", required);
+    return schema;
+}
+
+QString taskStateName(Task::State state)
+{
+    switch (state) {
+        case Task::State::Inactive:
+            return QStringLiteral("inactive");
+        case Task::State::Running:
+            return QStringLiteral("running");
+        case Task::State::Succeeded:
+            return QStringLiteral("succeeded");
+        case Task::State::Failed:
+            return QStringLiteral("failed");
+        case Task::State::AbortedByUser:
+            return QStringLiteral("aborted");
+    }
+    return QStringLiteral("unknown");
+}
+
+QString taskStepStateName(TaskStepState state)
+{
+    switch (state) {
+        case TaskStepState::Waiting:
+            return QStringLiteral("waiting");
+        case TaskStepState::Running:
+            return QStringLiteral("running");
+        case TaskStepState::Failed:
+            return QStringLiteral("failed");
+        case TaskStepState::Succeeded:
+            return QStringLiteral("succeeded");
+    }
+    return QStringLiteral("unknown");
+}
+
 QList<ApiOperation> legacyOperations()
 {
-    return { { "instance.list", "List installed instances." },
-             { "instance.info", "Read an installed instance." },
-             { "instance.rename", "Rename an installed instance." },
-             { "instance.group", "Move an instance to a group." },
-             { "instance.copy", "Copy an installed instance." },
-             { "instance.update", "Run an instance update." },
-             { "instance.delete", "Trash or permanently delete an instance.", {}, {}, true },
-             { "instance.undo-delete", "Restore the most recently trashed instance." },
-             { "account.list", "List launcher accounts." },
-             { "account.login", "Add a launcher account." },
-             { "account.set-default", "Set or clear the default account." },
-             { "account.refresh", "Refresh an account." },
-             { "account.remove", "Remove an account.", {}, {}, true },
-             { "instance.import", "Import an instance pack." },
-             { "instance.launch", "Launch an instance." },
-             { "resource.list", "List installed resources." },
-             { "resource.install", "Install a resource from a path or direct URL." },
-             { "resource.enable", "Enable an installed resource." },
-             { "resource.disable", "Disable an installed resource." },
-             { "resource.remove", "Remove an installed resource.", {}, {}, true },
-             { "java.list", "List available Java installations." },
-             { "settings.list", "List registered settings." },
-             { "settings.get", "Read a registered setting." },
-             { "settings.set", "Set a registered setting." },
-             { "settings.reset", "Reset a registered setting." } };
+    const auto instance = stringProperty("Instance ID, managed name, or display name.");
+    const auto account = stringProperty("Account ID or profile name.");
+    const auto resource = QJsonObject{ { "instance", instance }, { "kind", stringProperty("Resource kind.") },
+                                  { "resource", stringProperty("Resource ID, name, or file name.") } };
+    auto removableResource = resource;
+    removableResource.insert("confirm", boolProperty("Confirm removal."));
+    return { { "instance.list", "List installed instances.", objectSchema({}) },
+             { "instance.info", "Read an installed instance.", objectSchema({ { "instance", instance } }, { "instance" }) },
+             { "instance.rename", "Rename an installed instance.", objectSchema({ { "instance", instance }, { "name", stringProperty("New name.") } }, { "instance", "name" }) },
+             { "instance.group", "Move an instance to a group.", objectSchema({ { "instance", instance }, { "group", stringProperty("Group, or empty to clear.") } }, { "instance", "group" }) },
+             { "instance.copy", "Copy an installed instance.", objectSchema({ { "instance", instance }, { "name", stringProperty("Name for the copy.") }, { "group", stringProperty("Optional group.") }, { "icon", stringProperty("Optional icon key.") } }, { "instance", "name" }) },
+             { "instance.update", "Run an instance update.", objectSchema({ { "instance", instance } }, { "instance" }) },
+             { "instance.delete", "Trash or permanently delete an instance.", objectSchema({ { "instance", instance }, { "confirm", boolProperty("Confirm deletion.") }, { "permanent", boolProperty("Delete permanently.") }, { "force", boolProperty("Ignore linked instances.") } }, { "instance", "confirm" }), {}, true },
+             { "instance.undo-delete", "Restore the most recently trashed instance.", objectSchema({}) },
+             { "account.list", "List launcher accounts.", objectSchema({}) },
+             { "account.login", "Add a launcher account.", objectSchema({ { "type", stringProperty("microsoft, offline, yggdrasil, or unified-pass.") }, { "username", stringProperty("Username.") }, { "password", stringProperty("Password.") }, { "authUrl", stringProperty("Yggdrasil auth URL.") }, { "sessionUrl", stringProperty("Yggdrasil session URL.") } }, { "type" }) },
+             { "account.set-default", "Set or clear the default account.", objectSchema({ { "account", account } }, { "account" }) },
+             { "account.refresh", "Refresh an account.", objectSchema({ { "account", account } }, { "account" }) },
+             { "account.remove", "Remove an account.", objectSchema({ { "account", account }, { "confirm", boolProperty("Confirm removal.") } }, { "account", "confirm" }), {}, true },
+             { "instance.import", "Import an instance pack.", objectSchema({ { "source", stringProperty("Local path or URL.") }, { "name", stringProperty("Optional name.") } }, { "source" }) },
+             { "instance.launch", "Launch an instance.", objectSchema({ { "instance", instance }, { "profile", stringProperty("Account profile.") }, { "offlineName", stringProperty("Offline player name.") }, { "server", stringProperty("Server to join.") }, { "world", stringProperty("World to join.") }, { "wait", boolProperty("Wait for exit.") } }, { "instance" }) },
+             { "resource.list", "List installed resources.", objectSchema({ { "instance", instance }, { "kind", stringProperty("Resource kind.") } }, { "instance", "kind" }) },
+             { "resource.install", "Install a resource from a path or direct URL.", objectSchema({ { "instance", instance }, { "kind", stringProperty("Resource kind.") }, { "source", stringProperty("Path or URL.") } }, { "instance", "kind", "source" }) },
+             { "resource.enable", "Enable an installed resource.", objectSchema(resource, { "instance", "kind", "resource" }) },
+             { "resource.disable", "Disable an installed resource.", objectSchema(resource, { "instance", "kind", "resource" }) },
+             { "resource.remove", "Remove an installed resource.", objectSchema(removableResource, { "instance", "kind", "resource", "confirm" }), {}, true },
+             { "java.list", "List available Java installations.", objectSchema({}) },
+             { "settings.list", "List registered settings.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "filter", stringProperty("Optional key filter.") }, { "reveal", boolProperty("Reveal sensitive values.") } }, { "scope" }) },
+             { "settings.get", "Read a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") }, { "reveal", boolProperty("Reveal sensitive value.") } }, { "scope", "key" }) },
+             { "settings.set", "Set a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") }, { "value", QJsonObject{ { "description", "JSON value." } } } }, { "scope", "key", "value" }) },
+             { "settings.reset", "Reset a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") } }, { "scope", "key" }) } };
 }
 
 }  // namespace
 
 LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new OperationService(this))
 {
+    connect(m_legacyService, &OperationService::taskStarted, this, &LauncherApi::trackTask);
+    connect(m_legacyService, &OperationService::taskFinished, this, &LauncherApi::clearTrackedTask);
     for (const auto& operation : legacyOperations()) {
         const auto name = operation.name;
         registerOperation(operation, [this, name](const QJsonObject& parameters, UserInteraction& interaction) {
             return m_legacyService->execute(name, parameters, interaction);
         });
     }
+    registerOperation({ "api.describe", "Describe all operations and their input schemas." },
+                      [this](const QJsonObject&, UserInteraction&) { return OperationService::success(describe()); });
+    registerOperation({ "task.list",
+                        "List tasks tracked by the launcher API, including completed task snapshots.",
+                        objectSchema({ { "runningOnly", boolProperty("Only return tasks that are currently running.") } }),
+                        "tasks" },
+                      [this](const QJsonObject& parameters, UserInteraction&) { return taskList(parameters); });
+    registerOperation({ "task.status",
+                        "Read progress, status, and cancellation capabilities for a tracked task.",
+                        objectSchema({ { "taskId", stringProperty("Task UUID. Omit to inspect the current operation task.") } }),
+                        "tasks" },
+                      [this](const QJsonObject& parameters, UserInteraction&) { return taskStatus(parameters); });
+    registerOperation({ "task.cancel",
+                        "Request cancellation of a running task.",
+                        objectSchema({ { "taskId", stringProperty("Task UUID. Omit to cancel the current operation task.") } }),
+                        "tasks",
+                        true },
+                      [this](const QJsonObject& parameters, UserInteraction&) { return taskCancel(parameters); });
+    registerInstanceApiOperations(*this);
+    registerLauncherApiDomains(*this);
+    registerLauncherApiResourceOperations(*this);
+    registerLauncherApiServerOperations(*this);
+    registerLauncherApiExportOperations(*this);
+    registerLauncherApiComponentOperations(*this);
 }
 
 LauncherApi::~LauncherApi() = default;
@@ -58,9 +148,17 @@ LauncherApi::~LauncherApi() = default;
 QJsonObject LauncherApi::execute(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto it = m_operations.constFind(operation);
-    if (it == m_operations.constEnd())
-        return OperationService::failure(QStringLiteral("Unknown API operation: %1").arg(operation), 2);
-    return it->handler(parameters, interaction);
+    if (it == m_operations.constEnd()) {
+        auto result = OperationService::failure(QStringLiteral("Unknown API operation: %1").arg(operation), 2);
+        result.insert("apiVersion", 1);
+        result.insert("operation", operation);
+        return result;
+    }
+    auto result = it->handler(parameters, interaction);
+    if (!result.contains("apiVersion"))
+        result.insert("apiVersion", 1);
+    result.insert("operation", operation);
+    return result;
 }
 
 QJsonArray LauncherApi::describe() const
@@ -78,11 +176,181 @@ void LauncherApi::registerOperation(ApiOperation operation, Handler handler)
 {
     if (operation.name.isEmpty() || !handler)
         return;
-    m_operations.insert(operation.name, { std::move(operation), std::move(handler) });
+    // Copy the key before moving the metadata.  The key and value are passed
+    // to QHash::insert in one expression, whose argument evaluation order is
+    // unspecified; moving operation first could otherwise clear operation.name
+    // before QHash copied it, leaving every registration under an empty key.
+    const auto key = operation.name;
+    RegisteredOperation registered{ std::move(operation), std::move(handler) };
+    m_operations.insert(key, std::move(registered));
+}
+
+void LauncherApi::trackTask(Task* task)
+{
+    if (!task)
+        return;
+    const auto taskId = task->getUid().toString(QUuid::WithoutBraces);
+    auto& record = m_tasks[taskId];
+    if (!record.task) {
+        record.task = task;
+        m_taskOrder.append(taskId);
+        constexpr int maxTrackedTasks = 64;
+        while (m_taskOrder.size() > maxTrackedTasks) {
+            const auto expired = m_taskOrder.takeFirst();
+            if (expired != taskId)
+                m_tasks.remove(expired);
+        }
+        connect(task, &Task::finished, this, [this, taskId] {
+            const auto it = m_tasks.find(taskId);
+            if (it != m_tasks.end() && it->task)
+                it->snapshot = snapshotTask(taskId, it->task);
+        });
+    }
+    record.snapshot = snapshotTask(taskId, task);
+    m_externalTask = task;
+}
+
+void LauncherApi::clearTrackedTask(Task* task)
+{
+    if (task) {
+        const auto taskId = task->getUid().toString(QUuid::WithoutBraces);
+        const auto it = m_tasks.find(taskId);
+        if (it != m_tasks.end())
+            it->snapshot = snapshotTask(taskId, task);
+    }
+    if (m_externalTask == task)
+        m_externalTask.clear();
 }
 
 void LauncherApi::cancelCurrent()
 {
+    const auto legacyTask = m_legacyService ? m_legacyService->currentTask() : nullptr;
+    if (m_externalTask && m_externalTask != legacyTask)
+        m_externalTask->abort();
     if (m_legacyService)
         m_legacyService->cancelCurrent();
+}
+
+Task* LauncherApi::currentTask() const
+{
+    if (m_externalTask)
+        return m_externalTask;
+    return m_legacyService ? m_legacyService->currentTask() : nullptr;
+}
+
+QJsonObject LauncherApi::snapshotTask(const QString& taskId, Task* task) const
+{
+    if (!task)
+        return QJsonObject{ { "id", taskId } };
+
+    const auto state = task->getState();
+    QJsonArray warnings;
+    for (const auto& warning : task->warnings())
+        warnings.append(warning);
+    QJsonArray steps;
+    for (const auto& progress : task->getStepProgress()) {
+        if (!progress)
+            continue;
+        steps.append(QJsonObject{ { "id", progress->uid.toString(QUuid::WithoutBraces) },
+                                  { "current", progress->current },
+                                  { "total", progress->total },
+                                  { "oldCurrent", progress->old_current },
+                                  { "oldTotal", progress->old_total },
+                                  { "status", progress->status },
+                                  { "details", progress->details },
+                                  { "state", taskStepStateName(progress->state) },
+                                  { "finished", progress->isDone() } });
+    }
+    return QJsonObject{ { "id", taskId },
+                        { "type", QString::fromLatin1(task->metaObject()->className()) },
+                        { "name", task->objectName() },
+                        { "state", taskStateName(state) },
+                        { "running", task->isRunning() },
+                        { "finished", task->isFinished() },
+                        { "successful", task->wasSuccessful() },
+                        { "canAbort", task->canAbort() },
+                        { "status", task->getStatus() },
+                        { "details", task->getDetails() },
+                        { "progress", task->getProgress() },
+                        { "totalProgress", task->getTotalProgress() },
+                        { "transferRate", task->getTransferRate() },
+                        { "failReason", task->failReason() },
+                        { "warnings", warnings },
+                        { "steps", steps } };
+}
+
+QJsonObject LauncherApi::taskStatus(const QJsonObject& parameters) const
+{
+    const auto requestedId = parameters.value("taskId").toString().trimmed();
+    const auto active = currentTask();
+    const auto activeId = active ? active->getUid().toString(QUuid::WithoutBraces) : QString();
+    const auto taskId = requestedId.isEmpty() ? activeId : requestedId;
+
+    if (taskId.isEmpty())
+        return OperationService::failure(QObject::tr("There is no current task."), 2);
+
+    const auto it = m_tasks.constFind(taskId);
+    if (it != m_tasks.constEnd()) {
+        if (it->task)
+            return OperationService::success(snapshotTask(taskId, it->task));
+        return OperationService::success(it->snapshot);
+    }
+    if (active && activeId == taskId)
+        return OperationService::success(snapshotTask(taskId, active));
+    return OperationService::failure(QObject::tr("Task not found: %1").arg(taskId), 2);
+}
+
+QJsonObject LauncherApi::taskList(const QJsonObject& parameters) const
+{
+    const bool runningOnly = parameters.value("runningOnly").toBool(false);
+    QJsonArray tasks;
+    QSet<QString> seen;
+    for (const auto& taskId : m_taskOrder) {
+        const auto it = m_tasks.constFind(taskId);
+        if (it == m_tasks.constEnd())
+            continue;
+        const auto item = it->task ? snapshotTask(taskId, it->task) : it->snapshot;
+        if (runningOnly && !item.value("running").toBool())
+            continue;
+        tasks.append(item);
+        seen.insert(taskId);
+    }
+    if (const auto active = currentTask()) {
+        const auto taskId = active->getUid().toString(QUuid::WithoutBraces);
+        if (!seen.contains(taskId) && (!runningOnly || active->isRunning()))
+            tasks.append(snapshotTask(taskId, active));
+    }
+    return OperationService::success(tasks);
+}
+
+QJsonObject LauncherApi::taskCancel(const QJsonObject& parameters)
+{
+    const auto requestedId = parameters.value("taskId").toString().trimmed();
+    Task* task = nullptr;
+    QString taskId = requestedId;
+    if (requestedId.isEmpty()) {
+        task = currentTask();
+        if (task)
+            taskId = task->getUid().toString(QUuid::WithoutBraces);
+    } else {
+        const auto it = m_tasks.find(requestedId);
+        if (it != m_tasks.end())
+            task = it->task;
+        if (!task) {
+            const auto active = currentTask();
+            if (active && active->getUid().toString(QUuid::WithoutBraces) == requestedId)
+                task = active;
+        }
+    }
+    if (!task)
+        return OperationService::failure(taskId.isEmpty() ? QObject::tr("There is no current task.")
+                                                           : QObject::tr("Task not found: %1").arg(taskId),
+                                         2);
+    if (!task->isRunning())
+        return OperationService::success(QJsonObject{ { "cancelled", false }, { "alreadyFinished", true },
+                                                      { "task", snapshotTask(taskId, task) } });
+    if (!task->canAbort())
+        return OperationService::failure(QObject::tr("Task cannot be cancelled: %1").arg(taskId), 2);
+    const bool cancelled = task->abort();
+    return OperationService::success(QJsonObject{ { "cancelled", cancelled }, { "task", snapshotTask(taskId, task) } });
 }

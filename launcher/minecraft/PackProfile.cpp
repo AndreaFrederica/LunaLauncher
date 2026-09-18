@@ -247,6 +247,11 @@ void PackProfile::buildingFromScratch()
     d->dirty = true;
 }
 
+bool PackProfile::isLoaded() const
+{
+    return d->loaded;
+}
+
 void PackProfile::scheduleSave()
 {
     if (!d->loaded) {

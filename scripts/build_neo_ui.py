@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -7,7 +8,9 @@ from pathlib import Path
 
 def run(command, cwd):
     print("+", " ".join(str(part) for part in command), flush=True)
-    subprocess.check_call([str(part) for part in command], cwd=cwd)
+    env = os.environ.copy()
+    env["CI"] = "true"  # Meson custom targets cannot answer pnpm reinstall prompts.
+    subprocess.check_call([str(part) for part in command], cwd=cwd, env=env)
 
 
 pnpm, cargo, source, build, output = map(Path, sys.argv[1:])

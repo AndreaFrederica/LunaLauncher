@@ -44,22 +44,19 @@ fn sidecar_path() -> Result<PathBuf, String> {
 
 fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
     let executable = sidecar_path()?;
-    let data_dir = std::env::var("LUNA_LAUNCHER_DATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            executable
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."))
-                .join("data")
-        });
     let mut command = Command::new(executable);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
+    // Share the launcher's native portable/environment/default directory rules.
+    // Only isolate data when the caller explicitly requests it.
+    if let Some(data_dir) = std::env::var_os("LUNA_LAUNCHER_DATA").filter(|p| !p.is_empty()) {
+        command.arg("--dir").arg(data_dir);
+    }
     command
-        .args(["--dir", data_dir.to_string_lossy().as_ref(), "--mcp"])
+        .arg("--mcp")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -115,6 +112,16 @@ fn ensure_sidecar<'a>(
         .0
         .lock()
         .map_err(|_| "Launcher state lock is poisoned".to_string())?;
+    if let Some(sidecar) = guard.as_mut() {
+        if sidecar
+            .child
+            .try_wait()
+            .map_err(|e| e.to_string())?
+            .is_some()
+        {
+            *guard = None;
+        }
+    }
     if guard.is_none() {
         *guard = Some(start_sidecar(app)?);
     }
@@ -156,12 +163,14 @@ async fn launcher_request(
         let mut input = sidecar.input.lock().map_err(|_| ApiError {
             message: "Launcher stdin is unavailable".into(),
         })?;
-        writeln!(input, "{}", request).map_err(|e| ApiError {
-            message: format!("Could not write launcher request: {e}"),
-        })?;
-        input.flush().map_err(|e| ApiError {
-            message: format!("Could not flush launcher request: {e}"),
-        })?;
+        if let Err(error) = writeln!(input, "{}", request).and_then(|_| input.flush()) {
+            if let Ok(mut pending) = sidecar.pending.lock() {
+                pending.remove(&request_id);
+            }
+            return Err(ApiError {
+                message: format!("Could not write launcher request: {error}"),
+            });
+        }
         drop(input);
         receiver
     }; // Release state and stdin locks before waiting for a response.

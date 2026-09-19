@@ -265,7 +265,7 @@ if launcher_enable_curseforge_webview
 endif
 
 neo_ui_opt = get_option('neo_ui')
-if neo_ui_opt != 'disabled'
+if not neo_ui_opt.disabled()
   pnpm_prog = find_program('pnpm', required: neo_ui_opt)
   cargo_prog = find_program('cargo', required: neo_ui_opt)
   if pnpm_prog.found() and cargo_prog.found()

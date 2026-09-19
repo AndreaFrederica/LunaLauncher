@@ -843,6 +843,14 @@ void registerLauncherApiDomains(LauncherApi& api)
                                worlds->update();
                                return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "name", name }, { "path", destination }, { "changed", true } });
                            });
+    api.registerOperation({ "instance.world.create", "Create a world from a local world template or archive.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") }, { "template", stringProperty("Valid world directory or zip archive.") },
+                                           { "name", stringProperty("New world name.") }, { "replace", boolProperty("Replace an existing world.") } },
+                                          { "instance", "template", "name" }) },
+                           [&api](const QJsonObject& p, UserInteraction& i) {
+                               QJsonObject import{ { "instance", p.value("instance") }, { "source", p.value("template") }, { "name", p.value("name") }, { "replace", p.value("replace") } };
+                               return api.execute("instance.world.import", import, i);
+                           });
 
     api.registerOperation({ "instance.world.export", "Export a world directory as a zip archive.",
                             objectSchema({ { "instance", stringProperty("Instance ID or name.") },

@@ -20,6 +20,10 @@
 #include "tasks/Task.h"
 #include "MMCZip.h"
 #include "archive/ExportToZipTask.h"
+#include "FileSystem.h"
+#include "net/PasteUpload.h"
+#include "screenshots/ImgurUpload.h"
+#include "screenshots/Screenshot.h"
 
 #include <QDir>
 #include <QCoreApplication>
@@ -357,6 +361,79 @@ QJsonObject readLog(const QJsonObject& parameters)
                                                   { "truncated", !input.atEnd() } });
 }
 
+QJsonObject deleteLog(const QJsonObject& parameters, bool clear)
+{
+    if (!parameters.value("confirm").toBool())
+        return OperationService::failure(QObject::tr("Log modification requires confirm=true."), 2);
+    auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Instance not found."), 2);
+    QList<QFileInfo> files;
+    if (parameters.contains("file")) {
+        const auto file = safeFileInRoots(parameters.value("file").toString(), logRoots(instance));
+        if (file.exists()) files.append(file);
+    } else {
+        for (const auto& root : logRoots(instance))
+            files.append(QDir(root).entryInfoList(QDir::Files | QDir::Readable));
+    }
+    if (files.isEmpty())
+        return OperationService::failure(QObject::tr("No matching log files found."), 2);
+    int changed = 0;
+    for (const auto& file : files) {
+        if (clear) {
+            QFile output(file.absoluteFilePath());
+            if (output.open(QIODevice::WriteOnly | QIODevice::Truncate)) { output.close(); ++changed; }
+        } else if (QFile::remove(file.absoluteFilePath())) {
+            ++changed;
+        }
+    }
+    return OperationService::success(QJsonObject{ { "changed", changed }, { "cleared", clear } });
+}
+
+QJsonObject uploadLog(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    QString content = parameters.value("content").toString();
+    if (content.isEmpty() && parameters.contains("file")) {
+        auto instance = findInstance(parameters.value("instance").toString());
+        if (!instance)
+            return OperationService::failure(QObject::tr("Instance not found."), 2);
+        const auto file = safeFileInRoots(parameters.value("file").toString(), logRoots(instance));
+        if (!file.exists())
+            return OperationService::failure(QObject::tr("Log file not found."), 2);
+        content = QString::fromUtf8(FS::read(file.absoluteFilePath()));
+    }
+    if (content.isEmpty())
+        return OperationService::failure(QObject::tr("Either content or file is required."), 2);
+    int type = parameters.value("pasteType").toInt(APPLICATION->settings()->get("PastebinType").toInt());
+    type = qBound<int>(PasteUpload::First, type, PasteUpload::Last);
+    QString base = parameters.value("baseUrl").toString(APPLICATION->settings()->get("PastebinCustomAPIBase").toString());
+    auto job = makeShared<NetJob>("API log upload", APPLICATION->network());
+    auto upload = new PasteUpload(content, base, static_cast<PasteUpload::PasteType>(type));
+    job->addNetAction(Net::NetRequest::Ptr(upload));
+    QString error;
+    if (!waitForAccountTask(job.get(), interaction, &error, api))
+        return OperationService::failure(error);
+    return OperationService::success(QJsonObject{ { "url", upload->pasteLink() }, { "pasteType", type } });
+}
+
+QJsonObject uploadScreenshot(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Instance not found."), 2);
+    const auto root = QDir(instance->gameRoot()).filePath("screenshots");
+    const auto file = safeFileInRoots(parameters.value("file").toString(), { root });
+    if (!file.exists())
+        return OperationService::failure(QObject::tr("Screenshot not found."), 2);
+    auto shot = std::make_shared<ScreenShot>(file);
+    auto job = makeShared<NetJob>("API screenshot upload", APPLICATION->network());
+    job->addNetAction(ImgurUpload::make(shot));
+    QString error;
+    if (!waitForAccountTask(job.get(), interaction, &error, api))
+        return OperationService::failure(error);
+    return OperationService::success(QJsonObject{ { "path", file.absoluteFilePath() }, { "url", shot->m_url }, { "id", shot->m_imgurId } });
+}
+
 QJsonObject listScreenshots(const QJsonObject& parameters)
 {
     auto instance = findInstance(parameters.value("instance").toString());
@@ -668,6 +745,21 @@ void registerLauncherApiDomains(LauncherApi& api)
                                            { "maxBytes", QJsonObject{ { "type", "integer" }, { "default", 1048576 } } } },
                                           { "instance", "file" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return readLog(parameters); });
+    api.registerOperation({ "instance.log.upload", "Upload an instance log or supplied text to the configured paste service.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name, required when file is used.") },
+                                           { "file", stringProperty("Log file name or path returned by log.list.") },
+                                           { "content", stringProperty("Log text to upload.") },
+                                           { "pasteType", QJsonObject{ { "type", "integer" }, { "description", "0=0x0.st, 1=hastebin, 2=paste.gg, 3=mclo.gs" } } },
+                                           { "baseUrl", stringProperty("Optional paste service API base URL.") } }) },
+                           [&api](const QJsonObject& parameters, UserInteraction& interaction) { return uploadLog(api, parameters, interaction); });
+    api.registerOperation({ "instance.log.clear", "Truncate one or all instance log files.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") }, { "file", stringProperty("Optional log file.") },
+                                           { "confirm", boolProperty("Confirm truncation.") } }, { "instance", "confirm" }) },
+                           [](const QJsonObject& parameters, UserInteraction&) { return deleteLog(parameters, true); });
+    api.registerOperation({ "instance.log.delete", "Delete one or all instance log files.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") }, { "file", stringProperty("Optional log file.") },
+                                           { "confirm", boolProperty("Confirm deletion.") } }, { "instance", "confirm" }) },
+                           [](const QJsonObject& parameters, UserInteraction&) { return deleteLog(parameters, false); });
     api.registerOperation({ "instance.screenshot.list", "List screenshots in an instance.",
                             objectSchema({ { "instance", stringProperty("Instance ID or name.") } }, { "instance" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return listScreenshots(parameters); });
@@ -677,4 +769,9 @@ void registerLauncherApiDomains(LauncherApi& api)
                                            { "confirm", boolProperty("Confirm deletion.") } },
                                           { "instance", "file", "confirm" }), {}, true },
                            [](const QJsonObject& parameters, UserInteraction&) { return deleteScreenshot(parameters); });
+    api.registerOperation({ "instance.screenshot.upload", "Upload an instance screenshot to Imgur.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") },
+                                           { "file", stringProperty("Screenshot name or path returned by screenshot.list.") } },
+                                          { "instance", "file" }) },
+                           [&api](const QJsonObject& parameters, UserInteraction& interaction) { return uploadScreenshot(api, parameters, interaction); });
 }

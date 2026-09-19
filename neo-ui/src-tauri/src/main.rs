@@ -53,6 +53,11 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
                 .join("data")
         });
     let mut command = Command::new(executable);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
     command
         .args(["--dir", data_dir.to_string_lossy().as_ref(), "--mcp"])
         .stdin(Stdio::piped())
@@ -74,7 +79,7 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
     let reader_pending = Arc::clone(&pending);
     let reader_app = app.clone();
     thread::spawn(move || {
-        for line in BufReader::new(output).lines().flatten() {
+        for line in BufReader::new(output).lines().map_while(Result::ok) {
             let Ok(message) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
@@ -88,6 +93,9 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
                     message.get("params").cloned().unwrap_or(Value::Null),
                 );
             }
+        }
+        if let Ok(mut pending) = reader_pending.lock() {
+            pending.clear(); // Disconnect receivers when stdout closes.
         }
         let _ = reader_app.emit("launcher-exit", json!({}));
     });
@@ -114,42 +122,62 @@ fn ensure_sidecar<'a>(
 }
 
 #[tauri::command]
-fn launcher_execute(
+async fn launcher_execute(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     operation: String,
     parameters: Value,
 ) -> Result<Value, ApiError> {
-    let guard = ensure_sidecar(&app, &state).map_err(|message| ApiError { message })?;
-    let sidecar = guard.as_ref().ok_or_else(|| ApiError {
-        message: "Launcher sidecar is unavailable".into(),
-    })?;
-    let mut id = sidecar.next_id.lock().map_err(|_| ApiError {
-        message: "Launcher request counter is unavailable".into(),
-    })?;
-    let request_id = *id;
-    *id += 1;
-    let (sender, receiver) = mpsc::channel();
-    sidecar
-        .pending
-        .lock()
-        .map_err(|_| ApiError {
-            message: "Launcher response map is unavailable".into(),
+    let receiver = {
+        let guard = ensure_sidecar(&app, &state).map_err(|message| ApiError { message })?;
+        let sidecar = guard.as_ref().ok_or_else(|| ApiError {
+            message: "Launcher sidecar is unavailable".into(),
+        })?;
+        let mut id = sidecar.next_id.lock().map_err(|_| ApiError {
+            message: "Launcher request counter is unavailable".into(),
+        })?;
+        let request_id = *id;
+        *id += 1;
+        let (sender, receiver) = mpsc::channel();
+        sidecar
+            .pending
+            .lock()
+            .map_err(|_| ApiError {
+                message: "Launcher response map is unavailable".into(),
+            })?
+            .insert(request_id, sender);
+        let request = json!({ "jsonrpc": "2.0", "id": request_id, "method": "launcher/execute", "params": { "operation": operation, "parameters": parameters } });
+        let mut input = sidecar.input.lock().map_err(|_| ApiError {
+            message: "Launcher stdin is unavailable".into(),
+        })?;
+        writeln!(input, "{}", request).map_err(|e| ApiError {
+            message: format!("Could not write launcher request: {e}"),
+        })?;
+        input.flush().map_err(|e| ApiError {
+            message: format!("Could not flush launcher request: {e}"),
+        })?;
+        drop(input);
+        receiver
+    }; // Release state and stdin locks before waiting for a response.
+    let message = tauri::async_runtime::spawn_blocking(move || receiver.recv())
+        .await
+        .map_err(|e| ApiError {
+            message: e.to_string(),
         })?
-        .insert(request_id, sender);
-    let request = json!({ "jsonrpc": "2.0", "id": request_id, "method": "launcher/execute", "params": { "operation": operation, "parameters": parameters } });
-    let mut input = sidecar.input.lock().map_err(|_| ApiError {
-        message: "Launcher stdin is unavailable".into(),
-    })?;
-    writeln!(input, "{}", request).map_err(|e| ApiError {
-        message: format!("Could not write launcher request: {e}"),
-    })?;
-    input.flush().map_err(|e| ApiError {
-        message: format!("Could not flush launcher request: {e}"),
-    })?;
-    drop(input);
-    receiver.recv().map_err(|_| ApiError {
-        message: "Launcher sidecar exited before returning a response".into(),
+        .map_err(|_| ApiError {
+            message: "Launcher sidecar exited before returning a response".into(),
+        })?;
+    if let Some(error) = message.get("error") {
+        return Err(ApiError {
+            message: error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("Launcher protocol error")
+                .to_string(),
+        });
+    }
+    message.get("result").cloned().ok_or_else(|| ApiError {
+        message: "Launcher response has no result".into(),
     })
 }
 

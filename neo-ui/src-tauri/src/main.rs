@@ -122,12 +122,17 @@ fn ensure_sidecar<'a>(
 }
 
 #[tauri::command]
-async fn launcher_execute(
+async fn launcher_request(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-    operation: String,
+    method: String,
     parameters: Value,
 ) -> Result<Value, ApiError> {
+    if !["launcher/execute", "launcher/respond", "launcher/catalog"].contains(&method.as_str()) {
+        return Err(ApiError {
+            message: "Unsupported protocol method".into(),
+        });
+    }
     let receiver = {
         let guard = ensure_sidecar(&app, &state).map_err(|message| ApiError { message })?;
         let sidecar = guard.as_ref().ok_or_else(|| ApiError {
@@ -146,7 +151,8 @@ async fn launcher_execute(
                 message: "Launcher response map is unavailable".into(),
             })?
             .insert(request_id, sender);
-        let request = json!({ "jsonrpc": "2.0", "id": request_id, "method": "launcher/execute", "params": { "operation": operation, "parameters": parameters } });
+        let request =
+            json!({ "jsonrpc": "2.0", "id": request_id, "method": method, "params": parameters });
         let mut input = sidecar.input.lock().map_err(|_| ApiError {
             message: "Launcher stdin is unavailable".into(),
         })?;
@@ -184,7 +190,7 @@ async fn launcher_execute(
 fn main() {
     tauri::Builder::default()
         .manage(AppState(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![launcher_execute])
+        .invoke_handler(tauri::generate_handler![launcher_request])
         .build(tauri::generate_context!())
         .expect("error while building Neo UI")
         .run(|app, event| {

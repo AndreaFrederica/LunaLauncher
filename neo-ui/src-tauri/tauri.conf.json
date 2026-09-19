@@ -3,7 +3,38 @@
   "productName": "Luna Neo UI",
   "version": "0.1.0",
   "identifier": "org.lunalauncher.neo-ui",
-  "build": { "frontendDist": "../dist/spa" },
-  "app": { "windows": [{ "title": "Luna Neo UI", "width": 1200, "height": 800 }], "security": { "csp": null } },
-  "bundle": { "active": true, "targets": "all", "icon": ["../../program_info/lunalauncher.ico"] }
+  "build": {
+    "frontendDist": "../dist/spa"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Luna Neo UI",
+        "width": 1200,
+        "height": 800
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-events",
+          "windows": [
+            "main"
+          ],
+          "permissions": [
+            "core:event:allow-listen",
+            "core:event:allow-unlisten"
+          ]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "../../program_info/lunalauncher.ico"
+    ]
+  }
 }

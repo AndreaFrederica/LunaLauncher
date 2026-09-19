@@ -3,6 +3,7 @@
 #include "LauncherApiDomains.h"
 
 #include "Application.h"
+#include "DesktopServices.h"
 #include "api/LauncherApi.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/WorldList.h"
@@ -522,6 +523,22 @@ void registerLauncherApiDomains(LauncherApi& api)
                                            { "port", QJsonObject{ { "type", "integer" } } }, { "username", stringProperty("Optional username.") },
                                            { "password", stringProperty("Optional password.") } }) },
                            [](const QJsonObject& p, UserInteraction&) { return proxySet(p); });
+    api.registerOperation({ "desktop.open-path", "Open a local path using the operating system desktop handler.",
+                            objectSchema({ { "path", stringProperty("Local file or directory path.") }, { "select", boolProperty("Select the item in the file manager.") } }, { "path" }) },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               const QFileInfo path(p.value("path").toString());
+                               if (!path.exists()) return OperationService::failure(QObject::tr("Path does not exist."), 2);
+                               DesktopServices::openPath(path, p.value("select").toBool());
+                               return OperationService::success(QJsonObject{ { "path", path.absoluteFilePath() }, { "opened", true } });
+                           });
+    api.registerOperation({ "desktop.open-url", "Open a URL using the operating system browser.",
+                            objectSchema({ { "url", stringProperty("HTTP(S) or supported desktop URL.") } }, { "url" }) },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               const QUrl url(p.value("url").toString());
+                               if (!url.isValid() || url.scheme().isEmpty()) return OperationService::failure(QObject::tr("URL is invalid."), 2);
+                               DesktopServices::openUrl(url);
+                               return OperationService::success(QJsonObject{ { "url", url.toString() }, { "opened", true } });
+                           });
 
     api.registerOperation({ "account.move", "Move an account by a relative offset or to an absolute list position.",
                             objectSchema({ { "account", stringProperty("Account ID or profile name.") },

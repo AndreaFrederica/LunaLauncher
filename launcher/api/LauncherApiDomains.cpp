@@ -420,6 +420,18 @@ QJsonObject updateCheck()
                                                    { "output", output }, { "error", error }, { "status", updateStatus().value("result").toObject() } });
 }
 
+QJsonObject updateApply(const QJsonObject& p)
+{
+    const auto tag = p.value("versionTag").toString().trimmed();
+    if (tag.isEmpty() || tag.contains('/') || tag.contains('\\')) return OperationService::failure("versionTag is invalid.", 2);
+    const auto updater = QDir(APPLICATION->root()).filePath(QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater.exe");
+    if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
+    QProcess process;
+    const auto started = process.startDetached(updater, { "--dir", APPLICATION->dataRoot(), "--install-version", tag });
+    if (!started) return OperationService::failure("The updater could not be started.");
+    return OperationService::success(QJsonObject{ { "started", true }, { "versionTag", tag }, { "updater", updater } });
+}
+
 QJsonObject readLog(const QJsonObject& parameters)
 {
     auto instance = findInstance(parameters.value("instance").toString());
@@ -579,6 +591,9 @@ void registerLauncherApiDomains(LauncherApi& api)
                            [](const QJsonObject& p, UserInteraction&) { return updateConfigure(p); });
     api.registerOperation({ "launcher.update.check", "Run the installed external updater in check-only mode.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) { return updateCheck(); });
+    api.registerOperation({ "launcher.update.apply", "Start the installed updater to download and apply a selected release.",
+                            objectSchema({ { "versionTag", stringProperty("Release tag returned by launcher.update.check.") } }, { "versionTag" }) },
+                           [](const QJsonObject& p, UserInteraction&) { return updateApply(p); });
     api.registerOperation({ "desktop.open-path", "Open a local path using the operating system desktop handler.",
                             objectSchema({ { "path", stringProperty("Local file or directory path.") }, { "select", boolProperty("Select the item in the file manager.") } }, { "path" }) },
                            [](const QJsonObject& p, UserInteraction&) {

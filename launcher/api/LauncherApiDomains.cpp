@@ -398,11 +398,16 @@ QJsonObject updateStatus()
 {
     auto settings = updateSettings();
     const auto marker = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.success");
+    const auto failed = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.fail");
+    const auto lock = QDir(APPLICATION->dataRoot()).filePath(".prism_launcher_update.lock");
+    const auto log = QDir(APPLICATION->dataRoot()).filePath("logs/lunalauncher_update.log");
     return OperationService::success(QJsonObject{ { "automatic", settings.value("auto_check", true).toBool() },
                                                    { "intervalSeconds", settings.value("update_interval", 86400).toInt() },
                                                    { "beta", settings.value("allow_beta", false).toBool() },
                                                    { "lastCheck", settings.value("last_check").toString() },
                                                    { "updateSuccessMarker", QFileInfo::exists(marker) },
+                                                   { "updateFailureMarker", QFileInfo::exists(failed) }, { "updateInProgress", QFileInfo::exists(lock) },
+                                                   { "updateLog", QFileInfo::exists(log) ? QString::fromUtf8(FS::read(log)) : QString() },
                                                    { "dataRoot", APPLICATION->dataRoot() } });
 }
 
@@ -702,6 +707,19 @@ void registerLauncherApiDomains(LauncherApi& api)
                                                                                { "skin", skin },
                                                                                { "currentCape", profile.currentCape },
                                                                                { "capes", capes } });
+                           });
+    api.registerOperation({ "account.snapshot", "Read a complete snapshot of all accounts and the selected account.", objectSchema({}) },
+                           [](const QJsonObject&, UserInteraction&) {
+                               QJsonArray accounts;
+                               const auto list = APPLICATION->accounts();
+                               for (int i = 0; i < list->count(); ++i) {
+                                   const auto account = list->at(i); const auto data = account->accountData();
+                                   accounts.append(QJsonObject{ { "index", i }, { "id", account->profileId() }, { "name", account->profileName() },
+                                                               { "type", account->typeString() }, { "state", static_cast<int>(data->accountState) },
+                                                               { "ownsMinecraft", data->minecraftEntitlement.ownsMinecraft }, { "canPlayMinecraft", data->minecraftEntitlement.canPlayMinecraft },
+                                                               { "skinUrl", data->minecraftProfile.skin.url }, { "cape", data->minecraftProfile.currentCape } });
+                               }
+                               return OperationService::success(QJsonObject{ { "accounts", accounts }, { "count", accounts.size() } });
                            });
 
     const auto accountRef = stringProperty("Account ID or profile name.");

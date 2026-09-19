@@ -456,6 +456,13 @@ QJsonObject diagnoseJava(const QJsonObject& parameters)
     QRegularExpression versionRx("(?:openjdk|java) version \\\"([^\\\"]+)\\\"");
     auto match = versionRx.match(output);
     if (match.hasMatch()) result.insert("version", match.captured(1));
+    const auto lower = output.toLower();
+    result.insert("vendor", lower.contains("openjdk") ? "OpenJDK" : lower.contains("oracle") ? "Oracle" : "Unknown");
+    result.insert("architecture", lower.contains("64-bit") || lower.contains("amd64") || lower.contains("x86_64") ? "x86_64" : "unknown");
+    if (match.hasMatch()) {
+        const auto major = match.captured(1).startsWith("1.") ? match.captured(1).mid(2).section('.', 0, 0) : match.captured(1).section('.', 0, 0);
+        result.insert("major", major.toInt());
+    }
     result.insert("usable", process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0 && !output.isEmpty());
     return OperationService::success(result);
 }

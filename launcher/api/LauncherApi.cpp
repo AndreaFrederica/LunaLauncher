@@ -3,6 +3,7 @@
 #include "LauncherApi.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include <QList>
@@ -16,9 +17,43 @@
 #include "api/LauncherApiServer.h"
 #include "api/LauncherApiExports.h"
 #include "api/LauncherApiComponents.h"
+#include "api/LauncherApiCatalog.h"
+#include "api/LauncherApiIntegrations.h"
 #include "tasks/Task.h"
 
 namespace {
+
+QString validateInput(const QJsonValue& value, const QJsonObject& schema, const QString& path = "parameters")
+{
+    const auto type = schema.value("type").toString();
+    if ((!type.isEmpty() && type == "object" && !value.isObject()) ||
+        (type == "array" && !value.isArray()) || (type == "string" && !value.isString()) ||
+        (type == "boolean" && !value.isBool()) || (type == "number" && !value.isDouble()) ||
+        (type == "integer" && (!value.isDouble() || std::floor(value.toDouble()) != value.toDouble())))
+        return QStringLiteral("%1 must be %2.").arg(path, type);
+    if (value.isDouble() && ((schema.contains("minimum") && value.toDouble() < schema.value("minimum").toDouble()) ||
+                             (schema.contains("maximum") && value.toDouble() > schema.value("maximum").toDouble())))
+        return QStringLiteral("%1 is outside its permitted range.").arg(path);
+    if (value.isObject()) {
+        const auto object = value.toObject();
+        for (const auto& key : schema.value("required").toArray())
+            if (!object.contains(key.toString())) return QStringLiteral("%1.%2 is required.").arg(path, key.toString());
+        const auto properties = schema.value("properties").toObject();
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            if (!object.contains(it.key())) continue;
+            const auto error = validateInput(object.value(it.key()), it.value().toObject(), path + '.' + it.key());
+            if (!error.isEmpty()) return error;
+        }
+    }
+    if (value.isArray() && schema.value("items").isObject()) {
+        int i = 0;
+        for (const auto& item : value.toArray()) {
+            const auto error = validateInput(item, schema.value("items").toObject(), QStringLiteral("%1[%2]").arg(path).arg(i++));
+            if (!error.isEmpty()) return error;
+        }
+    }
+    return {};
+}
 
 QJsonObject stringProperty(const QString& description)
 {
@@ -78,7 +113,7 @@ QList<ApiOperation> legacyOperations()
                                   { "resource", stringProperty("Resource ID, name, or file name.") } };
     auto removableResource = resource;
     removableResource.insert("confirm", boolProperty("Confirm removal."));
-    return { { "instance.list", "List installed instances.", objectSchema({}) },
+    QList<ApiOperation> operations{ { "instance.list", "List installed instances.", objectSchema({}) },
              { "instance.info", "Read an installed instance.", objectSchema({ { "instance", instance } }, { "instance" }) },
              { "instance.rename", "Rename an installed instance.", objectSchema({ { "instance", instance }, { "name", stringProperty("New name.") } }, { "instance", "name" }) },
              { "instance.group", "Move an instance to a group.", objectSchema({ { "instance", instance }, { "group", stringProperty("Group, or empty to clear.") } }, { "instance", "group" }) },
@@ -103,6 +138,28 @@ QList<ApiOperation> legacyOperations()
              { "settings.get", "Read a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") }, { "reveal", boolProperty("Reveal sensitive value.") } }, { "scope", "key" }) },
              { "settings.set", "Set a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") }, { "value", QJsonObject{ { "description", "JSON value." } } } }, { "scope", "key", "value" }) },
              { "settings.reset", "Reset a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") } }, { "scope", "key" }) } };
+    for (auto& operation : operations) {
+        auto properties = operation.inputSchema.value("properties").toObject();
+        if (operation.name == "instance.copy") {
+            for (const auto key : { "copySaves", "keepPlaytime", "copyMods", "copyResourcePacks", "copyShaderPacks", "copyScreenshots" })
+                properties.insert(key, QJsonObject{ { "type", "boolean" } });
+        }
+        if (operation.name == "account.login" || operation.name == "instance.launch") {
+            for (const auto key : { "profileId", "username", "password" })
+                properties.insert(key, stringProperty(QString::fromLatin1(key)));
+        }
+        if (operation.name == "account.login") {
+            for (const auto key : { "sourceName", "serverId", "minecraftProfileName" })
+                properties.insert(key, stringProperty(QString::fromLatin1(key)));
+        }
+        if (operation.name.startsWith("settings."))
+            properties.insert("reveal", boolProperty("Reveal sensitive values."));
+        if (operation.name == "resource.remove")
+            properties.insert("preserveMetadata", boolProperty("Keep indexed metadata."));
+        operation.inputSchema.insert("properties", properties);
+    }
+    return operations;
+
 }
 
 }  // namespace
@@ -141,6 +198,8 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerLauncherApiServerOperations(*this);
     registerLauncherApiExportOperations(*this);
     registerLauncherApiComponentOperations(*this);
+    registerLauncherApiCatalogOperations(*this);
+    registerLauncherApiIntegrationOperations(*this);
 }
 
 LauncherApi::~LauncherApi() = default;
@@ -154,7 +213,8 @@ QJsonObject LauncherApi::execute(const QString& operation, const QJsonObject& pa
         result.insert("operation", operation);
         return result;
     }
-    auto result = it->handler(parameters, interaction);
+    const auto validation = validateInput(parameters, it->metadata.inputSchema);
+    auto result = validation.isEmpty() ? it->handler(parameters, interaction) : OperationService::failure(validation, 2);
     if (!result.contains("apiVersion"))
         result.insert("apiVersion", 1);
     result.insert("operation", operation);
@@ -194,12 +254,6 @@ void LauncherApi::trackTask(Task* task)
     if (!record.task) {
         record.task = task;
         m_taskOrder.append(taskId);
-        constexpr int maxTrackedTasks = 64;
-        while (m_taskOrder.size() > maxTrackedTasks) {
-            const auto expired = m_taskOrder.takeFirst();
-            if (expired != taskId)
-                m_tasks.remove(expired);
-        }
         connect(task, &Task::finished, this, [this, taskId] {
             const auto it = m_tasks.find(taskId);
             if (it != m_tasks.end() && it->task)
@@ -208,6 +262,18 @@ void LauncherApi::trackTask(Task* task)
     }
     record.snapshot = snapshotTask(taskId, task);
     m_externalTask = task;
+    // Do not retain a QHash reference while removing entries, or evict a task
+    // which still needs to receive cancellation and completion updates.
+    for (qsizetype i = 0; m_taskOrder.size() > 64 && i < m_taskOrder.size();) {
+        const auto expired = m_taskOrder.at(i);
+        const auto tracked = m_tasks.value(expired).task;
+        if (expired != taskId && (!tracked || tracked->isFinished())) {
+            m_tasks.remove(expired);
+            m_taskOrder.removeAt(i);
+        } else {
+            ++i;
+        }
+    }
 }
 
 void LauncherApi::clearTrackedTask(Task* task)

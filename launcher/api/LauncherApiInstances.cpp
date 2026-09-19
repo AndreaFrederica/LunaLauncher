@@ -17,6 +17,7 @@
 #include "InstanceTask.h"
 #include "LaunchController.h"
 #include "LauncherApi.h"
+#include "api/LauncherApiSupport.h"
 #include "icons/IconList.h"
 #include "icons/IconUtils.h"
 #include "minecraft/ShortcutUtils.h"
@@ -128,9 +129,15 @@ QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& inter
         const auto versionName = parameters.value("version").toString().trimmed();
         if (versionName.isEmpty())
             return OperationService::failure(QObject::tr("A Minecraft version is required."), 2);
+        if (!ApiSupport::identifier(versionName))
+            return OperationService::failure(QObject::tr("Invalid Minecraft version."), 2);
 
         interaction.status(QObject::tr("Loading Minecraft version %1...").arg(versionName));
-        const auto version = APPLICATION->metadataIndex()->getLoadedVersion("net.minecraft", versionName);
+        QString metadataError;
+        const auto index = APPLICATION->metadataIndex();
+        if (!ApiSupport::wait(api, index->loadVersion("net.minecraft", versionName), interaction, metadataError))
+            return OperationService::failure(metadataError);
+        const auto version = index->get("net.minecraft", versionName);
         if (!version || !version->isLoaded())
             return OperationService::failure(QObject::tr("Minecraft version not found: %1").arg(versionName), 2);
 
@@ -142,8 +149,12 @@ QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& inter
             auto loaderVersionName = parameters.value("loaderVersion").toString().trimmed();
             if (loaderVersionName.isEmpty())
                 return OperationService::failure(QObject::tr("loaderVersion is required when loader is specified."), 2);
+            if (!ApiSupport::identifier(loader) || !ApiSupport::identifier(loaderVersionName))
+                return OperationService::failure(QObject::tr("Invalid loader or loader version."), 2);
             interaction.status(QObject::tr("Loading %1 version %2...").arg(loader, loaderVersionName));
-            const auto loaderVersion = APPLICATION->metadataIndex()->getLoadedVersion(loader, loaderVersionName);
+            if (!ApiSupport::wait(api, index->loadVersion(loader, loaderVersionName), interaction, metadataError))
+                return OperationService::failure(metadataError);
+            const auto loaderVersion = index->get(loader, loaderVersionName);
             if (!loaderVersion || !loaderVersion->isLoaded())
                 return OperationService::failure(QObject::tr("Loader version not found: %1:%2").arg(loader, loaderVersionName), 2);
             rawTask = new VanillaCreationTask(version, loader, loaderVersion);

@@ -222,11 +222,11 @@ class ModrinthAPI : public ResourceAPI {
     {
         return args.dependency.version.length() != 0
                    ? QString("%1/version/%2").arg(ModApiMirror::modrinthBaseUrl(), args.dependency.version)
-                   : QString(R"(%1/project/%2/version?game_versions=["%3"]&loaders=["%4"]&include_changelog=%5)")
+                   : QString(R"(%1/project/%2/version?game_versions=["%3"]%4&include_changelog=%5)")
                          .arg(ModApiMirror::modrinthBaseUrl())
                          .arg(args.dependency.addonId.toString())
                          .arg(mapMCVersionToModrinth(args.mcVersion))
-                         .arg(getModLoaderStrings(args.loader).join("\",\""))
+                         .arg(args.loader ? QString(R"(&loaders=["%1"])").arg(getModLoaderStrings(args.loader).join("\",\"")) : QString())
                          .arg("true");
     };
 

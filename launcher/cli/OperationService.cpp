@@ -859,7 +859,7 @@ bool OperationService::waitForTask(Task* task, UserInteraction& interaction, QSt
     const auto previousTask = m_currentTask;
     m_currentTask = task;
     emit taskStarted(task);
-    connect(task, &Task::status, this, [&interaction](const QString& status) { interaction.status(status); });
+    connect(task, &Task::status, &loop, [&interaction](const QString& status) { interaction.status(status); });
     connect(task, &Task::finished, &loop, &QEventLoop::quit);
     if (!task->isFinished()) {
         if (!task->isRunning())

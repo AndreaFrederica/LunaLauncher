@@ -39,57 +39,53 @@ existing launcher models and tasks
 ```
 
 The first implementation can continue to use Qt internally. Qt-free embedding is a
-separate later goal. A UI that launches `lunalauncher-cli --mcp` already avoids a Qt
-Widgets dependency and does not require changes to the existing GUI.
+separate later goal. A UI that launches `lunalauncher-cli --mcp` needs no Qt linkage of its own.
+The sidecar still links Qt, including Widgets, and must ship with its runtime libraries.
 The generic `--cli api OPERATION JSON_OBJECT` form can invoke any catalog entry while
 transport-specific aliases are added.
 
 ## Command contract
 
-Every operation uses the following logical envelope, regardless of transport:
+The CLI uses `--cli --json api OPERATION JSON_OBJECT`. Persistent clients use
+`launcher/execute` on the existing `--mcp` JSON-RPC transport:
 
 ```json
-{
-  "operation": "instance.create",
-  "parameters": {},
-  "requestId": "optional-client-id"
-}
+{"jsonrpc":"2.0","id":1,"method":"launcher/execute","params":{"operation":"instance.list","parameters":{}}}
 ```
 
-The result has a stable shape:
+The JSON-RPC `result` (or CLI output) is the API envelope:
 
 ```json
-{
-  "ok": true,
-  "apiVersion": 1,
-  "data": {},
-  "warnings": []
-}
+{"ok":true,"apiVersion":1,"operation":"instance.list","exitCode":0,"data":[]}
 ```
 
-Failures include a machine-readable code and a human-readable message:
+Failures preserve the existing string error format:
 
 ```json
-{
-  "ok": false,
-  "apiVersion": 1,
-  "error": {
-    "code": "instance.not_found",
-    "message": "The instance does not exist.",
-    "details": {}
-  }
-}
+{"ok":false,"apiVersion":1,"operation":"instance.info","exitCode":2,"error":"Instance not found."}
 ```
 
-Long-running operations report `started`, `progress`, `input`, `status`, `succeeded`,
-`failed`, and `cancelled` events. User interaction is data, not a Qt dialog: the
-adapter may request text, a secret, or a choice and the transport returns the answer.
+Do not parse translated error text for control flow. `exitCode` distinguishes the
+existing broad error categories; domain-specific machine-readable error codes remain
+future work. JSON-RPC protocol errors are separate, including `-32000` for a busy
+backend and `-32602` for an invalid interaction reply.
 
-The catalog must expose the operation name, API version, input schema, destructive
-flag, supported instance kinds, and optional capability name. A UI must use the catalog
-instead of guessing from the launcher version. The initial facade currently publishes
-the legacy operation names and descriptions; schemas and the remaining domain
-adapters are added incrementally.
+`api.describe` and `launcher/catalog` expose the operation name, API version, input
+schema, destructive flag, and optional capability group. A capability group is not
+proof that a helper is installed: query `integration.status` for runtime availability.
+The dispatcher checks declared required fields, scalar/array types, and numeric bounds;
+handlers validate operation-specific constraints. It does not implement all JSON Schema
+keywords or reject every extra property. Use the catalog rather than guessing from the
+launcher version. MCP tools are generated from the same catalog.
+
+Native transport notifications use `launcher/event`, correlated by `requestId`:
+`status`, `device_code`, `task`, and `input`. Final completion is the response to
+`launcher/execute`. Input replies use `launcher/respond`. Task snapshots contain
+numeric progress, cancellation support, warnings and steps. `task.list`, `task.status`,
+`task.cancel`, catalog calls, and interaction replies remain available during a long
+operation; other operations are serialized. History retains up to 64 task records
+without evicting active tasks. See [NEO-UI-API.md](NEO-UI-API.md) for the wire protocol,
+client example, packaging requirements and lifecycle details.
 
 ## Operation groups
 
@@ -131,23 +127,63 @@ When upstream changes a task or page, the adapter is updated in its separate fil
 merge therefore adds a small adapter conflict only when the affected behavior changed;
 the upstream GUI implementation remains easy to merge.
 
-The facade currently waits for existing tasks and forwards status/input events through
-`UserInteraction`, preserving CLI and MCP behavior. Before exposing a new long-running
-GUI domain, add an API task bridge and task registry around the existing `Task` signals
-so a future transport can track a request without blocking its event loop.
+## Current coverage and remaining gaps
 
-## Current baseline
+The implementation reuses the existing models and tasks in additive domain adapters:
 
-The current headless interface covers basic instance/account/resource/settings
-operations, imports, launches, instance creation and lifecycle control, shortcuts,
-icons, notes, asset verification, Minecraft component editing, and zip export. It
-also covers world listing and editing, account ordering/profile and local skin library
-operations, skin upload/reset and cape selection, resource inspection/refresh, Java
-scanning/installation/removal/selection, server properties and EULA files, server
-operator/whitelist/ban lists, server console commands, bounded log reads, and
-screenshot listing/deletion. Optional domains such as platform search, resource
-dependency resolution and batch actions, server YAML/loader pages, and
-Aria2/Terracotta/Yukari controls still need dedicated adapters. They should be added
-beside the existing files and registered in the catalog so a client can distinguish
-an unsupported optional provider from an unknown operation.
-See [CLI-MCP.md](CLI-MCP.md) for the compatibility command list and limitations.
+| Domain | Implemented boundary | Remaining work |
+| --- | --- | --- |
+| Instances | list/info/create/import/copy/delete/restore, rename/group/icon/notes, launch/stop/kill, verify/update, shortcuts/folders, ZIP export | specialized managed-pack workflows, other export formats; server force-kill semantics still use the existing stop implementation |
+| Components | component catalog and version lists, installed list, version selection, enable/remove/reorder/customize/revert | import custom component/JAR workflows |
+| Resources | installed inspection/refresh, local/URL install, enable/disable/remove; provider catalog, remote search/project/version/dependency lookup, indexed selected-version installation | batch update planning/selection and automatic recursive dependency installation; restricted CurseForge files with no direct URL are not exposed by the common version list |
+| Servers | properties, EULA, operator/whitelist/ban lists, console commands, YAML text with revision checks, Minecraft/mod/plugin compatibility configuration | live console subscription, installing server loader distributions; legacy local resource CRUD still targets Minecraft clients, while indexed installation also supports server mods/plugins |
+| Worlds | list, rename/delete, reset icon | create/copy/import/export workflows |
+| Accounts | login/refresh/remove/default/order/profiles; skin library/upload/reset/cape | live profile changes outside current selection flow |
+| Java | scan/list/install/remove/select | platform-specific diagnostics beyond current core tasks |
+| Settings | every registered launcher/instance setting via list/get/set/reset | settings import/export, theme/language catalogs and dedicated runtime apply operations; some services require a sidecar restart after settings changes |
+| Integrations | Aria2/Terracotta/Yukari status/install/start/stop; room host/join/leave/state/log and Yukari retry; Aria2 queue/cancel/clear/remove | broader launcher update and proxy diagnostics; not every helper version/platform has been exercised |
+| Logs/screenshots | bounded log reads, file lists, screenshot deletion | live subscriptions, upload/clear workflows |
+
+`resource.update` refreshes installed resource metadata; it is **not** a remote version
+upgrade. To upgrade a known project, call `resource.versions`, inspect dependencies, and
+use `resource.install-version` with the selected version. Its result explicitly reports
+`dependenciesInstalled: false`. It uses the existing indexed downloader and checksum
+validation; an existing same-name file requires `replace: true`. The existing downloader
+updates index metadata before the file download finishes, so interrupted replacements
+may require a metadata refresh. `resource.install` remains the local/direct-URL path.
+
+Provider search uses the existing provider filters and page size (25). `mayHaveMore` is
+a page-size heuristic, not a provider total. Hangar does not filter Minecraft versions
+in project search; its version list is filtered after retrieval. The provider catalog
+reports these differences. Dependency lookup resolves one dependency, not a complete
+graph. Provider timeouts, credentials, mirror settings and version-list limits still
+follow the existing core implementations.
+
+`server.yaml.write` edits only `bukkit.yml` and `spigot.yml`, preserves raw UTF-8 text,
+limits content to 1 MiB, and uses an atomic save. An optional `ifRevision` prevents
+stale writes. YAML syntax is not parsed, matching the current GUI editor. Server loader
+configuration changes compatibility filters and does not install server software.
+
+`component.catalog` and `component.versions` accept `offline: true` to read existing
+metadata files without fetching missing entries. New instance metadata loads are tracked
+so the same cancellation mechanism covers the version-loading phase.
+
+## Validation
+
+Build and install with the repository's Meson/Pixi workflow (including helper modules
+and runtime deployment). Use a separate install prefix for tests. Then run:
+
+```text
+python tests/api_sidecar_smoke.py --exe install-api-test/lunalauncher-cli.exe
+python tests/api_sidecar_smoke.py --exe install-api-test/lunalauncher-cli.exe --online
+node --experimental-strip-types --test tests/launcher_api_client.test.mjs
+```
+
+The sidecar test uses a temporary profile and a local HTTP fixture. It covers fragmented
+UTF-8 and combined pipe frames, malformed/oversized requests, input replies/cancellation,
+busy requests, task control during a pending download, MCP compatibility, offline
+metadata, YAML revision checks, loader configuration, log boundaries and integration
+status. The optional online test searches public providers and installs a selected
+Modrinth file into a disposable instance. It does not launch Minecraft or authenticate
+real accounts. Live multiplayer rooms, Microsoft account mutations and every external
+provider are not validated by these tests.

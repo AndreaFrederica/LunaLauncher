@@ -63,7 +63,7 @@ Task::Ptr ResourceAPI::searchProjects(SearchArgs&& args, Callback<QList<ModPlatf
     QObject::connect(netJob.get(), &NetJob::failed, [weak, callbacks](const QString& reason) {
         int network_error_code = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failed_action = netJob->getFailedActions().at(0); failed_action)
+            if (auto* failed_action = netJob->getFailedActions().value(0); failed_action)
                 network_error_code = failed_action->replyStatusCode();
         }
         callbacks.on_fail(reason, network_error_code);
@@ -136,7 +136,7 @@ Task::Ptr ResourceAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVe
     QObject::connect(netJob.get(), &NetJob::failed, [weak, callbacks](const QString& reason) {
         int network_error_code = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failed_action = netJob->getFailedActions().at(0); failed_action)
+            if (auto* failed_action = netJob->getFailedActions().value(0); failed_action)
                 network_error_code = failed_action->replyStatusCode();
         }
         callbacks.on_fail(reason, network_error_code);
@@ -184,7 +184,7 @@ Task::Ptr ResourceAPI::getProjectInfo(ProjectInfoArgs&& args, Callback<ModPlatfo
         int network_error_code = -1;
         if (auto job = weak.lock()) {
             if (auto netJob = qSharedPointerDynamicCast<NetJob>(job)) {
-                if (auto* failed_action = netJob->getFailedActions().at(0); failed_action) {
+                if (auto* failed_action = netJob->getFailedActions().value(0); failed_action) {
                     network_error_code = failed_action->replyStatusCode();
                 }
             }
@@ -236,7 +236,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(DependencySearchArgs&& args, Callbac
                 file.addonId = args.dependency.addonId;
 
             if (file.fileId.isValid() &&
-                (!file.loaders || args.loader & file.loaders))  // Heuristic to check if the returned value is valid
+                (!args.loader || !file.loaders || args.loader & file.loaders))  // Heuristic to check if the returned value is valid
                 versions.append(file);
         }
 
@@ -256,7 +256,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(DependencySearchArgs&& args, Callbac
     QObject::connect(netJob.get(), &NetJob::failed, [weak, callbacks](const QString& reason) {
         int network_error_code = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failed_action = netJob->getFailedActions().at(0); failed_action)
+            if (auto* failed_action = netJob->getFailedActions().value(0); failed_action)
                 network_error_code = failed_action->replyStatusCode();
         }
         callbacks.on_fail(reason, network_error_code);

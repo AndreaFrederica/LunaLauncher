@@ -198,6 +198,8 @@ QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, U
     const auto account = findAccount(parameters.value("account").toString());
     if (!account)
         return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
+    if (account->accountType() != AccountType::MSA)
+        return OperationService::failure(QObject::tr("Skin upload requires a Microsoft account."), 2);
     if (account->accessToken().isEmpty())
         return OperationService::failure(QObject::tr("The account has no access token for skin changes."), 3);
     SkinList skins(nullptr, skinDirectory(), account);
@@ -211,6 +213,8 @@ QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, U
     if (variant != "classic" && variant != "slim")
         return OperationService::failure(QObject::tr("Skin variant must be classic or slim."), 2);
     const auto cape = parameters.contains("cape") ? parameters.value("cape").toString() : skin->getCapeId();
+    const auto skinPath = skin->getPath();
+    const auto skinName = skin->name();
 
     auto job = makeShared<NetJob>(QObject::tr("Change skin"), APPLICATION->network(), 1);
     job->addNetAction(SkinUpload::make(account->accessToken(), skin->getPath(), variant));
@@ -220,11 +224,15 @@ QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, U
     QString error;
     if (!waitForAccountTask(job.get(), interaction, &error, api))
         return OperationService::failure(error, 3);
-    skin->setURL(account->accountData()->minecraftProfile.skin.url);
-    skin->setCapeId(account->accountData()->minecraftProfile.currentCape);
-    skins.save();
-    return OperationService::success(QJsonObject{ { "skin", skin->name() }, { "variant", variant }, { "cape", skin->getCapeId() },
-                                                  { "url", skin->getURL() }, { "uploaded", true } });
+    // SkinList may rebuild its models from filesystem events during the wait.
+    const auto& profile = account->accountData()->minecraftProfile;
+    if (auto updated = findSkin(skins, skinPath)) {
+        updated->setURL(profile.skin.url);
+        updated->setCapeId(profile.currentCape);
+        skins.save();
+    }
+    return OperationService::success(QJsonObject{ { "skin", skinName }, { "variant", variant }, { "cape", profile.currentCape },
+                                                  { "url", profile.skin.url }, { "uploaded", true } });
 }
 
 QJsonObject resetAccountSkin(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
@@ -234,6 +242,8 @@ QJsonObject resetAccountSkin(LauncherApi& api, const QJsonObject& parameters, Us
     const auto account = findAccount(parameters.value("account").toString());
     if (!account)
         return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
+    if (account->accountType() != AccountType::MSA)
+        return OperationService::failure(QObject::tr("Skin reset requires a Microsoft account."), 2);
     if (account->accessToken().isEmpty())
         return OperationService::failure(QObject::tr("The account has no access token for skin changes."), 3);
     auto job = makeShared<NetJob>(QObject::tr("Reset skin"), APPLICATION->network(), 1);
@@ -250,6 +260,8 @@ QJsonObject selectAccountCape(LauncherApi& api, const QJsonObject& parameters, U
     const auto account = findAccount(parameters.value("account").toString());
     if (!account)
         return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
+    if (account->accountType() != AccountType::MSA)
+        return OperationService::failure(QObject::tr("Cape selection requires a Microsoft account."), 2);
     if (account->accessToken().isEmpty())
         return OperationService::failure(QObject::tr("The account has no access token for cape changes."), 3);
     const auto cape = parameters.value("cape").toString();
@@ -285,13 +297,6 @@ World* findWorld(WorldList* worlds, const QString& reference)
     return nullptr;
 }
 
-QJsonObject unsupported(const QString& message)
-{
-    auto result = OperationService::failure(message, 3);
-    result.insert("code", "unsupported");
-    return result;
-}
-
 QStringList logRoots(BaseInstance* instance)
 {
     QStringList roots = instance->getLogFileSearchPaths();
@@ -310,7 +315,7 @@ QFileInfo safeFileInRoots(const QString& reference, const QStringList& roots)
         if (!candidate.exists() || !candidate.isFile())
             continue;
         const auto canonical = candidate.canonicalFilePath();
-        if (canonical == rootPath || canonical.startsWith(rootPath + QDir::separator()))
+        if (canonical == rootPath || canonical.startsWith(rootPath + '/'))
             return candidate;
     }
     return {};
@@ -591,11 +596,6 @@ void registerLauncherApiDomains(LauncherApi& api)
                                    return OperationService::failure(QObject::tr("The world icon could not be removed."));
                                worlds->update();
                                return OperationService::success(QJsonObject{ { "reset", true } });
-                           });
-
-    api.registerOperation({ "integration.status", "Report optional integrations that are compiled into this build.", objectSchema({}) },
-                           [](const QJsonObject&, UserInteraction&) {
-                               return unsupported(QObject::tr("Detailed integration status is not available in this build."));
                            });
 
     api.registerOperation({ "instance.log.list", "List log files available for an instance.",

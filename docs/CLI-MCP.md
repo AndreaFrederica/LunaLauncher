@@ -117,10 +117,18 @@ Compatibility tools:
 
 Authentication and task status events use `notifications/progress` when the request supplies a progress token, and `notifications/message` otherwise. Microsoft authentication includes the verification URL, device code, and expiry in the notification payload. Settings tools use `scope: "launcher"` or `scope: "instance"`; instance scope also requires `instance`. Sensitive values are redacted unless `reveal: true` is explicitly supplied. MCP calls are serialized because launcher instance, account, and settings operations mutate shared on-disk state.
 
-Account, instance, resource, Java, import, launch, and settings operations share the same `OperationService` in CLI, TUI, and MCP. Destructive MCP tools require `confirm: true`; destructive CLI operations require `--yes`; the TUI asks interactively.
+Account, instance, resource, Java, import, launch, and settings operations share the same `OperationService` in CLI, TUI, and MCP. Operations that delete user data require `confirm: true` where declared by their schema; compatibility CLI deletion commands require `--yes` and the TUI asks interactively. The catalog's `destructive` flag describes mutations and does not itself introduce a universal confirmation parameter.
 
-This is broad headless coverage, while platform search and version selection for
-individual resources, resource dependency/batch actions, server YAML/loader pages, and
-proxy/download diagnostics still require dedicated shared operations. Resource
-installation currently accepts a local path or direct URL; platform project pages are
-supported for whole-instance imports.
+The API also exposes remote resource search, project/version/dependency lookup and
+selected-version installation, component version catalogs, server YAML/loader
+configuration, and optional integration controls. Resource installation from a local
+path/direct URL remains available as `resource.install`; use
+`resource.install-version` for indexed provider downloads. Dependencies are returned for
+client selection and are not recursively installed.
+
+For a Tauri/Neo UI sidecar, the same process additionally accepts `launcher/catalog`,
+`launcher/execute` and `launcher/respond`, with correlated `launcher/event`
+notifications. Task controls are accepted while a long operation is active. Cancellation
+notifications must name that operation's JSON-RPC request ID. See
+[NEO-UI-API.md](NEO-UI-API.md) for the protocol and TypeScript example and
+[LAUNCHER-API.md](LAUNCHER-API.md) for the current coverage and remaining gaps.

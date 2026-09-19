@@ -2234,6 +2234,11 @@ bool Application::handleDataMigration(const QString& currentData,
                                       const QString& name,
                                       const QString& configFile) const
 {
+    // A sidecar must never wait for an invisible migration dialog. Keep the old
+    // profile intact; the existing GUI can offer migration on its next launch.
+    if (isHeadless())
+        return false;
+
     QString nomigratePath = FS::PathCombine(currentData, name + "_nomigrate.txt");
     QStringList configPaths = { FS::PathCombine(oldData, configFile), FS::PathCombine(oldData, BuildConfig.LAUNCHER_CONFIGFILE) };
 

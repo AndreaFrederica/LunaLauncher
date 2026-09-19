@@ -15,9 +15,9 @@ public static class LogHelper
 
     /// <summary>
     /// Custom logger delegate. Signature: (message, level).
-    /// Defaults to Console.WriteLine.
+    /// Defaults to standard error so embedding applications can reserve stdout for protocols.
     /// </summary>
-    public static Action<string, LogLevel> Logger { get; set; } = (msg, _) => Console.WriteLine(msg);
+    public static Action<string, LogLevel> Logger { get; set; } = (msg, _) => Console.Error.WriteLine(msg);
 
     public static void Log(string message, LogLevel level = LogLevel.Normal)
     {

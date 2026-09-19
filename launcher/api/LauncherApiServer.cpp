@@ -5,18 +5,21 @@
 #include "Application.h"
 #include "InstanceList.h"
 #include "api/LauncherApi.h"
+#include "api/LauncherApiSupport.h"
 #include "cli/OperationService.h"
 #include "server/PropertiesFile.h"
 #include "server/ServerInstance.h"
 #include "server/ServerLaunchTask.h"
 
 #include <QDateTime>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTextStream>
+#include <QSaveFile>
 
 namespace {
 
@@ -371,6 +374,73 @@ QJsonObject consoleCommand(const QJsonObject& parameters)
     return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "sent", true }, { "command", command } });
 }
 
+QJsonObject yamlFile(const QJsonObject& p, bool write)
+{
+    const auto instance = findServer(p.value("instance").toString());
+    if (!instance) return missingServer(p.value("instance").toString());
+    const auto name = p.value("file").toString();
+    if (name != "bukkit.yml" && name != "spigot.yml")
+        return OperationService::failure("file must be bukkit.yml or spigot.yml.", 2);
+    const auto path = QDir(instance->instanceRoot()).filePath(name);
+    if (QFileInfo(path).isSymLink()) return OperationService::failure("Symbolic config files are not supported.", 2);
+    QFile file(path);
+    constexpr qint64 maxSize = 1024 * 1024;
+    QByteArray content;
+    const bool exists = file.exists();
+    if (exists) {
+        if (!file.open(QIODevice::ReadOnly)) return OperationService::failure(file.errorString());
+        if (file.size() > maxSize) return OperationService::failure("YAML file exceeds 1 MiB.", 2);
+        content = file.readAll();
+        if (file.error() != QFileDevice::NoError) return OperationService::failure(file.errorString());
+        file.close();
+    }
+    auto revision = QString::fromLatin1(QCryptographicHash::hash(content, QCryptographicHash::Sha256).toHex());
+    if (write) {
+        QString error;
+        if (!writable(instance, &error)) return OperationService::failure(error, 2);
+        if (!p.value("content").isString()) return OperationService::failure("content must be a string.", 2);
+        if (p.contains("ifRevision") && p.value("ifRevision").toString() != revision)
+            return OperationService::failure("The config changed since it was read. Read it again before saving.", 2);
+        content = p.value("content").toString().toUtf8();
+        if (content.size() > maxSize || content.contains('\0')) return OperationService::failure("Invalid YAML content or size exceeds 1 MiB.", 2);
+        QSaveFile output(path);
+        if (!output.open(QIODevice::WriteOnly) || output.write(content) != content.size() || !output.commit())
+            return OperationService::failure(output.errorString());
+        revision = QString::fromLatin1(QCryptographicHash::hash(content, QCryptographicHash::Sha256).toHex());
+    }
+    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "file", name }, { "exists", write || exists },
+        { "content", QString::fromUtf8(content) }, { "revision", revision } });
+}
+
+QJsonObject loaderConfig(const QJsonObject& p, bool write)
+{
+    const auto instance = findServer(p.value("instance").toString());
+    if (!instance) return missingServer(p.value("instance").toString());
+    using namespace ApiSupport;
+    auto mods = instance->getModLoaderTypes();
+    auto plugins = instance->getPluginLoaderTypes();
+    auto version = instance->getMinecraftVersion();
+    if (write) {
+        QString error;
+        if (!writable(instance, &error)) return OperationService::failure(error, 2);
+        if (p.contains("minecraftVersion")) {
+            version = p.value("minecraftVersion").toString();
+            if (!identifier(version)) return OperationService::failure("Invalid Minecraft version.", 2);
+        }
+        if (p.contains("loaders") && !parseFlags(p.value("loaders"), modLoaders(), mods))
+            return OperationService::failure("Unknown mod loader or invalid loaders array.", 2);
+        if (p.contains("pluginLoaders") && !parseFlags(p.value("pluginLoaders"), pluginLoaders(), plugins))
+            return OperationService::failure("Unknown plugin loader or invalid pluginLoaders array.", 2);
+        instance->setMinecraftVersion(version);
+        instance->setModLoaderTypes(mods);
+        instance->setPluginLoaderTypes(plugins);
+        instance->saveNow();
+    }
+    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "minecraftVersion", version },
+        { "loaders", flagNames(mods, modLoaders()) }, { "pluginLoaders", flagNames(plugins, pluginLoaders()) },
+        { "installsServerSoftware", false } });
+}
+
 }  // namespace
 
 void registerLauncherApiServerOperations(LauncherApi& api)
@@ -379,6 +449,20 @@ void registerLauncherApiServerOperations(LauncherApi& api)
     const auto kind = stringProperty("whitelist, ops, banned-players, or banned-ips.");
     const QJsonObject propertiesObject{ { "type", "object" }, { "additionalProperties", QJsonObject{ { "type", "string" } } } };
     const QJsonObject entriesArray{ { "type", "array" }, { "items", QJsonObject{ { "type", "object" } } } };
+
+    auto yaml = QJsonObject{ { "instance", instance }, { "file", stringProperty("bukkit.yml or spigot.yml.") } };
+    api.registerOperation({ "server.yaml.read", "Read server YAML text and its revision.", objectSchema(yaml, { "instance", "file" }), "server" },
+        [](const QJsonObject& p, UserInteraction&) { return yamlFile(p, false); });
+    yaml.insert("content", stringProperty("Full UTF-8 YAML text, at most 1 MiB. Syntax is not validated."));
+    yaml.insert("ifRevision", stringProperty("Optional revision from read; rejects a stale write."));
+    api.registerOperation({ "server.yaml.write", "Atomically save server YAML text while the server is stopped.", objectSchema(yaml, { "instance", "file", "content" }), "server", true },
+        [](const QJsonObject& p, UserInteraction&) { return yamlFile(p, true); });
+    api.registerOperation({ "server.loader.read", "Read the server resource compatibility configuration.", objectSchema({ { "instance", instance } }, { "instance" }), "server" },
+        [](const QJsonObject& p, UserInteraction&) { return loaderConfig(p, false); });
+    api.registerOperation({ "server.loader.write", "Set Minecraft, mod and plugin loader filters. This does not install server software.",
+        objectSchema({ { "instance", instance }, { "minecraftVersion", stringProperty("Minecraft version.") },
+            { "loaders", ApiSupport::strings() }, { "pluginLoaders", ApiSupport::strings() } }, { "instance" }), "server", true },
+        [](const QJsonObject& p, UserInteraction&) { return loaderConfig(p, true); });
 
     api.registerOperation({ "server.properties.read", "Read server.properties from a server instance.", objectSchema({ { "instance", instance } }, { "instance" }), "server" },
                            [](const QJsonObject& p, UserInteraction&) { return readProperties(p); });

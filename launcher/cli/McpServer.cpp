@@ -3,34 +3,37 @@
 #include "McpServer.h"
 
 #include <QCoreApplication>
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QIODevice>
-#include <QSet>
 #include <QTextStream>
 #include <QTimer>
+#include <QUuid>
 
 #include <functional>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <QWinEventNotifier>
 #else
 #include <unistd.h>
+#include <cerrno>
 #include <QSocketNotifier>
 #endif
 
 #include "Application.h"
 #include "api/LauncherApi.h"
 #include "cli/UserInteraction.h"
+#include "cli/OperationService.h"
 
 namespace {
 
 class McpInteraction final : public UserInteraction {
    public:
-    McpInteraction(QJsonObject parameters, std::function<void(const QJsonObject&)> notify)
-        : m_parameters(std::move(parameters)), m_notify(std::move(notify))
+    using Ask = std::function<QJsonValue(const QString&, bool, const QJsonArray*)>;
+    McpInteraction(QJsonObject parameters, std::function<void(const QJsonObject&)> notify, Ask ask = {})
+        : m_parameters(std::move(parameters)), m_notify(std::move(notify)), m_ask(std::move(ask))
     {}
 
     void status(const QString& message) override { send("status", QJsonObject{ { "message", message } }); }
@@ -38,14 +41,19 @@ class McpInteraction final : public UserInteraction {
     {
         send("device_code", QJsonObject{ { "url", url }, { "code", code }, { "expiresIn", expiresIn } });
     }
-    std::optional<QString> input(const QString&, bool secret) override
+    std::optional<QString> input(const QString& prompt, bool secret) override
     {
         const auto key = secret ? "password" : "username";
-        if (!m_parameters.contains(key))
-            return std::nullopt;
-        return m_parameters.value(key).toString();
+        if (m_parameters.contains(key))
+            return m_parameters.value(key).toString();
+        const auto answer = m_ask ? m_ask(prompt, secret, nullptr) : QJsonValue();
+        return answer.isString() ? std::optional<QString>(answer.toString()) : std::nullopt;
     }
-    std::optional<int> select(const QString&, const QJsonArray&) override { return std::nullopt; }
+    std::optional<int> select(const QString& prompt, const QJsonArray& choices) override
+    {
+        const auto answer = m_ask ? m_ask(prompt, false, &choices) : QJsonValue();
+        return answer.isDouble() ? std::optional<int>(answer.toInt()) : std::nullopt;
+    }
 
    private:
     void send(const QString& kind, QJsonObject data)
@@ -56,6 +64,7 @@ class McpInteraction final : public UserInteraction {
 
     QJsonObject m_parameters;
     std::function<void(const QJsonObject&)> m_notify;
+    Ask m_ask;
 };
 
 QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
@@ -64,11 +73,6 @@ QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
     if (!required.isEmpty())
         schema.insert("required", required);
     return schema;
-}
-
-QJsonObject stringProperty(const QString& description)
-{
-    return { { "type", "string" }, { "description", description } };
 }
 
 QString toolNameForOperation(const QString& operation)
@@ -81,13 +85,16 @@ QString toolNameForOperation(const QString& operation)
 
 }  // namespace
 
-McpServer::McpServer(QObject* parent) : QObject(parent), m_input(stdin, QIODevice::ReadOnly), m_service() {}
+McpServer::McpServer(QObject* parent) : QObject(parent), m_service() {}
 
 void McpServer::start()
 {
 #ifdef Q_OS_WIN
-    auto notifier = new QWinEventNotifier(GetStdHandle(STD_INPUT_HANDLE), this);
-    connect(notifier, &QWinEventNotifier::activated, this, &McpServer::readMessage);
+    // Anonymous pipes are not waitable console handles. Poll available bytes so
+    // a fragmented request never blocks Qt's task and network event loop.
+    auto notifier = new QTimer(this);
+    connect(notifier, &QTimer::timeout, this, &McpServer::readMessage);
+    notifier->start(20);
 #else
     auto notifier = new QSocketNotifier(STDIN_FILENO, QSocketNotifier::Read, this);
     connect(notifier, &QSocketNotifier::activated, this, &McpServer::readMessage);
@@ -97,20 +104,79 @@ void McpServer::start()
 
 void McpServer::readMessage()
 {
-    const auto line = m_input.readLine();
-    if (line.isNull()) {
+    if (m_disconnected)
+        return;
+    char buffer[65536];
+#ifdef Q_OS_WIN
+    DWORD available = 0, count = 0;
+    const auto input = GetStdHandle(STD_INPUT_HANDLE);
+    if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) {
+        disconnectInput();
+        return;
+    }
+    if (!available)
+        return;
+    if (!ReadFile(input, buffer, qMin<DWORD>(available, sizeof(buffer)), &count, nullptr) || !count) {
+        disconnectInput();
+        return;
+    }
+#else
+    const auto count = ::read(STDIN_FILENO, buffer, sizeof(buffer));
+    if (count < 0 && (errno == EINTR || errno == EAGAIN))
+        return;
+    if (count <= 0) {
+        disconnectInput();
+        return;
+    }
+#endif
+    m_input.append(buffer, static_cast<int>(count));
+    constexpr qsizetype maxMessageSize = 4 * 1024 * 1024;
+    qsizetype newline;
+    while ((newline = m_input.indexOf('\n')) >= 0) {
+        const auto line = m_input.left(newline);
+        m_input.remove(0, newline + 1);
+        if (m_discardingLine) {
+            m_discardingLine = false;
+            continue;
+        }
+        if (line.size() > maxMessageSize) {
+            writeError(QJsonValue(), -32600, QStringLiteral("Request exceeds 4 MiB."));
+            continue;
+        }
+        // Queue all complete frames before invoking a handler. Long operations
+        // run nested Qt loops, which must also receive replies and cancellation.
+        QTimer::singleShot(0, this, [this, line] {
+            if (m_disconnected)
+                return;
+            QJsonParseError parseError;
+            const auto document = QJsonDocument::fromJson(line, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+                writeError(QJsonValue(), -32700, QStringLiteral("Parse error"));
+                return;
+            }
+            handleMessage(document.object());
+        });
+    }
+    if (m_input.size() > maxMessageSize) {
+        if (!m_discardingLine)
+            writeError(QJsonValue(), -32600, QStringLiteral("Request exceeds 4 MiB."));
+        m_input.clear();
+        m_discardingLine = true;
+    }
+}
+
+void McpServer::disconnectInput()
+{
+    m_disconnected = true;
+    if (m_notifier)
+        m_notifier->deleteLater();
+    m_cancelled = true;
+    if (m_interactionLoop)
+        m_interactionLoop->quit();
+    if (m_activeService)
+        m_activeService->cancelCurrent();
+    else
         QCoreApplication::quit();
-        return;
-    }
-    if (!m_input.atEnd())
-        QTimer::singleShot(0, this, &McpServer::readMessage);
-    QJsonParseError parseError;
-    const auto document = QJsonDocument::fromJson(line.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        writeError(QJsonValue(), -32700, QStringLiteral("Parse error"));
-        return;
-    }
-    handleMessage(document.object());
 }
 
 void McpServer::handleMessage(const QJsonObject& request)
@@ -118,6 +184,12 @@ void McpServer::handleMessage(const QJsonObject& request)
     const auto id = request.value("id");
     const auto method = request.value("method").toString();
     const auto parameters = request.value("params").toObject();
+    if (request.value("jsonrpc") != "2.0" || method.isEmpty() ||
+        (!id.isUndefined() && !id.isString() && !id.isDouble()) ||
+        (request.contains("params") && !request.value("params").isObject())) {
+        writeError(QJsonValue(), -32600, QStringLiteral("Invalid JSON-RPC request."));
+        return;
+    }
     if (method == "initialize") {
         writeResult(
             id, QJsonObject{
@@ -129,8 +201,48 @@ void McpServer::handleMessage(const QJsonObject& request)
     if (method == "notifications/initialized")
         return;
     if (method == "notifications/cancelled") {
-        if (m_activeService)
+        if (m_activeService && parameters.value("requestId") == m_activeRequestId) {
+            m_cancelled = true;
+            if (m_interactionLoop)
+                m_interactionLoop->quit();
             m_activeService->cancelCurrent();
+        }
+        return;
+    }
+    if (id.isUndefined())
+        return;
+    if (method == "launcher/catalog") {
+        writeResult(id, QJsonObject{ { "apiVersion", 1 }, { "operations", m_service.describe() } });
+        return;
+    }
+    if (method == "launcher/respond") {
+        if (!m_interactionLoop || parameters.value("interactionId").toString() != m_interactionId) {
+            writeError(id, -32602, QStringLiteral("No matching pending interaction."));
+            return;
+        }
+        const auto answer = parameters.value("value");
+        const auto cancel = parameters.value("cancel").toBool();
+        if (!cancel && ((m_choiceCount < 0 && !answer.isString()) ||
+                        (m_choiceCount >= 0 && (!answer.isDouble() || answer.toDouble() != answer.toInt(-1) ||
+                                               answer.toInt(-1) < 0 || answer.toInt() >= m_choiceCount)))) {
+            writeError(id, -32602, QStringLiteral("Expected text or a valid zero-based choice index."));
+            return;
+        }
+        m_interactionAnswer = cancel ? QJsonValue() : answer;
+        auto loop = m_interactionLoop;
+        m_interactionLoop = nullptr;
+        writeResult(id, QJsonObject{ { "accepted", true } });
+        loop->quit();
+        return;
+    }
+    if (method == "launcher/execute") {
+        if (!parameters.value("operation").isString() ||
+            (parameters.contains("parameters") && !parameters.value("parameters").isObject())) {
+            writeError(id, -32602, QStringLiteral("Expected operation and parameters object."));
+            return;
+        }
+        executeOperation(id, parameters.value("operation").toString(), parameters.value("parameters").toObject(),
+                         parameters.value("_meta").toObject(), true);
         return;
     }
     if (method == "ping") {
@@ -154,38 +266,9 @@ void McpServer::handleMessage(const QJsonObject& request)
         return;
     }
     if (method == "tools/call") {
-        if (m_activeService) {
-            writeError(id, -32000, QStringLiteral("Another launcher operation is already running."));
-            return;
-        }
         const auto name = parameters.value("name").toString();
         const auto arguments = parameters.value("arguments").toObject();
-        static const QMap<QString, QString> operations{ { "lunalauncher_instance_list", "instance.list" },
-                                                        { "lunalauncher_instance_info", "instance.info" },
-                                                        { "lunalauncher_instance_rename", "instance.rename" },
-                                                        { "lunalauncher_instance_group", "instance.group" },
-                                                        { "lunalauncher_instance_copy", "instance.copy" },
-                                                        { "lunalauncher_instance_update", "instance.update" },
-                                                        { "lunalauncher_instance_delete", "instance.delete" },
-                                                        { "lunalauncher_instance_undo_delete", "instance.undo-delete" },
-                                                        { "lunalauncher_account_list", "account.list" },
-                                                        { "lunalauncher_account_login", "account.login" },
-                                                        { "lunalauncher_account_set_default", "account.set-default" },
-                                                        { "lunalauncher_account_refresh", "account.refresh" },
-                                                        { "lunalauncher_account_remove", "account.remove" },
-                                                        { "lunalauncher_instance_import", "instance.import" },
-                                                        { "lunalauncher_instance_launch", "instance.launch" },
-                                                        { "lunalauncher_resource_list", "resource.list" },
-                                                        { "lunalauncher_resource_install", "resource.install" },
-                                                        { "lunalauncher_resource_enable", "resource.enable" },
-                                                        { "lunalauncher_resource_disable", "resource.disable" },
-                                                        { "lunalauncher_resource_remove", "resource.remove" },
-                                                        { "lunalauncher_java_list", "java.list" },
-                                                        { "lunalauncher_settings_list", "settings.list" },
-                                                        { "lunalauncher_settings_get", "settings.get" },
-                                                        { "lunalauncher_settings_set", "settings.set" },
-                                                        { "lunalauncher_settings_reset", "settings.reset" } };
-        QString operation = operations.value(name);
+        QString operation;
         if (operation.isEmpty()) {
             for (const auto& metadata : m_service.describe()) {
                 const auto candidate = metadata.toObject();
@@ -199,28 +282,97 @@ void McpServer::handleMessage(const QJsonObject& request)
             writeError(id, -32602, QStringLiteral("Unknown tool: %1").arg(name));
             return;
         }
-        const auto progressToken = parameters.value("_meta").toObject().value("progressToken");
-        McpInteraction interaction(arguments, [this, progressToken, progress = 0](const QJsonObject& event) mutable {
-            const auto message = QString::fromUtf8(QJsonDocument(event).toJson(QJsonDocument::Compact));
-            if (!progressToken.isUndefined()) {
-                const QJsonObject params{ { "progressToken", progressToken }, { "progress", ++progress }, { "message", message } };
-                writeMessage(QJsonObject{ { "jsonrpc", "2.0" }, { "method", "notifications/progress" }, { "params", params } });
-            } else {
-                const QJsonObject params{ { "level", "info" }, { "logger", "lunalauncher" }, { "data", event } };
-                writeMessage(QJsonObject{ { "jsonrpc", "2.0" }, { "method", "notifications/message" }, { "params", params } });
-            }
-        });
-        m_activeService = &m_service;
-        const auto result = m_service.execute(operation, arguments, interaction);
-        m_activeService = nullptr;
-        const auto text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-        writeResult(id, QJsonObject{ { "content", QJsonArray{ QJsonObject{ { "type", "text" }, { "text", text } } } },
-                                     { "structuredContent", result },
-                                     { "isError", !result.value("ok").toBool() } });
+        executeOperation(id, operation, arguments, parameters.value("_meta").toObject(), false);
         return;
     }
     if (!id.isUndefined())
         writeError(id, -32601, QStringLiteral("Method not found"));
+}
+
+void McpServer::executeOperation(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
+                                 const QJsonObject& metadata, bool native)
+{
+    const bool control = operation == "task.list" || operation == "task.status" || operation == "task.cancel" || operation == "api.describe";
+    if (m_activeService && (!control || id == m_activeRequestId)) {
+        writeError(id, -32000, QStringLiteral("Another launcher operation is already running. Task controls remain available."));
+        return;
+    }
+    const std::function<void(const QJsonObject&)> notify = [this, id, native, progressToken = metadata.value("progressToken"), progress = 0](const QJsonObject& event) mutable {
+        if (native) {
+            auto params = event;
+            params.insert("requestId", id);
+            writeMessage({ { "jsonrpc", "2.0" }, { "method", "launcher/event" }, { "params", params } });
+        } else if (!progressToken.isUndefined()) {
+            const auto message = QString::fromUtf8(QJsonDocument(event).toJson(QJsonDocument::Compact));
+            const QJsonObject params{ { "progressToken", progressToken }, { "progress", ++progress }, { "message", message } };
+            writeMessage({ { "jsonrpc", "2.0" }, { "method", "notifications/progress" }, { "params", params } });
+        } else {
+            const QJsonObject params{ { "level", "info" }, { "logger", "lunalauncher" }, { "data", event } };
+            writeMessage({ { "jsonrpc", "2.0" }, { "method", "notifications/message" }, { "params", params } });
+        }
+    };
+    McpInteraction::Ask ask;
+    if (native)
+        ask = [this](const QString& prompt, bool secret, const QJsonArray* choices) { return requestInteraction(prompt, secret, choices); };
+    McpInteraction interaction(arguments, notify, ask);
+    const bool ownsRequest = !m_activeService;
+    if (ownsRequest) {
+        m_activeService = &m_service;
+        m_activeRequestId = id;
+        m_cancelled = false;
+    }
+    QTimer progressTimer;
+    if (native && !control) {
+        connect(&progressTimer, &QTimer::timeout, &progressTimer, [this, &interaction, notify, last = QJsonObject()]() mutable {
+            const auto state = m_service.execute("task.status", {}, interaction);
+            if (state.value("ok").toBool() && state != last) {
+                last = state;
+                notify({ { "kind", "task" }, { "data", state.value("data") } });
+            }
+        });
+        progressTimer.start(100);
+    }
+    const auto result = m_service.execute(operation, arguments, interaction);
+    progressTimer.stop();
+    if (ownsRequest) {
+        m_activeService = nullptr;
+        m_activeRequestId = QJsonValue();
+    }
+    if (native) {
+        writeResult(id, result);
+    } else {
+        const auto text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+        writeResult(id, QJsonObject{ { "content", QJsonArray{ QJsonObject{ { "type", "text" }, { "text", text } } } },
+                                     { "structuredContent", result }, { "isError", !result.value("ok").toBool() } });
+    }
+    if (m_disconnected && ownsRequest)
+        QCoreApplication::quit();
+}
+
+QJsonValue McpServer::requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices)
+{
+    if (m_cancelled || m_disconnected)
+        return {};
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    m_interactionLoop = &loop;
+    m_interactionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_choiceCount = choices ? choices->size() : -1;
+    m_interactionAnswer = QJsonValue();
+    QJsonObject event{ { "requestId", m_activeRequestId }, { "kind", "input" }, { "interactionId", m_interactionId },
+                       { "prompt", prompt }, { "secret", secret }, { "expiresIn", 300 } };
+    if (choices)
+        event.insert("choices", *choices);
+    writeMessage({ { "jsonrpc", "2.0" }, { "method", "launcher/event" }, { "params", event } });
+    timeout.start(300000);
+    loop.exec();
+    m_interactionLoop = nullptr;
+    m_interactionId.clear();
+    const auto answer = m_cancelled ? QJsonValue() : m_interactionAnswer;
+    m_interactionAnswer = QJsonValue();
+    return answer;
 }
 
 void McpServer::writeMessage(const QJsonObject& message)
@@ -240,204 +392,13 @@ void McpServer::writeError(const QJsonValue& id, int code, const QString& messag
 
 QJsonArray McpServer::tools() const
 {
-    QJsonArray result = {
-        QJsonObject{ { "name", "lunalauncher_instance_list" },
-                     { "description", "List installed Minecraft instances." },
-                     { "inputSchema", objectSchema({}) } },
-        QJsonObject{ { "name", "lunalauncher_instance_info" },
-                     { "description", "Read detailed information about an installed instance." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") } },
-                                                   QJsonArray{ "instance" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_rename" },
-                     { "description", "Rename an installed instance." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                                { "name", stringProperty("New instance name.") } },
-                                                   QJsonArray{ "instance", "name" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_group" },
-                     { "description", "Move an instance to a group; use an empty string to remove it from its group." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                                { "group", stringProperty("Destination group, or an empty string.") } },
-                                                   QJsonArray{ "instance", "group" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_copy" },
-                     { "description", "Copy an instance with optional control over copied user data." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                                { "name", stringProperty("Name for the copied instance.") },
-                                                                { "group", stringProperty("Optional destination group.") },
-                                                                { "icon", stringProperty("Optional icon key.") },
-                                                                { "copySaves", QJsonObject{ { "type", "boolean" } } },
-                                                                { "keepPlaytime", QJsonObject{ { "type", "boolean" } } },
-                                                                { "copyMods", QJsonObject{ { "type", "boolean" } } },
-                                                                { "copyResourcePacks", QJsonObject{ { "type", "boolean" } } },
-                                                                { "copyShaderPacks", QJsonObject{ { "type", "boolean" } } },
-                                                                { "copyScreenshots", QJsonObject{ { "type", "boolean" } } } },
-                                                   QJsonArray{ "instance", "name" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_update" },
-                     { "description", "Run the instance's registered update tasks." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") } },
-                                                   QJsonArray{ "instance" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_delete" },
-                     { "description", "Move an instance to trash, or permanently delete it when permanent is true." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                                { "confirm", QJsonObject{ { "type", "boolean" }, { "const", true } } },
-                                                                { "permanent", QJsonObject{ { "type", "boolean" }, { "default", false } } },
-                                                                { "force", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                                                   QJsonArray{ "instance", "confirm" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_undo_delete" },
-                     { "description", "Restore the most recently trashed instance." },
-                     { "inputSchema", objectSchema({}) } },
-        QJsonObject{ { "name", "lunalauncher_account_list" },
-                     { "description", "List launcher accounts without exposing tokens." },
-                     { "inputSchema", objectSchema({}) } },
-        QJsonObject{
-            { "name", "lunalauncher_account_login" },
-            { "description", "Add a Microsoft, offline, Yggdrasil, or UnifiedPass account." },
-            { "inputSchema",
-              objectSchema(
-                  QJsonObject{ { "type", QJsonObject{ { "type", "string" },
-                                                      { "enum", QJsonArray{ "microsoft", "offline", "yggdrasil", "unified-pass" } } } },
-                               { "username", stringProperty("Account username; omitted for Microsoft device code login.") },
-                               { "password", stringProperty("Password for the third-party authentication request.") },
-                               { "authUrl", stringProperty("Yggdrasil authentication server URL.") },
-                               { "sessionUrl", stringProperty("Yggdrasil session server URL.") },
-                               { "sourceName", stringProperty("Display name for the Yggdrasil service.") },
-                               { "serverId", stringProperty("UnifiedPass server ID.") },
-                               { "profileId", stringProperty("Profile ID to select when the account has multiple profiles.") },
-                               { "minecraftProfileName", stringProperty("Name to create when a Microsoft account has no Java profile.") } },
-
-                  QJsonArray{ "type" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_account_set_default" },
-            { "description", "Set the default account, or clear it using an empty account value." },
-            { "inputSchema", objectSchema(QJsonObject{ { "account", stringProperty("Account ID or profile name; empty clears it.") } },
-                                          QJsonArray{ "account" }) } },
-        QJsonObject{ { "name", "lunalauncher_account_refresh" },
-                     { "description", "Refresh an account, reporting any browser or device-code authentication challenge." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "account", stringProperty("Account ID or profile name.") } },
-                                                   QJsonArray{ "account" }) } },
-        QJsonObject{ { "name", "lunalauncher_account_remove" },
-                     { "description", "Remove an account from the launcher." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "account", stringProperty("Account ID or profile name.") },
-                                                                { "confirm", QJsonObject{ { "type", "boolean" }, { "const", true } } } },
-                                                   QJsonArray{ "account", "confirm" }) } },
-        QJsonObject{ { "name", "lunalauncher_instance_import" },
-                     { "description", "Import a local pack, direct URL, CurseForge page URL, or Modrinth page URL." },
-                     { "inputSchema", objectSchema(QJsonObject{ { "source", stringProperty("Local path or URL.") },
-                                                                { "name", stringProperty("Optional instance name override.") } },
-                                                   QJsonArray{ "source" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_instance_launch" },
-            { "description", "Launch an instance headlessly; detaches by default or waits for game exit when wait is true." },
-            { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                       { "profile", stringProperty("Account profile name.") },
-                                                       { "username", stringProperty("Username for third-party reauthentication.") },
-                                                       { "password", stringProperty("Password for third-party reauthentication.") },
-                                                       { "profileId", stringProperty("Profile ID for third-party reauthentication.") },
-                                                       { "offlineName", stringProperty("Offline player name.") },
-                                                       { "server", stringProperty("Server address to join.") },
-                                                       { "world", stringProperty("World to open.") },
-                                                       { "wait", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                                          QJsonArray{ "instance" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_resource_list" },
-            { "description", "List one kind of resource installed in an instance." },
-            { "inputSchema",
-              objectSchema(
-                  QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                               { "kind", QJsonObject{ { "type", "string" },
-                                                      { "enum", QJsonArray{ "mods", "coremods", "nilmods", "resourcepacks", "texturepacks",
-                                                                            "shaderpacks", "datapacks", "schematics", "customplayermodels",
-                                                                            "yesstevemodels" } } } } },
-                  QJsonArray{ "instance", "kind" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_resource_install" },
-            { "description", "Install a resource from a local file or direct download URL." },
-            { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                       { "kind", stringProperty("Resource kind returned by the resource list tool.") },
-                                                       { "source", stringProperty("Local file path or direct download URL.") } },
-                                          QJsonArray{ "instance", "kind", "source" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_resource_enable" },
-            { "description", "Enable an installed instance resource." },
-            { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                       { "kind", stringProperty("Resource kind.") },
-                                                       { "resource", stringProperty("Resource ID, display name, or file name.") } },
-                                          QJsonArray{ "instance", "kind", "resource" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_resource_disable" },
-            { "description", "Disable an installed instance resource." },
-            { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                       { "kind", stringProperty("Resource kind.") },
-                                                       { "resource", stringProperty("Resource ID, display name, or file name.") } },
-                                          QJsonArray{ "instance", "kind", "resource" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_resource_remove" },
-            { "description", "Remove an installed instance resource." },
-            { "inputSchema", objectSchema(QJsonObject{ { "instance", stringProperty("Instance ID or managed name.") },
-                                                       { "kind", stringProperty("Resource kind.") },
-                                                       { "resource", stringProperty("Resource ID, display name, or file name.") },
-                                                       { "confirm", QJsonObject{ { "type", "boolean" }, { "const", true } } },
-                                                       { "preserveMetadata", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                                          QJsonArray{ "instance", "kind", "resource", "confirm" }) } },
-        QJsonObject{ { "name", "lunalauncher_java_list" },
-                     { "description", "Scan and list available Java installations." },
-                     { "inputSchema", objectSchema({}) } },
-        QJsonObject{
-            { "name", "lunalauncher_settings_list" },
-            { "description", "List every registered launcher or instance setting. Sensitive values are redacted unless reveal is true." },
-            { "inputSchema",
-              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
-                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
-                                        { "filter", stringProperty("Optional case-insensitive setting name filter.") },
-                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                           QJsonArray{ "scope" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_settings_get" },
-            { "description", "Read one registered launcher or instance setting." },
-            { "inputSchema",
-              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
-                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
-                                        { "key", stringProperty("Canonical setting ID.") },
-                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                           QJsonArray{ "scope", "key" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_settings_set" },
-            { "description", "Set one registered launcher or instance setting using its existing value type." },
-            { "inputSchema",
-              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
-                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
-                                        { "key", stringProperty("Canonical setting ID.") },
-                                        { "value", QJsonObject{ { "description", "JSON value to store." } } },
-                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                           QJsonArray{ "scope", "key", "value" }) } },
-        QJsonObject{
-            { "name", "lunalauncher_settings_reset" },
-            { "description", "Reset one registered launcher or instance setting to its default or inherited value." },
-            { "inputSchema",
-              objectSchema(QJsonObject{ { "scope", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "launcher", "instance" } } } },
-                                        { "instance", stringProperty("Instance ID or name; required for instance scope.") },
-                                        { "key", stringProperty("Canonical setting ID.") },
-                                        { "reveal", QJsonObject{ { "type", "boolean" }, { "default", false } } } },
-                           QJsonArray{ "scope", "key" }) } }
-    };
-
-    // Keep the hand-written schemas for compatibility, but expose every newly
-    // registered API adapter automatically. Alternate UIs can therefore use the
-    // same catalog without another MCP change for each domain.
-    QSet<QString> existing;
-    for (const auto& value : result)
-        existing.insert(value.toObject().value("name").toString());
-    for (const auto& metadata : m_service.describe()) {
-        const auto operation = metadata.toObject();
-        const auto tool = toolNameForOperation(operation.value("name").toString());
-        if (existing.contains(tool))
-            continue;
-        QJsonObject entry{ { "name", tool },
-                           { "description", operation.value("description") },
-                           { "inputSchema", operation.value("inputSchema").toObject() } };
-        if (entry.value("inputSchema").toObject().isEmpty())
-            entry.insert("inputSchema", objectSchema({}));
-        result.append(entry);
-        existing.insert(tool);
+    QJsonArray result;
+    for (const auto& value : m_service.describe()) {
+        const auto operation = value.toObject();
+        auto input = operation.value("inputSchema").toObject();
+        if (input.isEmpty()) input = objectSchema({});
+        result.append(QJsonObject{ { "name", toolNameForOperation(operation.value("name").toString()) },
+            { "description", operation.value("description") }, { "inputSchema", input } });
     }
     return result;
 }

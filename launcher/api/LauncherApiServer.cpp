@@ -10,6 +10,8 @@
 #include "server/PropertiesFile.h"
 #include "server/ServerInstance.h"
 #include "server/ServerLaunchTask.h"
+#include "net/ApiDownload.h"
+#include "net/NetJob.h"
 
 #include <QDateTime>
 #include <QCryptographicHash>
@@ -20,6 +22,9 @@
 #include <QJsonDocument>
 #include <QTextStream>
 #include <QSaveFile>
+#include <QTemporaryDir>
+#include <QUrl>
+#include <QRegularExpression>
 
 namespace {
 
@@ -73,6 +78,47 @@ bool writable(ServerInstance* instance, QString* error)
         return false;
     }
     return true;
+}
+
+QJsonObject installDistribution(LauncherApi& api, const QJsonObject& p, UserInteraction& interaction)
+{
+    auto instance = findServer(p.value("instance").toString());
+    if (!instance) return missingServer(p.value("instance").toString());
+    QString error;
+    if (!writable(instance, &error)) return OperationService::failure(error, 2);
+    const QUrl url(p.value("url").toString());
+    const auto fileName = p.value("fileName").toString().trimmed();
+    if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http")) return OperationService::failure("url must be HTTP(S).", 2);
+    static const QRegularExpression unsafe(R"([<>:"/\\|?*\x00-\x1f])");
+    if (fileName.isEmpty() || fileName == "." || fileName == ".." || unsafe.match(fileName).hasMatch() || fileName.endsWith('.'))
+        return OperationService::failure("fileName is unsafe.", 2);
+    const auto destination = QDir(instance->instanceRoot()).filePath(fileName);
+    if (QFileInfo::exists(destination) && !p.value("replace").toBool()) return OperationService::failure("The server file exists; set replace=true.", 2);
+    QTemporaryDir staging(QDir(instance->instanceRoot()).filePath(".api-server-XXXXXX"));
+    if (!staging.isValid()) return OperationService::failure("Could not create a staging directory.");
+    const auto staged = QDir(staging.path()).filePath(fileName);
+    auto job = makeShared<NetJob>("Server distribution download", APPLICATION->network());
+    job->addNetAction(Net::ApiDownload::makeFile(url, staged));
+    if (!ApiSupport::wait(api, job, interaction, error)) return OperationService::failure(error);
+    if (!QFileInfo(staged).isFile() || QFileInfo(staged).size() == 0) return OperationService::failure("The downloaded server file is empty.");
+    if (QFileInfo::exists(destination) && !QFile::remove(destination)) return OperationService::failure("The existing server file could not be replaced.");
+    if (!QFile::rename(staged, destination)) return OperationService::failure("The downloaded server file could not be installed.");
+    const auto args = p.value("arguments").toArray();
+    QStringList launchArgs;
+    for (const auto& arg : args) launchArgs.append(arg.toString());
+    if (fileName.endsWith(".jar", Qt::CaseInsensitive)) {
+        launchArgs.prepend(fileName);
+        launchArgs.prepend("-jar");
+        instance->setExecutablePath("$java");
+        instance->setArguments(launchArgs);
+    } else {
+        instance->setExecutablePath(fileName);
+        instance->setArguments(launchArgs);
+    }
+    if (p.contains("minecraftVersion")) instance->setMinecraftVersion(p.value("minecraftVersion").toString());
+    instance->saveNow();
+    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "path", destination },
+        { "fileName", fileName }, { "url", url.toString() }, { "configured", true }, { "changed", true } });
 }
 
 QString listFileName(QString kind)
@@ -449,6 +495,13 @@ void registerLauncherApiServerOperations(LauncherApi& api)
     const auto kind = stringProperty("whitelist, ops, banned-players, or banned-ips.");
     const QJsonObject propertiesObject{ { "type", "object" }, { "additionalProperties", QJsonObject{ { "type", "string" } } } };
     const QJsonObject entriesArray{ { "type", "array" }, { "items", QJsonObject{ { "type", "object" } } } };
+
+    api.registerOperation({ "server.distribution.install", "Download and configure a server distribution from a verified HTTP(S) URL. The file is staged before replacement.",
+        objectSchema({ { "instance", instance }, { "url", stringProperty("HTTP(S) distribution URL.") },
+            { "fileName", stringProperty("Destination filename inside the server instance.") }, { "replace", boolProperty("Replace an existing file.") },
+            { "arguments", QJsonObject{ { "type", "array" }, { "items", stringProperty("Additional server arguments.") } } },
+            { "minecraftVersion", stringProperty("Optional Minecraft version recorded on the server instance.") } }, { "instance", "url", "fileName" }), "server", true },
+        [&api](const QJsonObject& p, UserInteraction& i) { return installDistribution(api, p, i); });
 
     api.registerOperation({ "server.start", "Start a configured server process without requiring a Minecraft account.",
         objectSchema({ { "instance", instance } }, { "instance" }), "server", true },

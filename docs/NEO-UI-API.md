@@ -133,6 +133,7 @@ if (!result.ok) showError(result.error);
 | 外观／语言 | `appearance.catalog/refresh/select`、`language.list/select/refresh` |
 | 服务端 YAML | `server.yaml.read` → 编辑 content → `server.yaml.write`，附带读取时的 ifRevision |
 | 服务端终端 | `instance.console.subscribe` → `server.start` → `server.console.write/resize`；结束用 `instance.stop/kill` |
+| 服务端安装 | `server.distribution.install` 传入发行版 URL 和版本信息，后端暂存下载并配置启动命令 |
 | 日志跟随 | `instance.log.subscribe` → `launcher/stream` 通知或 `event.poll` → `event.unsubscribe` |
 | 联机 | `integration.status` → install/start → host/join → state/log → leave/stop |
 | 下载队列 | `aria2.downloads`、`aria2.cancel`、`aria2.clear-finished` |

@@ -25,6 +25,7 @@
 #include "net/PasteUpload.h"
 #include "screenshots/ImgurUpload.h"
 #include "screenshots/Screenshot.h"
+#include <BuildConfig.h>
 
 #include <QDir>
 #include <QCoreApplication>
@@ -36,6 +37,8 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QTimer>
+#include <QSettings>
+#include <QProcess>
 
 namespace {
 
@@ -373,6 +376,50 @@ QJsonObject proxySet(const QJsonObject& p)
     return proxyInfo();
 }
 
+QSettings updateSettings()
+{
+    return QSettings(QDir(APPLICATION->dataRoot()).filePath("lunalauncher_update.cfg"), QSettings::IniFormat);
+}
+
+QJsonObject updateStatus()
+{
+    auto settings = updateSettings();
+    const auto marker = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.success");
+    return OperationService::success(QJsonObject{ { "automatic", settings.value("auto_check", true).toBool() },
+                                                   { "intervalSeconds", settings.value("update_interval", 86400).toInt() },
+                                                   { "beta", settings.value("allow_beta", false).toBool() },
+                                                   { "lastCheck", settings.value("last_check").toString() },
+                                                   { "updateSuccessMarker", QFileInfo::exists(marker) },
+                                                   { "dataRoot", APPLICATION->dataRoot() } });
+}
+
+QJsonObject updateConfigure(const QJsonObject& p)
+{
+    auto settings = updateSettings();
+    if (p.contains("automatic")) settings.setValue("auto_check", p.value("automatic").toBool());
+    if (p.contains("intervalSeconds")) {
+        const auto seconds = p.value("intervalSeconds").toInt();
+        if (seconds < 0 || seconds > 31536000) return OperationService::failure("intervalSeconds is out of range.", 2);
+        settings.setValue("update_interval", seconds);
+    }
+    if (p.contains("beta")) settings.setValue("allow_beta", p.value("beta").toBool());
+    settings.sync();
+    return updateStatus();
+}
+
+QJsonObject updateCheck()
+{
+    const auto updater = QDir(APPLICATION->root()).filePath(QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater.exe");
+    if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
+    QProcess process;
+    process.start(updater, { "--check-only", "--dir", APPLICATION->dataRoot(), "--debug" });
+    if (!process.waitForFinished(60000)) { process.kill(); return OperationService::failure("The updater check timed out."); }
+    const auto output = QString::fromLocal8Bit(process.readAllStandardOutput());
+    const auto error = QString::fromLocal8Bit(process.readAllStandardError());
+    return OperationService::success(QJsonObject{ { "exitCode", process.exitCode() }, { "available", process.exitCode() == 100 },
+                                                   { "output", output }, { "error", error }, { "status", updateStatus().value("result").toObject() } });
+}
+
 QJsonObject readLog(const QJsonObject& parameters)
 {
     auto instance = findInstance(parameters.value("instance").toString());
@@ -523,6 +570,15 @@ void registerLauncherApiDomains(LauncherApi& api)
                                            { "port", QJsonObject{ { "type", "integer" } } }, { "username", stringProperty("Optional username.") },
                                            { "password", stringProperty("Optional password.") } }) },
                            [](const QJsonObject& p, UserInteraction&) { return proxySet(p); });
+    api.registerOperation({ "launcher.update.status", "Read launcher updater state and persisted preferences.", objectSchema({}) },
+                           [](const QJsonObject&, UserInteraction&) { return updateStatus(); });
+    api.registerOperation({ "launcher.update.configure", "Configure automatic, beta, and interval updater preferences.",
+                            objectSchema({ { "automatic", boolProperty("Enable automatic update checks.") },
+                                           { "intervalSeconds", QJsonObject{ { "type", "integer" } } },
+                                           { "beta", boolProperty("Allow pre-release updates.") } }) },
+                           [](const QJsonObject& p, UserInteraction&) { return updateConfigure(p); });
+    api.registerOperation({ "launcher.update.check", "Run the installed external updater in check-only mode.", objectSchema({}) },
+                           [](const QJsonObject&, UserInteraction&) { return updateCheck(); });
     api.registerOperation({ "desktop.open-path", "Open a local path using the operating system desktop handler.",
                             objectSchema({ { "path", stringProperty("Local file or directory path.") }, { "select", boolProperty("Select the item in the file manager.") } }, { "path" }) },
                            [](const QJsonObject& p, UserInteraction&) {

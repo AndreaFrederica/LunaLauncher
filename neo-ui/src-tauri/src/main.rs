@@ -89,6 +89,11 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
                     "launcher-event",
                     message.get("params").cloned().unwrap_or(Value::Null),
                 );
+            } else if message.get("method").and_then(Value::as_str) == Some("launcher/stream") {
+                let _ = reader_app.emit(
+                    "launcher-stream",
+                    message.get("params").cloned().unwrap_or(Value::Null),
+                );
             }
         }
         if let Ok(mut pending) = reader_pending.lock() {

@@ -15,7 +15,7 @@
   <p v-if="!instances.length && !busy && !error">还没有实例，点击添加实例创建或导入。</p>
   <div class="row q-col-gutter-md"><div class="col-12 col-md-6 col-xl-4" v-for="i in instances.filter(x => (x.name || x.id).toLowerCase().includes(search.toLowerCase()))" :key="i.id">
    <q-card class="bg-grey-9"><q-card-section><div class="text-h6">{{ i.name }}</div><div class="text-grey-4">{{ i.group || '未分组' }} · {{ i.id }}</div></q-card-section>
-   <q-card-actions><q-btn color="primary" label="启动" :disable="busy" @click="run('instance.launch',{instance:i.id})" /><q-btn flat label="管理" :disable="busy" @click="openInstance(i)" /><q-btn flat label="打开目录" :disable="busy" @click="run('instance.open-folder',{instance:i.id})" /></q-card-actions></q-card>
+   <q-card-actions><q-btn color="primary" label="启动" :disable="busy" @click="launch(i)" /><q-btn flat label="管理" :disable="busy" @click="openInstance(i)" /><q-btn flat label="打开目录" :disable="busy" @click="run('instance.open-folder',{instance:i.id})" /></q-card-actions></q-card>
   </div></div>
  </div>
  <div v-if="page==='create'" class="form"><h5>添加实例</h5>
@@ -30,14 +30,22 @@
   <q-btn color="primary" label="创建实例" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : !creation.source)" @click="create"/>
  </div>
  <div v-if="page==='manage' && selected"><h5>{{ selected.name }} · 实例管理</h5><div class="row q-gutter-sm q-mb-lg">
+  <q-btn color="primary" label="启动并查看日志" :disable="busy" @click="launch(selected)"/>
   <q-btn v-for="a in actions" :key="a.op" :label="a.label" :disable="busy" @click="instanceAction(a.op,a.field,a.label)"/>
   <q-btn label="实例设置" @click="scope='instance'; page='settings'; refresh()"/>
   <q-btn color="negative" label="删除到回收站" :disable="busy" @click="askDelete('instance.delete',{instance:selected.id},selected.name)"/>
  </div><q-input dark outlined autogrow v-model="notes" label="实例备注"/><q-btn class="q-mt-md" label="保存备注" :disable="busy" @click="run('instance.set-notes',{instance:selected.id,notes})"/>
+ <p class="text-grey-4" style="overflow-wrap:anywhere">实例目录：{{ instanceDetails?.root || '尚未读取' }}<br>游戏目录：{{ instanceDetails?.gameRoot || '尚未读取' }}</p>
+ <h6 class="q-mb-md">版本组件</h6>
+ <q-banner v-if="componentError" class="bg-red-9 q-my-sm">{{ componentError }}</q-banner>
+ <q-list bordered separator><q-item v-for="c in components" :key="c.id"><q-item-section><q-item-label>{{ c.name || c.id }} · {{ c.version }} {{ c.custom ? '（自定义）' : '' }}</q-item-label><q-item-label caption class="text-grey-4">{{ c.id }} · {{ c.enabled ? '已启用' : '已禁用' }}</q-item-label><q-item-label v-for="(p,index) in c.problems" :key="index" class="text-orange">{{ p.description }}</q-item-label></q-item-section><q-item-section side><q-btn v-if="c.canChangeVersion" flat label="更改版本" :disable="busy" @click="changeComponentVersion(c)"/><q-btn v-if="c.canDisable" flat :label="c.enabled?'禁用':'启用'" :disable="busy" @click="run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled:!c.enabled})"/></q-item-section></q-item></q-list>
  <h6 class="q-mb-md">资源管理</h6>
  <q-select dark outlined v-model="resourceKind" :options="resourceKinds" emit-value map-options label="资源类型" @update:model-value="loadResources" />
  <div class="row q-gutter-sm q-my-md"><q-input class="col" dark outlined v-model="resourceSource" label="资源本地完整路径或下载 URL"/><q-btn label="安装资源" :disable="busy || !resourceSource" @click="run('resource.install',{instance:selected.id,kind:resourceKind,source:resourceSource})"/></div>
- <p v-if="!resources.length">当前类型暂无资源。</p>
+ <q-linear-progress v-if="resourcesLoading" indeterminate class="q-my-sm"/>
+ <q-banner v-if="resourceError" class="bg-red-9 q-my-sm">资源读取失败：{{ resourceError }}</q-banner>
+ <p v-else-if="!resourcesLoading && !resources.length">当前目录中没有此类资源。请核对上方实例目录是否与老 UI 相同。</p>
+ <p v-else-if="!resourcesLoading">共 {{ resources.length }} 项资源</p>
  <q-list bordered separator><q-item v-for="r in resources" :key="r.fileName"><q-item-section>{{ r.name || r.fileName }}<q-item-label caption class="text-grey-4">{{ r.fileName }} · {{ r.enabled ? '已启用' : '已禁用' }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat :label="r.enabled ? '禁用' : '启用'" :disable="busy" @click="run(r.enabled?'resource.disable':'resource.enable',{instance:selected.id,kind:resourceKind,resource:r.fileName})"/><q-btn flat color="red-4" label="删除" :disable="busy" @click="askDelete('resource.remove',{instance:selected.id,kind:resourceKind,resource:r.fileName},r.fileName)"/></div></q-item-section></q-item></q-list>
  </div>
  <div v-if="page==='accounts'"><h5>账户管理</h5>
@@ -48,6 +56,15 @@
  <q-input dark outlined v-model="settingSearch" label="搜索设置名称" class="q-mb-md"/><p class="text-grey-4">设置使用后端原始名称。部分设置需要重启启动器后生效。</p>
  <q-list bordered separator><q-item v-for="s in settings.filter(x => x.key.toLowerCase().includes(settingSearch.toLowerCase()))" :key="s.key"><q-item-section><q-item-label>{{ s.key }}</q-item-label><q-item-label class="text-grey-4">{{ s.redacted ? '敏感值已隐藏' : JSON.stringify(s.value) }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat label="编辑" :disable="busy || s.redacted" @click="editSetting(s)"/><q-btn flat label="恢复默认" :disable="busy" @click="run('settings.reset',{...settingScope(),key:s.key})"/></div></q-item-section></q-item></q-list>
  </div>
+ <q-card v-if="selected && page==='manage'" class="bg-grey-9 q-mt-lg">
+  <q-card-section><div class="text-h6">{{ selected.name }} · 日志</div>
+   <q-tabs v-model="logMode" align="left"><q-tab name="live" label="实时控制台"/><q-tab name="files" label="历史日志"/></q-tabs>
+   <template v-if="logMode==='live'"><div class="row items-center q-gutter-sm"><q-btn flat label="连接控制台" :disable="busy" @click="connectConsole(selected)"/><q-btn flat label="清空显示" @click="consoleLines=[]"/><q-checkbox dark v-model="followLog" label="自动滚动"/><span>{{ consoleState }}</span></div>
+    <pre ref="consoleElement" class="console" tabindex="0">{{ consoleLines.join('\n') || '启动时自动连接；也可以连接已运行实例的控制台。' }}</pre>
+   </template>
+   <template v-else><div class="row q-gutter-sm q-my-md"><q-select class="col" dark outlined v-model="logFile" :options="logFiles.map(f=>({label:f.name,value:f.path}))" emit-value map-options label="日志文件"/><q-btn label="刷新文件" :disable="busy" @click="loadLogFiles"/><q-btn label="读取" :disable="busy || !logFile" @click="readLogFile"/></div><pre class="console" tabindex="0">{{ fileLog || '选择文件后点击读取。' }}</pre></template>
+  </q-card-section>
+ </q-card>
  <q-banner v-if="device" class="bg-blue-grey-9 q-mt-md">请在浏览器中访问 {{ device.url }}，输入代码：<strong>{{ device.code }}</strong></q-banner>
  <div v-if="status" class="q-mt-md text-grey-4">{{ status }}</div>
  <q-btn v-if="busy" flat color="orange" label="取消当前任务" @click="cancel"/>
@@ -59,9 +76,55 @@
 </q-layout>
 </template>
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { launcher } from './boot/launcher-api';
-const buildLabel = '界面修订 2026-09-19.2';
+const buildLabel = '界面修订 2026-09-19.3';
+const components=ref<any[]>([]),componentError=ref('');
+async function loadComponents(){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});components.value=r.components;}catch(e){componentError.value=message(e);}}
+async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name||c.id)+' 版本',c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
+const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref('');
+const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
+const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
+let consoleSubscription='',consoleInstance='',launchInFlight=false;
+async function appendConsole(text:string){
+ consoleLines.value.push(text);
+ if(consoleLines.value.length>3000)consoleLines.value.splice(0,consoleLines.value.length-3000);
+ await nextTick();if(followLog.value && consoleElement.value)consoleElement.value.scrollTop=consoleElement.value.scrollHeight;
+}
+function receiveStream(batch:any){
+ if(batch.subscriptionId!==consoleSubscription)return;
+ if(batch.dropped)void appendConsole(`[日志缓冲区已省略 ${batch.dropped} 条消息]`);
+ for(const event of batch.events || []){
+  if(event.kind==='console.line')void appendConsole(event.text);
+  else if(event.kind==='console.data')void appendConsole(new TextDecoder().decode(Uint8Array.from(atob(event.data),c=>c.charCodeAt(0))));
+  else if(event.kind==='instance.state'){
+   consoleState.value=event.running?'客户端运行中':'客户端已停止';
+   void appendConsole(`[${consoleState.value}]`);
+  }else if(event.kind==='console.reset')consoleState.value=event.available?'控制台已连接':'等待启动';
+ }
+}
+async function connectConsole(i:any){
+ if(consoleSubscription && consoleInstance===i.id)return;
+ try{
+  if(consoleSubscription)await call('event.unsubscribe',{subscriptionId:consoleSubscription});
+  consoleSubscription='';consoleInstance=i.id;consoleLines.value=[];
+  const sub=await call('instance.console.subscribe',{instance:i.id});consoleSubscription=sub.subscriptionId;
+  consoleState.value='控制台已连接';
+ }catch(e){error.value=message(e);consoleState.value='连接失败';}
+}
+async function launch(i:any){
+ if(busy.value)return;
+ await openInstance(i);logMode.value='live';await connectConsole(i);
+ if(!consoleSubscription)return;
+ busy.value=true;launchInFlight=true;error.value='';notice.value='';
+ try{
+  const result=await call('instance.launch',{instance:i.id});
+  notice.value=`启动请求已返回（PID ${result.pid}），请查看控制台确认客户端运行状态。`;
+ }catch(e){error.value=message(e);void appendConsole('[启动失败] '+error.value);}
+ finally{busy.value=false;launchInFlight=false;device.value=null;status.value='';}
+}
+async function loadLogFiles(){try{logFiles.value=await call('instance.log.list',{instance:selected.value.id});}catch(e){error.value=message(e);}}
+async function readLogFile(){try{const r=await call('instance.log.read',{instance:selected.value.id,file:logFile.value,maxBytes:1048576});fileLog.value=r.content+(r.truncated?'\n[文件超过 1 MiB，仅显示前部分]':'');}catch(e){error.value=message(e);}}
 const resources=ref<any[]>([]),resourceKind=ref('mods'),resourceSource=ref('');
 const resourceKinds=[{label:'模组',value:'mods'},{label:'资源包',value:'resourcepacks'},{label:'光影包',value:'shaderpacks'},{label:'材质包',value:'texturepacks'},{label:'数据包',value:'datapacks'},{label:'投影',value:'schematics'},{label:'Yes Steve Model',value:'yesstevemodels'},{label:'Customizable Player Models',value:'customplayermodels'}];
 const pages=[{id:'instances',label:'实例库',icon:'apps'},{id:'create',label:'添加实例',icon:'add_box'},{id:'accounts',label:'账户管理',icon:'person'},{id:'settings',label:'设置',icon:'settings'}];
@@ -93,18 +156,27 @@ function finishDialog(ok:boolean){dialog.value=false;resolveDialog?.(ok ? (confi
 function message(e:any){return e?.message || String(e);}
 async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||'操作失败');return r.data;}
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
-async function loadResources(){resources.value=[];try{resources.value=await call('resource.list',{instance:selected.value.id,kind:resourceKind.value});}catch(e){error.value=message(e);}}
-async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage')await loadResources();else instances.value=await call('instance.list');}catch(e){error.value=message(e);}}
+let resourceRequest=0;
+async function loadResources(){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind});if(request===resourceRequest){if(!Array.isArray(data))throw new Error('资源接口返回格式错误');resources.value=data;}}catch(e){if(request===resourceRequest)resourceError.value=message(e);}finally{if(request===resourceRequest)resourcesLoading.value=false;}}
+async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage'){await loadResources();await loadComponents();await loadLogFiles();}else instances.value=await call('instance.list');}catch(e){error.value=message(e);}}
 async function navigate(id:string){if(busy.value)return;page.value=id;error.value='';notice.value='';if(id==='settings')scope.value='launcher';await refresh();}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;}}
 async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
-async function openInstance(i:any){selected.value=i;page.value='manage';notes.value='';error.value='';try{const info=await call('instance.info',{instance:i.id});notes.value=info.notes || '';await loadResources();}catch(e){error.value=message(e);}}
+async function openInstance(i:any){
+ if(selected.value?.id!==i.id){
+  if(consoleSubscription){try{await call('event.unsubscribe',{subscriptionId:consoleSubscription});}catch(e){error.value=message(e);}}
+  consoleSubscription='';consoleInstance='';consoleLines.value=[];consoleState.value='未连接';logFile.value='';fileLog.value='';logFiles.value=[];
+ }
+ selected.value=i;page.value='manage';notes.value='';error.value='';instanceDetails.value=null;
+ try{const info=await call('instance.info',{instance:i.id});instanceDetails.value=info;notes.value=info.notes || '';}catch(e){error.value=message(e);}
+ await loadResources();await loadComponents();await loadLogFiles();
+}
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}
 async function askDelete(op:string,p:any,name:string){if(await ask('确认移除 '+name+'？','',true))await run(op,{...p,confirm:true});}
 async function editSetting(s:any){const value=await ask('编辑 '+s.key,JSON.stringify(s.value));if(value===null)return;try{await run('settings.set',{...settingScope(),key:s.key,value:JSON.parse(value)});}catch(e){error.value='请输入有效的 JSON 值，例如 true、1024 或 "文本"';}}
 async function cancel(){try{await call('task.cancel');}catch(e){error.value=message(e);}}
-let unlisten:(()=>void)|undefined;
-onMounted(async()=>{try{unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;}else if(raw.kind==='status'){status.value=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');}else if(raw.kind==='task'){status.value=raw.data?.status||raw.data?.state||'正在执行';}});await refresh();}catch(e){error.value=message(e);}});
-onUnmounted(()=>unlisten?.());
+let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
+onMounted(async()=>{try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit(()=>{consoleSubscription='';consoleState.value='后端已退出';error.value='启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;}else if(raw.kind==='status'){if(launchInFlight)void appendConsole('[启动] '+(raw.message || raw.data?.message || ''));status.value=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');}else if(raw.kind==='task'){status.value=raw.data?.status||raw.data?.state||'正在执行';}});await refresh();}catch(e){error.value=message(e);}});
+onUnmounted(()=>{unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
-<style scoped>.form{max-width:640px}h5{margin-top:12px}</style>
+<style scoped>.form{max-width:640px}h5{margin-top:12px}.console{height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#111;padding:12px;font-size:12px;user-select:text}</style>

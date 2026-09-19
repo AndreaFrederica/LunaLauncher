@@ -17,5 +17,13 @@ export class LauncherApiClient {
     this.requireDesktop();
     return listen('launcher-event', event => handler(event.payload));
   }
+  onStream(handler: (batch: unknown) => void): Promise<UnlistenFn> {
+    this.requireDesktop();
+    return listen('launcher-stream', event => handler(event.payload));
+  }
+  onExit(handler: () => void): Promise<UnlistenFn> {
+    this.requireDesktop();
+    return listen('launcher-exit', handler);
+  }
 }
 export const launcher = new LauncherApiClient();

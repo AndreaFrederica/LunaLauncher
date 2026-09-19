@@ -23,3 +23,15 @@ and settings at all window sizes. Instance management includes resource
 installation, enable/disable, and removal. Minecraft and loader version lists
 are fetched from the backend using the load-version buttons. The interface
 revision in the header can be used to identify an outdated installed binary.
+
+Instance management displays the actual instance/game directories and the
+ordered version components separately from installed mod/resource files.
+Resource read failures are shown separately from an empty resource directory.
+
+Launching opens instance management and subscribes to the console before
+issuing the launch request. The Tauri bridge forwards `launcher/stream` batches
+for live output and running-state changes. The console retains up to 3,000
+entries, supports auto-scroll and clearing the display, and keeps startup
+errors visible. Historical log files can also be listed and read (up to 1 MiB).
+A successful launch response means that the request returned; the console is
+the source for subsequent client output and exit state.

@@ -574,6 +574,39 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             } else return OperationService::failure("Unknown distribution provider.", 2);
             return OperationService::success(QJsonObject{ { "provider", provider }, { "version", version }, { "url", url }, { "fileName", fileName }, { "executable", executable } });
         });
+    api.registerOperation({ "server.distribution.versions", "Fetch available versions and builds for a server distribution provider.",
+        objectSchema({ { "provider", stringProperty("vanilla, paper, purpur, or fabric.") }, { "version", stringProperty("Optional version for build listing.") } }, { "provider" }), "server" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto provider = p.value("provider").toString().trimmed().toLower();
+            const auto version = p.value("version").toString().trimmed();
+            QString error; QJsonArray versions; QJsonArray builds;
+            if (provider == "vanilla") {
+                const auto manifest = fetchJson(QUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"), &error);
+                for (const auto& item : manifest.value("versions").toArray()) {
+                    const auto object = item.toObject();
+                    versions.append(QJsonObject{ { "id", object.value("id") }, { "type", object.value("type") }, { "releaseTime", object.value("releaseTime") }, { "url", object.value("url") } });
+                }
+            } else if (provider == "paper") {
+                const auto project = fetchJson(QUrl("https://api.papermc.io/v2/projects/paper"), &error);
+                for (const auto& item : project.value("versions").toArray()) versions.append(item);
+                if (!version.isEmpty()) {
+                    const auto data = fetchJson(QUrl("https://api.papermc.io/v2/projects/paper/versions/" + version + "/builds"), &error);
+                    for (const auto& item : data.value("builds").toArray()) builds.append(item);
+                }
+            } else if (provider == "purpur") {
+                const auto project = fetchJson(QUrl("https://api.purpurmc.org/v2/purpur"), &error);
+                for (const auto& item : project.value("versions").toArray()) versions.append(item);
+                if (!version.isEmpty()) {
+                    const auto data = fetchJson(QUrl("https://api.purpurmc.org/v2/purpur/" + version), &error);
+                    for (const auto& item : data.value("builds").toArray()) builds.append(item);
+                }
+            } else if (provider == "fabric") {
+                const auto data = fetchJson(QUrl("https://meta.fabricmc.net/v2/versions/game"), &error);
+                for (const auto& item : data.value("versions").toArray()) versions.append(item);
+            } else return OperationService::failure("Unknown distribution provider.", 2);
+            if (versions.isEmpty() && builds.isEmpty() && !error.isEmpty()) return OperationService::failure(error, 2);
+            return OperationService::success(QJsonObject{ { "provider", provider }, { "version", version }, { "versions", versions }, { "builds", builds } });
+        });
 
     api.registerOperation({ "server.distribution.install", "Download and configure a server distribution from a verified HTTP(S) URL. The file is staged before replacement.",
         objectSchema({ { "instance", instance }, { "url", stringProperty("HTTP(S) distribution URL.") },

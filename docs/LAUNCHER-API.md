@@ -137,7 +137,7 @@ The implementation exposes 120 operations and reuses existing models and tasks i
 | Components | component catalog and version lists, installed list, version selection, enable/remove/reorder/customize/revert | import custom component/JAR workflows |
 | Resources | installed inspection/refresh, local/URL install, enable/disable/remove; remote search/project/version/dependency lookup, indexed installation; batch upgrade check/select/apply with stale-file validation and disabled-state preservation | automatic recursive dependency installation, Hangar update metadata; restricted CurseForge files with no direct URL are not exposed by the common version list |
 | Servers | properties, EULA, operator/whitelist/ban lists, start, terminal subscription/input/resize, YAML revisions, compatibility configuration; local mods/plugins CRUD | installing server loader distributions |
-| Worlds | list, rename/delete, reset icon | create/copy/import/export workflows |
+| Worlds | list, rename/delete, reset icon, import directory/zip and export world zip | world creation from an empty template and advanced copy/replace policies |
 | Accounts | login/refresh/remove/default/order/profiles; skin library/upload/reset/cape | live profile changes outside current selection flow |
 | Java | scan/list/install/remove/select | platform-specific diagnostics beyond current core tasks |
 | Settings | every registered launcher/instance setting via list/get/set/reset; theme/icon/background catalogs, refresh and selection; backend language catalog/selection/refresh | settings import/export; frontend rendering and localization; some services require a sidecar restart after settings changes |

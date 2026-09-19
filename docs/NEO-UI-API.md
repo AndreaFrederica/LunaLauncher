@@ -126,6 +126,7 @@ if (!result.ok) showError(result.error);
 | 资源浏览 | `resource.providers` → `resource.search` → `resource.project` / `resource.versions` |
 | 资源安装/升级 | 检查版本返回的 dependencies，必要时 `resource.resolve-dependency`，再逐项 `resource.install-version` |
 | 批量升级 | `resource.updates.check` → 展示 updates 并勾选 itemId → `resource.updates.apply`；取消计划用 discard |
+| 世界管理 | `instance.world.list` → `instance.world.import/export/rename/delete/reset-icon` |
 | 设置 | `settings.list/get/set/reset`，instance scope 同时提供 instance ID |
 | 外观／语言 | `appearance.catalog/refresh/select`、`language.list/select/refresh` |
 | 服务端 YAML | `server.yaml.read` → 编辑 content → `server.yaml.write`，附带读取时的 ifRevision |

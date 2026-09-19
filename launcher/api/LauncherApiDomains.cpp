@@ -6,6 +6,7 @@
 #include "api/LauncherApi.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/WorldList.h"
+#include "minecraft/World.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/skins/CapeChange.h"
@@ -17,6 +18,8 @@
 #include "cli/OperationService.h"
 #include "net/NetJob.h"
 #include "tasks/Task.h"
+#include "MMCZip.h"
+#include "archive/ExportToZipTask.h"
 
 #include <QDir>
 #include <QCoreApplication>
@@ -596,6 +599,64 @@ void registerLauncherApiDomains(LauncherApi& api)
                                    return OperationService::failure(QObject::tr("The world icon could not be removed."));
                                worlds->update();
                                return OperationService::success(QJsonObject{ { "reset", true } });
+                           });
+
+    api.registerOperation({ "instance.world.import", "Import a world directory or zip archive into a stopped Minecraft instance.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") },
+                                           { "source", stringProperty("Local world directory or zip archive.") },
+                                           { "name", stringProperty("Optional world name override.") },
+                                           { "replace", boolProperty("Replace an existing destination when possible.") } },
+                                          { "instance", "source" }),
+                            "worlds", true },
+                           [](const QJsonObject& parameters, UserInteraction&) {
+                               auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
+                               if (!instance) return OperationService::failure(QObject::tr("Minecraft instance not found."), 2);
+                               if (instance->isRunning()) return OperationService::failure(QObject::tr("Worlds cannot be imported while the instance is running."), 2);
+                               const QFileInfo source(parameters.value("source").toString());
+                               if (!source.exists() || (!source.isDir() && !source.isFile())) return OperationService::failure(QObject::tr("World source does not exist."), 2);
+                               World world(source);
+                               if (!world.isValid()) return OperationService::failure(QObject::tr("The source is not a valid world or archive."), 2);
+                               const auto targetName = parameters.value("name").toString().trimmed();
+                               if (!targetName.isEmpty() && (targetName == "." || targetName == ".." || targetName.contains('/') || targetName.contains('\\')))
+                                   return OperationService::failure(QObject::tr("Invalid world name."), 2);
+                               auto worlds = instance->worldList();
+                               worlds->update();
+                               const auto destination = QDir(instance->worldDir()).filePath(targetName.isEmpty() ? world.name() : targetName);
+                               if (QFileInfo::exists(destination) && !parameters.value("replace").toBool())
+                                   return OperationService::failure(QObject::tr("A world already exists at the destination; set replace=true."), 2);
+                               if (QFileInfo::exists(destination) && !QDir(destination).removeRecursively())
+                                   return OperationService::failure(QObject::tr("The existing world could not be replaced."));
+                               if (!world.install(instance->worldDir(), targetName)) return OperationService::failure(QObject::tr("The world could not be imported."));
+                               worlds->update();
+                               return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "name", targetName.isEmpty() ? world.name() : targetName },
+                                   { "path", destination }, { "changed", true } });
+                           });
+
+    api.registerOperation({ "instance.world.export", "Export a world directory as a zip archive.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") },
+                                           { "world", stringProperty("World folder or display name.") },
+                                           { "output", stringProperty("Destination zip path.") },
+                                           { "overwrite", boolProperty("Replace an existing output file.") } },
+                                          { "instance", "world", "output" }),
+                            "worlds", true },
+                           [&api](const QJsonObject& parameters, UserInteraction& interaction) {
+                               auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
+                               if (!instance) return OperationService::failure(QObject::tr("Minecraft instance not found."), 2);
+                               if (instance->isRunning()) return OperationService::failure(QObject::tr("Worlds cannot be exported while the instance is running."), 2);
+                               auto worlds = instance->worldList();
+                               worlds->update();
+                               auto world = findWorld(worlds.get(), parameters.value("world").toString());
+                               if (!world || !world->isOnFS()) return OperationService::failure(QObject::tr("World directory was not found."), 2);
+                               const QFileInfo output(parameters.value("output").toString());
+                               if (output.exists() && !parameters.value("overwrite").toBool()) return OperationService::failure(QObject::tr("Output exists; set overwrite=true."), 2);
+                               if (!output.absoluteDir().exists() && !QDir().mkpath(output.absoluteDir().absolutePath())) return OperationService::failure(QObject::tr("Output directory could not be created."));
+                               QFileInfoList files;
+                               if (!MMCZip::collectFileListRecursively(world->container().absoluteFilePath(), nullptr, &files, {})) return OperationService::failure(QObject::tr("World files could not be enumerated."));
+                               auto task = makeShared<MMCZip::ExportToZipTask>(output.absoluteFilePath(), world->container().absoluteFilePath(), files, "", true);
+                               QString error;
+                               if (!waitForAccountTask(task.get(), interaction, &error, api)) return OperationService::failure(error);
+                               return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "world", world->folderName() },
+                                   { "path", output.absoluteFilePath() }, { "files", files.size() }, { "changed", true } });
                            });
 
     api.registerOperation({ "instance.log.list", "List log files available for an instance.",

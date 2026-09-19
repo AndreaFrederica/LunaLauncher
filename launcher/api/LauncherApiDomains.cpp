@@ -31,6 +31,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QNetworkProxy>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QTimer>
 
 namespace {
 
@@ -344,6 +348,30 @@ QJsonObject listLogs(const QJsonObject& parameters)
     return OperationService::success(result);
 }
 
+QJsonObject proxyInfo()
+{
+    const auto s = APPLICATION->settings();
+    return OperationService::success(QJsonObject{ { "type", s->get("ProxyType").toString() }, { "host", s->get("ProxyAddr").toString() },
+                                                   { "port", s->get("ProxyPort").toInt() }, { "username", s->get("ProxyUser").toString() },
+                                                   { "configured", s->get("ProxyType").toString() != "None" } });
+}
+
+QJsonObject proxySet(const QJsonObject& p)
+{
+    const auto type = p.value("type").toString("None").toUpper();
+    if (type != "NONE" && type != "HTTP" && type != "SOCKS5" && type != "DEFAULT")
+        return OperationService::failure(QObject::tr("Proxy type must be None, HTTP, SOCKS5, or Default."), 2);
+    const auto normalized = type == "NONE" ? QString("None") : type == "DEFAULT" ? QString("Default") : type;
+    const auto host = p.value("host").toString();
+    const auto port = p.value("port").toInt(8080);
+    if (port < 1 || port > 65535) return OperationService::failure(QObject::tr("Proxy port is invalid."), 2);
+    auto s = APPLICATION->settings();
+    s->set("ProxyType", normalized); s->set("ProxyAddr", host); s->set("ProxyPort", port);
+    s->set("ProxyUser", p.value("username").toString()); s->set("ProxyPass", p.value("password").toString());
+    APPLICATION->updateProxySettings(normalized, host, port, p.value("username").toString(), p.value("password").toString());
+    return proxyInfo();
+}
+
 QJsonObject readLog(const QJsonObject& parameters)
 {
     auto instance = findInstance(parameters.value("instance").toString());
@@ -487,6 +515,13 @@ void registerLauncherApiDomains(LauncherApi& api)
                                                                                { "headless", APPLICATION->isHeadless() },
                                                                                { "capabilities", capabilities } });
                            });
+    api.registerOperation({ "network.proxy.get", "Read the effective launcher proxy configuration.", objectSchema({}) },
+                           [](const QJsonObject&, UserInteraction&) { return proxyInfo(); });
+    api.registerOperation({ "network.proxy.set", "Set the launcher HTTP/SOCKS5/system proxy configuration.",
+                            objectSchema({ { "type", stringProperty("None, HTTP, SOCKS5, or Default.") }, { "host", stringProperty("Proxy host.") },
+                                           { "port", QJsonObject{ { "type", "integer" } } }, { "username", stringProperty("Optional username.") },
+                                           { "password", stringProperty("Optional password.") } }) },
+                           [](const QJsonObject& p, UserInteraction&) { return proxySet(p); });
 
     api.registerOperation({ "account.move", "Move an account by a relative offset or to an absolute list position.",
                             objectSchema({ { "account", stringProperty("Account ID or profile name.") },

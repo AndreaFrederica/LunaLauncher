@@ -132,3 +132,9 @@ notifications. Task controls are accepted while a long operation is active. Canc
 notifications must name that operation's JSON-RPC request ID. See
 [NEO-UI-API.md](NEO-UI-API.md) for the protocol and TypeScript example and
 [LAUNCHER-API.md](LAUNCHER-API.md) for the current coverage and remaining gaps.
+
+The native protocol also emits `launcher/stream` notifications for console and log
+subscriptions. Their lifetime extends beyond the subscribe response. Use
+`event.poll/subscriptions/unsubscribe` to manage them. These calls and server terminal
+input/resize remain available during a long operation. Batch resource upgrade plans,
+theme/language selection and stream examples are documented in [NEO-UI-API.md](NEO-UI-API.md).

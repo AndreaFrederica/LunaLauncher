@@ -57,3 +57,18 @@ test('a broken stdin rejects every pending request', async () => {
   const results = await Promise.allSettled(requests);
   assert.ok(results.every(result => result.status === 'rejected' && result.reason.message === 'broken pipe'));
 });
+
+test('stream batches preserve cursors, overflow and base64 bytes independently of responses', async () => {
+  const batches = [];
+  const client = new LauncherClient(async () => {}, undefined, batch => batches.push(batch));
+  const request = client.begin('instance.console.subscribe', { instance: 'server' });
+  const batch = { subscriptionId: 'sub', nextCursor: 514, dropped: 2, hasMore: true,
+    events: [{ subscriptionId: 'sub', instance: 'server', sequence: 514,
+      kind: 'console.data', encoding: 'base64', data: Buffer.from('Neo 测试\u001b[0m').toString('base64') }] };
+  client.acceptLine(JSON.stringify({ jsonrpc: '2.0', method: 'launcher/stream', params: batch }));
+  assert.deepEqual(batches, [batch]);
+  assert.equal(Buffer.from(batches[0].events[0].data, 'base64').toString('utf8'), 'Neo 测试\u001b[0m');
+  client.acceptLine(JSON.stringify({ jsonrpc: '2.0', id: request.requestId,
+    result: { ok: true, data: { subscriptionId: 'sub' } } }));
+  assert.equal((await request.result).data.subscriptionId, 'sub');
+});

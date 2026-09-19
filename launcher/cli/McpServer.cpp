@@ -100,6 +100,13 @@ void McpServer::start()
     connect(notifier, &QSocketNotifier::activated, this, &McpServer::readMessage);
 #endif
     m_notifier = notifier;
+    auto streams = new QTimer(this);
+    connect(streams, &QTimer::timeout, this, [this] {
+        if (m_disconnected) return;
+        for (const auto& batch : m_service.streamNotifications())
+            writeMessage({ { "jsonrpc", "2.0" }, { "method", "launcher/stream" }, { "params", batch } });
+    });
+    streams->start(50);
 }
 
 void McpServer::readMessage()
@@ -292,7 +299,9 @@ void McpServer::handleMessage(const QJsonObject& request)
 void McpServer::executeOperation(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
                                  const QJsonObject& metadata, bool native)
 {
-    const bool control = operation == "task.list" || operation == "task.status" || operation == "task.cancel" || operation == "api.describe";
+    const bool control = operation == "task.list" || operation == "task.status" || operation == "task.cancel" || operation == "api.describe" ||
+                         operation == "event.poll" || operation == "event.subscriptions" || operation == "event.unsubscribe" ||
+                         operation == "server.console.command" || operation == "server.console.write" || operation == "server.console.resize";
     if (m_activeService && (!control || id == m_activeRequestId)) {
         writeError(id, -32000, QStringLiteral("Another launcher operation is already running. Task controls remain available."));
         return;

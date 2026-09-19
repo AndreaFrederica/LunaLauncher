@@ -8,6 +8,7 @@
 
 #include <QList>
 #include <QSet>
+#include <QScopedValueRollback>
 #include <QStringList>
 
 #include "cli/OperationService.h"
@@ -19,6 +20,8 @@
 #include "api/LauncherApiComponents.h"
 #include "api/LauncherApiCatalog.h"
 #include "api/LauncherApiIntegrations.h"
+#include "api/LauncherApiAppearance.h"
+#include "api/LauncherApiStreams.h"
 #include "tasks/Task.h"
 
 namespace {
@@ -200,12 +203,16 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerLauncherApiComponentOperations(*this);
     registerLauncherApiCatalogOperations(*this);
     registerLauncherApiIntegrationOperations(*this);
+    registerLauncherApiAppearanceOperations(*this);
+    m_streams = std::make_unique<LauncherApiStreams>(*this);
 }
 
 LauncherApi::~LauncherApi() = default;
 
 QJsonObject LauncherApi::execute(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
+    if (!m_executeDepth) m_cancelRequested = false;
+    QScopedValueRollback<int> depth(m_executeDepth, m_executeDepth + 1);
     const auto it = m_operations.constFind(operation);
     if (it == m_operations.constEnd()) {
         auto result = OperationService::failure(QStringLiteral("Unknown API operation: %1").arg(operation), 2);
@@ -290,6 +297,7 @@ void LauncherApi::clearTrackedTask(Task* task)
 
 void LauncherApi::cancelCurrent()
 {
+    m_cancelRequested = true;
     const auto legacyTask = m_legacyService ? m_legacyService->currentTask() : nullptr;
     if (m_externalTask && m_externalTask != legacyTask)
         m_externalTask->abort();
@@ -418,5 +426,11 @@ QJsonObject LauncherApi::taskCancel(const QJsonObject& parameters)
     if (!task->canAbort())
         return OperationService::failure(QObject::tr("Task cannot be cancelled: %1").arg(taskId), 2);
     const bool cancelled = task->abort();
+    if (cancelled) m_cancelRequested = true;
     return OperationService::success(QJsonObject{ { "cancelled", cancelled }, { "task", snapshotTask(taskId, task) } });
+}
+
+QJsonArray LauncherApi::streamNotifications()
+{
+    return m_streams->notifications();
 }

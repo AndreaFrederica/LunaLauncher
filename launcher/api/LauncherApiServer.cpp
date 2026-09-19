@@ -450,6 +450,38 @@ void registerLauncherApiServerOperations(LauncherApi& api)
     const QJsonObject propertiesObject{ { "type", "object" }, { "additionalProperties", QJsonObject{ { "type", "string" } } } };
     const QJsonObject entriesArray{ { "type", "array" }, { "items", QJsonObject{ { "type", "object" } } } };
 
+    api.registerOperation({ "server.start", "Start a configured server process without requiring a Minecraft account.",
+        objectSchema({ { "instance", instance } }, { "instance" }), "server", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto server = findServer(p.value("instance").toString());
+            if (!server) return missingServer(p.value("instance").toString());
+            if (!server->isRunning() && !server->startServer()) return OperationService::failure("The server could not be started.");
+            return OperationService::success(QJsonObject{ { "instance", server->id() }, { "running", server->isRunning() } });
+        });
+    api.registerOperation({ "server.console.write", "Write UTF-8 terminal input, including control characters, to the server PTY.",
+        objectSchema({ { "instance", instance }, { "text", stringProperty("Terminal input of at most 32 KiB UTF-8; no newline is added.") } }, { "instance", "text" }), "server" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto server = findServer(p.value("instance").toString());
+            if (!server) return missingServer(p.value("instance").toString());
+            const auto task = dynamic_cast<ServerLaunchTask*>(server->getLaunchTask());
+            if (!task || !task->canStop()) return OperationService::failure("The server terminal is not available.", 2);
+            const auto text = p.value("text").toString().toUtf8();
+            if (text.size() > 32768) return OperationService::failure("Terminal input exceeds 32 KiB.", 2);
+            task->writeToStdin(text);
+            return OperationService::success(QJsonObject{ { "bytesWritten", text.size() } });
+        });
+    api.registerOperation({ "server.console.resize", "Resize the running server terminal.",
+        objectSchema({ { "instance", instance }, { "columns", QJsonObject{ { "type", "integer" }, { "minimum", 1 }, { "maximum", 1000 } } },
+            { "rows", QJsonObject{ { "type", "integer" }, { "minimum", 1 }, { "maximum", 1000 } } } }, { "instance", "columns", "rows" }), "server" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto server = findServer(p.value("instance").toString());
+            if (!server) return missingServer(p.value("instance").toString());
+            const auto task = dynamic_cast<ServerLaunchTask*>(server->getLaunchTask());
+            if (!task || !task->canStop()) return OperationService::failure("The server terminal is not available.", 2);
+            task->resizePty(p.value("columns").toInt(), p.value("rows").toInt());
+            return OperationService::success();
+        });
+
     auto yaml = QJsonObject{ { "instance", instance }, { "file", stringProperty("bukkit.yml or spigot.yml.") } };
     api.registerOperation({ "server.yaml.read", "Read server YAML text and its revision.", objectSchema(yaml, { "instance", "file" }), "server" },
         [](const QJsonObject& p, UserInteraction&) { return yamlFile(p, false); });

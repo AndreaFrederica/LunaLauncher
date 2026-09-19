@@ -58,6 +58,8 @@ stdout 只承载协议，stderr 是诊断日志。输入允许分片和多行合
 
 - `launcher/catalog`、`api.describe`、`tools/list`、`ping`。
 - `task.list`、`task.status`、`task.cancel`，可以通过 native 或 MCP 调用。
+- `event.poll`、`event.subscriptions`、`event.unsubscribe`，以及
+  `server.console.command/write/resize`。
 - `launcher/respond` 和 `notifications/cancelled`。
 
 查询当前任务可省略 `taskId`；指定 UUID 可查询已完成任务快照。取消整个操作：
@@ -100,6 +102,9 @@ interactionId、错误类型或越界下标返回 `-32602`。密码通过管道�
 ```typescript
 const client = new LauncherClient(line => child.write(line), event => {
   // 按 event.requestId 更新进度、登录引导或输入框。
+}, batch => {
+  // 按 batch.subscriptionId 分发控制台／日志事件并记录 nextCursor。
+  // dropped > 0 表示缓冲区已有历史缺口。
 });
 // 注册 stdout / close 监听之后：
 const catalog = await client.catalog();
@@ -120,12 +125,31 @@ if (!result.ok) showError(result.error);
 | 新建实例 | `component.catalog` → `component.versions` → `instance.create` |
 | 资源浏览 | `resource.providers` → `resource.search` → `resource.project` / `resource.versions` |
 | 资源安装/升级 | 检查版本返回的 dependencies，必要时 `resource.resolve-dependency`，再逐项 `resource.install-version` |
+| 批量升级 | `resource.updates.check` → 展示 updates 并勾选 itemId → `resource.updates.apply`；取消计划用 discard |
 | 设置 | `settings.list/get/set/reset`，instance scope 同时提供 instance ID |
+| 外观／语言 | `appearance.catalog/refresh/select`、`language.list/select/refresh` |
 | 服务端 YAML | `server.yaml.read` → 编辑 content → `server.yaml.write`，附带读取时的 ifRevision |
+| 服务端终端 | `instance.console.subscribe` → `server.start` → `server.console.write/resize`；结束用 `instance.stop/kill` |
+| 日志跟随 | `instance.log.subscribe` → `launcher/stream` 通知或 `event.poll` → `event.unsubscribe` |
 | 联机 | `integration.status` → install/start → host/join → state/log → leave/stop |
 | 下载队列 | `aria2.downloads`、`aria2.cancel`、`aria2.clear-finished` |
 
-仍未达到所有 GUI 功能的完全覆盖。递归依赖自动安装、批量升级计划、实时控制台
-订阅、部分世界管理和主题/语言目录等缺口见
+## 升级计划和实时流
+
+`resource.updates.check` 最多检查 256 个索引资源，默认只选择 release，并读取
+实例 Minecraft／loader 配置。返回的 `updates` 由前端选择 itemId 后交给
+`resource.updates.apply`；计划在十分钟后过期，最多保留 16 个。执行前会校验原文件、
+索引和目标文件名，下载使用临时目录和既有校验和逻辑，成功后替换并保留禁用状态。
+单项失败会尝试恢复原文件；批次没有整体回滚，依赖仍需单独选择安装。
+
+`instance.console.subscribe` 和 `instance.log.subscribe` 返回 subscriptionId。服务端
+终端和日志文件的字节块使用 base64，客户端 console.line 来自脱敏日志模型。
+`launcher/stream` 通知与 `event.poll` 共享有界历史但游标独立；每个订阅最多保留
+512 条／1 MiB，`dropped` 大于零表示需要提示日志缺口。文件轮换或截断会产生
+`log.reset`。`server.console.write` 最多 32 KiB，command 会补换行，resize 范围为
+1–1000。外观接口应用 Qt 后端主题，Neo UI 自己负责浏览器样式和文案翻译。
+
+当前接口目录为 **120 项**，仍未达到所有 GUI 功能的完全覆盖。递归依赖自动安装、
+世界管理、服务端软件安装、设置导入导出等缺口见
 [覆盖表](LAUNCHER-API.md#current-coverage-and-remaining-gaps)。目前有些设置需重启
 sidecar 才能应用到常驻服务；服务端 loader 配置也不等于安装服务端软件。

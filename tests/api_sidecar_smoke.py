@@ -5,6 +5,7 @@ python tests/api_sidecar_smoke.py --exe install-api-test/lunalauncher-cli.exe
 Add --online to smoke-test public resource providers (read-only network requests).
 """
 import argparse
+import base64
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -13,6 +14,7 @@ import os
 from pathlib import Path
 import queue
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -86,7 +88,13 @@ class Sidecar:
         return self.send("launcher/execute", {"operation": operation, "parameters": parameters})
 
     def execute(self, operation, **parameters):
-        message = self.response(self.start(operation, **parameters))
+        request_id = self.start(operation, **parameters)
+        try:
+            message = self.response(request_id, timeout=120)
+        except AssertionError:
+            self.send("notifications/cancelled", {"requestId": request_id}, notification=True)
+            self.response(request_id)
+            raise
         if "error" in message:
             raise AssertionError(message)
         return message["result"]
@@ -109,7 +117,7 @@ class Sidecar:
             self.process.stdout.close()
             self.process.stderr.close()
         if self.process.returncode != 0:
-            raise AssertionError(f"Sidecar exit code: {self.process.returncode}")
+            raise AssertionError(f"Sidecar exit code: {self.process.returncode}\n" + "".join(self.stderr))
 
 
 class ApiSmoke(unittest.TestCase):
@@ -255,6 +263,11 @@ class ApiSmoke(unittest.TestCase):
 
     def test_06_long_task_controls_and_cancellation(self):
         s = self.sidecar
+        logs = self.root / "instances/neo-client/.minecraft/logs"
+        logs.mkdir(exist_ok=True)
+        log = logs / "during-download.log"
+        log.write_bytes(b"")
+        subscription = s.ok("instance.log.subscribe", instance="neo-client", file=str(log))["subscriptionId"]
         url = f"http://127.0.0.1:{self.http.server_port}/"
         s.ok("settings.set", scope="launcher", key="MetaURLOverride", value=url)
         request_id = s.start("component.versions", uid="neo.slow")
@@ -265,6 +278,10 @@ class ApiSmoke(unittest.TestCase):
         status = s.ok("task.status", taskId=task_id)
         self.assertTrue(status["running"])
         self.assertTrue(status["canAbort"])
+        log.write_bytes(b"during download\n")
+        s.receive(lambda m: m.get("method") == "launcher/stream" and m["params"]["subscriptionId"] == subscription)
+        self.assertTrue(s.ok("event.poll", subscriptionId=subscription)["events"])
+        self.assertTrue(s.ok("event.unsubscribe", subscriptionId=subscription)["removed"])
         mcp = s.call("tools/call", {"name": "lunalauncher_task_list", "arguments": {"runningOnly": True}})
         self.assertFalse(mcp["isError"])
         self.assertTrue(mcp["structuredContent"]["data"])
@@ -296,11 +313,49 @@ class ApiSmoke(unittest.TestCase):
         self.assertTrue(info["name"])
         versions = s.ok("resource.versions", provider="modrinth", kind="mods", projectId=project, minecraftVersion="1.21.1", loaders=["fabric"])
         self.assertTrue(versions)
+        releases = sorted((v for v in versions if v["type"] == "release"), key=lambda v: v["date"])
+        self.assertGreater(len(releases), 1)
         installed = s.ok("resource.install-version", provider="modrinth", kind="mods", projectId=project,
-            versionId=versions[0]["versionId"], minecraftVersion="1.21.1", loaders=["fabric"], instance="neo-client")
+            versionId=releases[0]["versionId"], minecraftVersion="1.21.1", loaders=["fabric"], instance="neo-client")
         self.assertTrue(Path(installed["path"]).is_file())
         self.assertGreater(Path(installed["path"]).stat().st_size, 0)
         self.assertEqual(hashlib.new(installed["hashType"], Path(installed["path"]).read_bytes()).hexdigest(), installed["hash"])
+        s.ok("resource.disable", instance="neo-client", kind="mods", resource=installed["fileName"])
+        plan = s.ok("resource.updates.check", instance="neo-client", kind="mods", minecraftVersion="1.21.1", loaders=["fabric"])
+        self.assertEqual(len(plan["updates"]), 1, plan)
+        item = plan["updates"][0]
+        self.assertFalse(item["enabled"])
+        self.assertEqual(item["target"]["versionId"], releases[-1]["versionId"])
+        selection = dict(planId=plan["planId"], items=[item["itemId"]])
+        self.assertFalse(s.execute("resource.updates.apply", planId=plan["planId"], items=["unknown"])["ok"])
+        self.assertFalse(s.execute("resource.updates.apply", planId=plan["planId"], items=[item["itemId"]] * 2)["ok"])
+        old_path = Path(installed["path"] + ".disabled")
+        old_bytes = old_path.read_bytes()
+        old_path.write_bytes(old_bytes + b"stale")
+        self.assertFalse(s.execute("resource.updates.apply", **selection)["ok"])
+        self.assertTrue(old_path.read_bytes().endswith(b"stale"))
+        old_path.write_bytes(old_bytes)
+        index = next((old_path.parent / ".index").glob("*.pw.toml"))
+        old_index = index.read_bytes()
+        index.write_bytes(old_index + b"\n# changed externally\n")
+        self.assertFalse(s.execute("resource.updates.apply", **selection)["ok"])
+        index.write_bytes(old_index)
+        collision = old_path.parent / item["target"]["fileName"]
+        collision.write_bytes(b"unrelated resource")
+        self.assertFalse(s.execute("resource.updates.apply", **selection)["ok"])
+        self.assertEqual(collision.read_bytes(), b"unrelated resource")
+        collision.unlink()
+        applied = s.ok("resource.updates.apply", **selection)
+        self.assertTrue(applied["complete"], applied)
+        self.assertEqual(applied["results"][0]["status"], "updated")
+        self.assertFalse(old_path.exists())
+        updated = Path(applied["results"][0]["path"])
+        self.assertTrue(updated.name.endswith(".disabled"))
+        self.assertEqual(hashlib.new(item["target"]["hashType"], updated.read_bytes()).hexdigest(), item["target"]["hash"])
+        self.assertFalse(s.execute("resource.updates.apply", **selection)["ok"])
+        fresh = s.ok("resource.updates.check", instance="neo-client", kind="mods", minecraftVersion="1.21.1", loaders=["fabric"])
+        self.assertEqual(fresh["updates"], [], fresh)
+        self.assertTrue(s.ok("resource.updates.discard", planId=fresh["planId"])["removed"])
         dependency = s.ok("resource.resolve-dependency", provider="modrinth", kind="mods", projectId="P7dR8mSH", minecraftVersion="1.21.1")
         self.assertTrue(dependency["versionId"])
         plugins = s.ok("resource.search", provider="hangar", kind="plugins", query="ViaVersion")["projects"]
@@ -326,12 +381,130 @@ class ApiSmoke(unittest.TestCase):
             finally:
                 sidecar.close()
 
+    def test_10_appearance_and_language(self):
+        s = self.sidecar
+        catalog = s.ok("appearance.catalog")
+        self.assertTrue(catalog["themes"])
+        self.assertTrue(catalog["icons"])
+        selected = catalog["selected"]
+        self.assertFalse(s.execute("appearance.select", theme=catalog["themes"][0]["id"], icons="nonexistent")["ok"])
+        self.assertEqual(s.ok("appearance.catalog")["selected"], selected)
+        theme = catalog["themes"][0]["id"]
+        self.assertEqual(s.ok("appearance.select", theme=theme)["theme"], theme)
+        self.assertEqual(s.ok("appearance.refresh")["selected"]["theme"], theme)
+        languages = s.ok("language.list")
+        self.assertTrue(any(entry["id"] == "en_US" for entry in languages["languages"]))
+        self.assertFalse(s.execute("language.select", language="unknown", useSystemLocale=True)["ok"])
+        self.assertEqual(s.ok("language.list")["useSystemLocale"], languages["useSystemLocale"])
+        self.assertFalse(s.ok("language.select", language="en_US", useSystemLocale=False)["updateRequested"])
+        self.assertTrue(s.ok("language.refresh", language="en_US")["builtin"])
+
+    def test_11_server_resources_and_console(self):
+        s = self.sidecar
+        script = self.root / "terminal.py"
+        script.write_text('import sys\nprint("NEO_READY", flush=True)\n'
+            'for line in sys.stdin:\n print("NEO_REPLY:" + line.strip(), flush=True)\n', encoding="utf-8")
+        server = s.ok("instance.create", type="server", name="PTY fixture", executable=sys.executable, arguments=["-u", str(script)])
+        ref = server["id"]
+        resource = self.root / "fixture.jar"
+        resource.write_bytes(b"fixture resource")
+        for kind in ("mods", "plugins"):
+            self.assertEqual(s.ok("resource.list", instance=ref, kind=kind), [])
+            s.ok("resource.install", instance=ref, kind=kind, source=str(resource))
+            self.assertEqual(s.ok("resource.list", instance=ref, kind=kind)[0]["fileName"], "fixture.jar")
+            s.ok("resource.disable", instance=ref, kind=kind, resource="fixture.jar")
+            self.assertFalse(s.ok("resource.inspect", instance=ref, kind=kind, resource="fixture.jar.disabled")["enabled"])
+            s.ok("resource.enable", instance=ref, kind=kind, resource="fixture.jar.disabled")
+            s.ok("resource.remove", instance=ref, kind=kind, resource="fixture.jar", confirm=True)
+            self.assertEqual(s.ok("resource.list", instance=ref, kind=kind), [])
+        sub = s.ok("instance.console.subscribe", instance=ref)["subscriptionId"]
+        cursor, output = 0, b""
+        def await_output(marker):
+            nonlocal cursor, output
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                batch = s.ok("event.poll", subscriptionId=sub, after=cursor)
+                cursor = batch["nextCursor"]
+                for event in batch["events"]:
+                    if event["kind"] == "console.data":
+                        output += base64.b64decode(event["data"])
+                if marker in output:
+                    return
+                time.sleep(0.1)
+            self.fail(f"Console output missing {marker!r}: {output!r}")
+        try:
+            self.assertTrue(s.ok("server.start", instance=ref)["running"])
+            await_output(b"NEO_READY")
+            s.ok("server.console.resize", instance=ref, columns=90, rows=24)
+            self.assertFalse(s.execute("server.console.resize", instance=ref, columns=0, rows=24)["ok"])
+            self.assertEqual(s.ok("server.console.write", instance=ref, text="roundtrip\r\n")["bytesWritten"], 11)
+            await_output(b"NEO_REPLY:roundtrip")
+            self.assertFalse(s.execute("resource.install", instance=ref, kind="plugins", source=str(resource))["ok"])
+            s.ok("instance.kill", instance=ref)
+            output = b""
+            self.assertTrue(s.ok("server.start", instance=ref)["running"])
+            await_output(b"NEO_READY")
+        finally:
+            s.ok("instance.kill", instance=ref)
+            self.assertTrue(s.ok("event.unsubscribe", subscriptionId=sub)["removed"])
+        self.assertFalse(s.execute("server.console.write", instance=ref, text="test")["ok"])
+
+    def test_12_log_streams_polling_and_overflow(self):
+        s = self.sidecar
+        logs = self.root / "instances/neo-client/.minecraft/logs"
+        logs.mkdir(exist_ok=True)
+        log = logs / "stream.log"
+        payload = ("Neo 日志🙂\n" * 5000).encode()
+        log.write_bytes(payload)
+        self.assertFalse(s.execute("instance.log.subscribe", instance="neo-client", file=str(self.root / "terminal.py"))["ok"])
+        sub = s.ok("instance.log.subscribe", instance="neo-client", file=str(log), tailBytes=len(payload))["subscriptionId"]
+        cursor, data = 0, b""
+        try:
+            while len(data) < len(payload):
+                batch = s.receive(lambda m: m.get("method") == "launcher/stream" and m["params"]["subscriptionId"] == sub)["params"]
+                cursor = batch["nextCursor"]
+                for event in batch["events"]:
+                    if event["kind"] == "log.data":
+                        data += base64.b64decode(event["data"])
+            self.assertEqual(data, payload)
+            # Poll retains history independently of notification delivery.
+            history = s.ok("event.poll", subscriptionId=sub, after=0, limit=1)
+            self.assertEqual(len(history["events"]), 1)
+            self.assertTrue(history["hasMore"])
+            self.assertFalse(s.execute("event.poll", subscriptionId=sub, after=cursor + 100)["ok"])
+            log.write_bytes(b"rotated\n")
+            batch = s.receive(lambda m: m.get("method") == "launcher/stream" and m["params"]["subscriptionId"] == sub and
+                any(e["kind"] == "log.reset" for e in m["params"]["events"]))["params"]
+            self.assertTrue(any(e.get("data") == base64.b64encode(b"rotated\n").decode() for e in batch["events"]))
+            # More than one MiB of event data evicts history with an explicit gap.
+            with log.open("ab") as handle:
+                handle.write(b"x" * (2 * 1024 * 1024))
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                history = s.ok("event.poll", subscriptionId=sub, after=0)
+                if history["dropped"] > 0:
+                    break
+                time.sleep(0.2)
+            self.assertGreater(history["dropped"], 0)
+        finally:
+            self.assertTrue(s.ok("event.unsubscribe", subscriptionId=sub)["removed"])
+        self.assertFalse(s.execute("event.poll", subscriptionId=sub)["ok"])
+        self.assertFalse(s.ok("event.unsubscribe", subscriptionId=sub)["removed"])
+
+    def test_13_update_plan_validation(self):
+        s = self.sidecar
+        self.assertFalse(s.execute("resource.updates.check", instance="missing", kind="mods")["ok"])
+        self.assertFalse(s.execute("resource.updates.check", instance="neo-client", kind="mods", minecraftVersion="1.21.1", releaseTypes=["unknown"])["ok"])
+        self.assertFalse(s.execute("resource.updates.apply", planId="missing", items=[])["ok"])
+        self.assertFalse(s.ok("resource.updates.discard", planId="missing")["removed"])
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--exe", type=lambda path: Path(path).resolve(), required=True)
     parser.add_argument("--online", action="store_true")
+    parser.add_argument("--tests", nargs="*", default=[], help="Optional unittest test names")
     ARGS = parser.parse_args()
     if not ARGS.exe.is_file():
         parser.error("--exe must point to an installed launcher CLI executable")
-    unittest.main(argv=[__file__], verbosity=2)
+    unittest.main(argv=[__file__, *ARGS.tests], verbosity=2)

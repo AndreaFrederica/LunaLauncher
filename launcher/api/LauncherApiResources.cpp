@@ -25,6 +25,9 @@
 #include "java/download/ArchiveDownloadTask.h"
 #include "java/download/ManifestDownloadTask.h"
 #include "minecraft/MinecraftInstance.h"
+#include "server/ServerInstance.h"
+#include "minecraft/mod/PluginFolderModel.h"
+#include "minecraft/mod/ModFolderModel.h"
 #include "minecraft/mod/Resource.h"
 #include "minecraft/mod/ResourceFolderModel.h"
 #include "settings/SettingsObject.h"
@@ -67,16 +70,23 @@ BaseInstance* findInstance(const QString& reference)
     return instance;
 }
 
-std::shared_ptr<ResourceFolderModel> findResourceModel(MinecraftInstance* instance, QString kind)
+std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind)
 {
     kind = kind.toLower().remove('-').remove('_');
+    if (auto server = dynamic_cast<ServerInstance*>(instance)) {
+        if (kind == "mods") return server->loaderModList();
+        if (kind == "plugins") return server->pluginList();
+        return nullptr;
+    }
     static const QMap<QString, int> indexes{ { "mods", 0 },           { "coremods", 1 },           { "nilmods", 2 },
                                              { "resourcepacks", 3 },  { "texturepacks", 4 },       { "shaderpacks", 5 },
                                              { "yesstevemodels", 6 }, { "customplayermodels", 7 }, { "schematics", 8 },
                                              { "datapacks", 9 } };
     if (!indexes.contains(kind))
         return nullptr;
-    const auto lists = instance->resourceLists();
+    const auto client = dynamic_cast<MinecraftInstance*>(instance);
+    if (!client) return nullptr;
+    const auto lists = client->resourceLists();
     const auto index = indexes.value(kind);
     return index < lists.size() ? lists.at(index) : nullptr;
 }
@@ -215,7 +225,7 @@ bool waitForTask(Task* task, UserInteraction& interaction, QString* error, Launc
 
 QJsonObject inspectResource(const QJsonObject& parameters)
 {
-    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
+    const auto instance = findInstance(parameters.value("instance").toString());
     if (!instance)
         return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
     const auto model = findResourceModel(instance, parameters.value("kind").toString());
@@ -233,7 +243,7 @@ QJsonObject inspectResource(const QJsonObject& parameters)
 
 QJsonObject updateResources(const QJsonObject& parameters, UserInteraction& interaction)
 {
-    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
+    const auto instance = findInstance(parameters.value("instance").toString());
     if (!instance)
         return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
     if (instance->isRunning())

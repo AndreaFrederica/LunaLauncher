@@ -27,6 +27,28 @@ export type Operation = {
   destructive: boolean;
   capability?: string;
 };
+export type StreamEvent = {
+  subscriptionId: string;
+  instance: string;
+  sequence: number;
+  kind: "console.reset" | "console.data" | "console.line" | "instance.state" |
+    "instance.removed" | "log.data" | "log.reset" | "log.unavailable";
+  encoding?: "base64";
+  data?: string;
+  text?: string;
+  level?: number;
+  truncated?: boolean;
+  available?: boolean;
+  running?: boolean;
+  offset?: number;
+};
+export type StreamBatch = {
+  subscriptionId: string;
+  events: StreamEvent[];
+  nextCursor: number;
+  dropped: number;
+  hasMore: boolean;
+};
 
 export class LauncherClient {
   private nextId = 0;
@@ -38,10 +60,13 @@ export class LauncherClient {
   }>();
   private readonly write: (line: string) => Promise<void>;
   private readonly onEvent: (event: ApiEvent) => void;
+  private readonly onStream: (batch: StreamBatch) => void;
 
-  constructor(write: (line: string) => Promise<void>, onEvent: (event: ApiEvent) => void = () => {}) {
+  constructor(write: (line: string) => Promise<void>, onEvent: (event: ApiEvent) => void = () => {},
+    onStream: (batch: StreamBatch) => void = () => {}) {
     this.write = write;
     this.onEvent = onEvent;
+    this.onStream = onStream;
   }
 
   // Tauri shell stdout callbacks already deliver complete lines. For a raw Rust
@@ -51,6 +76,10 @@ export class LauncherClient {
     if (message.jsonrpc !== "2.0") throw new Error("Invalid launcher JSON-RPC message");
     if (message.method === "launcher/event") {
       this.onEvent(message.params as ApiEvent);
+      return;
+    }
+    if (message.method === "launcher/stream") {
+      this.onStream(message.params as StreamBatch);
       return;
     }
     const request = this.pending.get(message.id);
@@ -96,7 +125,8 @@ export class LauncherClient {
   }
 
   // Mutations are serialized by the backend. Await the current operation before
-  // beginning another; task.list/status/cancel and interaction replies may overlap.
+  // beginning another; task controls, stream polls, terminal input and interaction
+  // replies may overlap. Subscriptions live until unsubscribe or sidecar exit.
   begin<T = unknown>(operation: string, parameters: Parameters = {}) {
     const request = this.request<ApiResult<T>>("launcher/execute", { operation, parameters });
     return {

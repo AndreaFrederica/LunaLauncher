@@ -26,6 +26,9 @@
 #include "java/JavaInstall.h"
 #include "java/JavaInstallList.h"
 #include "minecraft/MinecraftInstance.h"
+#include "server/ServerInstance.h"
+#include "minecraft/mod/PluginFolderModel.h"
+#include "minecraft/mod/ModFolderModel.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
@@ -128,16 +131,23 @@ MinecraftAccountPtr findAccount(const QString& reference, int* row = nullptr)
     return nullptr;
 }
 
-std::shared_ptr<ResourceFolderModel> findResourceModel(MinecraftInstance* instance, QString kind)
+std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind)
 {
     kind = kind.toLower().remove('-').remove('_');
+    if (auto server = dynamic_cast<ServerInstance*>(instance)) {
+        if (kind == "mods") return server->loaderModList();
+        if (kind == "plugins") return server->pluginList();
+        return nullptr;
+    }
     static const QMap<QString, int> indexes{ { "mods", 0 },           { "coremods", 1 },           { "nilmods", 2 },
                                              { "resourcepacks", 3 },  { "texturepacks", 4 },       { "shaderpacks", 5 },
                                              { "yesstevemodels", 6 }, { "customplayermodels", 7 }, { "schematics", 8 },
                                              { "datapacks", 9 } };
     if (!indexes.contains(kind))
         return nullptr;
-    const auto lists = instance->resourceLists();
+    const auto client = dynamic_cast<MinecraftInstance*>(instance);
+    if (!client) return nullptr;
+    const auto lists = client->resourceLists();
     const auto index = indexes.value(kind);
     return index < lists.size() ? lists.at(index) : nullptr;
 }
@@ -610,7 +620,7 @@ QJsonObject OperationService::undoDeleteInstance()
 QJsonObject OperationService::listResources(const QJsonObject& parameters)
 {
     const auto reference = parameters.value("instance").toString();
-    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    const auto instance = findInstance(reference);
     if (!instance)
         return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
     const auto kind = parameters.value("kind").toString();
@@ -638,7 +648,7 @@ QJsonObject OperationService::listResources(const QJsonObject& parameters)
 QJsonObject OperationService::installResource(const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto reference = parameters.value("instance").toString();
-    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    const auto instance = findInstance(reference);
     if (!instance)
         return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
     if (instance->isRunning())
@@ -678,7 +688,7 @@ QJsonObject OperationService::installResource(const QJsonObject& parameters, Use
 QJsonObject OperationService::setResourceEnabled(const QJsonObject& parameters, bool enabled)
 {
     const auto reference = parameters.value("instance").toString();
-    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    const auto instance = findInstance(reference);
     if (!instance)
         return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
     if (instance->isRunning())
@@ -702,7 +712,7 @@ QJsonObject OperationService::removeResource(const QJsonObject& parameters)
     if (!parameters.value("confirm").toBool())
         return failure(tr("Resource removal requires confirm=true."), 2);
     const auto reference = parameters.value("instance").toString();
-    const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(reference));
+    const auto instance = findInstance(reference);
     if (!instance)
         return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
     if (instance->isRunning())

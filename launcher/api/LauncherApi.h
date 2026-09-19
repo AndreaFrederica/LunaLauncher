@@ -10,12 +10,14 @@
 #include <QStringList>
 
 #include <functional>
+#include <memory>
 
 #include "api/ApiTypes.h"
 
 class OperationService;
 class UserInteraction;
 class Task;
+class LauncherApiStreams;
 
 /**
  * Stable service boundary for alternate launcher user interfaces.
@@ -39,6 +41,8 @@ class LauncherApi final : public QObject {
     void trackTask(Task* task);
     void clearTrackedTask(Task* task);
     void cancelCurrent();
+    bool isCancellationRequested() const { return m_cancelRequested; }
+    QJsonArray streamNotifications();
 
    private:
     struct RegisteredOperation {
@@ -62,4 +66,7 @@ class LauncherApi final : public QObject {
     QStringList m_taskOrder;
     OperationService* m_legacyService = nullptr;
     QPointer<Task> m_externalTask;
+    std::unique_ptr<LauncherApiStreams> m_streams;
+    int m_executeDepth = 0;
+    bool m_cancelRequested = false;
 };

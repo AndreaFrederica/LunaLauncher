@@ -646,6 +646,60 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
     api.registerOperation({ "resource.install-version", "Install one selected provider version using the existing indexed resource download task. Dependencies are selected separately.",
         schema(project, { "provider", "kind", "projectId", "versionId", "instance" }), "catalog", true },
         [&api](const QJsonObject& p, UserInteraction& i) { return browse(api, "resource.install-version", p, i); });
+    auto recursiveProject = project;
+    recursiveProject.insert("maxDepth", QJsonObject{ { "type", "integer" }, { "minimum", 0 }, { "maximum", 32 } });
+    recursiveProject.insert("maxItems", QJsonObject{ { "type", "integer" }, { "minimum", 1 }, { "maximum", 256 } });
+    recursiveProject.insert("includeOptional", boolean());
+    api.registerOperation({ "resource.install-with-dependencies", "Install a selected resource and recursively install required dependencies through the same provider APIs.",
+        schema(recursiveProject, { "provider", "kind", "projectId", "versionId", "instance" }), "catalog", true },
+        [&api](const QJsonObject& root, UserInteraction& interaction) {
+            const int maxDepth = qBound(0, root.value("maxDepth").toInt(8), 32);
+            const int maxItems = qBound(1, root.value("maxItems").toInt(64), 256);
+            const bool includeOptional = root.value("includeOptional").toBool(false);
+            QSet<QString> visited;
+            QJsonArray results;
+            auto operationParameters = [](const QJsonObject& source) {
+                QJsonObject value;
+                for (const auto& key : { "provider", "kind", "projectId", "versionId", "instance", "minecraftVersion", "loaders", "pluginLoaders", "replace", "includeChangelog" })
+                    if (source.contains(key)) value.insert(key, source.value(key));
+                return value;
+            };
+            std::function<bool(QJsonObject, int)> install = [&](QJsonObject parameters, int depth) {
+                if (depth > maxDepth || results.size() >= maxItems) return false;
+                const auto key = parameters.value("provider").toString() + ':' + parameters.value("projectId").toString();
+                if (visited.contains(key)) return true;
+                visited.insert(key);
+                const auto response = api.execute("resource.install-version", operationParameters(parameters), interaction);
+                const auto data = response.value("data").toObject();
+                results.append(QJsonObject{ { "projectId", parameters.value("projectId") }, { "provider", parameters.value("provider") },
+                                            { "depth", depth }, { "ok", response.value("ok") }, { "data", data },
+                                            { "error", response.value("error") } });
+                if (!response.value("ok").toBool()) return false;
+                for (const auto& dependencyValue : data.value("dependencies").toArray()) {
+                    const auto dependency = dependencyValue.toObject();
+                    const auto type = dependency.value("type").toString().toLower();
+                    if (type != "required" && !(includeOptional && type == "optional")) continue;
+                    if (results.size() >= maxItems) return false;
+                    QJsonObject child = operationParameters(root);
+                    child.insert("projectId", dependency.value("projectId"));
+                    child.insert("versionId", dependency.value("versionId"));
+                    if (child.value("versionId").toString().isEmpty()) {
+                        const auto resolved = api.execute("resource.resolve-dependency", child, interaction);
+                        if (!resolved.value("ok").toBool()) {
+                            results.append(QJsonObject{ { "projectId", child.value("projectId") }, { "depth", depth + 1 },
+                                { "ok", false }, { "error", resolved.value("error") } });
+                            return false;
+                        }
+                        child.insert("versionId", resolved.value("data").toObject().value("versionId"));
+                    }
+                    if (!install(child, depth + 1)) return false;
+                }
+                return true;
+            };
+            const bool complete = install(root, 0) && !api.isCancellationRequested();
+            return OperationService::success(QJsonObject{ { "complete", complete }, { "cancelled", api.isCancellationRequested() },
+                { "items", results }, { "maxDepth", maxDepth }, { "maxItems", maxItems }, { "includeOptional", includeOptional } });
+        });
     api.registerOperation({ "component.catalog", "List Minecraft metadata component identifiers.", schema({ { "offline", boolean() } }), "components" },
         [&api](const QJsonObject& p, UserInteraction& i) { return metadata(api, p, i, true); });
     api.registerOperation({ "component.versions", "List Minecraft or loader versions and requirements for version selection.",

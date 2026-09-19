@@ -126,6 +126,7 @@ if (!result.ok) showError(result.error);
 | 资源浏览 | `resource.providers` → `resource.search` → `resource.project` / `resource.versions` |
 | 资源安装/升级 | 检查版本返回的 dependencies，必要时 `resource.resolve-dependency`，再逐项 `resource.install-version` |
 | 批量升级 | `resource.updates.check` → 展示 updates 并勾选 itemId → `resource.updates.apply`；取消计划用 discard |
+| 依赖安装 | `resource.install-with-dependencies`，用 `maxDepth/maxItems` 限制递归，可选 includeOptional |
 | 世界管理 | `instance.world.list` → `instance.world.import/export/rename/delete/reset-icon` |
 | 自定义组件 | `instance.components.list` → `instance.component.install-custom`（component/jarmod/jar/agent） |
 | 设置 | `settings.list/get/set/reset`；备份用 `settings.export`，恢复用 `settings.import`，instance scope 同时提供 instance ID |

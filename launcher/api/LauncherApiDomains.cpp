@@ -709,6 +709,33 @@ void registerLauncherApiDomains(LauncherApi& api)
                                    { "path", destination }, { "changed", true } });
                            });
 
+    api.registerOperation({ "instance.world.copy", "Copy a world inside an instance to a new world name.",
+                            objectSchema({ { "instance", stringProperty("Instance ID or name.") },
+                                           { "world", stringProperty("Source world folder or display name.") },
+                                           { "name", stringProperty("Destination world name.") },
+                                           { "replace", boolProperty("Replace an existing destination.") } },
+                                          { "instance", "world", "name" }) },
+                           [](const QJsonObject& parameters, UserInteraction&) {
+                               auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
+                               if (!instance) return OperationService::failure(QObject::tr("Minecraft instance not found."), 2);
+                               if (instance->isRunning()) return OperationService::failure(QObject::tr("Worlds cannot be copied while the instance is running."), 2);
+                               const auto name = parameters.value("name").toString().trimmed();
+                               if (name.isEmpty() || name == "." || name == ".." || name.contains('/') || name.contains('\\'))
+                                   return OperationService::failure(QObject::tr("Invalid destination world name."), 2);
+                               auto worlds = instance->worldList(); worlds->update();
+                               auto source = findWorld(worlds.get(), parameters.value("world").toString());
+                               if (!source || !source->isOnFS()) return OperationService::failure(QObject::tr("Source world was not found."), 2);
+                               const auto destination = QDir(instance->worldDir()).filePath(name);
+                               if (QFileInfo::exists(destination)) {
+                                   if (!parameters.value("replace").toBool()) return OperationService::failure(QObject::tr("Destination exists; set replace=true."), 2);
+                                   if (!QDir(destination).removeRecursively()) return OperationService::failure(QObject::tr("Destination could not be replaced."));
+                               }
+                               if (!FS::copy(source->container().absoluteFilePath(), destination)())
+                                   return OperationService::failure(QObject::tr("World could not be copied."));
+                               worlds->update();
+                               return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "name", name }, { "path", destination }, { "changed", true } });
+                           });
+
     api.registerOperation({ "instance.world.export", "Export a world directory as a zip archive.",
                             objectSchema({ { "instance", stringProperty("Instance ID or name.") },
                                            { "world", stringProperty("World folder or display name.") },

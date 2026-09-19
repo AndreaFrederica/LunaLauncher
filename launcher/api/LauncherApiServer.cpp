@@ -25,6 +25,10 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QRegularExpression>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QEventLoop>
+#include <QTimer>
 
 namespace {
 
@@ -78,6 +82,23 @@ bool writable(ServerInstance* instance, QString* error)
         return false;
     }
     return true;
+}
+
+QJsonObject fetchJson(const QUrl& url, QString* error)
+{
+    QNetworkAccessManager manager;
+    QNetworkReply* reply = manager.get(QNetworkRequest(url));
+    QEventLoop loop;
+    QTimer timer; timer.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(30000); loop.exec();
+    if (!reply->isFinished()) { reply->abort(); if (error) *error = "Request timed out."; return {}; }
+    if (reply->error() != QNetworkReply::NoError) { if (error) *error = reply->errorString(); return {}; }
+    QJsonParseError parseError;
+    const auto doc = QJsonDocument::fromJson(reply->readAll(), &parseError);
+    if (!doc.isObject()) { if (error) *error = parseError.errorString(); return {}; }
+    return doc.object();
 }
 
 QJsonObject installDistribution(LauncherApi& api, const QJsonObject& p, UserInteraction& interaction)
@@ -523,7 +544,17 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             if (version.isEmpty() || version.contains('/') || version.contains('\\')) return OperationService::failure("Invalid version.", 2);
             QString url; QString fileName; QString executable = "java";
             if (provider == "vanilla") {
-                url = QString("https://piston-data.mojang.com/v1/objects/%1/server.jar").arg(version);
+                QString error;
+                const auto manifest = fetchJson(QUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"), &error);
+                for (const auto& item : manifest.value("versions").toArray()) {
+                    const auto entry = item.toObject();
+                    if (entry.value("id").toString() == version) {
+                        const auto detail = fetchJson(QUrl(entry.value("url").toString()), &error);
+                        url = detail.value("downloads").toObject().value("server").toObject().value("url").toString();
+                        break;
+                    }
+                }
+                if (url.isEmpty()) return OperationService::failure(error.isEmpty() ? "Minecraft version was not found." : error, 2);
                 fileName = "server.jar";
             } else if (provider == "paper") {
                 const auto build = p.value("build").toInt();

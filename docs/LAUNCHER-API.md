@@ -142,7 +142,7 @@ The implementation exposes 120 operations and reuses existing models and tasks i
 | Java | scan/list/install/remove/select | platform-specific diagnostics beyond current core tasks |
 | Settings | every registered launcher/instance setting via list/get/set/reset/import/export; theme/icon/background catalogs, refresh and selection; backend language catalog/selection/refresh | frontend rendering and localization; some services require a sidecar restart after settings changes |
 | Integrations | Aria2/Terracotta/Yukari status/install/start/stop; room host/join/leave/state/log and Yukari retry; Aria2 queue/cancel/clear/remove | broader launcher update and proxy diagnostics; not every helper version/platform has been exercised |
-| Logs/screenshots | bounded reads, file lists, screenshot deletion; client console and server PTY subscriptions, log file following with bounded buffers and cursor polling | upload/clear workflows |
+| Logs/screenshots | bounded reads, file lists, clear/delete/upload for logs, Imgur screenshot upload/deletion; client console and server PTY subscriptions, log file following with bounded buffers and cursor polling | copy/open actions remain presentation-owned |
 
 `resource.update` refreshes installed resource metadata; it is **not** a remote version
 upgrade. To upgrade a known project, call `resource.versions`, inspect dependencies, and

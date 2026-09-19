@@ -25,6 +25,9 @@
 #include "java/JavaInstall.h"
 #include "java/JavaInstallList.h"
 #include "java/JavaMetadata.h"
+#include "java/JavaChecker.h"
+#include "java/JavaUtils.h"
+#include "minecraft/PackProfile.h"
 #include "java/download/ArchiveDownloadTask.h"
 #include "java/download/ManifestDownloadTask.h"
 #include "minecraft/MinecraftInstance.h"
@@ -425,7 +428,7 @@ QJsonObject selectJava(const QJsonObject& parameters, UserInteraction& interacti
     return OperationService::success(QJsonObject{ { "path", executable }, { "scope", scope } });
 }
 
-QJsonObject diagnoseJava(const QJsonObject& parameters)
+QJsonObject diagnoseJava(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto scope = parameters.value("scope").toString("launcher").toLower();
     SettingsObject* settings = APPLICATION->settings();
@@ -437,33 +440,43 @@ QJsonObject diagnoseJava(const QJsonObject& parameters)
     } else if (scope != "launcher" && scope != "global") {
         return OperationService::failure(QObject::tr("Unknown Java diagnostic scope."), 2);
     }
-    const auto configured = settings->get("JavaPath").toString();
+    const auto configured = parameters.value("path").toString(settings->get("JavaPath").toString());
     const auto resolved = FS::ResolveExecutable(configured);
     const QFileInfo file(resolved);
     const auto found = QStandardPaths::findExecutable(resolved);
     const auto executable = found.isEmpty() ? resolved : found;
-    QProcess process;
-    if (!executable.isEmpty() && (file.exists() || !found.isEmpty())) {
-        process.start(executable, { "-version" });
-        process.waitForFinished(10000);
-    }
-    const auto output = QString::fromLocal8Bit(process.readAllStandardError() + process.readAllStandardOutput()).trimmed();
+    if (JavaUtils::getJavaCheckPath().isEmpty()) return OperationService::failure("Installed JavaCheck.jar was not found.");
+    auto checker = makeShared<JavaChecker>(executable, parameters.value("arguments").toString(), 0, 0, 0);
+    JavaChecker::Result probe;
+    QObject::connect(checker.get(), &JavaChecker::checkFinished, checker.get(), [&probe](const JavaChecker::Result& value) { probe = value; });
+    QString error;
+    if (!waitForTask(checker.get(), interaction, &error, &api)) return OperationService::failure(error);
+    const auto usable = probe.validity == JavaChecker::Result::Validity::Valid;
     QJsonObject result{ { "scope", scope }, { "configured", configured }, { "resolved", resolved },
                         { "exists", file.exists() || !found.isEmpty() }, { "executable", executable },
                         { "automatic", settings->get("AutomaticJava").toBool() }, { "override", settings->get("OverrideJavaLocation").toBool() },
-                        { "javaRoot", javaRoot() }, { "probeStarted", process.processId() != 0 }, { "probeExitCode", process.exitCode() },
-                        { "probeOutput", output } };
-    QRegularExpression versionRx("(?:openjdk|java) version \\\"([^\\\"]+)\\\"");
-    auto match = versionRx.match(output);
-    if (match.hasMatch()) result.insert("version", match.captured(1));
-    const auto lower = output.toLower();
-    result.insert("vendor", lower.contains("openjdk") ? "OpenJDK" : lower.contains("oracle") ? "Oracle" : "Unknown");
-    result.insert("architecture", lower.contains("64-bit") || lower.contains("amd64") || lower.contains("x86_64") ? "x86_64" : "unknown");
-    if (match.hasMatch()) {
-        const auto major = match.captured(1).startsWith("1.") ? match.captured(1).mid(2).section('.', 0, 0) : match.captured(1).section('.', 0, 0);
-        result.insert("major", major.toInt());
+                        { "javaRoot", javaRoot() }, { "usable", usable }, { "probeOutput", probe.outLog }, { "probeError", probe.errorLog },
+                        { "version", probe.javaVersion.toString() }, { "major", probe.javaVersion.major() },
+                        { "vendor", probe.javaVendor }, { "architecture", probe.realPlatform }, { "is64Bit", probe.is_64bit } };
+    QJsonArray majors;
+    QJsonArray recommendations;
+    bool compatible = usable;
+    if (auto minecraft = dynamic_cast<MinecraftInstance*>(instance)) {
+        const auto profile = minecraft->getPackProfile()->getProfile();
+        if (profile) {
+            const auto allowed = profile->getCompatibleJavaMajors();
+            for (const auto major : allowed) majors.append(major);
+            compatible = usable && (allowed.isEmpty() || allowed.contains(probe.javaVersion.major()));
+        }
     }
-    result.insert("usable", process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0 && !output.isEmpty());
+    const bool memoryCompatible = usable && (probe.is_64bit || settings->get("MaxMemAlloc").toInt() <= 2048);
+    if (!usable) recommendations.append("Run java.refresh and select a working runtime, or install one with java.install.");
+    else if (!compatible) recommendations.append("Select a runtime whose major appears in compatibleMajors.");
+    if (usable && !memoryCompatible) recommendations.append("Select a 64-bit runtime or lower MaxMemAlloc to at most 2048 MiB.");
+    result.insert("compatibleMajors", majors);
+    result.insert("compatible", compatible && memoryCompatible);
+    result.insert("memoryCompatible", memoryCompatible);
+    result.insert("recommendations", recommendations);
     return OperationService::success(result);
 }
 
@@ -509,6 +522,7 @@ void registerLauncherApiResourceOperations(LauncherApi& api)
                             "java" },
                           [](const QJsonObject& parameters, UserInteraction& interaction) { return selectJava(parameters, interaction); });
     api.registerOperation({ "java.diagnose", "Inspect Java selection, resolution, and executable availability.",
-                            objectSchema({ { "scope", stringProperty("launcher or instance.") }, { "instance", stringProperty("Instance ID when scope=instance.") } }), "java" },
-                          [](const QJsonObject& parameters, UserInteraction&) { return diagnoseJava(parameters); });
+                            objectSchema({ { "scope", stringProperty("launcher or instance.") }, { "instance", stringProperty("Instance ID when scope=instance.") },
+                                { "path", stringProperty("Optional runtime to probe without changing settings.") }, { "arguments", stringProperty("Optional JVM arguments to test.") } }), "java" },
+                          [&api](const QJsonObject& parameters, UserInteraction& interaction) { return diagnoseJava(api, parameters, interaction); });
 }

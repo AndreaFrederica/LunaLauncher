@@ -32,9 +32,10 @@ export type StreamEvent = {
   instance: string;
   sequence: number;
   kind: "console.reset" | "console.data" | "console.line" | "instance.state" |
-    "instance.removed" | "log.data" | "log.reset" | "log.unavailable";
+    "instance.removed" | "log.data" | "log.reset" | "log.unavailable" |
+    "account.snapshot" | "launcher.update.state";
   encoding?: "base64";
-  data?: string;
+  data?: string | Record<string, unknown>;
   text?: string;
   level?: number;
   truncated?: boolean;

@@ -13,6 +13,8 @@
 #include "Application.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
+#include "api/LauncherApiDomains.h"
+#include "minecraft/auth/AccountList.h"
 #include "cli/OperationService.h"
 #include "launch/LaunchTask.h"
 #include "server/ServerLaunchTask.h"
@@ -205,6 +207,41 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
     using namespace ApiSupport;
     const auto instance = string("Installed instance ID.");
     const auto subscription = string("Subscription UUID from a subscribe operation.");
+    api.registerOperation({ "launcher.update.subscribe", "Observe changes to updater markers and bounded log tail; includes the initial state.", schema({}), "streams" },
+        [this](const QJsonObject&, UserInteraction&) {
+            auto sub = create("launcher-update", {});
+            if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+            auto timer = new QTimer(&sub->context);
+            const auto snapshot = launcherUpdateSnapshot();
+            append(sub, { { "kind", "launcher.update.state" }, { "data", snapshot } });
+            QObject::connect(timer, &QTimer::timeout, &sub->context,
+                [this, weak = std::weak_ptr<Subscription>(sub), previous = snapshot]() mutable {
+                    if (const auto sub = weak.lock()) {
+                        const auto current = launcherUpdateSnapshot();
+                        if (current != previous) {
+                            previous = current;
+                            append(sub, { { "kind", "launcher.update.state" }, { "data", current } });
+                        }
+                    }
+                });
+            timer->start(500);
+            return OperationService::success(subscriptionJson(sub->id, sub->type, {}));
+        });
+    api.registerOperation({ "account.subscribe", "Subscribe to account, authentication activity and default selection changes. Includes an initial snapshot.", schema({}), "streams" },
+        [this](const QJsonObject&, UserInteraction&) {
+            auto sub = create("accounts", {});
+            if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+            const auto changed = [this, weak = std::weak_ptr<Subscription>(sub)] {
+                if (const auto sub = weak.lock()) append(sub, { { "kind", "account.snapshot" }, { "data", launcherAccountSnapshot() } });
+            };
+            const auto list = APPLICATION->accounts();
+            QObject::connect(list, &AccountList::listChanged, &sub->context, changed);
+            QObject::connect(list, &AccountList::defaultAccountChanged, &sub->context, changed);
+            QObject::connect(list, &AccountList::listActivityChanged, &sub->context, changed);
+            QObject::connect(list, &QAbstractItemModel::dataChanged, &sub->context, changed);
+            changed();
+            return OperationService::success(subscriptionJson(sub->id, sub->type, {}));
+        });
     api.registerOperation({ "instance.console.subscribe", "Subscribe to launch state and console output, including future launches.",
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeConsole(p); });

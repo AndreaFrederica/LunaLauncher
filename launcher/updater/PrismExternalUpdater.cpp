@@ -265,7 +265,7 @@ void PrismExternalUpdater::setUpdateCheckInterval(double seconds)
 void PrismExternalUpdater::setBetaAllowed(bool allowed)
 {
     priv->allowBeta = allowed;
-    priv->settings->setValue("auto_beta", allowed);
+    priv->settings->setValue("allow_beta", allowed);
     priv->settings->sync();
 }
 

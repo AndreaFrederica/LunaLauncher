@@ -10,6 +10,9 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import hashlib
+import gzip
+import struct
+import shutil
 import os
 from pathlib import Path
 import queue
@@ -503,6 +506,96 @@ class ApiSmoke(unittest.TestCase):
         self.assertFalse(s.execute("resource.updates.check", instance="neo-client", kind="mods", minecraftVersion="1.21.1", releaseTypes=["unknown"])["ok"])
         self.assertFalse(s.execute("resource.updates.apply", planId="missing", items=[])["ok"])
         self.assertFalse(s.ok("resource.updates.discard", planId="missing")["removed"])
+
+
+    def test_14_accounts_and_batch(self):
+        s = self.sidecar
+        sub = s.ok("account.subscribe")["subscriptionId"]
+        try:
+            initial = s.ok("event.poll", subscriptionId=sub)
+            self.assertEqual(initial["events"][0]["kind"], "account.snapshot")
+            self.assertIn("defaultAccount", initial["events"][0]["data"])
+            s.ok("account.login", type="offline", username="NeoEvents")
+            current = s.ok("account.snapshot")
+            account = next(a for a in current["accounts"] if a["name"] == "NeoEvents")
+            self.assertIn("skin", account)
+            self.assertIn("lastError", account)
+            changes = s.ok("event.poll", subscriptionId=sub, after=initial["nextCursor"])
+            self.assertTrue(any(any(a["name"] == "NeoEvents" for a in e["data"]["accounts"]) for e in changes["events"]))
+        finally:
+            s.ok("event.unsubscribe", subscriptionId=sub)
+        operations = [{"operation": "runtime.info"}, {"operation": "instance.info", "parameters": {"instance": "missing"}}, {"operation": "account.snapshot"}]
+        stopped = s.ok("api.batch", operations=operations)
+        self.assertEqual(stopped["executed"], 2)
+        self.assertFalse(stopped["complete"])
+        continued = s.ok("api.batch", operations=operations, stopOnError=False)
+        self.assertEqual(continued["executed"], 3)
+        self.assertFalse(s.execute("api.batch", operations=[{"operation": "api.batch"}])["ok"])
+
+    def test_15_world_copy_preserves_source(self):
+        s = self.sidecar
+        world = self.root / "instances/neo-client/.minecraft/saves/Original"
+        world.mkdir(parents=True, exist_ok=True)
+        def string(value):
+            data = value.encode()
+            return struct.pack(">H", len(data)) + data
+        nbt = b"\x0a\x00\x00\x0a" + string("Data") + b"\x08" + string("LevelName") + string("Original") + b"\x00\x00"
+        (world / "level.dat").write_bytes(gzip.compress(nbt))
+        (world / "sentinel.txt").write_text("preserve me")
+        self.assertFalse(s.execute("instance.world.copy", instance="neo-client", world="Original", name="Original", replace=True)["ok"])
+        self.assertEqual((world / "sentinel.txt").read_text(), "preserve me")
+        copy = s.ok("instance.world.copy", instance="neo-client", world="Original", name="Copied")
+        self.assertEqual((Path(copy["path"]) / "sentinel.txt").read_text(), "preserve me")
+        listed = s.ok("instance.world.list", instance="neo-client")
+        self.assertTrue(any(w["name"] == "Copied" for w in listed))
+        self.assertFalse(s.execute("instance.world.copy", instance="neo-client", world="Original", name="CON", replace=True)["ok"])
+        s.ok("instance.world.copy", instance="neo-client", world="Original", name="Copied", replace=True)
+        self.assertTrue((world / "level.dat").exists())
+
+    def test_16_java_probe(self):
+        s = self.sidecar
+        invalid = s.ok("java.diagnose", path=str(self.root / "missing-java.exe"))
+        self.assertFalse(invalid["usable"])
+        self.assertTrue(invalid["recommendations"])
+        java = shutil.which("java")
+        if java:
+            result = s.ok("java.diagnose", path=java)
+            self.assertTrue(result["usable"], result)
+            self.assertGreater(result["major"], 0)
+            self.assertTrue(result["vendor"])
+            self.assertTrue(result["architecture"])
+
+    def test_17_instance_files_and_state(self):
+        s = self.sidecar
+        created = s.ok("instance.file.write", instance="neo-client", path="lunaui/api-test.txt", content="first")
+        self.assertFalse(s.execute("instance.file.write", instance="neo-client", path="lunaui/api-test.txt", content="lost update")["ok"])
+        read = s.ok("instance.file.read", instance="neo-client", path="lunaui/api-test.txt")
+        self.assertEqual(read["content"], "first")
+        s.ok("instance.file.write", instance="neo-client", path="lunaui/api-test.txt", content="second", revision=created["revision"])
+        for path in ("../outside", "lunaui/../../outside", "C:/outside", "lunaui:stream"):
+            self.assertFalse(s.execute("instance.file.write", instance="neo-client", path=path, content="blocked")["ok"])
+        self.assertFalse(s.execute("instance.file.remove", instance="neo-client", path=".", confirm=True)["ok"])
+        state = s.ok("instance.custom-ui.state", instance="neo-client")
+        s.ok("instance.custom-ui.save-state", instance="neo-client", state={"theme": "neo"}, revision=state["revision"])
+        self.assertEqual(s.ok("instance.custom-ui.state", instance="neo-client")["state"], {"theme": "neo"})
+        self.assertFalse(s.execute("instance.custom-ui.save-state", instance="neo-client", state={}, revision=state["revision"])["ok"])
+
+    def test_18_update_marker_stream(self):
+        s = self.sidecar
+        sub = s.ok("launcher.update.subscribe")["subscriptionId"]
+        try:
+            initial = s.ok("event.poll", subscriptionId=sub)
+            (self.root / ".prism_launcher_update.fail").write_text("fixture")
+            batch = s.receive(lambda m: m.get("method") == "launcher/stream" and m["params"]["subscriptionId"] == sub and
+                any(e["data"]["updateFailureMarker"] for e in m["params"]["events"]))["params"]
+            self.assertGreater(batch["nextCursor"], initial["nextCursor"])
+            self.assertTrue(s.ok("launcher.update.status")["updateFailureMarker"])
+            before = s.ok("launcher.update.status")["automatic"]
+            self.assertFalse(s.execute("launcher.update.configure", automatic=not before, intervalSeconds=-1)["ok"])
+            self.assertEqual(s.ok("launcher.update.status")["automatic"], before)
+        finally:
+            s.ok("event.unsubscribe", subscriptionId=sub)
+            (self.root / ".prism_launcher_update.fail").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

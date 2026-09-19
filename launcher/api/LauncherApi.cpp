@@ -14,6 +14,7 @@
 #include "cli/OperationService.h"
 #include "api/LauncherApiInstances.h"
 #include "api/LauncherApiDomains.h"
+#include "api/LauncherApiFiles.h"
 #include "api/LauncherApiResources.h"
 #include "api/LauncherApiServer.h"
 #include "api/LauncherApiExports.h"
@@ -199,6 +200,7 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
                       [this](const QJsonObject& parameters, UserInteraction&) { return taskCancel(parameters); });
     registerInstanceApiOperations(*this);
     registerLauncherApiDomains(*this);
+    registerLauncherApiFiles(*this);
     registerLauncherApiResourceOperations(*this);
     registerLauncherApiServerOperations(*this);
     registerLauncherApiExportOperations(*this);
@@ -207,6 +209,32 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerLauncherApiIntegrationOperations(*this);
     registerLauncherApiAppearanceOperations(*this);
     m_streams = std::make_unique<LauncherApiStreams>(*this);
+    registerOperation({ "api.batch", "Execute up to 100 operations sequentially; returns individual results, without rollback. Recursive batches are rejected.",
+        objectSchema({ { "operations", QJsonObject{ { "type", "array" }, { "items", objectSchema({
+            { "operation", stringProperty("Operation name.") }, { "parameters", QJsonObject{ { "type", "object" } } } }, { "operation" }) } } },
+            { "stopOnError", boolProperty("Stop at the first failed operation.", true) } }, { "operations" }), "batch", true },
+        [this](const QJsonObject& p, UserInteraction& interaction) {
+            const auto operations = p.value("operations").toArray();
+            if (operations.isEmpty() || operations.size() > 100) return OperationService::failure("Batch size must be 1 to 100.", 2);
+            for (const auto& item : operations) {
+                const auto name = item.toObject().value("operation").toString();
+                if (name == "api.batch" || !m_operations.contains(name)) return OperationService::failure("Unknown operation or recursive batch: " + name, 2);
+            }
+            QJsonArray results;
+            bool complete = true;
+            for (const auto& item : operations) {
+                if (isCancellationRequested()) { complete = false; break; }
+                const auto request = item.toObject();
+                const auto result = execute(request.value("operation").toString(), request.value("parameters").toObject(), interaction);
+                results.append(result);
+                if (!result.value("ok").toBool()) {
+                    complete = false;
+                    if (p.value("stopOnError").toBool(true)) break;
+                }
+            }
+            return OperationService::success(QJsonObject{ { "results", results }, { "complete", complete },
+                { "executed", results.size() }, { "remaining", operations.size() - results.size() }, { "cancelled", isCancellationRequested() } });
+        });
 }
 
 LauncherApi::~LauncherApi() = default;

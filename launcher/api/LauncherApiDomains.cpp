@@ -39,6 +39,11 @@
 #include <QTimer>
 #include <QSettings>
 #include <QProcess>
+#include <QTemporaryDir>
+#include <QRegularExpression>
+#include <QClipboard>
+#include <QGuiApplication>
+#include "updater/ExternalUpdater.h"
 
 namespace {
 
@@ -352,6 +357,49 @@ QJsonObject listLogs(const QJsonObject& parameters)
     return OperationService::success(result);
 }
 
+QJsonObject installWorldSafely(MinecraftInstance* instance, const QFileInfo& source, QString name, bool replace)
+{
+    if (instance->isRunning()) return OperationService::failure("The target instance must be stopped.", 2);
+    World world(source);
+    if (!world.isValid()) return OperationService::failure("The source is not a valid world.", 2);
+    if (name.isEmpty()) name = world.name().trimmed();
+    static const QRegularExpression unsafe(R"([<>:"/\\|?*\x00-\x1f])");
+    static const QRegularExpression reserved(R"(^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$))", QRegularExpression::CaseInsensitiveOption);
+    if (name.isEmpty() || name == "." || name == ".." || name.endsWith('.') || name.endsWith(' ') ||
+        unsafe.match(name).hasMatch() || reserved.match(name).hasMatch()) return OperationService::failure("Invalid world name.", 2);
+    if (!QDir().mkpath(instance->worldDir())) return OperationService::failure("Could not create saves directory.");
+    const auto root = QFileInfo(instance->worldDir()).canonicalFilePath();
+    const auto destination = QDir(root).filePath(name);
+    const QFileInfo target(destination);
+    const auto sourcePath = source.canonicalFilePath();
+    const auto targetPath = target.canonicalFilePath();
+    if (target.isSymLink() || (!targetPath.isEmpty() && !targetPath.startsWith(root + '/')))
+        return OperationService::failure("Destination is outside the saves directory or is a symbolic link.", 2);
+    if (!targetPath.isEmpty() && (sourcePath == targetPath || sourcePath.startsWith(targetPath + '/')))
+        return OperationService::failure("Source and destination overlap.", 2);
+    if (source.isDir() && (root == sourcePath || root.startsWith(sourcePath + '/')))
+        return OperationService::failure("Destination is inside the source world.", 2);
+    if (target.exists() && (!replace || !target.isDir())) return OperationService::failure("Destination exists; replacement requires a world directory and replace=true.", 2);
+    QTemporaryDir staging(QDir(root).filePath(".api-world-XXXXXX"));
+    if (!staging.isValid()) return OperationService::failure("Could not create world staging directory.");
+    const auto incoming = QDir(staging.path()).filePath("incoming");
+    if (!QDir().mkpath(incoming) || !world.install(incoming, name)) return OperationService::failure("World staging failed; destination was preserved.");
+    const auto entries = QDir(incoming).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    if (entries.size() != 1 || !World(entries.first()).isValid() || World(entries.first()).name() != name)
+        return OperationService::failure("Staged world validation failed; destination was preserved.");
+    const auto backup = QDir(staging.path()).filePath("previous");
+    if (target.exists() && !QDir().rename(destination, backup)) return OperationService::failure("Could not back up existing world.");
+    if (!QDir().rename(entries.first().absoluteFilePath(), destination)) {
+        if (target.exists() && !QDir().rename(backup, destination)) {
+            staging.setAutoRemove(false);
+            return OperationService::failure("Restore failed; previous world is preserved at " + backup);
+        }
+        return OperationService::failure("World installation failed; previous world restored.");
+    }
+    instance->worldList()->update();
+    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "name", name }, { "path", destination }, { "changed", true } });
+}
+
 QJsonObject proxyInfo()
 {
     const auto s = APPLICATION->settings();
@@ -398,22 +446,31 @@ QJsonObject updateStatus()
 {
     auto settings = updateSettings();
     const auto marker = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.success");
-    const auto failed = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.fail");
+    const auto failed = QDir(APPLICATION->dataRoot()).filePath(".prism_launcher_update.fail");
     const auto lock = QDir(APPLICATION->dataRoot()).filePath(".prism_launcher_update.lock");
-    const auto log = QDir(APPLICATION->dataRoot()).filePath("logs/lunalauncher_update.log");
+    const auto log = QDir(APPLICATION->dataRoot()).filePath("logs/prism_launcher_update.log");
+    QFile logFile(log);
+    QByteArray logTail;
+    if (logFile.open(QIODevice::ReadOnly)) {
+        logFile.seek(qMax<qint64>(0, logFile.size() - 262144));
+        logTail = logFile.read(262144);
+    }
     return OperationService::success(QJsonObject{ { "automatic", settings.value("auto_check", true).toBool() },
                                                    { "intervalSeconds", settings.value("update_interval", 86400).toInt() },
                                                    { "beta", settings.value("allow_beta", false).toBool() },
                                                    { "lastCheck", settings.value("last_check").toString() },
                                                    { "updateSuccessMarker", QFileInfo::exists(marker) },
                                                    { "updateFailureMarker", QFileInfo::exists(failed) }, { "updateInProgress", QFileInfo::exists(lock) },
-                                                   { "updateLog", QFileInfo::exists(log) ? QString::fromUtf8(FS::read(log)) : QString() },
+                                                   { "updateLog", QString::fromUtf8(logTail) }, { "updateLogPath", log },
+                                                   { "logTruncated", logFile.size() > 262144 },
                                                    { "dataRoot", APPLICATION->dataRoot() } });
 }
 
 QJsonObject updateConfigure(const QJsonObject& p)
 {
     auto settings = updateSettings();
+    if (p.contains("intervalSeconds") && (p.value("intervalSeconds").toInt() < 0 || p.value("intervalSeconds").toInt() > 31536000))
+        return OperationService::failure("intervalSeconds is out of range.", 2);
     if (p.contains("automatic")) settings.setValue("auto_check", p.value("automatic").toBool());
     if (p.contains("intervalSeconds")) {
         const auto seconds = p.value("intervalSeconds").toInt();
@@ -422,32 +479,64 @@ QJsonObject updateConfigure(const QJsonObject& p)
     }
     if (p.contains("beta")) settings.setValue("allow_beta", p.value("beta").toBool());
     settings.sync();
+    if (settings.status() != QSettings::NoError) return OperationService::failure("Could not save update preferences.");
+    if (const auto updater = APPLICATION->updater()) {
+        if (p.contains("automatic")) updater->setAutomaticallyChecksForUpdates(p.value("automatic").toBool());
+        if (p.contains("beta")) updater->setBetaAllowed(p.value("beta").toBool());
+        if (p.contains("intervalSeconds")) updater->setUpdateCheckInterval(p.value("intervalSeconds").toInt());
+    }
     return updateStatus();
+}
+
+QString updaterPath()
+{
+#ifdef Q_OS_WIN
+    const auto name = QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater.exe";
+#else
+    const auto name = "bin/" + QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater";
+#endif
+    return QDir(APPLICATION->root()).filePath(name);
 }
 
 QJsonObject updateCheck()
 {
-    const auto updater = QDir(APPLICATION->root()).filePath(QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater.exe");
+    const auto updater = updaterPath();
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
     QProcess process;
-    process.start(updater, { "--check-only", "--dir", APPLICATION->dataRoot(), "--debug" });
-    if (!process.waitForFinished(60000)) { process.kill(); return OperationService::failure("The updater check timed out."); }
+    auto settings = updateSettings();
+    QStringList arguments{ "--check-only", "--dir", APPLICATION->dataRoot(), "--debug" };
+    if (settings.value("allow_beta", false).toBool()) arguments.append("--pre-release");
+    process.start(updater, arguments);
+    if (!process.waitForStarted(5000)) return OperationService::failure(process.errorString());
+    if (!process.waitForFinished(60000)) { process.kill(); process.waitForFinished(5000); return OperationService::failure("The updater check timed out."); }
     const auto output = QString::fromLocal8Bit(process.readAllStandardOutput());
     const auto error = QString::fromLocal8Bit(process.readAllStandardError());
+    if (process.exitStatus() != QProcess::NormalExit || (process.exitCode() != 0 && process.exitCode() != 100))
+        return OperationService::failure("Updater check failed: " + error);
+    settings.setValue("last_check", QDateTime::currentDateTime().toString(Qt::ISODate)); settings.sync();
+    const auto lines = output.split('\n');
     return OperationService::success(QJsonObject{ { "exitCode", process.exitCode() }, { "available", process.exitCode() == 100 },
-                                                   { "output", output }, { "error", error }, { "status", updateStatus().value("result").toObject() } });
+        { "versionName", process.exitCode() == 100 ? lines.value(0).section(": ", 1).trimmed() : QString() },
+        { "versionTag", process.exitCode() == 100 ? lines.value(1).section(": ", 1).trimmed() : QString() },
+        { "releaseTime", process.exitCode() == 100 ? lines.value(2).section(": ", 1).trimmed() : QString() },
+        { "releaseNotes", process.exitCode() == 100 ? lines.mid(3).join('\n') : QString() },
+        { "output", output }, { "error", error }, { "status", updateStatus().value("data").toObject() } });
 }
 
 QJsonObject updateApply(const QJsonObject& p)
 {
     const auto tag = p.value("versionTag").toString().trimmed();
     if (tag.isEmpty() || tag.contains('/') || tag.contains('\\')) return OperationService::failure("versionTag is invalid.", 2);
-    const auto updater = QDir(APPLICATION->root()).filePath(QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater.exe");
+    const auto updater = updaterPath();
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
     QProcess process;
-    const auto started = process.startDetached(updater, { "--dir", APPLICATION->dataRoot(), "--install-version", tag });
+    auto settings = updateSettings();
+    QStringList arguments{ "--dir", APPLICATION->dataRoot(), "--install-version", tag };
+    if (settings.value("allow_beta", false).toBool()) arguments.append("--pre-release");
+    const auto started = process.startDetached(updater, arguments);
     if (!started) return OperationService::failure("The updater could not be started.");
-    return OperationService::success(QJsonObject{ { "started", true }, { "versionTag", tag }, { "updater", updater } });
+    return OperationService::success(QJsonObject{ { "started", true }, { "versionTag", tag }, { "updater", updater },
+        { "shutdownRequired", true }, { "externalUpdaterUi", true } });
 }
 
 QJsonObject readLog(const QJsonObject& parameters)
@@ -571,6 +660,34 @@ QJsonObject deleteScreenshot(const QJsonObject& parameters)
 
 }  // namespace
 
+QJsonObject launcherAccountSnapshot()
+{
+    const auto list = APPLICATION->accounts();
+    const auto selected = list->defaultAccount();
+    QJsonArray accounts;
+    const QStringList states{ "unchecked", "offline", "working", "online", "disabled", "errored", "expired", "gone" };
+    for (int i = 0; i < list->count(); ++i) {
+        const auto account = list->at(i);
+        const auto data = account->accountData();
+        const auto& profile = data->minecraftProfile;
+        QJsonArray capes;
+        for (auto it = profile.capes.constBegin(); it != profile.capes.constEnd(); ++it)
+            capes.append(QJsonObject{ { "id", it.value().id }, { "url", it.value().url }, { "alias", it.value().alias },
+                                     { "current", it.key() == profile.currentCape } });
+        accounts.append(QJsonObject{ { "index", i }, { "id", account->profileId() }, { "internalId", account->internalId() },
+            { "name", account->profileName() }, { "type", account->typeString() }, { "state", static_cast<int>(data->accountState) },
+            { "stateName", states.value(static_cast<int>(data->accountState), "unknown") }, { "active", account->isActive() },
+            { "lastError", account->lastError() }, { "default", account == selected },
+            { "ownsMinecraft", data->minecraftEntitlement.ownsMinecraft }, { "canPlayMinecraft", data->minecraftEntitlement.canPlayMinecraft },
+            { "skinUrl", profile.skin.url }, { "cape", profile.currentCape }, { "capes", capes },
+            { "skin", QJsonObject{ { "id", profile.skin.id }, { "url", profile.skin.url }, { "variant", profile.skin.variant } } } });
+    }
+    return { { "accounts", accounts }, { "count", accounts.size() }, { "active", list->isActive() },
+             { "defaultAccount", selected ? QJsonValue(selected->internalId()) : QJsonValue(QJsonValue::Null) } };
+}
+
+QJsonObject launcherUpdateSnapshot() { return updateStatus().value("data").toObject(); }
+
 void registerLauncherApiDomains(LauncherApi& api)
 {
     api.registerOperation({ "runtime.info", "Read launcher paths, platform, and optional integration capabilities.", objectSchema({}) },
@@ -620,17 +737,28 @@ void registerLauncherApiDomains(LauncherApi& api)
                            [](const QJsonObject& p, UserInteraction&) {
                                const QFileInfo path(p.value("path").toString());
                                if (!path.exists()) return OperationService::failure(QObject::tr("Path does not exist."), 2);
-                               DesktopServices::openPath(path, p.value("select").toBool());
-                               return OperationService::success(QJsonObject{ { "path", path.absoluteFilePath() }, { "opened", true } });
+                               if (p.value("select").toBool()) return OperationService::failure("Selecting an item is not supported by the launcher desktop handler; use the frontend file manager integration.", 2);
+                               const auto opened = DesktopServices::openPath(path);
+                               return opened ? OperationService::success(QJsonObject{ { "path", path.absoluteFilePath() }, { "opened", true } }) : OperationService::failure("The desktop handler could not open the path.");
                            });
     api.registerOperation({ "desktop.open-url", "Open a URL using the operating system browser.",
                             objectSchema({ { "url", stringProperty("HTTP(S) or supported desktop URL.") } }, { "url" }) },
                            [](const QJsonObject& p, UserInteraction&) {
                                const QUrl url(p.value("url").toString());
                                if (!url.isValid() || url.scheme().isEmpty()) return OperationService::failure(QObject::tr("URL is invalid."), 2);
-                               DesktopServices::openUrl(url);
-                               return OperationService::success(QJsonObject{ { "url", url.toString() }, { "opened", true } });
+                               if (url.scheme() != "https" && url.scheme() != "http") return OperationService::failure("Only HTTP(S) URLs are accepted.", 2);
+                               return DesktopServices::openUrl(url) ? OperationService::success(QJsonObject{ { "url", url.toString() }, { "opened", true } }) : OperationService::failure("The desktop handler could not open the URL.");
                            });
+    api.registerOperation({ "desktop.clipboard.write", "Copy text to the system clipboard when the platform clipboard is available.",
+        objectSchema({ { "text", stringProperty("Text to copy.") } }, { "text" }), "desktop", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            if (QGuiApplication::platformName() == "offscreen" || QGuiApplication::platformName() == "minimal")
+                return OperationService::failure("System clipboard is unavailable on this headless platform; use the frontend clipboard.", 2);
+            const auto clipboard = QGuiApplication::clipboard();
+            if (!clipboard) return OperationService::failure("System clipboard is unavailable.", 2);
+            clipboard->setText(p.value("text").toString());
+            return OperationService::success(QJsonObject{ { "copied", true } });
+        });
 
     api.registerOperation({ "account.move", "Move an account by a relative offset or to an absolute list position.",
                             objectSchema({ { "account", stringProperty("Account ID or profile name.") },
@@ -710,16 +838,7 @@ void registerLauncherApiDomains(LauncherApi& api)
                            });
     api.registerOperation({ "account.snapshot", "Read a complete snapshot of all accounts and the selected account.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) {
-                               QJsonArray accounts;
-                               const auto list = APPLICATION->accounts();
-                               for (int i = 0; i < list->count(); ++i) {
-                                   const auto account = list->at(i); const auto data = account->accountData();
-                                   accounts.append(QJsonObject{ { "index", i }, { "id", account->profileId() }, { "name", account->profileName() },
-                                                               { "type", account->typeString() }, { "state", static_cast<int>(data->accountState) },
-                                                               { "ownsMinecraft", data->minecraftEntitlement.ownsMinecraft }, { "canPlayMinecraft", data->minecraftEntitlement.canPlayMinecraft },
-                                                               { "skinUrl", data->minecraftProfile.skin.url }, { "cape", data->minecraftProfile.currentCape } });
-                               }
-                               return OperationService::success(QJsonObject{ { "accounts", accounts }, { "count", accounts.size() } });
+                               return OperationService::success(launcherAccountSnapshot());
                            });
 
     const auto accountRef = stringProperty("Account ID or profile name.");
@@ -848,22 +967,7 @@ void registerLauncherApiDomains(LauncherApi& api)
                                if (instance->isRunning()) return OperationService::failure(QObject::tr("Worlds cannot be imported while the instance is running."), 2);
                                const QFileInfo source(parameters.value("source").toString());
                                if (!source.exists() || (!source.isDir() && !source.isFile())) return OperationService::failure(QObject::tr("World source does not exist."), 2);
-                               World world(source);
-                               if (!world.isValid()) return OperationService::failure(QObject::tr("The source is not a valid world or archive."), 2);
-                               const auto targetName = parameters.value("name").toString().trimmed();
-                               if (!targetName.isEmpty() && (targetName == "." || targetName == ".." || targetName.contains('/') || targetName.contains('\\')))
-                                   return OperationService::failure(QObject::tr("Invalid world name."), 2);
-                               auto worlds = instance->worldList();
-                               worlds->update();
-                               const auto destination = QDir(instance->worldDir()).filePath(targetName.isEmpty() ? world.name() : targetName);
-                               if (QFileInfo::exists(destination) && !parameters.value("replace").toBool())
-                                   return OperationService::failure(QObject::tr("A world already exists at the destination; set replace=true."), 2);
-                               if (QFileInfo::exists(destination) && !QDir(destination).removeRecursively())
-                                   return OperationService::failure(QObject::tr("The existing world could not be replaced."));
-                               if (!world.install(instance->worldDir(), targetName)) return OperationService::failure(QObject::tr("The world could not be imported."));
-                               worlds->update();
-                               return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "name", targetName.isEmpty() ? world.name() : targetName },
-                                   { "path", destination }, { "changed", true } });
+                               return installWorldSafely(instance, source, parameters.value("name").toString().trimmed(), parameters.value("replace").toBool());
                            });
 
     api.registerOperation({ "instance.world.copy", "Copy a world inside an instance to a new world name.",
@@ -882,15 +986,7 @@ void registerLauncherApiDomains(LauncherApi& api)
                                auto worlds = instance->worldList(); worlds->update();
                                auto source = findWorld(worlds.get(), parameters.value("world").toString());
                                if (!source || !source->isOnFS()) return OperationService::failure(QObject::tr("Source world was not found."), 2);
-                               const auto destination = QDir(instance->worldDir()).filePath(name);
-                               if (QFileInfo::exists(destination)) {
-                                   if (!parameters.value("replace").toBool()) return OperationService::failure(QObject::tr("Destination exists; set replace=true."), 2);
-                                   if (!QDir(destination).removeRecursively()) return OperationService::failure(QObject::tr("Destination could not be replaced."));
-                               }
-                               if (!FS::copy(source->container().absoluteFilePath(), destination)())
-                                   return OperationService::failure(QObject::tr("World could not be copied."));
-                               worlds->update();
-                               return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "name", name }, { "path", destination }, { "changed", true } });
+                               return installWorldSafely(instance, source->container(), name, parameters.value("replace").toBool());
                            });
     api.registerOperation({ "instance.world.create", "Create a world from a local world template or archive.",
                             objectSchema({ { "instance", stringProperty("Instance ID or name.") }, { "template", stringProperty("Valid world directory or zip archive.") },
@@ -915,14 +1011,13 @@ void registerLauncherApiDomains(LauncherApi& api)
                                auto worlds = source->worldList(); worlds->update();
                                auto world = findWorld(worlds.get(), p.value("world").toString());
                                if (!world || !world->isOnFS()) return OperationService::failure(QObject::tr("Source world was not found."), 2);
-                               const auto destination = QDir(target->worldDir()).filePath(name);
-                               if (QFileInfo::exists(destination)) {
-                                   if (!p.value("replace").toBool()) return OperationService::failure(QObject::tr("Destination exists; set replace=true."), 2);
-                                   if (!QDir(destination).removeRecursively()) return OperationService::failure(QObject::tr("Destination could not be replaced."));
+                               auto result = installWorldSafely(target, world->container(), name, p.value("replace").toBool());
+                               if (result.value("ok").toBool()) {
+                                   auto data = result.value("data").toObject();
+                                   data.insert("sourceInstance", source->id()); data.insert("targetInstance", target->id());
+                                   result.insert("data", data);
                                }
-                               if (!FS::copy(world->container().absoluteFilePath(), destination)()) return OperationService::failure(QObject::tr("World could not be copied."));
-                               target->worldList()->update();
-                               return OperationService::success(QJsonObject{ { "sourceInstance", source->id() }, { "targetInstance", target->id() }, { "name", name }, { "path", destination }, { "changed", true } });
+                               return result;
                            });
 
     api.registerOperation({ "instance.world.export", "Export a world directory as a zip archive.",

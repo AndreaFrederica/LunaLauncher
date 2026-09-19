@@ -140,7 +140,9 @@ QList<ApiOperation> legacyOperations()
              { "settings.list", "List registered settings.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "filter", stringProperty("Optional key filter.") }, { "reveal", boolProperty("Reveal sensitive values.") } }, { "scope" }) },
              { "settings.get", "Read a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") }, { "reveal", boolProperty("Reveal sensitive value.") } }, { "scope", "key" }) },
              { "settings.set", "Set a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") }, { "value", QJsonObject{ { "description", "JSON value." } } } }, { "scope", "key", "value" }) },
-             { "settings.reset", "Reset a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") } }, { "scope", "key" }) } };
+             { "settings.reset", "Reset a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") } }, { "scope", "key" }) },
+             { "settings.export", "Export registered settings as a JSON values object.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "reveal", boolProperty("Include sensitive values.") } }, { "scope" }) },
+             { "settings.import", "Import a JSON values object into registered settings.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "values", QJsonObject{ { "type", "object" } } }, { "allowSensitive", boolProperty("Allow sensitive values in the import.") } }, { "scope", "values" }) } };
     for (auto& operation : operations) {
         auto properties = operation.inputSchema.value("properties").toObject();
         if (operation.name == "instance.copy") {

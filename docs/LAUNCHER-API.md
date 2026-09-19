@@ -134,13 +134,13 @@ The implementation exposes 120 operations and reuses existing models and tasks i
 | Domain | Implemented boundary | Remaining work |
 | --- | --- | --- |
 | Instances | list/info/create/import/copy/delete/restore, rename/group/icon/notes, launch/stop/kill, verify/update, shortcuts/folders, ZIP export | specialized managed-pack workflows, other export formats; server force-kill semantics still use the existing stop implementation |
-| Components | component catalog and version lists, installed list, version selection, enable/remove/reorder/customize/revert | import custom component/JAR workflows |
+| Components | component catalog and version lists, installed list, version selection, enable/remove/reorder/customize/revert; install local component files, jar mods, replacement jars and Java agents | richer drag/drop validation and provider-specific component installers |
 | Resources | installed inspection/refresh, local/URL install, enable/disable/remove; remote search/project/version/dependency lookup, indexed installation; batch upgrade check/select/apply with stale-file validation and disabled-state preservation | automatic recursive dependency installation, Hangar update metadata; restricted CurseForge files with no direct URL are not exposed by the common version list |
 | Servers | properties, EULA, operator/whitelist/ban lists, start, terminal subscription/input/resize, YAML revisions, compatibility configuration; local mods/plugins CRUD | installing server loader distributions |
 | Worlds | list, rename/delete, reset icon, import directory/zip and export world zip | world creation from an empty template and advanced copy/replace policies |
 | Accounts | login/refresh/remove/default/order/profiles; skin library/upload/reset/cape | live profile changes outside current selection flow |
 | Java | scan/list/install/remove/select | platform-specific diagnostics beyond current core tasks |
-| Settings | every registered launcher/instance setting via list/get/set/reset; theme/icon/background catalogs, refresh and selection; backend language catalog/selection/refresh | settings import/export; frontend rendering and localization; some services require a sidecar restart after settings changes |
+| Settings | every registered launcher/instance setting via list/get/set/reset/import/export; theme/icon/background catalogs, refresh and selection; backend language catalog/selection/refresh | frontend rendering and localization; some services require a sidecar restart after settings changes |
 | Integrations | Aria2/Terracotta/Yukari status/install/start/stop; room host/join/leave/state/log and Yukari retry; Aria2 queue/cancel/clear/remove | broader launcher update and proxy diagnostics; not every helper version/platform has been exercised |
 | Logs/screenshots | bounded reads, file lists, screenshot deletion; client console and server PTY subscriptions, log file following with bounded buffers and cursor polling | upload/clear workflows |
 

@@ -369,6 +369,10 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         return setSetting(parameters, interaction);
     if (operation == "settings.reset")
         return resetSetting(parameters);
+    if (operation == "settings.export")
+        return exportSettings(parameters);
+    if (operation == "settings.import")
+        return importSettings(parameters);
     if (operation == "account.login")
         return loginAccount(parameters, interaction);
     if (operation == "instance.import")
@@ -856,6 +860,49 @@ QJsonObject OperationService::resetSetting(const QJsonObject& parameters)
     if (instance)
         instance->saveNow();
     return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));
+}
+
+QJsonObject OperationService::exportSettings(const QJsonObject& parameters)
+{
+    QString error;
+    auto settings = resolveSettings(parameters, &error);
+    if (!settings) return failure(error, 2);
+    const bool reveal = parameters.value("reveal").toBool(false);
+    QJsonObject values;
+    int count = 0;
+    for (const auto& key : settings->settingIds()) {
+        if (isSensitiveSetting(key) && !reveal) continue;
+        values.insert(key, variantToJson(settings->get(key)));
+        ++count;
+    }
+    return success(QJsonObject{ { "scope", parameters.value("scope").toString() }, { "values", values },
+                                { "count", count }, { "includesSensitive", reveal } });
+}
+
+QJsonObject OperationService::importSettings(const QJsonObject& parameters)
+{
+    QString error;
+    BaseInstance* instance = nullptr;
+    auto settings = resolveSettings(parameters, &error, &instance);
+    if (!settings) return failure(error, 2);
+    const auto values = parameters.value("values").toObject();
+    if (values.isEmpty()) return failure(tr("values must contain at least one setting."), 2);
+    const bool allowSensitive = parameters.value("allowSensitive").toBool(false);
+    QList<QPair<QString, QVariant>> converted;
+    int skipped = 0;
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        const auto setting = settings->getSetting(it.key());
+        if (!setting) { ++skipped; continue; }
+        if (isSensitiveSetting(it.key()) && !allowSensitive) return failure(tr("Sensitive setting %1 requires allowSensitive=true.").arg(it.key()), 2);
+        const auto current = settings->get(it.key());
+        QVariant value;
+        if (!convertSettingValue(it.value(), current.isValid() ? current : setting->defValue(), &value, &error))
+            return failure(tr("%1: %2").arg(it.key(), error), 2);
+        converted.append({ it.key(), value });
+    }
+    for (const auto& pair : converted) settings->set(pair.first, pair.second);
+    if (instance) instance->saveNow();
+    return success(QJsonObject{ { "imported", converted.size() }, { "skippedUnknown", skipped }, { "allowSensitive", allowSensitive } });
 }
 
 bool OperationService::waitForTask(Task* task, UserInteraction& interaction, QString* error)

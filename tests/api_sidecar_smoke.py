@@ -383,6 +383,12 @@ class ApiSmoke(unittest.TestCase):
 
     def test_10_appearance_and_language(self):
         s = self.sidecar
+        exported = s.ok("settings.export", scope="launcher")
+        self.assertIn("values", exported)
+        self.assertGreater(exported["count"], 0)
+        self.assertEqual(s.ok("settings.import", scope="launcher", values={"Language": "en_US"})["imported"], 1)
+        self.assertFalse(s.execute("settings.import", scope="launcher", values={"MetaURLOverride": {"bad": True}})["ok"])
+        self.assertEqual(s.ok("settings.import", scope="launcher", values={"NoSuchSetting": "x"})["skippedUnknown"], 1)
         catalog = s.ok("appearance.catalog")
         self.assertTrue(catalog["themes"])
         self.assertTrue(catalog["icons"])

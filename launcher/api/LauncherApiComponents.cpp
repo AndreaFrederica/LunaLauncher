@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
+#include <QFileInfo>
 #include <QUuid>
 
 #include <exception>
@@ -322,6 +323,38 @@ QJsonObject customizeComponent(LauncherApi& api, const QJsonObject& parameters, 
                                                   { "changed", true } });
 }
 
+QJsonObject installCustomComponent(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    QString error;
+    auto instance = findMinecraftInstance(parameters, &error);
+    if (!instance) return OperationService::failure(error, 2);
+    if (instance->isRunning()) return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
+    if (!ensureLoaded(instance, api, interaction, &error)) return OperationService::failure(error, 2);
+    const auto source = QFileInfo(parameters.value("source").toString());
+    if (!source.isFile() || !source.isReadable()) return OperationService::failure(QObject::tr("Component source file was not found."), 2);
+    const auto type = parameters.value("type").toString("component").trimmed().toLower();
+    auto profile = instance->getPackProfile();
+    bool changed = false;
+    if (type == "component") {
+        changed = profile->installComponents({ source.absoluteFilePath() });
+    } else if (type == "jarmod") {
+        profile->installJarMods({ source.absoluteFilePath() });
+        changed = true;
+    } else if (type == "jar") {
+        profile->installCustomJar(source.absoluteFilePath());
+        changed = true;
+    } else if (type == "agent") {
+        profile->installAgents({ source.absoluteFilePath() });
+        changed = true;
+    } else {
+        return OperationService::failure(QObject::tr("type must be component, jarmod, jar, or agent."), 2);
+    }
+    if (!changed) return OperationService::failure(QObject::tr("The custom component could not be installed."));
+    profile->saveNow();
+    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "type", type },
+        { "source", source.absoluteFilePath() }, { "changed", true } });
+}
+
 }  // namespace
 
 void registerLauncherApiComponentOperations(LauncherApi& api)
@@ -377,5 +410,12 @@ void registerLauncherApiComponentOperations(LauncherApi& api)
                                if (!parameters.value("confirm").toBool())
                                    return OperationService::failure(QObject::tr("Component revert requires confirm=true."), 2);
                                return customizeComponent(api, parameters, interaction, true);
+                           });
+    api.registerOperation({ "instance.component.install-custom", "Install a local custom component, jar mod, replacement jar, or Java agent using the existing profile workflow.",
+                            objectSchema({ { "instance", instance }, { "source", stringProperty("Local component or jar file.") },
+                                           { "type", stringProperty("component, jarmod, jar, or agent.") } }, { "instance", "source" }),
+                            "instance.components", true },
+                           [&api](const QJsonObject& parameters, UserInteraction& interaction) {
+                               return installCustomComponent(api, parameters, interaction);
                            });
 }

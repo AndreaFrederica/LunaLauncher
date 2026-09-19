@@ -54,6 +54,8 @@ class OperationService final : public QObject {
     QJsonObject getSetting(const QJsonObject& parameters);
     QJsonObject setSetting(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject resetSetting(const QJsonObject& parameters);
+    QJsonObject exportSettings(const QJsonObject& parameters);
+    QJsonObject importSettings(const QJsonObject& parameters);
     QJsonObject loginAccount(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject importInstance(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject launchInstance(const QJsonObject& parameters, UserInteraction& interaction);

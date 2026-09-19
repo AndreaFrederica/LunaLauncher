@@ -79,6 +79,7 @@ class LaunchController : public Task {
     QString id() const { return m_instance->id(); }
 
     bool abort() override;
+    bool canAbort() const override;
 
    private:
     void login();
@@ -113,5 +114,7 @@ class LaunchController : public Task {
     LaunchTask* m_launcher = nullptr;
     MinecraftTarget::Ptr m_targetToJoin = nullptr;
     bool m_headless = false;
+    Task* m_authTask = nullptr; // Owned by the account and the local refresh task handle.
+    bool m_authCancelled = false;
     std::function<MinecraftAccountPtr(const MinecraftAccountPtr&, const QString&)> m_reauthenticateHandler;
 };

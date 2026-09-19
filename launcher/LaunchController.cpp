@@ -197,22 +197,40 @@ LaunchDecision LaunchController::decideLaunchMode()
         // refresh is in progress, we need to wait for it to finish to proceed.
         auto task = accountToCheck->currentTask();
         if (m_headless) {
+            if (!task) {
+                setDetails(tr("Account refresh task is unavailable."));
+                return LaunchDecision::Abort;
+            }
             QEventLoop loop;
             QTimer cancellation;
             bool cancelled = false;
+            m_authTask = task.get();
+            m_authCancelled = false;
+            emit abortStatusChanged(canAbort());
+            setStatus(tr("Refreshing account…"));
+            connect(task.get(), &Task::status, &loop, [this](const QString& status) { setStatus(status); });
+            connect(task.get(), &Task::details, &loop, [this](const QString& details) { setDetails(details); });
             cancellation.setInterval(100);
             connect(&cancellation, &QTimer::timeout, &loop, [&] {
-                if (activeInteractionCancellation && activeInteractionCancellation()) {
+                if (m_authCancelled || (activeInteractionCancellation && activeInteractionCancellation())) {
                     cancelled = true;
-                    if (task->canAbort()) task->abort();
+                    // AuthFlow implements abort even though its generic Task
+                    // abortability flag is not set.
+                    if (!task->isFinished()) task->abort();
                     loop.quit();
                 }
             });
             connect(task.get(), &Task::finished, &loop, &QEventLoop::quit);
             cancellation.start();
+            // ProgressDialog starts pending tasks in the GUI path. The headless
+            // path must do the same before waiting for their completion.
+            if (!task->isFinished() && !task->isRunning())
+                task->start();
             if (!task->isFinished())
                 loop.exec();
-            if (cancelled) return LaunchDecision::Abort;
+            m_authTask = nullptr;
+            emit abortStatusChanged(canAbort());
+            if (cancelled || m_authCancelled) return LaunchDecision::Abort;
         } else {
             ProgressDialog progDialog(m_parentWidget);
             progDialog.setSkipButton(true, tr("Abort"));
@@ -610,8 +628,20 @@ void LaunchController::onProgressRequested(Task* task) const
     progDialog.execWithTask(task);
 }
 
+bool LaunchController::canAbort() const
+{
+    if (m_headless)
+        return m_authTask || (m_launcher && m_launcher->canAbort());
+    return Task::canAbort();
+}
+
 bool LaunchController::abort()
 {
+    if (m_headless && m_authTask) {
+        m_authCancelled = true;
+        if (!m_authTask->isFinished()) m_authTask->abort();
+        return true;
+    }
     if (!m_launcher) {
         return true;
     }

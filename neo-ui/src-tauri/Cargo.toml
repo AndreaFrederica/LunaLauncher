@@ -3,6 +3,9 @@ name = "luna-neo-ui"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

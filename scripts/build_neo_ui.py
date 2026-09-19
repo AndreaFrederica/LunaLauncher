@@ -17,7 +17,7 @@ install = build / "pnpm-store"
 run([pnpm, "install", "--frozen-lockfile", "--store-dir", install], source)
 run([pnpm, "build"], source)
 cargo_target = build / "cargo-target"
-run([cargo, "build", "--release", "--target-dir", cargo_target], source / "src-tauri")
+run([cargo, "build", "--locked", "--release", "--features", "custom-protocol", "--target-dir", cargo_target], source / "src-tauri")
 binary = cargo_target / "release" / ("luna-neo-ui.exe" if sys.platform == "win32" else "luna-neo-ui")
 if not binary.is_file():
     raise SystemExit(f"Neo UI build did not produce {binary}")

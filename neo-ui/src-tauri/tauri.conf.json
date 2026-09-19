@@ -5,5 +5,5 @@
   "identifier": "org.lunalauncher.neo-ui",
   "build": { "frontendDist": "../dist/spa" },
   "app": { "windows": [{ "title": "Luna Neo UI", "width": 1200, "height": 800 }], "security": { "csp": null } },
-  "bundle": { "active": true, "targets": "all" }
+  "bundle": { "active": true, "targets": "all", "icon": ["../../program_info/lunalauncher.ico"] }
 }

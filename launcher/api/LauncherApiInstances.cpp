@@ -338,6 +338,47 @@ QJsonObject createInstanceShortcut(const QJsonObject& parameters)
 
 void registerInstanceApiOperations(LauncherApi& api)
 {
+    api.registerOperation({ "instance.managed-pack.info", "Read managed pack identity and update source.",
+        ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID.") } }, { "instance" }), "instances" },
+        [](const QJsonObject& p, UserInteraction&) {
+            auto inst = findInstance(p.value("instance").toString());
+            if (!inst) return OperationService::failure("Instance not found.", 2);
+            return OperationService::success(QJsonObject{ { "managed", inst->isManagedPack() }, { "type", inst->getManagedPackType() },
+                { "projectId", inst->getManagedPackID() }, { "versionId", inst->getManagedPackVersionID() },
+                { "name", inst->getManagedPackName() }, { "versionName", inst->getManagedPackVersionName() },
+                { "url", inst->settings()->get("ManagedPackURL").toString() } });
+        });
+    api.registerOperation({ "instance.managed-pack.versions", "List versions for a managed Modrinth or CurseForge pack.",
+        ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID.") } }, { "instance" }), "instances" },
+        [&api](const QJsonObject& p, UserInteraction& i) {
+            auto inst = findInstance(p.value("instance").toString());
+            if (!inst || !inst->isManagedPack()) return OperationService::failure("Managed instance not found.", 2);
+            const auto type = inst->getManagedPackType();
+            if (type != "flame" && type != "modrinth") return OperationService::failure("This managed pack uses a local file or update URL.", 2);
+            return api.execute("resource.versions", { { "provider", type == "flame" ? "curseforge" : "modrinth" }, { "kind", "modpacks" },
+                { "projectId", inst->getManagedPackID() }, { "includeChangelog", true } }, i);
+        });
+    api.registerOperation({ "instance.managed-pack.update", "Update an existing managed pack from a selected pack URL or local archive through the existing staged import workflow.",
+        ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID.") }, { "source", ApiSupport::string("Selected version download URL or local pack file.") },
+            { "versionId", ApiSupport::string("Selected provider version ID.") }, { "confirm", ApiSupport::boolean() } }, { "instance", "source", "confirm" }), "instances", true },
+        [&api](const QJsonObject& p, UserInteraction& interaction) {
+            auto inst = findInstance(p.value("instance").toString());
+            if (!inst || !inst->isManagedPack()) return OperationService::failure("Managed instance not found.", 2);
+            if (inst->isRunning() || !p.value("confirm").toBool()) return OperationService::failure("Stop the instance and confirm the pack update.", 2);
+            const auto source = p.value("source").toString();
+            const auto url = QFileInfo(source).isFile() ? QUrl::fromLocalFile(QFileInfo(source).absoluteFilePath()) : QUrl(source);
+            if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https" && !url.isLocalFile())) return OperationService::failure("Invalid pack source.", 2);
+            const auto id = inst->id();
+            auto raw = new InstanceImportTask(url, nullptr, { { "pack_id", inst->getManagedPackID() },
+                { "pack_version_id", p.value("versionId").toString() }, { "original_instance_id", id } });
+            raw->setName(inst->name()); raw->setGroup(APPLICATION->instances()->getInstanceGroup(id)); raw->setIcon(inst->iconKey());
+            raw->setConfirmUpdate(false);
+            auto task = APPLICATION->instances()->wrapInstanceTask(raw);
+            QString error;
+            if (!waitForTask(task, interaction, &error, &api)) return OperationService::failure(error);
+            APPLICATION->instances()->saveNow();
+            return OperationService::success(QJsonObject{ { "instance", id }, { "updated", true } });
+        });
     const auto instance = stringProperty("Instance ID, managed name, or display name.");
     api.registerOperation({ "instance.create", "Create a vanilla, server, or imported instance.",
                             objectSchema({ { "type", stringProperty("vanilla or server; defaults to vanilla.") },

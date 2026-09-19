@@ -34,6 +34,7 @@
  */
 
 #include "FlameInstanceCreationTask.h"
+#include "cli/ScopedUserInteraction.h"
 
 #include "InstanceTask.h"
 #include "QObjectPtr.h"
@@ -58,6 +59,7 @@
 #include "SysInfo.h"
 #include "tasks/ConcurrentTask.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include "cli/HeadlessBlockedMods.h"
 #include "ui/dialogs/CustomMessageBox.h"
 
 #include <QDebug>
@@ -242,6 +244,11 @@ bool FlameCreationTask::updateInstance()
 
         m_processUpdateFileInfoJob = nullptr;
     } else {
+        if (APPLICATION->isHeadless()) {
+            if (!headlessConfirm(tr("The old pack index is missing; updating may duplicate files. Continue?"))) {
+                m_abort = true; return false;
+            }
+        } else {
         // We don't have an old index file, so we may duplicate stuff!
         auto dialog = CustomMessageBox::selectable(m_parent, tr("No index file."),
                                                    tr("We couldn't find a suitable index file for the older version. This may cause some "
@@ -251,6 +258,7 @@ bool FlameCreationTask::updateInstance()
         if (dialog->exec() == QDialog::DialogCode::Rejected) {
             m_abort = true;
             return false;
+        }
         }
     }
 
@@ -502,7 +510,13 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
         }
     }
 
-    if (!optionalFiles.empty() && !APPLICATION->isHeadless()) {
+    if (!optionalFiles.empty() && APPLICATION->isHeadless() && activeUserInteraction) {
+        for (const auto& file : optionalFiles) {
+            const auto choice = activeUserInteraction->select(tr("Enable optional file %1?").arg(file), QJsonArray{ "Enable", "Disable", "Cancel import" });
+            if (!choice || *choice == 2) { emitAborted(); loop.quit(); return; }
+            if (*choice == 0) m_selectedOptionalMods.append(file);
+        }
+    } else if (!optionalFiles.empty() && !APPLICATION->isHeadless()) {
         OptionalModDialog optionalModDialog(m_parent, optionalFiles);
         if (optionalModDialog.exec() == QDialog::Rejected) {
             emitAborted();
@@ -543,15 +557,18 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
     if (anyBlocked) {
         qWarning() << "Blocked mods found, displaying mod list";
 
-        BlockedModsDialog message_dialog(m_parent, tr("Blocked mods found"),
+        QString headlessError;
+        const bool accepted = [&] {
+            if (APPLICATION->isHeadless()) return resolveHeadlessBlockedMods(blocked_mods, "sha1", headlessError);
+            BlockedModsDialog message_dialog(m_parent, tr("Blocked mods found"),
                                          tr("The following files are not available for download in third party launchers.<br/>"
                                             "You will need to manually download them and add them to the instance."),
                                          blocked_mods);
 
         message_dialog.setModal(true);
 
-        QString headlessError;
-        const bool accepted = APPLICATION->isHeadless() ? message_dialog.execHeadless(&headlessError) : message_dialog.exec();
+            return message_dialog.exec() != 0;
+        }();
         if (accepted) {
             qDebug() << "Post dialog blocked mods list:" << blocked_mods;
             copyBlockedMods(blocked_mods);

@@ -38,6 +38,14 @@
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QProgressDialog>
+#include <QElapsedTimer>
+#include <QTimer>
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#else
+#include <signal.h>
+#include <cerrno>
+#endif
 #include <memory>
 
 #include <filesystem>
@@ -98,6 +106,10 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
           { { "F", "force" }, tr("Force an update, even if one is not needed.") },
           { { "l", "list" }, tr("List available releases.") },
           { "debug", tr("Log debug to console.") },
+          { "headless", tr("Run without dialogs or restarting the launcher. Ambiguous assets require --asset.") },
+          { "asset", tr("Select an exact release asset name."), tr("name") },
+          { "json-releases", tr("Print releases and compatible assets as JSON, without installing.") },
+          { "wait-pid", tr("Wait for this frontend/backend process to exit before changing installation files."), tr("pid") },
           { { "S", "select-ui" }, tr("Select the version to install with a GUI.") },
           { { "D", "allow-downgrade" }, tr("Allow the updater to downgrade to previous versions.") } });
 
@@ -105,7 +117,19 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
     parser.addVersionOption();
     parser.process(arguments());
 
-    logToConsole = parser.isSet("debug");
+    m_jsonReleases = parser.isSet("json-releases");
+    m_headless = parser.isSet("headless") || parser.isSet("check-only") || parser.isSet("list") || m_jsonReleases;
+    if (parser.isSet("wait-pid")) {
+        bool valid;
+        m_waitPid = parser.value("wait-pid").toLongLong(&valid);
+        if (!valid || m_waitPid <= 0 || m_waitPid > 2147483647 || m_waitPid == QCoreApplication::applicationPid()) {
+            m_status = Failed; return;
+        }
+    }
+    m_checkOnly = parser.isSet("check-only");
+    m_assetName = parser.value("asset");
+
+    logToConsole = parser.isSet("debug") || m_headless;
 
     QString origCwdPath = QDir::currentPath();
     QString binPath = applicationDirPath();
@@ -386,6 +410,15 @@ void PrismUpdaterApp::abort(const QString& reason)
 void PrismUpdaterApp::showFatalErrorMessage(const QString& title, const QString& content)
 {
     m_status = Failed;
+    if (m_headless) {
+        if (!m_checkOnly && !m_jsonReleases && !m_dataPath.isEmpty()) {
+            QFile marker(QDir(m_dataPath).filePath(".prism_launcher_update.fail"));
+            if (marker.open(QIODevice::WriteOnly)) marker.write((title + ": " + content).toUtf8());
+        }
+        qCritical().noquote() << title << ":" << content;
+        QMetaObject::invokeMethod(this, [this]() { exit(1); }, Qt::QueuedConnection);
+        return;
+    }
     auto msgBox = new QMessageBox();
     msgBox->setWindowTitle(title);
     msgBox->setText(content);
@@ -401,9 +434,22 @@ void PrismUpdaterApp::showFatalErrorMessage(const QString& title, const QString&
 
 void PrismUpdaterApp::run()
 {
+    if (m_status == Failed) return exit(1);
     qDebug() << "found" << m_releases.length() << "releases on github";
     qDebug() << "loading exe at" << m_prismExecutable;
 
+    if (m_jsonReleases) {
+        QJsonArray result;
+        for (const auto& release : m_releases) {
+            if (release.draft || (release.prerelease && !m_allowPreRelease)) continue;
+            QJsonArray assets;
+            for (const auto& asset : validReleaseArtifacts(release)) assets.append(QJsonObject{ { "name", asset.name }, { "url", asset.browser_download_url }, { "size", asset.size } });
+            result.append(QJsonObject{ { "versionTag", release.tag_name }, { "name", release.name }, { "notes", release.body },
+                { "publishedAt", release.published_at.toString(Qt::ISODate) }, { "prerelease", release.prerelease }, { "assets", assets } });
+        }
+        QTextStream out(stdout); out << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n'; out.flush();
+        m_status = Succeeded; return exit(0);
+    }
     if (m_printOnly) {
         printReleases();
         m_status = Succeeded;
@@ -475,7 +521,7 @@ void PrismUpdaterApp::run()
                     QString("Can not find a github release for specified version %1").arg(m_userSelectedVersion.toString()));
                 return;
             }
-        } else if (m_selectUI) {
+        } else if (m_selectUI && !m_headless) {
             update_release = selectRelease();
             if (!update_release.isValid()) {
                 showFatalErrorMessage("No version selected.", "No version was selected.");
@@ -530,7 +576,8 @@ void PrismUpdaterApp::moveAndFinishUpdate(QDir target)
     progress.setCancelButton(nullptr);
     progress.setMinimumWidth(400);
     progress.adjustSize();
-    progress.show();
+    if (!m_headless) progress.show();
+    else progress.setMinimumDuration(INT_MAX);
     QCoreApplication::processEvents();
 
     logUpdate(tr("Installing from %1").arg(m_rootPath));
@@ -594,7 +641,7 @@ void PrismUpdaterApp::moveAndFinishUpdate(QDir target)
 #endif
 
     auto app_exe_path = target.absoluteFilePath(app_exe_name);
-    proc.startDetached(app_exe_path);
+    if (!m_headless) proc.startDetached(app_exe_path);
 
     exit(error ? 1 : 0);
 }
@@ -714,6 +761,11 @@ QList<GitHubReleaseAsset> PrismUpdaterApp::validReleaseArtifacts(const GitHubRel
 
 GitHubReleaseAsset PrismUpdaterApp::selectAsset(const QList<GitHubReleaseAsset>& assets)
 {
+    if (!m_assetName.isEmpty()) {
+        for (const auto& asset : assets) if (asset.name == m_assetName) return asset;
+        return {};
+    }
+    if (m_headless) return {};
     SelectReleaseAssetDialog dlg(assets);
     auto result = dlg.exec();
 
@@ -739,7 +791,7 @@ void PrismUpdaterApp::performUpdate(const GitHubRelease& release)
             tr("Github release %1 has no valid assets for this platform: %2")
                 .arg(release.tag_name)
                 .arg(tr("%1 portable: %2").arg(BuildConfig.BUILD_ARTIFACT).arg(m_isPortable ? tr("yes") : tr("no"))));
-    } else if (valid_assets.length() > 1) {
+    } else if (valid_assets.length() > 1 || !m_assetName.isEmpty()) {
         selected_asset = selectAsset(valid_assets);
     } else {
         selected_asset = valid_assets.takeFirst();
@@ -768,10 +820,17 @@ QFileInfo PrismUpdaterApp::downloadAsset(const GitHubReleaseAsset& asset)
     qDebug() << "downloading" << file_url << "to" << out_file_path;
     auto download = Net::Download::makeFile(file_url, out_file_path);
     download->setNetwork(m_network);
-    auto progress_dialog = ProgressDialog();
-    progress_dialog.adjustSize();
-
-    progress_dialog.execWithTask(download.get());
+    if (m_headless) {
+        QEventLoop loop;
+        connect(download.get(), &Task::finished, &loop, &QEventLoop::quit);
+        download->start();
+        if (!download->isFinished()) loop.exec();
+    } else {
+        auto progress_dialog = ProgressDialog();
+        progress_dialog.adjustSize();
+        progress_dialog.execWithTask(download.get());
+    }
+    if (!download->wasSuccessful()) return {};
 
     qDebug() << "download complete";
 
@@ -850,10 +909,31 @@ bool write_lock_file(const QString& path, QDateTime timestamp, QString from, QSt
 
 void PrismUpdaterApp::performInstall(QFileInfo file)
 {
+    if (m_waitPid > 0) {
+        logUpdate(tr("Waiting for process %1 to exit before installing.").arg(m_waitPid));
+#ifdef Q_OS_WIN
+        HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, DWORD(m_waitPid));
+        if (!process && GetLastError() != ERROR_INVALID_PARAMETER) return showFatalErrorMessage("Update handoff failed", "Could not inspect the running launcher process.");
+        const auto running = [&] { return process && WaitForSingleObject(process, 0) == WAIT_TIMEOUT; };
+#else
+        const auto running = [&] { return kill(pid_t(m_waitPid), 0) == 0 || errno == EPERM; };
+#endif
+        QElapsedTimer elapsed; elapsed.start();
+        while (running() && elapsed.elapsed() < 120000) {
+            QEventLoop loop; QTimer::singleShot(200, &loop, &QEventLoop::quit); loop.exec();
+        }
+        const bool stillRunning = running();
+#ifdef Q_OS_WIN
+        if (process) CloseHandle(process);
+#endif
+        if (stillRunning) return showFatalErrorMessage("Update handoff timed out", "Close the launcher sidecar before applying the update.");
+        m_waitPid = 0;
+    }
     qDebug() << "starting install";
     auto update_lock_path = FS::PathCombine(m_dataPath, ".prism_launcher_update.lock");
     QFileInfo update_lock(update_lock_path);
     if (update_lock.exists()) {
+        if (m_headless) return showFatalErrorMessage(tr("Update locked"), tr("An update lock already exists. Inspect the update log before retrying."));
         auto [timestamp, from, to, target, data_path] = read_lock_File(update_lock_path);
         auto msg = tr("Update already in progress\n");
         auto infoMsg =
@@ -939,7 +1019,9 @@ void PrismUpdaterApp::unpackAndInstall(QFileInfo archive)
 
         auto new_updater_path = loc.value().absoluteFilePath(exe_name);
         logUpdate(tr("Starting new updater at '%1'").arg(new_updater_path));
-        if (!proc.startDetached(new_updater_path, { "-d", m_dataPath }, loc.value().absolutePath())) {
+        QStringList workerArguments{ "-d", m_dataPath };
+        if (m_headless) workerArguments.append("--headless");
+        if (!proc.startDetached(new_updater_path, workerArguments, loc.value().absolutePath())) {
             logUpdate(tr("Failed to launch '%1' %2").arg(new_updater_path).arg(proc.errorString()));
             return exit(10);
         }
@@ -1004,7 +1086,8 @@ void PrismUpdaterApp::backupAppDir()
     progress.setCancelButton(nullptr);
     progress.setMinimumWidth(400);
     progress.adjustSize();
-    progress.show();
+    if (!m_headless) progress.show();
+    else progress.setMinimumDuration(INT_MAX);
     QCoreApplication::processEvents();
 
     logUpdate(tr("Backing up install at %1").arg(m_rootPath));
@@ -1121,8 +1204,8 @@ void PrismUpdaterApp::loadReleaseList()
     if (github_repo.host() != "github.com")
         return fail("updating from a non github url is not supported");
 
-    auto path_parts = github_repo.path().split('/');
-    path_parts.removeFirst();  // empty segment from leading /
+    auto path_parts = github_repo.path().split('/', Qt::SkipEmptyParts);
+    if (path_parts.size() != 2) return fail("Update URL must identify a GitHub owner and repository.");
     auto repo_owner = path_parts.takeFirst();
     auto repo_name = path_parts.takeFirst();
     auto api_url = QString("https://api.github.com/repos/%1/%2/releases").arg(repo_owner, repo_name);

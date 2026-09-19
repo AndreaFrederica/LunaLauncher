@@ -278,6 +278,7 @@ def configure(root: Path, profile: str) -> None:
     idir = install_dir(root, profile)
 
     build_testing = os.environ.get("LUNA_BUILD_TESTING", "false").lower() in ("1", "true", "yes")
+    build_updater = os.environ.get("LUNA_BUILD_UPDATER", "false" if system == "macos" else "true").lower() in ("1", "true", "yes")
     disable_ownership = os.environ.get("LUNA_DISABLE_OWNERSHIP_CHECK", "false").lower() in ("1", "true", "yes")
 
     args = [
@@ -292,7 +293,7 @@ def configure(root: Path, profile: str) -> None:
         "-Dwarning_level=0",
         f"-Dbuild_testing={'true' if build_testing else 'false'}",
         f"-Ddisable_ownership_check={'true' if disable_ownership else 'false'}",
-        "-Dbuild_updater=false",
+        f"-Dbuild_updater={'true' if build_updater else 'false'}",
         "-Dbuild_filelinker=true" if system == "windows" else "-Dbuild_filelinker=false",
         "-Dlibarchive:tests=disabled",
         "-Dlibarchive:zlib=enabled",
@@ -392,7 +393,7 @@ def deploy(root: Path, profile: str) -> None:
     if not windeployqt.exists():
         raise SystemExit(f"missing windeployqt: {windeployqt}")
 
-    for exe_name in ["lunalauncher.exe", "lunalauncher-cli.exe", "lunalauncher_filelink.exe"]:
+    for exe_name in ["lunalauncher.exe", "lunalauncher-cli.exe", "lunalauncher_filelink.exe", "lunalauncher_updater.exe"]:
         exe = idir / exe_name
         if not exe.exists():
             continue

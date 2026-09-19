@@ -35,6 +35,8 @@
  */
 
 #include "LaunchController.h"
+#include <QRegularExpression>
+#include "cli/ScopedUserInteraction.h"
 #include "Application.h"
 #include "launch/steps/PrintServers.h"
 #include "minecraft/auth/AccountData.h"
@@ -241,7 +243,7 @@ LaunchDecision LaunchController::decideLaunchMode()
 bool LaunchController::askPlayDemo() const
 {
     if (m_headless)
-        return false;
+        return headlessConfirm(tr("This account cannot play the full game. Play the Minecraft demo?"));
     QMessageBox box(m_parentWidget);
     box.setWindowTitle(tr("Play demo?"));
     QString text = m_accountToUse
@@ -289,6 +291,14 @@ QString LaunchController::askOfflineName(const QString& playerName, bool* ok) co
                 *ok = true;
             return m_offlineName;
         }
+        if (activeUserInteraction) {
+            const auto value = activeUserInteraction->input(message, false);
+            if (value && QRegularExpression("^[A-Za-z0-9_]{1,16}$").match(*value).hasMatch()) {
+                APPLICATION->settings()->set("LastOfflinePlayerName", *value);
+                if (ok) *ok = true;
+                return *value;
+            }
+        }
         return {};
     }
 
@@ -312,7 +322,7 @@ void LaunchController::login()
 {
     decideAccount();
 
-    if (m_headless && !m_accountToUse && m_wantedLaunchMode != LaunchMode::Offline) {
+    if (m_headless && !m_accountToUse && m_wantedLaunchMode != LaunchMode::Offline && m_wantedLaunchMode != LaunchMode::Demo) {
         emitFailed(tr("No account selected for launch"));
         return;
     }
@@ -513,8 +523,17 @@ void LaunchController::readyForLaunch()
     }
 
     if (m_headless) {
-        m_launcher->abort();
-        emitFailed(tr("Profilers require GUI interaction and are not supported in headless mode."));
+        QString error;
+        if (!m_profiler->check(&error)) { m_launcher->abort(); emitFailed(error); return; }
+        auto profiler = m_profiler->createProfiler(m_launcher->instance(), this);
+        connect(profiler, &BaseProfiler::readyToLaunch, this, [this, profiler](const QString& message) {
+            if (!headlessConfirm(tr("Profiler is ready. Configure it, then continue to launch.\n%1").arg(message))) {
+                profiler->abortProfiling(); m_launcher->abort(); emitAborted(); return;
+            }
+            m_launcher->proceed(); emit gameStarted(m_launcher->pid());
+        });
+        connect(profiler, &BaseProfiler::abortLaunch, this, [this](const QString& message) { m_launcher->abort(); emitFailed(message); });
+        profiler->beginProfiling(m_launcher);
         return;
     }
 

@@ -182,7 +182,11 @@ class ApiSmoke(unittest.TestCase):
         self.assertEqual(len(tools), len(names))
         result = s.call("tools/call", {"name": "lunalauncher_resource_providers", "arguments": {}})
         self.assertFalse(result["isError"])
-        self.assertEqual({p["id"] for p in result["structuredContent"]["data"]}, {"modrinth", "curseforge", "hangar"})
+        providers = result["structuredContent"]["data"]
+        ids = {p["id"] for p in providers}
+        self.assertTrue({"modrinth", "curseforge", "hangar"}.issubset(ids))
+        self.assertEqual(len(ids), len(providers))
+        self.assertTrue(all(p in {"modrinth", "curseforge", "hangar"} or p.startswith("js:") for p in ids))
         self.assertFalse(s.execute("operation.does-not-exist")["ok"])
         print(f"\nCatalog: {len(names)} operations", flush=True)
 
@@ -579,6 +583,195 @@ class ApiSmoke(unittest.TestCase):
         s.ok("instance.custom-ui.save-state", instance="neo-client", state={"theme": "neo"}, revision=state["revision"])
         self.assertEqual(s.ok("instance.custom-ui.state", instance="neo-client")["state"], {"theme": "neo"})
         self.assertFalse(s.execute("instance.custom-ui.save-state", instance="neo-client", state={}, revision=state["revision"])["ok"])
+
+    def test_20_exports_and_helpers(self):
+        import zipfile
+        s = self.sidecar
+        for fmt, index in (("zip", "instance.cfg"), ("modrinth", "modrinth.index.json"), ("curseforge", "manifest.json")):
+            output = self.root / ("export-" + fmt + ".zip")
+            s.ok("instance.export", instance="neo-client", output=str(output), format=fmt, version="1.0", exclude=[".minecraft/mods"])
+            with zipfile.ZipFile(output) as archive:
+                self.assertIn(index, archive.namelist())
+                if fmt != "zip":
+                    manifest = json.loads(archive.read(index))
+                    self.assertEqual(manifest["versionId" if fmt == "modrinth" else "version"], "1.0")
+            before = output.read_bytes()
+            self.assertFalse(s.execute("instance.export", instance="neo-client", output=str(output), format=fmt, version="2")["ok"])
+            self.assertEqual(output.read_bytes(), before)
+        inside = self.root / "instances/neo-client/recursive.zip"
+        self.assertFalse(s.execute("instance.export", instance="neo-client", output=str(inside))["ok"])
+        self.assertFalse(inside.exists())
+        for fmt in ("text", "html", "markdown", "json", "csv", "custom"):
+            result = s.ok("resource.export-list", instance="neo-client", format=fmt, template="{name}")
+            self.assertIn("content", result)
+        self.assertFalse(s.ok("instance.managed-pack.info", instance="neo-client")["managed"])
+        self.assertFalse(s.execute("instance.managed-pack.update", instance="neo-client", source="missing", confirm=True)["ok"])
+        self.assertEqual(len(s.ok("java.catalog")), 4)
+        self.assertFalse(s.execute("java.versions", uid="../escape", version="21", offline=True)["ok"])
+        for helper in ("authlib-injector", "nide8auth"):
+            status = s.ok("authentication.helper.status", helper=helper)
+            self.assertIn("installed", status)
+            self.assertFalse(s.execute("authentication.helper.remove", helper=helper)["ok"])
+        self.assertFalse(s.ok("external-tool.check", tool="mcedit", path="Z:/missing/tool")["valid"])
+        s.ok("account.preset.add", name="API fixture", authUrl="https://example.invalid/auth", sessionUrl="https://example.invalid/session", tokenType="OAuth")
+        self.assertTrue(any(p["name"] == "API fixture" and p["tokenType"] == "OAuth" for p in s.ok("account.preset.list")))
+        s.ok("account.preset.remove", name="API fixture", confirm=True)
+        self.assertFalse(s.execute("settings.import-prism", confirm=False)["ok"])
+
+    def test_21_world_datapacks_themes_and_compressed_logs(self):
+        import zipfile
+        s = self.sidecar
+        game = self.root / "instances/neo-client/.minecraft"
+        world = game / "saves/API world"
+        world.mkdir(parents=True, exist_ok=True)
+        pack = self.root / "fixture-datapack.zip"
+        with zipfile.ZipFile(pack, "w") as archive:
+            archive.writestr("pack.mcmeta", '{"pack":{"pack_format":48,"description":"API fixture"}}')
+        args = dict(instance="neo-client", kind="datapacks", world="API world")
+        s.ok("resource.install", **args, source=str(pack))
+        self.assertTrue((world / "datapacks/fixture-datapack.zip").is_file())
+        self.assertEqual(len(s.ok("resource.list", **args)), 1)
+        s.ok("resource.disable", **args, resource=pack.name)
+        self.assertFalse(s.ok("resource.list", **args)[0]["enabled"])
+        s.ok("resource.enable", **args, resource=pack.name)
+        s.ok("resource.remove", **args, resource=pack.name, confirm=True)
+        self.assertEqual(s.ok("resource.list", **args), [])
+        self.assertFalse(s.execute("resource.list", **{**args, "world": "../escape"})["ok"])
+        self.assertFalse(s.execute("resource.list", **{**args, "kind": "mods"})["ok"])
+        theme = self.root / "fixture-icons.zip"
+        with zipfile.ZipFile(theme, "w") as archive:
+            archive.writestr("icons/api-fixture/index.theme", "[Icon Theme]\nName=API fixture\nInherits=hicolor\nDirectories=\n")
+        digest = "sha256:" + hashlib.sha256(theme.read_bytes()).hexdigest()
+        self.assertEqual(s.ok("appearance.install", kind="icons", path=str(theme), digest=digest)["installed"], ["api-fixture"])
+        self.assertFalse(s.execute("appearance.install", kind="icons", path=str(theme))["ok"])
+        s.ok("appearance.install", kind="icons", path=str(theme), overwrite=True)
+        self.assertFalse(s.execute("appearance.install", kind="icons", path=str(theme), digest="sha256:" + "0" * 64, overwrite=True)["ok"])
+        with zipfile.ZipFile(theme, "w") as archive:
+            archive.writestr("icons/../../escaped.txt", "bad")
+        self.assertFalse(s.execute("appearance.install", kind="icons", path=str(theme), overwrite=True)["ok"])
+        s.ok("appearance.remove", kind="icons", id="api-fixture", confirm=True)
+        log = game / "logs/fixture.log.gz"
+        log.parent.mkdir(exist_ok=True)
+        log.write_bytes(gzip.compress("压缩日志\n".encode() * 100))
+        self.assertEqual(s.ok("instance.log.read", instance="neo-client", file=str(log))["content"], "压缩日志\n" * 100)
+        self.assertTrue(s.ok("instance.log.read", instance="neo-client", file=str(log), maxBytes=10)["truncated"])
+        arbitrary = game / "options.txt"
+        arbitrary.write_text("must survive")
+        self.assertFalse(s.execute("instance.log.delete", instance="neo-client", file=str(arbitrary), confirm=True)["ok"])
+        self.assertEqual(arbitrary.read_text(), "must survive")
+        s.ok("account.preset.add", name="API edit", authUrl="https://example.invalid/a", sessionUrl="https://example.invalid/s")
+        s.ok("account.preset.edit", originalName="API edit", name="API edited", authUrl="https://example.invalid/b", sessionUrl="https://example.invalid/s")
+        self.assertTrue(any(p["name"] == "API edited" and p["authUrl"].endswith("/b") for p in s.ok("account.preset.list")))
+        s.ok("account.preset.remove", name="API edited", confirm=True)
+
+    def test_22_pack_catalogs_and_ftb_migration(self):
+        s = self.sidecar
+        cache = self.root / "cache/api-packs"
+        cache.mkdir(parents=True, exist_ok=True)
+        def response(url, value):
+            (cache / hashlib.sha256(url.encode()).hexdigest()).write_bytes(value if isinstance(value, bytes) else json.dumps(value).encode())
+        response("https://download.nodecdn.net/containers/atl/launcher/json/packsnew.json", [
+            {"id": 42, "position": 1, "name": "API Pack", "type": "public", "versions": [{"version": "1.0", "minecraft": "1.21.1"}]}])
+        packs = s.ok("modpack.search", provider="atlauncher", query="API", offline=True)
+        self.assertEqual(len(packs), 1)
+        self.assertEqual(s.ok("modpack.versions", provider="atlauncher", projectId=packs[0]["projectId"], offline=True)[0]["versionId"], "1.0")
+        base = "https://api.feed-the-beast.com/v1/modpacks/public"
+        response(base + "/modpack/all", {"packs": [42]})
+        response(base + "/modpack/42", {"id": 42, "name": "FTB Fixture", "synopsis": "fixture", "description": "fixture", "type": "release",
+            "featured": False, "installs": 0, "plays": 0, "updated": 0, "art": [], "authors": [], "tags": [],
+            "versions": [{"id": 99, "name": "1.0", "type": "release", "updated": 0, "specs": {"id": 1, "minimum": 1024, "recommended": 2048}}]})
+        self.assertEqual(len(s.ok("modpack.search", provider="ftb", offline=True)), 1)
+        self.assertEqual(s.ok("modpack.versions", provider="ftb", projectId="42", offline=True)[0]["versionId"], "99")
+        response("https://api.technicpack.net/modpack/fixture?build=multimc", {"name": "fixture", "version": "1.0", "minecraft": "1.21.1", "url": "https://example.invalid/pack.zip"})
+        self.assertEqual(s.ok("modpack.versions", provider="technic", projectId="fixture", offline=True)[0]["versionId"], "1.0")
+        for name in ("modpacks", "thirdparty"):
+            response("https://dist.creeper.host/FTB2/static/" + name + ".xml", b'<modpacks><modpack name="Legacy Fixture" dir="fixture" version="1.0" mcVersion="1.7.10" oldVersions="1.0;0.9" url="fixture.zip"/></modpacks>' if name == "modpacks" else b'<modpacks/>')
+        self.assertEqual(len(s.ok("modpack.search", provider="legacy-ftb", offline=True)), 1)
+        self.assertEqual(len(s.ok("modpack.versions", provider="legacy-ftb", projectId="fixture", offline=True)), 2)
+        self.assertFalse(s.execute("modpack.install", provider="ftb", projectId="42", versionId="99", offline=True)["ok"])
+        s.ok("modpack.legacy-ftb.private-codes", codes=["fixture"])
+        self.assertEqual(s.ok("modpack.legacy-ftb.private-codes"), ["fixture"])
+        source = self.root / "ftb-app/fixture"
+        source.mkdir(parents=True)
+        (source / "instance.json").write_text(json.dumps({"uuid": "fixture", "id": 42, "versionId": 99, "name": "FTB local fixture", "version": "1.0",
+            "mcVersion": "1.21.1", "totalPlayTime": 120000, "modLoader": "", "jvmArgs": "-Dfixture=true"}))
+        (source / "marker.txt").write_text("preserve me")
+        self.assertEqual(len(s.ok("modpack.ftb-local.list", path=str(source.parent))), 1)
+        result = s.ok("modpack.ftb-local.import", path=str(source), name="FTB migrated", group="API fixtures")
+        self.assertTrue(result["installed"])
+        self.assertEqual(len(result["instances"]), 1)
+        migrated = self.root / "instances" / result["instances"][0]
+        self.assertTrue(any(p.read_text() == "preserve me" for p in migrated.rglob("marker.txt")))
+        self.assertEqual((source / "marker.txt").read_text(), "preserve me")
+
+    def test_23_binary_screenshots_and_panel_state(self):
+        import zlib
+        s = self.sidecar
+        payload = bytes(range(256))
+        s.ok("instance.file.write", instance="neo-client", path="binary.bin", encoding="base64", content=base64.b64encode(payload).decode())
+        self.assertEqual(base64.b64decode(s.ok("instance.file.read", instance="neo-client", path="binary.bin", encoding="base64")["content"]), payload)
+        s.ok("instance.file.rename", instance="neo-client", path="binary.bin", destination="renamed.bin")
+        self.assertFalse(s.execute("instance.file.rename", instance="neo-client", path="renamed.bin", destination="../escape")["ok"])
+        def chunk(kind, data):
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+        png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(b'\x00\xff\x00\x00')) + chunk(b'IEND', b'')
+        source = self.root / "red.png"
+        source.write_bytes(png)
+        s.ok("instance.screenshot.import", instance="neo-client", source=str(source), name="red.png")
+        self.assertEqual(base64.b64decode(s.ok("instance.screenshot.read", instance="neo-client", file="red.png")["content"]), png)
+        s.ok("instance.screenshot.rename", instance="neo-client", file="red.png", name="renamed.png")
+        self.assertFalse(s.execute("instance.screenshot.rename", instance="neo-client", file="renamed.png", name="../outside.png")["ok"])
+        s.ok("instance.screenshot.delete", instance="neo-client", file="renamed.png", confirm=True)
+        s.ok("instance.file.remove", instance="neo-client", path="lunaui/panel.js", confirm=True)
+        s.ok("instance.file.write", instance="neo-client", path="lunaui/controls.json", content=json.dumps({"title": "Controls", "controls": [
+            {"id": "enabled", "type": "toggle", "default": True},
+            {"id": "mode", "type": "select", "options": ["first", "second"]},
+            {"type": "account-select"}]}))
+        opened = s.ok("instance.custom-ui.open", instance="neo-client")
+        sid = opened["sessionId"]
+        self.assertEqual(s.ok("instance.custom-ui.open", instance="neo-client")["sessionId"], sid)
+        self.assertTrue(opened["tabs"][0]["controls"][0]["value"])
+        self.assertEqual(opened["tabs"][0]["controls"][1]["value"], "first")
+        self.assertFalse(s.ok("instance.custom-ui.trigger", sessionId=sid, tab=0, control=1, value="missing")["complete"])
+        self.assertTrue(s.ok("instance.custom-ui.trigger", sessionId=sid, tab=0, control=2, value="")["complete"])
+        self.assertTrue(s.ok("instance.custom-ui.save", sessionId=sid)["complete"])
+        state = s.ok("instance.custom-ui.state", instance="neo-client")
+        s.ok("instance.custom-ui.save-state", instance="neo-client", revision=state["revision"], state={"external": True})
+        self.assertFalse(s.ok("instance.custom-ui.save", sessionId=sid)["complete"])
+        self.assertTrue(s.ok("instance.custom-ui.state", instance="neo-client")["state"]["external"])
+        s.ok("instance.custom-ui.close", sessionId=sid)
+
+    def test_19_custom_ui_runtime(self):
+        s = self.sidecar
+        script = '''
+function clicked(e) { launcher.setState('fromHandler', e.value); launcher.saveState(); }
+var tabs = [{title:'Test', controls:[{id:'toggle',type:'toggle',onChange:'clicked'}]}];
+'''
+        s.ok("instance.file.write", instance="neo-client", path="lunaui/panel.js", content=script)
+        panel = s.ok("instance.custom-ui.open", instance="neo-client")
+        sid = panel["sessionId"]
+        try:
+            self.assertEqual(panel["errors"], [])
+            result = s.ok("instance.custom-ui.trigger", sessionId=sid, tab=0, control=0, value=True)
+            self.assertTrue(result["complete"])
+            self.assertTrue(result["state"]["fromHandler"])
+            self.assertTrue(s.ok("instance.custom-ui.state", instance="neo-client")["state"]["fromHandler"])
+            result = s.ok("instance.custom-ui.call", sessionId=sid, method="fs.writeFile", arguments=["lunaui/bridge.txt", "bridge"])
+            self.assertTrue(result["value"])
+            self.assertEqual(s.ok("instance.file.read", instance="neo-client", path="lunaui/bridge.txt")["content"], "bridge")
+            result = s.ok("instance.custom-ui.call", sessionId=sid, method="fs.rm", arguments=[".", True])
+            self.assertFalse(result["value"])
+            result = s.ok("instance.custom-ui.call", sessionId=sid, method="fs.writeFile", arguments=["../escape", "bad"])
+            self.assertFalse(result["value"])
+            self.assertFalse(s.execute("instance.custom-ui.trigger", sessionId=sid, tab=99, control=0, value=True)["ok"])
+        finally:
+            s.ok("instance.custom-ui.close", sessionId=sid)
+        self.assertFalse(s.execute("instance.custom-ui.snapshot", sessionId=sid)["ok"])
+        s.ok("instance.file.write", instance="neo-client", path="lunaui/loop.js", content="while(true){}")
+        panel = s.ok("instance.custom-ui.open", instance="neo-client")
+        self.assertTrue(panel["errors"])
+        s.ok("instance.custom-ui.close", sessionId=panel["sessionId"])
+        s.ok("instance.file.remove", instance="neo-client", path="lunaui/loop.js", confirm=True)
 
     def test_18_update_marker_stream(self):
         s = self.sidecar

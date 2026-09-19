@@ -24,6 +24,12 @@
 #include "FileSystem.h"
 #include "net/PasteUpload.h"
 #include "screenshots/ImgurUpload.h"
+#include "GZip.h"
+#include "screenshots/ImgurAlbumCreation.h"
+#include "minecraft/auth/YggdrasilPresets.h"
+#include "net/HttpMetaCache.h"
+#include "tools/MCEditTool.h"
+#include "news/NewsChecker.h"
 #include "screenshots/Screenshot.h"
 #include <BuildConfig.h>
 
@@ -33,6 +39,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QNetworkProxy>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -43,6 +50,10 @@
 #include <QRegularExpression>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QMimeData>
+#include <QImageReader>
+#include <QBuffer>
+#include <QSaveFile>
 #include "updater/ExternalUpdater.h"
 
 namespace {
@@ -106,6 +117,7 @@ QJsonObject worldJson(const World& world)
              { "size", static_cast<qint64>(world.bytes()) },
              { "lastPlayed", world.lastPlayed().toString(Qt::ISODate) },
              { "seed", static_cast<qint64>(world.seed()) },
+             { "seedText", QString::number(world.seed()) },
              { "gameType", world.gameType().toLogString() },
              { "valid", world.isValid() },
              { "directory", world.isOnFS() } };
@@ -348,13 +360,25 @@ QJsonObject listLogs(const QJsonObject& parameters)
         return OperationService::failure(QObject::tr("Instance not found."), 2);
     QJsonArray result;
     for (const auto& root : logRoots(instance)) {
-        const auto entries = QDir(root).entryInfoList(QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase);
+        QStringList filters{ "*.log", "*.log.gz" };
+        if (QDir(root).absolutePath() != QDir(instance->gameRoot()).absolutePath()) filters.append("*.txt");
+        const auto entries = QDir(root).entryInfoList(filters, QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::Name | QDir::IgnoreCase);
         for (const auto& entry : entries)
             result.append(QJsonObject{ { "name", entry.fileName() }, { "path", entry.absoluteFilePath() },
                                        { "size", static_cast<qint64>(entry.size()) },
                                        { "modified", entry.lastModified().toString(Qt::ISODate) } });
     }
     return OperationService::success(result);
+}
+
+QFileInfo logFile(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("file").toString();
+    for (const auto& value : listLogs(parameters).value("data").toArray()) {
+        const QFileInfo file(value.toObject().value("path").toString());
+        if (reference == file.fileName() || QDir::cleanPath(QDir::fromNativeSeparators(reference)) == file.absoluteFilePath()) return file;
+    }
+    return {};
 }
 
 QJsonObject installWorldSafely(MinecraftInstance* instance, const QFileInfo& source, QString name, bool replace)
@@ -410,31 +434,39 @@ QJsonObject proxyInfo()
 
 QJsonObject proxySet(const QJsonObject& p)
 {
-    const auto type = p.value("type").toString("None").toUpper();
+    auto s = APPLICATION->settings();
+    const auto type = p.value("type").toString(s->get("ProxyType").toString()).toUpper();
     if (type != "NONE" && type != "HTTP" && type != "SOCKS5" && type != "DEFAULT")
         return OperationService::failure(QObject::tr("Proxy type must be None, HTTP, SOCKS5, or Default."), 2);
     const auto normalized = type == "NONE" ? QString("None") : type == "DEFAULT" ? QString("Default") : type;
-    const auto host = p.value("host").toString();
-    const auto port = p.value("port").toInt(8080);
+    const auto host = p.value("host").toString(s->get("ProxyAddr").toString()).trimmed();
+    const auto port = p.value("port").toInt(s->get("ProxyPort").toInt());
     if (port < 1 || port > 65535) return OperationService::failure(QObject::tr("Proxy port is invalid."), 2);
-    auto s = APPLICATION->settings();
+    if ((type == "HTTP" || type == "SOCKS5") && host.isEmpty()) return OperationService::failure("Proxy host is required.", 2);
+    const auto user = p.value("username").toString(s->get("ProxyUser").toString());
+    const auto password = p.value("password").toString(s->get("ProxyPass").toString());
     s->set("ProxyType", normalized); s->set("ProxyAddr", host); s->set("ProxyPort", port);
-    s->set("ProxyUser", p.value("username").toString()); s->set("ProxyPass", p.value("password").toString());
-    APPLICATION->updateProxySettings(normalized, host, port, p.value("username").toString(), p.value("password").toString());
+    s->set("ProxyUser", user); s->set("ProxyPass", password);
+    APPLICATION->updateProxySettings(normalized, host, port, user, password);
     return proxyInfo();
 }
 
 QJsonObject proxyTest(const QJsonObject& p)
 {
     const auto url = QUrl(p.value("url").toString("https://api.minecraftservices.com/"));
-    if (!url.isValid() || url.scheme() != "https") return OperationService::failure("Only HTTPS test URLs are allowed.", 2);
+    if (!url.isValid() || url.scheme() != "https" || url.host().isEmpty()) return OperationService::failure("Only HTTPS test URLs are allowed.", 2);
     QNetworkReply* reply = APPLICATION->network()->head(QNetworkRequest(url));
     QEventLoop loop; QTimer timer; timer.setSingleShot(true);
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit); QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
     timer.start(qBound(1000, p.value("timeoutMs").toInt(10000), 60000)); loop.exec();
-    if (!reply->isFinished()) { reply->abort(); return OperationService::success(QJsonObject{ { "reachable", false }, { "timedOut", true }, { "url", url.toString() } }); }
-    return OperationService::success(QJsonObject{ { "reachable", reply->error() == QNetworkReply::NoError }, { "timedOut", false },
-                                                   { "statusCode", reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() }, { "error", reply->errorString() }, { "url", url.toString() } });
+    const bool timedOut = !reply->isFinished();
+    if (timedOut) reply->abort();
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const auto result = OperationService::success(QJsonObject{ { "reachable", !timedOut && status > 0 }, { "timedOut", timedOut },
+        { "statusCode", status }, { "errorCode", static_cast<int>(reply->error()) },
+        { "error", reply->error() == QNetworkReply::NoError ? QString() : reply->errorString() }, { "url", url.toString() } });
+    reply->deleteLater();
+    return result;
 }
 
 QSettings updateSettings()
@@ -498,21 +530,33 @@ QString updaterPath()
     return QDir(APPLICATION->root()).filePath(name);
 }
 
-QJsonObject updateCheck()
+QJsonObject updateCheck(LauncherApi& api, bool releases = false)
 {
     const auto updater = updaterPath();
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
     QProcess process;
     auto settings = updateSettings();
-    QStringList arguments{ "--check-only", "--dir", APPLICATION->dataRoot(), "--debug" };
+    QStringList arguments{ releases ? "--json-releases" : "--check-only", "--dir", APPLICATION->dataRoot(), "--debug" };
     if (settings.value("allow_beta", false).toBool()) arguments.append("--pre-release");
-    process.start(updater, arguments);
-    if (!process.waitForStarted(5000)) return OperationService::failure(process.errorString());
-    if (!process.waitForFinished(60000)) { process.kill(); process.waitForFinished(5000); return OperationService::failure("The updater check timed out."); }
+    QEventLoop loop;
+    QTimer timeout, cancellation; timeout.setSingleShot(true); cancellation.setInterval(100);
+    bool timedOut = false;
+    QObject::connect(&process, &QProcess::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&process, &QProcess::errorOccurred, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, [&] { timedOut = true; process.kill(); loop.quit(); });
+    QObject::connect(&cancellation, &QTimer::timeout, &loop, [&] { if (api.isCancellationRequested()) { process.kill(); loop.quit(); } });
+    process.start(updater, arguments); timeout.start(60000); cancellation.start(); loop.exec();
+    if (process.state() != QProcess::NotRunning) { process.kill(); process.waitForFinished(5000); }
+    if (timedOut || api.isCancellationRequested()) return OperationService::failure(timedOut ? "Updater check timed out." : "Updater check cancelled.");
+    if (process.error() == QProcess::FailedToStart) return OperationService::failure(process.errorString());
     const auto output = QString::fromLocal8Bit(process.readAllStandardOutput());
     const auto error = QString::fromLocal8Bit(process.readAllStandardError());
     if (process.exitStatus() != QProcess::NormalExit || (process.exitCode() != 0 && process.exitCode() != 100))
         return OperationService::failure("Updater check failed: " + error);
+    if (releases) {
+        const auto document = QJsonDocument::fromJson(output.toUtf8());
+        return document.isArray() ? OperationService::success(document.array()) : OperationService::failure("Updater returned an invalid release catalog.");
+    }
     settings.setValue("last_check", QDateTime::currentDateTime().toString(Qt::ISODate)); settings.sync();
     const auto lines = output.split('\n');
     return OperationService::success(QJsonObject{ { "exitCode", process.exitCode() }, { "available", process.exitCode() == 100 },
@@ -531,12 +575,14 @@ QJsonObject updateApply(const QJsonObject& p)
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
     QProcess process;
     auto settings = updateSettings();
-    QStringList arguments{ "--dir", APPLICATION->dataRoot(), "--install-version", tag };
+    QStringList arguments{ "--dir", APPLICATION->dataRoot(), "--install-version", tag, "--headless", "--wait-pid", QString::number(QCoreApplication::applicationPid()) };
+    if (!p.value("assetName").toString().isEmpty()) arguments.append({ "--asset", p.value("assetName").toString() });
     if (settings.value("allow_beta", false).toBool()) arguments.append("--pre-release");
+    if (p.value("allowDowngrade").toBool()) arguments.append("--allow-downgrade");
     const auto started = process.startDetached(updater, arguments);
     if (!started) return OperationService::failure("The updater could not be started.");
     return OperationService::success(QJsonObject{ { "started", true }, { "versionTag", tag }, { "updater", updater },
-        { "shutdownRequired", true }, { "externalUpdaterUi", true } });
+        { "shutdownRequired", true }, { "externalUpdaterUi", false }, { "systemInstallerMayOpen", true }, { "restartByFrontend", true } });
 }
 
 QJsonObject readLog(const QJsonObject& parameters)
@@ -544,16 +590,28 @@ QJsonObject readLog(const QJsonObject& parameters)
     auto instance = findInstance(parameters.value("instance").toString());
     if (!instance)
         return OperationService::failure(QObject::tr("Instance not found."), 2);
-    const auto file = safeFileInRoots(parameters.value("file").toString(), logRoots(instance));
+    const auto file = logFile(parameters);
     if (!file.exists())
         return OperationService::failure(QObject::tr("Log file not found: %1").arg(parameters.value("file").toString()), 2);
     QFile input(file.absoluteFilePath());
     if (!input.open(QIODevice::ReadOnly))
         return OperationService::failure(QObject::tr("Could not read log file: %1").arg(input.errorString()));
     const auto maxBytes = qBound<qint64>(1, parameters.value("maxBytes").toInteger(1024 * 1024), qint64(16 * 1024 * 1024));
+    QByteArray bytes;
+    bool truncated = false;
+    if (file.fileName().endsWith(".gz")) {
+        const auto error = GZip::readGzFileByBlocks(&input, [&](const QByteArray& block) {
+            const auto available = maxBytes - bytes.size();
+            bytes.append(block.first(qMin<qint64>(available, block.size())));
+            truncated = block.size() > available;
+            return !truncated;
+        });
+        if (!error.isEmpty()) return OperationService::failure(error);
+    } else {
+        bytes = input.read(maxBytes); truncated = !input.atEnd();
+    }
     return OperationService::success(QJsonObject{ { "path", file.absoluteFilePath() },
-                                                  { "content", QString::fromUtf8(input.read(maxBytes)) },
-                                                  { "truncated", !input.atEnd() } });
+        { "content", QString::fromUtf8(bytes) }, { "truncated", truncated }, { "compressed", file.fileName().endsWith(".gz") } });
 }
 
 QJsonObject deleteLog(const QJsonObject& parameters, bool clear)
@@ -565,11 +623,10 @@ QJsonObject deleteLog(const QJsonObject& parameters, bool clear)
         return OperationService::failure(QObject::tr("Instance not found."), 2);
     QList<QFileInfo> files;
     if (parameters.contains("file")) {
-        const auto file = safeFileInRoots(parameters.value("file").toString(), logRoots(instance));
+        const auto file = logFile(parameters);
         if (file.exists()) files.append(file);
     } else {
-        for (const auto& root : logRoots(instance))
-            files.append(QDir(root).entryInfoList(QDir::Files | QDir::Readable));
+        for (const auto& entry : listLogs(parameters).value("data").toArray()) files.append(QFileInfo(entry.toObject().value("path").toString()));
     }
     if (files.isEmpty())
         return OperationService::failure(QObject::tr("No matching log files found."), 2);
@@ -582,20 +639,19 @@ QJsonObject deleteLog(const QJsonObject& parameters, bool clear)
             ++changed;
         }
     }
-    return OperationService::success(QJsonObject{ { "changed", changed }, { "cleared", clear } });
+    return OperationService::success(QJsonObject{ { "changed", changed }, { "cleared", clear }, { "complete", changed == files.size() }, { "failed", files.size() - changed } });
 }
 
 QJsonObject uploadLog(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
 {
     QString content = parameters.value("content").toString();
     if (content.isEmpty() && parameters.contains("file")) {
-        auto instance = findInstance(parameters.value("instance").toString());
-        if (!instance)
-            return OperationService::failure(QObject::tr("Instance not found."), 2);
-        const auto file = safeFileInRoots(parameters.value("file").toString(), logRoots(instance));
-        if (!file.exists())
-            return OperationService::failure(QObject::tr("Log file not found."), 2);
-        content = QString::fromUtf8(FS::read(file.absoluteFilePath()));
+        auto request = parameters;
+        request.insert("maxBytes", 16 * 1024 * 1024);
+        const auto read = readLog(request);
+        if (!read.value("ok").toBool()) return read;
+        if (read.value("data").toObject().value("truncated").toBool()) return OperationService::failure("Log exceeds the upload limit (16 MiB).", 2);
+        content = read.value("data").toObject().value("content").toString();
     }
     if (content.isEmpty())
         return OperationService::failure(QObject::tr("Either content or file is required."), 2);
@@ -627,6 +683,39 @@ QJsonObject uploadScreenshot(LauncherApi& api, const QJsonObject& parameters, Us
     if (!waitForAccountTask(job.get(), interaction, &error, api))
         return OperationService::failure(error);
     return OperationService::success(QJsonObject{ { "path", file.absoluteFilePath() }, { "url", shot->m_url }, { "id", shot->m_imgurId } });
+}
+
+QJsonObject uploadScreenshotAlbum(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance) return OperationService::failure("Instance not found.", 2);
+    const auto files = parameters.value("files").toArray();
+    if (files.isEmpty() || files.size() > 100) return OperationService::failure("Select between 1 and 100 screenshots.", 2);
+    const auto root = QDir(instance->gameRoot()).filePath("screenshots");
+    QList<ScreenShot::Ptr> shots;
+    auto uploads = makeShared<NetJob>("API screenshot uploads", APPLICATION->network());
+    for (const auto& name : files) {
+        const auto file = safeFileInRoots(name.toString(), { root });
+        if (!file.isFile()) return OperationService::failure("Screenshot not found: " + name.toString(), 2);
+        auto shot = std::make_shared<ScreenShot>(file);
+        shots.append(shot); uploads->addNetAction(ImgurUpload::make(shot));
+    }
+    QString error;
+    bool complete = waitForAccountTask(uploads.get(), interaction, &error, api);
+    QJsonArray images;
+    for (const auto& shot : shots) if (!shot->m_url.isEmpty()) images.append(QJsonObject{ { "url", shot->m_url }, { "id", shot->m_imgurId } });
+    QJsonObject result{ { "images", images }, { "complete", false }, { "error", error } };
+    if (!complete) return OperationService::success(result);
+    auto albumResult = std::make_shared<ImgurAlbumCreation::Result>();
+    auto album = makeShared<NetJob>("API screenshot album", APPLICATION->network());
+    album->addNetAction(ImgurAlbumCreation::make(albumResult, shots));
+    complete = waitForAccountTask(album.get(), interaction, &error, api) && !albumResult->id.isEmpty();
+    result.insert("complete", complete); result.insert("error", error);
+    if (complete) {
+        result.insert("id", albumResult->id); result.insert("url", "https://imgur.com/a/" + albumResult->id);
+        result.insert("deleteHash", albumResult->deleteHash);
+    }
+    return OperationService::success(result);
 }
 
 QJsonObject listScreenshots(const QJsonObject& parameters)
@@ -690,6 +779,97 @@ QJsonObject launcherUpdateSnapshot() { return updateStatus().value("data").toObj
 
 void registerLauncherApiDomains(LauncherApi& api)
 {
+    api.registerOperation({ "launcher.news", "Load launcher news using the existing feed parser and cache. Content contains HTML to sanitize in the frontend.", objectSchema({}), "launcher" },
+        [&api](const QJsonObject&, UserInteraction& interaction) {
+            class ApiNews : public NewsChecker {
+            public:
+                ApiNews() : NewsChecker(APPLICATION->network(), BuildConfig.NEWS_RSS_URL) {}
+                Task::Ptr task() const { return m_newsNetJob; }
+            } news;
+            news.reloadNews();
+            const auto task = news.task();
+            QString error;
+            if (task && !waitForAccountTask(task.get(), interaction, &error, api)) return OperationService::failure(error);
+            if (!news.getLastLoadErrorMsg().isEmpty()) return OperationService::failure(news.getLastLoadErrorMsg());
+            QJsonArray entries;
+            for (const auto& entry : news.getNewsEntries()) entries.append(QJsonObject{ { "title", entry->title }, { "content", entry->content }, { "url", entry->link } });
+            return OperationService::success(entries);
+        });
+    api.registerOperation({ "launcher.cache.clear", "Evict metadata cache using the same operation as the launcher menu.",
+        objectSchema({ { "confirm", boolProperty("Confirm clearing cached metadata.") } }, { "confirm" }), "launcher", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            if (!p.value("confirm").toBool()) return OperationService::failure("Cache clearing requires confirm=true.", 2);
+            const auto cleared = APPLICATION->metacache()->evictAll(); APPLICATION->metacache()->SaveNow();
+            return cleared ? OperationService::success() : OperationService::failure("Some metadata cache files could not be cleared.");
+        });
+    api.registerOperation({ "instance.world.edit", "Open a world in the configured MCEdit executable.",
+        objectSchema({ { "instance", stringProperty("Instance ID.") }, { "world", stringProperty("World folder name.") } }, { "instance", "world" }), "worlds", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            auto instance = dynamic_cast<MinecraftInstance*>(findInstance(p.value("instance").toString()));
+            if (!instance || instance->isRunning()) return OperationService::failure("A stopped Minecraft instance is required.", 2);
+            auto worlds = instance->worldList(); worlds->update();
+            for (const auto& world : worlds->allWorlds()) {
+                if (world.folderName() != p.value("world").toString()) continue;
+                const auto editor = APPLICATION->mcedit();
+                QString error;
+                if (!editor->check(editor->path(), error)) return OperationService::failure(error);
+                const auto started = QProcess::startDetached(editor->getProgramPath(), { world.container().absoluteFilePath() }, editor->path());
+                return started ? OperationService::success(QJsonObject{ { "started", true } }) : OperationService::failure("MCEdit could not start.");
+            }
+            return OperationService::failure("World not found.", 2);
+        });
+    api.registerOperation({ "settings.import-prism", "Import compatible Prism Launcher settings while retaining Luna-only settings.",
+        objectSchema({ { "confirm", boolProperty("Confirm overwriting matching settings.") } }, { "confirm" }), "settings", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            if (!p.value("confirm").toBool()) return OperationService::failure("Import requires confirm=true.", 2);
+            QString error;
+            const auto count = APPLICATION->importPrismSettings(&error);
+            return count < 0 ? OperationService::failure(error) : OperationService::success(QJsonObject{ { "imported", count } });
+        });
+    for (const QString action : { "list", "add", "edit", "remove" }) {
+        QJsonObject properties{ { "name", stringProperty("Preset name.") }, { "authUrl", stringProperty("Authentication URL.") },
+            { "originalName", stringProperty("Existing custom preset name when renaming; defaults to name.") },
+            { "sessionUrl", stringProperty("Session URL.") }, { "confirm", boolProperty("Confirm removal.") } };
+        for (const auto key : { "authenticateEndpoint", "refreshEndpoint", "validateEndpoint", "profileEndpoint", "oauthTokenEndpoint", "tokenType" })
+            properties.insert(key, stringProperty(QString::fromLatin1(key)));
+        api.registerOperation({ "account.preset." + action, "Manage Yggdrasil authentication presets: " + action + ".", objectSchema(properties), "accounts", action != "list" },
+            [action](const QJsonObject& p, UserInteraction&) {
+                if (action == "list") {
+                    QJsonArray result;
+                    const auto defaults = YggdrasilPresets::getDefaults();
+                    const auto all = YggdrasilPresets::getAllPresets();
+                    for (int row = 0; row < all.size(); ++row) {
+                        const auto& v = all[row];
+                        result.append(QJsonObject{ { "name", v.name }, { "authUrl", v.authUrl }, { "sessionUrl", v.sessionUrl },
+                            { "authenticateEndpoint", v.authenticateEndpoint }, { "refreshEndpoint", v.refreshEndpoint },
+                            { "validateEndpoint", v.validateEndpoint }, { "profileEndpoint", v.profileEndpoint }, { "oauthTokenEndpoint", v.oauthTokenEndpoint },
+                            { "tokenType", v.tokenType == YggdrasilTokenType::OAuth ? "OAuth" : "Standard" }, { "builtin", row < defaults.size() } });
+                    }
+                    return OperationService::success(result);
+                }
+                const auto name = p.value("name").toString().trimmed();
+                if (name.isEmpty()) return OperationService::failure("Preset name is required.", 2);
+                if (action == "remove") {
+                    if (!p.value("confirm").toBool()) return OperationService::failure("Removal requires confirm=true.", 2);
+                    return YggdrasilPresets::removeCustomPreset(name) ? OperationService::success() : OperationService::failure("Custom preset could not be removed.");
+                }
+                const auto auth = QUrl(p.value("authUrl").toString()), session = QUrl(p.value("sessionUrl").toString());
+                for (const auto& url : { auth, session }) if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https"))
+                    return OperationService::failure("Preset authentication and session URLs must be HTTP(S).", 2);
+                const auto tokenType = p.value("tokenType").toString("Standard");
+                if (tokenType != "Standard" && tokenType != "OAuth") return OperationService::failure("tokenType must be Standard or OAuth.", 2);
+                YggdrasilPreset preset;
+                preset.name = name; preset.authUrl = auth.toString(); preset.sessionUrl = session.toString();
+                preset.authenticateEndpoint = p.value("authenticateEndpoint").toString(); preset.refreshEndpoint = p.value("refreshEndpoint").toString();
+                preset.validateEndpoint = p.value("validateEndpoint").toString(); preset.profileEndpoint = p.value("profileEndpoint").toString();
+                preset.oauthTokenEndpoint = p.value("oauthTokenEndpoint").toString(); preset.tokenType = tokenType == "OAuth" ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard;
+                return YggdrasilPresets::addCustomPreset(preset, action == "edit" ? p.value("originalName").toString(name) : QString()) ? OperationService::success() : OperationService::failure("Preset conflicts, does not exist, or could not be saved.");
+            });
+    }
+    api.registerOperation({ "instance.screenshot.upload-album", "Upload selected screenshots and create an Imgur album; partial uploads are returned on failure.",
+        objectSchema({ { "instance", stringProperty("Instance ID.") }, { "files", QJsonObject{ { "type", "array" },
+            { "items", QJsonObject{ { "type", "string" } } }, { "minItems", 1 }, { "maxItems", 100 } } } }, { "instance", "files" }), "screenshots", true },
+        [&api](const QJsonObject& p, UserInteraction& interaction) { return uploadScreenshotAlbum(api, p, interaction); });
     api.registerOperation({ "runtime.info", "Read launcher paths, platform, and optional integration capabilities.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) {
                                const auto caps = APPLICATION->capabilities();
@@ -728,16 +908,33 @@ void registerLauncherApiDomains(LauncherApi& api)
                                            { "beta", boolProperty("Allow pre-release updates.") } }) },
                            [](const QJsonObject& p, UserInteraction&) { return updateConfigure(p); });
     api.registerOperation({ "launcher.update.check", "Run the installed external updater in check-only mode.", objectSchema({}) },
-                           [](const QJsonObject&, UserInteraction&) { return updateCheck(); });
+                           [&api](const QJsonObject&, UserInteraction&) { return updateCheck(api); });
+    api.registerOperation({ "launcher.update.releases", "List releases and compatible assets from the installed updater.", objectSchema({}), "updates" },
+                           [&api](const QJsonObject&, UserInteraction&) { return updateCheck(api, true); });
     api.registerOperation({ "launcher.update.apply", "Start the installed updater to download and apply a selected release.",
-                            objectSchema({ { "versionTag", stringProperty("Release tag returned by launcher.update.check.") } }, { "versionTag" }) },
+                            objectSchema({ { "versionTag", stringProperty("Release tag returned by launcher.update.check.") },
+                                { "allowDowngrade", boolProperty("Allow selecting an older release.") },
+                                { "assetName", stringProperty("Exact release asset name when multiple assets match.") } }, { "versionTag" }) },
                            [](const QJsonObject& p, UserInteraction&) { return updateApply(p); });
     api.registerOperation({ "desktop.open-path", "Open a local path using the operating system desktop handler.",
                             objectSchema({ { "path", stringProperty("Local file or directory path.") }, { "select", boolProperty("Select the item in the file manager.") } }, { "path" }) },
                            [](const QJsonObject& p, UserInteraction&) {
                                const QFileInfo path(p.value("path").toString());
                                if (!path.exists()) return OperationService::failure(QObject::tr("Path does not exist."), 2);
-                               if (p.value("select").toBool()) return OperationService::failure("Selecting an item is not supported by the launcher desktop handler; use the frontend file manager integration.", 2);
+                               if (p.value("select").toBool()) {
+                                   bool started = false;
+#ifdef Q_OS_WIN
+                                   started = QProcess::startDetached("explorer.exe", { "/select,", QDir::toNativeSeparators(path.absoluteFilePath()) });
+#elif defined(Q_OS_MACOS)
+                                   started = QProcess::startDetached("open", { "-R", path.absoluteFilePath() });
+#else
+                                   QProcess process;
+                                   process.start("gdbus", { "call", "--session", "--dest", "org.freedesktop.FileManager1", "--object-path", "/org/freedesktop/FileManager1",
+                                       "--method", "org.freedesktop.FileManager1.ShowItems", "['" + QUrl::fromLocalFile(path.absoluteFilePath()).toString(QUrl::FullyEncoded) + "']", "" });
+                                   started = process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+#endif
+                                   return started ? OperationService::success(QJsonObject{ { "path", path.absoluteFilePath() }, { "selected", true } }) : OperationService::failure("File manager could not select the item.");
+                               }
                                const auto opened = DesktopServices::openPath(path);
                                return opened ? OperationService::success(QJsonObject{ { "path", path.absoluteFilePath() }, { "opened", true } }) : OperationService::failure("The desktop handler could not open the path.");
                            });
@@ -749,14 +946,33 @@ void registerLauncherApiDomains(LauncherApi& api)
                                if (url.scheme() != "https" && url.scheme() != "http") return OperationService::failure("Only HTTP(S) URLs are accepted.", 2);
                                return DesktopServices::openUrl(url) ? OperationService::success(QJsonObject{ { "url", url.toString() }, { "opened", true } }) : OperationService::failure("The desktop handler could not open the URL.");
                            });
-    api.registerOperation({ "desktop.clipboard.write", "Copy text to the system clipboard when the platform clipboard is available.",
-        objectSchema({ { "text", stringProperty("Text to copy.") } }, { "text" }), "desktop", true },
+    api.registerOperation({ "desktop.clipboard.write", "Copy text, an image, or local file URLs to the system clipboard.",
+        objectSchema({ { "text", stringProperty("Text to copy.") }, { "imagePath", stringProperty("Local image path.") },
+            { "files", QJsonObject{ { "type", "array" }, { "items", QJsonObject{ { "type", "string" } } }, { "minItems", 1 }, { "maxItems", 256 } } } }), "desktop", true },
         [](const QJsonObject& p, UserInteraction&) {
+            if (int(p.contains("text")) + int(p.contains("imagePath")) + int(p.contains("files")) != 1)
+                return OperationService::failure("Provide exactly one of text, imagePath, or files.", 2);
             if (QGuiApplication::platformName() == "offscreen" || QGuiApplication::platformName() == "minimal")
                 return OperationService::failure("System clipboard is unavailable on this headless platform; use the frontend clipboard.", 2);
             const auto clipboard = QGuiApplication::clipboard();
             if (!clipboard) return OperationService::failure("System clipboard is unavailable.", 2);
-            clipboard->setText(p.value("text").toString());
+            if (p.contains("text")) clipboard->setText(p.value("text").toString());
+            else if (p.contains("imagePath")) {
+                QImageReader reader(p.value("imagePath").toString());
+                const auto size = reader.size();
+                if (!size.isValid() || qint64(size.width()) * size.height() > 32 * 1024 * 1024) return OperationService::failure("Image is invalid or too large.", 2);
+                const auto image = reader.read();
+                if (image.isNull()) return OperationService::failure(reader.errorString());
+                clipboard->setImage(image);
+            } else {
+                QList<QUrl> urls;
+                for (const auto& entry : p.value("files").toArray()) {
+                    const QFileInfo file(entry.toString());
+                    if (!file.exists()) return OperationService::failure("Clipboard file does not exist.", 2);
+                    urls.append(QUrl::fromLocalFile(file.absoluteFilePath()));
+                }
+                auto mime = new QMimeData; mime->setUrls(urls); clipboard->setMimeData(mime);
+            }
             return OperationService::success(QJsonObject{ { "copied", true } });
         });
 
@@ -1071,6 +1287,48 @@ void registerLauncherApiDomains(LauncherApi& api)
                             objectSchema({ { "instance", stringProperty("Instance ID or name.") }, { "file", stringProperty("Optional log file.") },
                                            { "confirm", boolProperty("Confirm deletion.") } }, { "instance", "confirm" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return deleteLog(parameters, false); });
+    for (const QString action : { "read", "import", "rename" }) {
+        QJsonObject properties{ { "instance", stringProperty("Instance ID.") }, { "file", stringProperty("Existing screenshot name or path.") },
+            { "source", stringProperty("Local image to import.") }, { "name", stringProperty("Destination screenshot filename.") } };
+        QJsonArray required{ "instance" };
+        if (action == "import") required.append("source"); else required.append("file");
+        if (action != "read") required.append("name");
+        api.registerOperation({ "instance.screenshot." + action, "Screenshot operation: " + action + ".", objectSchema(properties, required), "screenshots", action != "read" },
+            [action](const QJsonObject& p, UserInteraction&) {
+                auto instance = findInstance(p.value("instance").toString());
+                if (!instance) return OperationService::failure("Instance not found.", 2);
+                const auto root = QDir(instance->gameRoot()).filePath("screenshots");
+                if (QFileInfo(root).isSymLink()) return OperationService::failure("Screenshot directory must not be a link.", 2);
+                const auto source = action == "import" ? QFileInfo(p.value("source").toString()) : safeFileInRoots(p.value("file").toString(), { root });
+                if (!source.isFile() || source.size() > 32 * 1024 * 1024) return OperationService::failure("Screenshot not found or exceeds 32 MiB.", 2);
+                QImageReader reader(source.absoluteFilePath());
+                const auto dimensions = reader.size();
+                if (!reader.canRead() || !dimensions.isValid() || qint64(dimensions.width()) * dimensions.height() > 32 * 1024 * 1024)
+                    return OperationService::failure("Invalid or oversized screenshot.", 2);
+                QFile input(source.absoluteFilePath());
+                if (!input.open(QIODevice::ReadOnly)) return OperationService::failure(input.errorString());
+                if (action == "read") return OperationService::success(QJsonObject{ { "content", QString::fromLatin1(input.readAll().toBase64()) },
+                    { "encoding", "base64" }, { "format", QString::fromLatin1(reader.format()) }, { "width", dimensions.width() }, { "height", dimensions.height() } });
+                const auto name = p.value("name").toString();
+                static const QRegularExpression invalid(R"([<>:"/\\|?*\x00-\x1f])");
+                static const QRegularExpression reserved(R"(^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])($|\.))", QRegularExpression::CaseInsensitiveOption);
+                if (name.isEmpty() || name == "." || name == ".." || name.endsWith('.') || name.endsWith(' ') || invalid.match(name).hasMatch() || reserved.match(name).hasMatch() ||
+                    !QStringList{ "png", "jpg", "jpeg" }.contains(QFileInfo(name).suffix().toLower())) return OperationService::failure("Invalid screenshot filename.", 2);
+                const auto destination = QDir(root).filePath(name);
+                if (QFileInfo::exists(destination) || QFileInfo(destination).isSymLink() || !QDir().mkpath(root)) return OperationService::failure("Screenshot destination exists or cannot be created.", 2);
+                if (action == "rename") {
+                    input.close();
+                    reader.setDevice(nullptr);
+                    if (!QFile::rename(source.absoluteFilePath(), destination)) return OperationService::failure("Could not rename screenshot.");
+                } else {
+                    QSaveFile output(destination);
+                    if (!output.open(QIODevice::WriteOnly)) return OperationService::failure(output.errorString());
+                    while (!input.atEnd()) { const auto bytes = input.read(1024 * 1024); if (bytes.isEmpty() || output.write(bytes) != bytes.size()) return OperationService::failure("Could not copy screenshot."); }
+                    if (!output.commit()) return OperationService::failure(output.errorString());
+                }
+                return OperationService::success(QJsonObject{ { "path", destination }, { "name", name } });
+            });
+    }
     api.registerOperation({ "instance.screenshot.list", "List screenshots in an instance.",
                             objectSchema({ { "instance", stringProperty("Instance ID or name.") } }, { "instance" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return listScreenshots(parameters); });

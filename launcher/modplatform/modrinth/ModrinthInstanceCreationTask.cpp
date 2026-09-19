@@ -1,4 +1,5 @@
 #include "ModrinthInstanceCreationTask.h"
+#include "cli/ScopedUserInteraction.h"
 
 #include "Application.h"
 #include "FileSystem.h"
@@ -133,6 +134,11 @@ bool ModrinthCreationTask::updateInstance()
             scheduleToDelete(m_parent, old_minecraft_dir, entry);
         }
     } else {
+        if (APPLICATION->isHeadless()) {
+            if (!headlessConfirm(tr("The old pack index is missing; updating may duplicate files. Continue?"))) {
+                m_abort = true; return false;
+            }
+        } else {
         // We don't have an old index file, so we may duplicate stuff!
         auto dialog = CustomMessageBox::selectable(m_parent, tr("No index file."),
                                                    tr("We couldn't find a suitable index file for the older version. This may cause some "
@@ -142,6 +148,7 @@ bool ModrinthCreationTask::updateInstance()
         if (dialog->exec() == QDialog::DialogCode::Rejected) {
             m_abort = true;
             return false;
+        }
         }
     }
 
@@ -416,7 +423,15 @@ bool ModrinthCreationTask::parseManifest(const QString& index_path,
             }
 
             if (!optionalFiles.empty()) {
-                if (show_optional_dialog && !APPLICATION->isHeadless()) {
+                if (show_optional_dialog && APPLICATION->isHeadless() && activeUserInteraction) {
+                    for (auto file : optionalFiles) {
+                        const auto choice = activeUserInteraction->select(tr("Enable optional file %1?").arg(file.path), QJsonArray{ "Enable", "Disable", "Cancel import" });
+                        if (!choice || *choice == 2) { emitAborted(); return false; }
+                        if (*choice == 0) file.required = true;
+                        else file.path += ".disabled";
+                        files.push_back(file);
+                    }
+                } else if (show_optional_dialog && !APPLICATION->isHeadless()) {
                     QStringList oFiles;
                     for (auto file : optionalFiles)
                         oFiles.push_back(file.path);

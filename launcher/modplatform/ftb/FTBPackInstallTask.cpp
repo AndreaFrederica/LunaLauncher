@@ -50,6 +50,7 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include "cli/HeadlessBlockedMods.h"
 
 namespace FTB {
 
@@ -207,6 +208,12 @@ void PackInstallTask::onResolveModsSucceeded()
     m_modIdResolverTask.reset();
 
     if (anyBlocked) {
+        if (APPLICATION->isHeadless()) {
+            QString error;
+            if (resolveHeadlessBlockedMods(m_blockedMods, "sha1", error)) createInstance();
+            else emitFailed(error);
+            return;
+        }
         qDebug() << "Blocked files found, displaying file list";
 
         BlockedModsDialog message_dialog(m_parent, tr("Blocked files found"),

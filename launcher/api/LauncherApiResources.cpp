@@ -20,6 +20,7 @@
 #include "InstanceList.h"
 #include "api/ApiTypes.h"
 #include "api/LauncherApi.h"
+#include "api/ResourceModelSupport.h"
 #include "cli/OperationService.h"
 #include "cli/UserInteraction.h"
 #include "java/JavaInstall.h"
@@ -76,9 +77,10 @@ BaseInstance* findInstance(const QString& reference)
     return instance;
 }
 
-std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind)
+std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind, const QString& world = {})
 {
     kind = kind.toLower().remove('-').remove('_');
+    if (!world.isEmpty()) return ApiSupport::worldDataPacks(instance, kind, world);
     if (auto server = dynamic_cast<ServerInstance*>(instance)) {
         if (kind == "mods") return server->loaderModList();
         if (kind == "plugins") return server->pluginList();
@@ -234,7 +236,7 @@ QJsonObject inspectResource(const QJsonObject& parameters)
     const auto instance = findInstance(parameters.value("instance").toString());
     if (!instance)
         return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
-    const auto model = findResourceModel(instance, parameters.value("kind").toString());
+    const auto model = findResourceModel(instance, parameters.value("kind").toString(), parameters.value("world").toString());
     if (!model)
         return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
                                          2);
@@ -254,7 +256,7 @@ QJsonObject updateResources(const QJsonObject& parameters, UserInteraction& inte
         return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("Resources cannot be updated while the instance is running."), 2);
-    const auto model = findResourceModel(instance, parameters.value("kind").toString());
+    const auto model = findResourceModel(instance, parameters.value("kind").toString(), parameters.value("world").toString());
     if (!model)
         return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
                                          2);
@@ -484,7 +486,30 @@ QJsonObject diagnoseJava(LauncherApi& api, const QJsonObject& parameters, UserIn
 
 void registerLauncherApiResourceOperations(LauncherApi& api)
 {
+    api.registerOperation({ "java.repair", "Diagnose Java, scan installed runtimes, and select a compatible working runtime. Returns repaired=false if a download or manual memory change is required.",
+        objectSchema({ { "scope", stringProperty("launcher or instance.") }, { "instance", stringProperty("Instance ID for instance scope.") } }), "java", true },
+        [&api](const QJsonObject& p, UserInteraction& interaction) {
+            const auto initial = diagnoseJava(api, p, interaction);
+            if (!initial.value("ok").toBool()) return initial;
+            auto result = initial.value("data").toObject();
+            if (result.value("compatible").toBool()) { result.insert("repaired", true); result.insert("changed", false); return OperationService::success(result); }
+            const auto scan = refreshJava({}, interaction, api);
+            if (!scan.value("ok").toBool()) return scan;
+            for (const auto& candidate : scan.value("data").toArray()) {
+                if (api.isCancellationRequested()) return OperationService::failure("Java repair cancelled.");
+                auto probeRequest = p; probeRequest.insert("path", candidate.toObject().value("path"));
+                const auto probe = diagnoseJava(api, probeRequest, interaction);
+                if (!probe.value("data").toObject().value("compatible").toBool()) continue;
+                const auto selected = selectJava(probeRequest, interaction);
+                if (!selected.value("ok").toBool()) return selected;
+                result = probe.value("data").toObject(); result.insert("repaired", true); result.insert("changed", true);
+                return OperationService::success(result);
+            }
+            result.insert("repaired", false); result.insert("changed", false); result.insert("availableRuntimes", scan.value("data"));
+            return OperationService::success(result);
+        });
     const auto resourceRef = QJsonObject{ { "instance", stringProperty("Instance ID, managed name, or display name.") },
+                                          { "world", stringProperty("Optional world folder for datapacks.") },
                                           { "kind", stringProperty("Resource kind (mods, resourcepacks, shaderpacks, ...).") },
                                           { "resource", stringProperty("Resource ID, name, or file name.") } };
     api.registerOperation({ "resource.inspect", "Inspect an installed resource and its metadata.",

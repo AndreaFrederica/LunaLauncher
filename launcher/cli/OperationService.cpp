@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "OperationService.h"
+#include "api/ResourceModelSupport.h"
+#include "cli/ScopedUserInteraction.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -131,9 +133,10 @@ MinecraftAccountPtr findAccount(const QString& reference, int* row = nullptr)
     return nullptr;
 }
 
-std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind)
+std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind, const QString& world = {})
 {
     kind = kind.toLower().remove('-').remove('_');
+    if (!world.isEmpty()) return ApiSupport::worldDataPacks(instance, kind, world);
     if (auto server = dynamic_cast<ServerInstance*>(instance)) {
         if (kind == "mods") return server->loaderModList();
         if (kind == "plugins") return server->pluginList();
@@ -325,10 +328,30 @@ QJsonObject OperationService::failure(const QString& message, int exitCode)
 
 QJsonObject OperationService::execute(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
+    ScopedUserInteraction interactionScope(interaction);
     if (operation == "instance.list")
         return listInstances();
     if (operation == "account.list")
         return listAccounts();
+    if (operation == "account.profile.create" || operation == "account.profile.check-name") {
+        const auto account = findAccount(parameters.value("account").toString());
+        const auto name = parameters.value("name").toString();
+        if (!account || account->accountType() != AccountType::MSA || account->accessToken().isEmpty()) return failure("An authenticated Microsoft account is required.", 2);
+        if (!QRegularExpression("^[A-Za-z0-9_]{3,16}$").match(name).hasMatch()) return failure("Invalid Minecraft profile name.", 2);
+        if (operation == "account.profile.create") {
+            if (account->hasProfile()) return failure("This account already has a Java profile.", 2);
+            const auto result = setupMicrosoftProfile(account, name, interaction);
+            APPLICATION->accounts()->saveList(); return result;
+        }
+        auto [request, response] = Net::Download::makeByteArray(QUrl("https://api.minecraftservices.com/minecraft/profile/name/" + name + "/available"));
+        request->addHeaderProxy(std::make_unique<Net::RawHeaderProxy>(QList<Net::HeaderPair>{ { "Authorization", "Bearer " + account->accessToken().toUtf8() } }));
+        request->setNetwork(APPLICATION->network());
+        QString error;
+        if (!waitForTask(request.get(), interaction, &error)) return failure(error);
+        const auto status = QJsonDocument::fromJson(*response).object().value("status").toString();
+        if (status.isEmpty()) return failure("Invalid profile availability response.");
+        return success(QJsonObject{ { "name", name }, { "status", status }, { "available", status == "AVAILABLE" } });
+    }
     if (operation == "account.set-default")
         return setDefaultAccount(parameters);
     if (operation == "account.remove")
@@ -628,7 +651,7 @@ QJsonObject OperationService::listResources(const QJsonObject& parameters)
     if (!instance)
         return failure(tr("Minecraft instance not found: %1").arg(reference), 2);
     const auto kind = parameters.value("kind").toString();
-    const auto model = findResourceModel(instance, kind);
+    const auto model = findResourceModel(instance, kind, parameters.value("world").toString());
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
 
@@ -658,7 +681,7 @@ QJsonObject OperationService::installResource(const QJsonObject& parameters, Use
     if (instance->isRunning())
         return failure(tr("Resources cannot be installed while the instance is running."), 2);
     const auto kind = parameters.value("kind").toString();
-    const auto model = findResourceModel(instance, kind);
+    const auto model = findResourceModel(instance, kind, parameters.value("world").toString());
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
     const auto source = parameters.value("source").toString();
@@ -698,7 +721,7 @@ QJsonObject OperationService::setResourceEnabled(const QJsonObject& parameters, 
     if (instance->isRunning())
         return failure(tr("Resources cannot be changed while the instance is running."), 2);
     const auto kind = parameters.value("kind").toString();
-    const auto model = findResourceModel(instance, kind);
+    const auto model = findResourceModel(instance, kind, parameters.value("world").toString());
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
     const auto resource = findResource(model, parameters.value("resource").toString());
@@ -722,7 +745,7 @@ QJsonObject OperationService::removeResource(const QJsonObject& parameters)
     if (instance->isRunning())
         return failure(tr("Resources cannot be removed while the instance is running."), 2);
     const auto kind = parameters.value("kind").toString();
-    const auto model = findResourceModel(instance, kind);
+    const auto model = findResourceModel(instance, kind, parameters.value("world").toString());
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
     const auto resource = findResource(model, parameters.value("resource").toString());
@@ -974,7 +997,7 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
     } else if (type == "microsoft") {
         account = MinecraftAccount::createBlankMSA();
     } else if (type == "yggdrasil" || type == "unified-pass") {
-        const auto password = interaction.input(tr("Password"), true);
+        const auto password = parameters.contains("password") ? std::optional<QString>(parameters.value("password").toString()) : interaction.input(tr("Password"), true);
         if (!password)
             return failure(tr("A password is required; use an interactive terminal or --password-stdin."), 2);
         if (type == "yggdrasil") {
@@ -983,7 +1006,10 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
             if (authUrl.isEmpty() || sessionUrl.isEmpty())
                 return failure(tr("Yggdrasil login requires authUrl and sessionUrl."), 2);
             account =
-                MinecraftAccount::createYggdrasil(username, *password, authUrl, sessionUrl, parameters.value("sourceName").toString());
+                MinecraftAccount::createYggdrasil(username, *password, authUrl, sessionUrl, parameters.value("sourceName").toString(),
+                    parameters.value("refreshEndpoint").toString(), parameters.value("validateEndpoint").toString(),
+                    parameters.value("authenticateEndpoint").toString(), parameters.value("profileEndpoint").toString(),
+                    parameters.value("oauthTokenEndpoint").toString(), parameters.value("tokenType").toString() == "OAuth" ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard);
         } else {
             const auto serverId = parameters.value("serverId").toString();
             if (serverId.isEmpty())
@@ -1193,20 +1219,48 @@ QJsonObject OperationService::launchInstance(const QJsonObject& parameters, User
         return failure(tr("Instance not found: %1").arg(instanceId), 2);
 
     MinecraftAccountPtr account;
+    const auto modeName = parameters.value("mode").toString("normal");
+    if (!QStringList{ "normal", "offline", "demo" }.contains(modeName)) return failure("mode must be normal, offline, or demo.", 2);
     const auto profile = parameters.value("profile").toString();
-    if (!profile.isEmpty())
-        account = APPLICATION->accounts()->getAccountByProfileName(profile);
-    else
+    const auto accountId = parameters.value("account").toString();
+    if (!accountId.isEmpty() || !profile.isEmpty()) {
+        account = findAccount(accountId.isEmpty() ? profile : accountId);
+        if (!account) return failure("Selected account not found.", 2);
+    } else {
+        if (instance->settings()->get("UseAccountForInstance").toBool()) account = findAccount(instance->settings()->get("InstanceAccountId").toString());
+        if (!account)
         account = APPLICATION->accounts()->defaultAccount();
+    }
 
     const auto offlineName = parameters.value("offlineName").toString();
-    auto mode = LaunchMode::Normal;
+    auto mode = modeName == "demo" ? LaunchMode::Demo : modeName == "offline" ? LaunchMode::Offline : LaunchMode::Normal;
     if (!offlineName.isEmpty()) {
-        mode = LaunchMode::Offline;
-        account = MinecraftAccount::createOffline(offlineName);
+        if (!QRegularExpression("^[A-Za-z0-9_]{1,16}$").match(offlineName).hasMatch()) return failure("Invalid offline player name.", 2);
+        if (mode != LaunchMode::Demo) { mode = LaunchMode::Offline; account = MinecraftAccount::createOffline(offlineName); }
     }
-    if (!account)
+    if (!account && mode != LaunchMode::Demo && offlineName.isEmpty()) {
+        QJsonArray choices;
+        auto accounts = APPLICATION->accounts();
+        for (int i = 0; i < accounts->count(); ++i) choices.append(QJsonObject{ { "id", accounts->at(i)->internalId() }, { "name", accounts->at(i)->profileName() } });
+        if (!choices.isEmpty()) {
+            const auto selected = interaction.select("Choose the account to launch", choices);
+            if (!selected) return failure("Account selection cancelled.", 2);
+            if (*selected >= 0 && *selected < accounts->count()) account = accounts->at(*selected);
+        }
+    }
+    if (!account && mode != LaunchMode::Demo)
         return failure(tr("No account is available. Log in or pass an offline player name."), 2);
+    if (account && account->accountType() == AccountType::MSA && !account->hasProfile() && mode == LaunchMode::Normal) {
+        auto name = parameters.value("minecraftProfileName").toString();
+        if (name.isEmpty()) {
+            const auto input = interaction.input("Choose your Minecraft Java profile name", false);
+            if (!input) return failure("Profile creation cancelled.", 2);
+            name = *input;
+        }
+        const auto result = setupMicrosoftProfile(account, name, interaction);
+        if (!result.value("ok").toBool()) return result;
+        APPLICATION->accounts()->saveList();
+    }
 
     MinecraftTarget::Ptr target;
     if (!parameters.value("server").toString().isEmpty())
@@ -1215,6 +1269,12 @@ QJsonObject OperationService::launchInstance(const QJsonObject& parameters, User
         target.reset(new MinecraftTarget(MinecraftTarget::parse(parameters.value("world").toString(), true)));
 
     auto controller = new LaunchController();
+    const auto profilerName = parameters.value("profiler").toString();
+    if (!profilerName.isEmpty()) {
+        const auto profiler = APPLICATION->profilers().value(profilerName);
+        if (!profiler) { delete controller; return failure(tr("Unknown profiler."), 2); }
+        controller->setProfiler(profiler.get());
+    }
     controller->setParent(this);
     controller->setHeadless(true);
     controller->setInstance(instance);
@@ -1300,11 +1360,13 @@ QJsonObject OperationService::launchInstance(const QJsonObject& parameters, User
     connect(controller, &LaunchController::logLine, this, [&interaction](const QString& line) { interaction.status(line); });
     connect(controller, &Task::finished, &loop, &QEventLoop::quit);
     m_currentTask = controller;
+    emit taskStarted(controller);
     controller->start();
     if (!controller->isFinished() && (!started || parameters.value("wait").toBool()))
         loop.exec();
 
     const bool wait = parameters.value("wait").toBool();
+    emit taskFinished(controller);
     if (!wait && started) {
         controller->deleteLater();
         m_currentTask.clear();

@@ -47,6 +47,10 @@ void PackInstallTask::executeTask()
 
 void PackInstallTask::copySettings()
 {
+    if (!m_copyFuture.result()) {
+        emitFailed(tr("Could not copy the FTB App instance files."));
+        return;
+    }
     setStatus(tr("Copying settings..."));
     progress(2, 2);
 

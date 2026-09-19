@@ -8,6 +8,15 @@
 #include "minecraft/online/YukariConnect.h"
 #include "minecraft/online/YukariConnectDownload.h"
 #include "net/Aria2Manager.h"
+#include "Application.h"
+#include "InstanceList.h"
+#include "minecraft/auth/AuthlibInjector.h"
+#include "minecraft/auth/AuthlibInjectorDownload.h"
+#include "minecraft/auth/Nide8Auth.h"
+#include "minecraft/auth/Nide8AuthDownload.h"
+#include "tools/BaseProfiler.h"
+#include "tools/MCEditTool.h"
+#include "modplatform/flame/CurseForgeDownloadPageService.h"
 
 namespace {
 using namespace ApiSupport;
@@ -120,6 +129,49 @@ QJsonObject control(LauncherApi& api, const QString& action, const QJsonObject& 
 
 void registerLauncherApiIntegrationOperations(LauncherApi& api)
 {
+    api.registerOperation({ "external-tool.check", "Check a configured profiler, MCEdit, or CurseForge download tool using its existing validator.",
+        schema({ { "tool", string("jprofiler, jvisualvm, mcedit, or curseforge.") }, { "path", string("Installation path to validate.") } }, { "tool", "path" }), "integrations" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto tool = p.value("tool").toString(), path = p.value("path").toString();
+            QString error; bool valid = false, headless = false;
+            if (tool == "mcedit") valid = APPLICATION->mcedit()->check(path, error);
+            else if (tool == "curseforge") valid = CurseForgeDownloadPageService::probeExternalTool(path, &error, &headless);
+            else {
+                const auto factory = APPLICATION->profilers().value(tool);
+                if (!factory) return OperationService::failure("Unknown external tool.", 2);
+                valid = factory->check(path, &error);
+            }
+            return OperationService::success(QJsonObject{ { "valid", valid }, { "error", error }, { "supportsHeadless", headless } });
+        });
+    for (const QString action : { "status", "install", "remove" }) {
+        api.registerOperation({ "authentication.helper." + action, "Manage the authlib-injector or nide8auth helper: " + action + ".",
+            schema({ { "helper", string("authlib-injector or nide8auth.") }, { "confirm", boolean() } }, { "helper" }), "integrations", action != "status" },
+            [&api, action](const QJsonObject& p, UserInteraction& interaction) {
+                const auto helper = p.value("helper").toString();
+                const bool authlib = helper == "authlib-injector";
+                if (!authlib && helper != "nide8auth") return OperationService::failure("Unknown authentication helper.", 2);
+                const auto path = authlib ? AuthlibInjector::instance().getLocalPath() : Nide8Auth::instance().getLocalPath();
+                if (action == "install") {
+                    Task::Ptr task;
+                    if (authlib) task = makeShared<AuthlibInjectorDownload>(); else task = makeShared<Nide8AuthDownload>();
+                    QString error;
+                    if (!wait(api, task, interaction, error)) return OperationService::failure(error);
+                } else if (action == "remove") {
+                    if (!p.value("confirm").toBool()) return OperationService::failure("Removal requires confirm=true.", 2);
+                    for (int row = 0; row < APPLICATION->instances()->count(); ++row)
+                        if (APPLICATION->instances()->at(row)->isRunning()) return OperationService::failure("Stop running instances before removing authentication helpers.", 2);
+                    if (QFileInfo::exists(path) && !QFile::remove(path)) return OperationService::failure("Could not remove authentication helper.");
+                    if (authlib) {
+                        const auto metadata = AuthlibInjector::instance().getMetadataPath();
+                        if (QFileInfo::exists(metadata) && !QFile::remove(metadata)) return OperationService::failure("Helper removed, but metadata removal failed.");
+                    }
+                }
+                const QFileInfo file(path);
+                return OperationService::success(QJsonObject{ { "helper", helper }, { "path", path }, { "installed", file.isFile() },
+                    { "size", file.size() }, { "valid", authlib ? AuthlibInjector::instance().checkCache() : Nide8Auth::instance().checkCache() },
+                    { "version", authlib && file.isFile() ? AuthlibInjector::instance().getVersion() : QString() } });
+            });
+    }
     using namespace ApiSupport;
     api.registerOperation({ "integration.status", "Read installation and process state for optional integrations.", schema({}), "integrations" },
         [](const QJsonObject&, UserInteraction&) { return OperationService::success(QJsonArray{

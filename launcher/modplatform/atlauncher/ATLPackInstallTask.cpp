@@ -58,6 +58,7 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include "cli/HeadlessBlockedMods.h"
 
 namespace ATLauncher {
 
@@ -814,14 +815,23 @@ void PackInstallTask::downloadMods()
 
         qWarning() << "Blocked mods found, displaying mod list";
 
-        BlockedModsDialog message_dialog(nullptr, tr("Blocked mods found"),
+        const auto accepted = [&] {
+            if (APPLICATION->isHeadless()) {
+                QString error;
+                const bool result = resolveHeadlessBlockedMods(mods, "md5", error);
+                if (!result) setDetails(error);
+                return result;
+            }
+            BlockedModsDialog message_dialog(nullptr, tr("Blocked mods found"),
                                          tr("The following files are not available for download in third party launchers.<br/>"
                                             "You will need to manually download them and add them to the instance."),
                                          mods, "md5");
 
         message_dialog.setModal(true);
 
-        if (message_dialog.exec()) {
+            return message_dialog.exec() != 0;
+        }();
+        if (accepted) {
             qDebug() << "Post dialog blocked mods list:" << mods;
             for (auto blocked : mods) {
                 if (!blocked.matched) {

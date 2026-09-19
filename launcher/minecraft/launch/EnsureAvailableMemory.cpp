@@ -20,6 +20,7 @@
 
 #include "HardwareInfo.h"
 #include "Application.h"
+#include "cli/ScopedUserInteraction.h"
 #include "ui/dialogs/CustomMessageBox.h"
 
 EnsureAvailableMemory::EnsureAvailableMemory(LaunchTask* parent, MinecraftInstance* instance) : LaunchStep(parent), m_instance(instance) {}
@@ -36,9 +37,9 @@ void EnsureAvailableMemory::executeTask()
 
         if (m_instance->settings()->get("LowMemWarning").toBool()) {
             if (APPLICATION->isHeadless()) {
-                const auto message = tr("Not enough RAM available to launch this instance");
-                emit logLine(message, MessageLevel::Fatal);
-                emitFailed(message);
+                const auto message = tr("Not enough RAM: required %1 MiB, available %2 MiB. Continue anyway?").arg(required).arg(available);
+                if (headlessConfirm(message)) { emit logLine(message, MessageLevel::Warning); emitSucceeded(); }
+                else { emit logLine(message, MessageLevel::Fatal); emitFailed(message); }
                 return;
             }
             auto* dialog = CustomMessageBox::selectable(

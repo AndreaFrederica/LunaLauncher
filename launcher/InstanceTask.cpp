@@ -1,4 +1,5 @@
 #include "InstanceTask.h"
+#include "cli/ScopedUserInteraction.h"
 #include <QDir>
 
 #include "Application.h"
@@ -10,7 +11,7 @@
 InstanceNameChange askForChangingInstanceName(QWidget* parent, const QString& old_name, const QString& new_name)
 {
     if (APPLICATION->isHeadless())
-        return InstanceNameChange::ShouldKeep;
+        return headlessConfirm(QObject::tr("Change instance name from %1 to %2?").arg(old_name, new_name)) ? InstanceNameChange::ShouldChange : InstanceNameChange::ShouldKeep;
     auto dialog =
         CustomMessageBox::selectable(parent, QObject::tr("Change instance name"),
                                      QObject::tr("The instance's name seems to include the old version. Would you like to update it?\n\n"
@@ -27,8 +28,12 @@ InstanceNameChange askForChangingInstanceName(QWidget* parent, const QString& ol
 
 ShouldUpdate askIfShouldUpdate(QWidget* parent, QString original_version_name)
 {
-    if (APPLICATION->isHeadless())
-        return ShouldUpdate::Cancel;
+    if (APPLICATION->isHeadless()) {
+        if (!activeUserInteraction) return ShouldUpdate::Cancel;
+        const auto choice = activeUserInteraction->select(QObject::tr("A matching modpack %1 exists. Choose how to import.").arg(original_version_name),
+            QJsonArray{ "Cancel", "Update existing instance", "Create separate instance" });
+        return !choice || *choice == 0 ? ShouldUpdate::Cancel : *choice == 1 ? ShouldUpdate::Update : ShouldUpdate::SkipUpdating;
+    }
     if (APPLICATION->settings()->get("SkipModpackUpdatePrompt").toBool())
         return ShouldUpdate::SkipUpdating;
 
@@ -91,7 +96,7 @@ InstanceTask::InstanceTask() : Task(), InstanceName() {}
 ShouldDeleteSaves askIfShouldDeleteSaves(QWidget* parent)
 {
     if (APPLICATION->isHeadless())
-        return ShouldDeleteSaves::No;
+        return headlessConfirm(QObject::tr("Delete saves installed by the previous pack version?")) ? ShouldDeleteSaves::Yes : ShouldDeleteSaves::No;
     auto dialog = CustomMessageBox::selectable(parent, QObject::tr("Delete Existing Save Files"),
                                                QObject::tr("An earlier version of this mod pack installed save files.\n"
                                                            "Would you like to remove those existing saves as part of this update?"),

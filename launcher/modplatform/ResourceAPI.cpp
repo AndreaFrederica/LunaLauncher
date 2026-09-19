@@ -111,7 +111,7 @@ Task::Ptr ResourceAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVe
                     file.addonId = args.pack->addonId;
                 }
 
-                if (file.fileId.isValid() && !file.downloadUrl.isEmpty()) {  // Heuristic to check if the returned value is valid
+                if (file.fileId.isValid() && (!file.downloadUrl.isEmpty() || args.includeRestricted)) {
                     unsortedVersions.append(file);
                 }
             }

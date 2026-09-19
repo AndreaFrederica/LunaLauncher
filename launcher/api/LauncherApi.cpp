@@ -15,6 +15,7 @@
 #include "api/LauncherApiInstances.h"
 #include "api/LauncherApiDomains.h"
 #include "api/LauncherApiFiles.h"
+#include "cli/ScopedUserInteraction.h"
 #include "api/LauncherApiResources.h"
 #include "api/LauncherApiServer.h"
 #include "api/LauncherApiExports.h"
@@ -22,6 +23,7 @@
 #include "api/LauncherApiCatalog.h"
 #include "api/LauncherApiIntegrations.h"
 #include "api/LauncherApiAppearance.h"
+#include "api/LauncherApiPacks.h"
 #include "api/LauncherApiStreams.h"
 #include "tasks/Task.h"
 
@@ -126,6 +128,8 @@ QList<ApiOperation> legacyOperations()
              { "instance.delete", "Trash or permanently delete an instance.", objectSchema({ { "instance", instance }, { "confirm", boolProperty("Confirm deletion.") }, { "permanent", boolProperty("Delete permanently.") }, { "force", boolProperty("Ignore linked instances.") } }, { "instance", "confirm" }), {}, true },
              { "instance.undo-delete", "Restore the most recently trashed instance.", objectSchema({}) },
              { "account.list", "List launcher accounts.", objectSchema({}) },
+             { "account.profile.check-name", "Check a Minecraft Java profile name before creation.", objectSchema({ { "account", account }, { "name", stringProperty("Minecraft profile name.") } }, { "account", "name" }), "accounts" },
+             { "account.profile.create", "Create a missing Java profile for an authenticated Microsoft account.", objectSchema({ { "account", account }, { "name", stringProperty("Minecraft profile name.") } }, { "account", "name" }), "accounts", true },
              { "account.login", "Add a launcher account.", objectSchema({ { "type", stringProperty("microsoft, offline, yggdrasil, or unified-pass.") }, { "username", stringProperty("Username.") }, { "password", stringProperty("Password.") }, { "authUrl", stringProperty("Yggdrasil auth URL.") }, { "sessionUrl", stringProperty("Yggdrasil session URL.") } }, { "type" }) },
              { "account.set-default", "Set or clear the default account.", objectSchema({ { "account", account } }, { "account" }) },
              { "account.refresh", "Refresh an account.", objectSchema({ { "account", account } }, { "account" }) },
@@ -146,6 +150,7 @@ QList<ApiOperation> legacyOperations()
              { "settings.import", "Import a JSON values object into registered settings.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "values", QJsonObject{ { "type", "object" } } }, { "allowSensitive", boolProperty("Allow sensitive values in the import.") } }, { "scope", "values" }) } };
     for (auto& operation : operations) {
         auto properties = operation.inputSchema.value("properties").toObject();
+        if (operation.name.startsWith("resource.")) properties.insert("world", stringProperty("Optional world folder for datapacks."));
         if (operation.name == "instance.copy") {
             for (const auto key : { "copySaves", "keepPlaytime", "copyMods", "copyResourcePacks", "copyShaderPacks", "copyScreenshots" })
                 properties.insert(key, QJsonObject{ { "type", "boolean" } });
@@ -155,8 +160,14 @@ QList<ApiOperation> legacyOperations()
                 properties.insert(key, stringProperty(QString::fromLatin1(key)));
         }
         if (operation.name == "account.login") {
-            for (const auto key : { "sourceName", "serverId", "minecraftProfileName" })
+            for (const auto key : { "sourceName", "serverId", "minecraftProfileName", "refreshEndpoint", "validateEndpoint", "authenticateEndpoint", "profileEndpoint", "oauthTokenEndpoint", "tokenType" })
                 properties.insert(key, stringProperty(QString::fromLatin1(key)));
+        }
+        if (operation.name == "instance.launch") {
+            properties.insert("profiler", stringProperty("Optional profiler ID, such as jprofiler or jvisualvm."));
+            properties.insert("account", stringProperty("Account internal or profile ID; otherwise use instance/default account or prompt."));
+            properties.insert("mode", stringProperty("normal (default), offline, or demo."));
+            properties.insert("minecraftProfileName", stringProperty("Profile name to create for a Microsoft account without a Java profile."));
         }
         if (operation.name.startsWith("settings."))
             properties.insert("reveal", boolProperty("Reveal sensitive values."));
@@ -208,6 +219,7 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerLauncherApiCatalogOperations(*this);
     registerLauncherApiIntegrationOperations(*this);
     registerLauncherApiAppearanceOperations(*this);
+    registerLauncherApiPackOperations(*this);
     m_streams = std::make_unique<LauncherApiStreams>(*this);
     registerOperation({ "api.batch", "Execute up to 100 operations sequentially; returns individual results, without rollback. Recursive batches are rejected.",
         objectSchema({ { "operations", QJsonObject{ { "type", "array" }, { "items", objectSchema({
@@ -241,6 +253,7 @@ LauncherApi::~LauncherApi() = default;
 
 QJsonObject LauncherApi::execute(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
+    ScopedUserInteraction interactionScope(interaction, [this] { return isCancellationRequested(); });
     if (!m_executeDepth) m_cancelRequested = false;
     QScopedValueRollback<int> depth(m_executeDepth, m_executeDepth + 1);
     const auto it = m_operations.constFind(operation);

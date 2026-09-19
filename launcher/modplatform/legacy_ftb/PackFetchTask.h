@@ -17,12 +17,12 @@ class PackFetchTask : public QObject {
 
     void fetch();
     void fetchPrivate(const QStringList& toFetch);
+    static bool parseAndAddPacks(QByteArray& data, PackType packType, ModpackList& list);
 
    private:
     QNetworkAccessManager* m_network;
     NetJob::Ptr jobPtr;
 
-    bool parseAndAddPacks(QByteArray& data, PackType packType, ModpackList& list);
     ModpackList publicPacks;
     ModpackList thirdPartyPacks;
 

@@ -35,6 +35,7 @@
  */
 
 #include "InstanceImportTask.h"
+#include "cli/ScopedUserInteraction.h"
 
 #include "Application.h"
 #include "FileSystem.h"
@@ -208,8 +209,16 @@ void InstanceImportTask::processZipPack()
         if (encryptedValidationPath.isEmpty() || !m_archivePassphrase.isEmpty())
             return true;
         if (APPLICATION->isHeadless()) {
-            emitFailed(tr("Encrypted modpacks require an archive password, which is not supported by this command yet."));
-            return false;
+            while (activeUserInteraction) {
+                const auto password = activeUserInteraction->input(tr("Enter the archive password:"), true);
+                if (!password) { emitAborted(); return false; }
+                MMCZip::ArchiveReader validator(m_archivePath, *password);
+                auto encryptedFile = validator.goToFile(encryptedValidationPath);
+                DiscardWriteDevice sink;
+                if (encryptedFile && encryptedFile->copyTo(sink)) { m_archivePassphrase = *password; return true; }
+                activeUserInteraction->status(tr("Incorrect archive password. Try again or cancel."));
+            }
+            emitFailed(tr("Archive password input is unavailable.")); return false;
         }
         while (true) {
             bool accepted = false;
@@ -290,7 +299,11 @@ void InstanceImportTask::processZipPack()
             int selectedIndex = 0;
             if (candidates.size() > 1) {
                 if (APPLICATION->isHeadless()) {
-                    setStatus(tr("The archive contains multiple PCL versions; selecting the first one."));
+                    QJsonArray choices;
+                    for (const auto& candidate : candidates) choices.append(candidate.version + " (" + candidate.root + ")");
+                    const auto selected = activeUserInteraction ? activeUserInteraction->select(tr("Select the PCL version to import:"), choices) : std::nullopt;
+                    if (!selected) { emitAborted(); return; }
+                    selectedIndex = *selected;
                 } else {
                     QStringList labels;
                     for (const auto& candidate : candidates)

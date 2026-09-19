@@ -17,6 +17,8 @@
  */
 
 #include "YggdrasilPresets.h"
+#include "Application.h"
+#include <QSaveFile>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -61,7 +63,7 @@ const QVector<YggdrasilPreset>& YggdrasilPresets::getDefaults()
 
 static QString getPresetsFilePath()
 {
-    auto dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    auto dir = APPLICATION ? APPLICATION->dataRoot() : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     return QDir(dir).absoluteFilePath(CUSTOM_PRESETS_FILE);
 }
 
@@ -94,25 +96,31 @@ static QJsonArray loadCustomPresets()
 
 static bool saveCustomPresets(const QJsonArray& array)
 {
-    QFile file(getPresetsFilePath());
+    const auto path = getPresetsFilePath();
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
+    QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         qWarning() << "Failed to open Yggdrasil presets file for writing:" << file.errorString();
         return false;
     }
 
     QJsonDocument doc(array);
-    file.write(doc.toJson());
-    return true;
+    const auto bytes = doc.toJson();
+    return file.write(bytes) == bytes.size() && file.commit();
 }
 
-bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset)
+bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset, const QString& replaceName)
 {
     auto array = loadCustomPresets();
+    int replaceIndex = -1;
+    for (int i = 0; i < array.size(); ++i)
+        if (!replaceName.isEmpty() && array[i].toObject().value("name").toString() == replaceName) replaceIndex = i;
+    if (!replaceName.isEmpty() && replaceIndex < 0) return false;
 
     // Check if a preset with the same name already exists
     for (const auto& value : array) {
         auto obj = value.toObject();
-        if (obj.value("name").toString() == preset.name) {
+        if (obj.value("name").toString() == preset.name && obj.value("name").toString() != replaceName) {
             return false;
         }
     }
@@ -142,7 +150,8 @@ bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset)
     } else {
         obj["tokenType"] = "Standard";
     }
-    array.append(obj);
+    if (replaceIndex >= 0) array[replaceIndex] = obj;
+    else array.append(obj);
 
     return saveCustomPresets(array);
 }

@@ -2055,6 +2055,7 @@ void Application::on_windowClose()
 
 void Application::updateProxySettings(QString proxyTypeStr, QString addr, int port, QString user, QString password)
 {
+    QNetworkProxyFactory::setUseSystemConfiguration(proxyTypeStr == "Default");
     // Set the application proxy settings.
     if (proxyTypeStr == "SOCKS5") {
         QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, addr, port, user, password));

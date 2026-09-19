@@ -96,6 +96,7 @@ class ResourceAPI {
         std::optional<ModPlatform::ModLoaderTypes> loaders;
         ModPlatform::ResourceType resourceType;
         bool includeChangelog = false;
+        bool includeRestricted = false; // Callers with a manual-download interaction can include files without direct URLs.
         std::optional<ModPlatform::PluginLoaderTypes> pluginLoaders;  // For server plugins (Hangar)
     };
 

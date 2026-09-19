@@ -107,7 +107,11 @@ class PrismUpdaterApp : public QApplication {
     QString m_prismExecutable;
     QUrl m_prismRepoUrl;
     Version m_userSelectedVersion;
-    bool m_checkOnly;
+    bool m_headless = false;
+    bool m_jsonReleases = false;
+    qint64 m_waitPid = 0;
+    QString m_assetName;
+    bool m_checkOnly = false;
     bool m_forceUpdate;
     bool m_printOnly;
     bool m_selectUI;

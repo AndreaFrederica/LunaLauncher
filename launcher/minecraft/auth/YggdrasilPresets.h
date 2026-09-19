@@ -40,7 +40,7 @@ struct YggdrasilPreset {
 class YggdrasilPresets {
 public:
     static const QVector<YggdrasilPreset>& getDefaults();
-    static bool addCustomPreset(const YggdrasilPreset& preset);
+    static bool addCustomPreset(const YggdrasilPreset& preset, const QString& replaceName = {});
     static bool removeCustomPreset(const QString& name);
     static QVector<YggdrasilPreset> getCustomPresets();
     static QVector<YggdrasilPreset> getAllPresets();

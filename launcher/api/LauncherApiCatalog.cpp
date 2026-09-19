@@ -18,7 +18,9 @@
 #include "InstanceList.h"
 #include "ResourceDownloadTask.h"
 #include "api/LauncherApiSupport.h"
+#include "api/ResourceModelSupport.h"
 #include "cli/OperationService.h"
+#include "cli/HeadlessBlockedMods.h"
 #include "meta/Index.h"
 #include "meta/Version.h"
 #include "minecraft/MinecraftInstance.h"
@@ -34,6 +36,10 @@
 #include "modplatform/flame/FlameAPI.h"
 #include "modplatform/hangar/HangarAPI.h"
 #include "server/ServerInstance.h"
+#include "SysInfo.h"
+#include "java/JavaMetadata.h"
+#include "modplatform/jsapi/JSAPIManager.h"
+#include "minecraft/VersionFile.h"
 
 namespace {
 using namespace ApiSupport;
@@ -41,11 +47,12 @@ using Pack = ModPlatform::IndexedPack;
 using PackVersion = ModPlatform::IndexedVersion;
 using Kind = ModPlatform::ResourceType;
 
-std::unique_ptr<ResourceAPI> provider(const QString& name)
+std::shared_ptr<ResourceAPI> provider(const QString& name)
 {
-    if (name == "modrinth") return std::make_unique<ModrinthAPI>();
-    if (name == "curseforge") return std::make_unique<FlameAPI>();
-    if (name == "hangar") return std::make_unique<HangarAPI>();
+    if (name == "modrinth") return std::make_shared<ModrinthAPI>();
+    if (name == "curseforge") return std::make_shared<FlameAPI>();
+    if (name == "hangar") return std::make_shared<HangarAPI>();
+    if (name.startsWith("js:")) return JSAPIManager::instance().getAPIById(name.mid(3));
     return {};
 }
 
@@ -53,8 +60,16 @@ const QMap<QString, Kind> kinds{ { "mods", Kind::Mod }, { "plugins", Kind::Plugi
                                { "shaderpacks", Kind::ShaderPack }, { "datapacks", Kind::DataPack }, { "modpacks", Kind::Modpack } };
 QStringList supportedKinds(const QString& name)
 {
+    if (name.startsWith("js:")) {
+        const auto api = JSAPIManager::instance().getAPIById(name.mid(3));
+        QStringList result;
+        if (!api || !api->getMetadata().enabled) return result;
+        for (auto it = kinds.begin(); it != kinds.end(); ++it)
+            if (api->getMetadata().supportedTypes.contains(static_cast<int>(it.value()))) result.append(it.key());
+        return result;
+    }
     if (name == "hangar") return { "plugins" };
-    if (name == "curseforge") return { "mods", "resourcepacks", "modpacks" };
+    if (name == "curseforge") return { "mods", "resourcepacks", "shaderpacks", "datapacks", "modpacks" };
     return { "mods", "resourcepacks", "shaderpacks", "datapacks", "modpacks" };
 }
 
@@ -79,10 +94,22 @@ QJsonObject versionJson(const PackVersion& version)
     return { { "projectId", version.addonId.toString() }, { "versionId", version.fileId.toString() },
              { "name", version.version }, { "version", version.version_number }, { "type", version.version_type.toString() },
              { "minecraftVersions", QJsonArray::fromStringList(version.mcVersion) }, { "date", version.date },
-             { "fileName", version.fileName }, { "downloadUrl", version.downloadUrl }, { "hashType", version.hash_type },
+             { "fileName", version.fileName }, { "downloadUrl", version.downloadUrl }, { "requiresManualDownload", version.downloadUrl.isEmpty() }, { "hashType", version.hash_type },
              { "hash", version.hash }, { "loaders", flagNames(version.loaders, modLoaders()) },
              { "pluginLoaders", flagNames(version.pluginLoaders, pluginLoaders()) },
              { "changelog", version.changelog }, { "dependencies", dependencies } };
+}
+
+bool downloadResource(LauncherApi& api, const Pack::Ptr& pack, PackVersion version, ResourceFolderModel* model, UserInteraction& ui, QString& error)
+{
+    if (version.downloadUrl.isEmpty()) {
+        if (pack->provider != ModPlatform::ResourceProvider::FLAME) { error = "Provider did not supply a downloadable file."; return false; }
+        const auto page = (pack->websiteUrl.isEmpty() ? ModPlatform::getMetaURL(pack->provider, pack->addonId) : pack->websiteUrl) + "/download/" + version.fileId.toString();
+        QList<BlockedMod> blocked{ { version.fileName, page, version.hash, false, {} } };
+        if (!resolveHeadlessBlockedMods(blocked, version.hash_type, error)) return false;
+        version.downloadUrl = QUrl::fromLocalFile(blocked.first().localPath).toString();
+    }
+    return wait(api, makeShared<ResourceDownloadTask>(pack, version, model), ui, error);
 }
 
 template <typename T>
@@ -143,8 +170,9 @@ bool projectIdValid(const QString& id, const QString& source)
     return identifier(id);
 }
 
-std::shared_ptr<ResourceFolderModel> resourceModel(BaseInstance* instance, const QString& kind)
+std::shared_ptr<ResourceFolderModel> resourceModel(BaseInstance* instance, const QString& kind, const QString& world = {})
 {
+    if (!world.isEmpty()) return worldDataPacks(instance, kind, world);
     if (const auto client = dynamic_cast<MinecraftInstance*>(instance)) {
         if (kind == "mods") return client->loaderModList();
         if (kind == "resourcepacks") return client->resourcePackList();
@@ -169,7 +197,7 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
 {
     const auto source = p.value("provider").toString();
     auto service = provider(source);
-    if (!service) return OperationService::failure("provider must be modrinth, curseforge, or hangar.", 2);
+    if (!service) return OperationService::failure("Unknown provider; see resource.providers.", 2);
     const auto kind = p.value("kind").toString();
     if (!supportedKinds(source).contains(kind)) return OperationService::failure("This provider does not support the requested kind.", 2);
     Filters filters;
@@ -235,6 +263,7 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
     args.loaders = filters.loaders;
     args.pluginLoaders = filters.plugins;
     args.includeChangelog = p.value("includeChangelog").toBool();
+    args.includeRestricted = true;
     Reply<QList<PackVersion>> reply;
     const auto task = service->getProjectVersions(std::move(args), reply.callbacks());
     if (!reply.finish(api, task, interaction)) return OperationService::failure(reply.error);
@@ -252,17 +281,16 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
     const auto instance = APPLICATION->instances()->getInstanceById(p.value("instance").toString());
     if (!instance) return OperationService::failure("Instance ID not found.", 2);
     if (instance->isRunning()) return OperationService::failure("Stop the instance before installing resources.", 2);
-    const auto model = resourceModel(instance, kind);
+    const auto model = resourceModel(instance, kind, p.value("world").toString());
     if (!model) return OperationService::failure("This resource kind cannot be installed into this instance. Use instance.import for modpacks.", 2);
     const auto name = selected->fileName;
     if (!safeFilename(name)) return OperationService::failure("Provider returned an unsafe filename.", 2);
     const QUrl url(selected->downloadUrl);
-    if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http")) return OperationService::failure("Invalid download URL.", 2);
+    if (!selected->downloadUrl.isEmpty() && (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http"))) return OperationService::failure("Invalid download URL.", 2);
     if (QFileInfo::exists(model->dir().absoluteFilePath(name)) && !p.value("replace").toBool())
         return OperationService::failure("File already exists; set replace=true to replace it.", 2);
-    auto download = makeShared<ResourceDownloadTask>(pack, *selected, model.get());
     QString error;
-    if (!wait(api, download, interaction, error)) return OperationService::failure(error);
+    if (!downloadResource(api, pack, *selected, model.get(), interaction, error)) return OperationService::failure(error);
     // ResourceFolderModel watches this directory; avoid starting a second
     // asynchronous refresh while a headless sidecar may be shutting down.
     auto result = versionJson(*selected);
@@ -282,7 +310,7 @@ struct UpdateItem {
     QString destination() const { return version.fileName + (disabled ? ".disabled" : ""); }
 };
 struct UpdatePlan {
-    QString id, instance, kind, root, indexRoot;
+    QString id, instance, kind, world, root, indexRoot;
     QDateTime expires;
     QList<UpdateItem> items;
 };
@@ -321,7 +349,7 @@ QJsonObject checkUpdates(LauncherApi& api, UpdatePlans& state, QJsonObject p, Us
     const auto instance = APPLICATION->instances()->getInstanceById(p.value("instance").toString());
     if (!instance) return OperationService::failure("Instance ID not found.", 2);
     const auto kind = p.value("kind").toString();
-    const auto model = resourceModel(instance, kind);
+    const auto model = resourceModel(instance, kind, p.value("world").toString());
     if (!model) return OperationService::failure("This resource kind is unavailable for the instance.", 2);
     if (const auto client = dynamic_cast<MinecraftInstance*>(instance)) {
         const auto profile = client->getPackProfile();
@@ -350,6 +378,7 @@ QJsonObject checkUpdates(LauncherApi& api, UpdatePlans& state, QJsonObject p, Us
     plan.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     plan.instance = instance->id();
     plan.kind = kind;
+    plan.world = p.value("world").toString();
     plan.root = QFileInfo(model->dir().absolutePath()).canonicalFilePath();
     plan.indexRoot = QFileInfo(model->indexDir().absolutePath()).canonicalFilePath();
     if (!entries.isEmpty() && plan.indexRoot != plan.root + "/.index")
@@ -395,6 +424,7 @@ QJsonObject checkUpdates(LauncherApi& api, UpdatePlans& state, QJsonObject p, Us
         args.mcVersions = filters.versions;
         args.loaders = filters.loaders;
         args.pluginLoaders = filters.plugins;
+        args.includeRestricted = true;
         Reply<QList<PackVersion>> reply;
         interaction.status(QString("Checking resource updates: %1").arg(meta.name));
         if (!reply.finish(api, service->getProjectVersions(std::move(args), reply.callbacks()), interaction)) { skip(reply.error); continue; }
@@ -411,7 +441,8 @@ QJsonObject checkUpdates(LauncherApi& api, UpdatePlans& state, QJsonObject p, Us
             if (filters.plugins && !(version.pluginLoaders & *filters.plugins)) continue;
             const QUrl url(version.downloadUrl);
             if (!safeFilename(version.fileName) || version.fileName.endsWith(".disabled") ||
-                !url.isValid() || (url.scheme() != "https" && url.scheme() != "http")) continue;
+                (!version.downloadUrl.isEmpty() && (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http"))) ||
+                (version.downloadUrl.isEmpty() && meta.provider != ModPlatform::ResourceProvider::FLAME)) continue;
             newest = date;
             item.version = version;
         }
@@ -468,7 +499,7 @@ QJsonObject applyUpdates(LauncherApi& api, UpdatePlans& state, const QJsonObject
     }
     if (!selection.isEmpty()) return OperationService::failure("Unknown update item ID.", 2);
     const auto instance = APPLICATION->instances()->getInstanceById(plan.instance);
-    const auto model = resourceModel(instance, plan.kind);
+    const auto model = resourceModel(instance, plan.kind, plan.world);
     if (!model) return OperationService::failure("The instance or resource directory is unavailable.", 2);
     for (const auto& item : items) {
         const auto error = validateUpdate(api, plan, item, *model);
@@ -487,8 +518,7 @@ QJsonObject applyUpdates(LauncherApi& api, UpdatePlans& state, const QJsonObject
             if (!staging.isValid()) error = "Could not create a resource staging directory.";
             else {
                 ResourceFolderModel staged(QDir(staging.path()), instance, true, true);
-                const auto download = makeShared<ResourceDownloadTask>(item.pack, item.version, &staged);
-                if (wait(api, download, interaction, error)) {
+                if (downloadResource(api, item.pack, item.version, &staged, interaction, error)) {
                     error = validateUpdate(api, plan, item, *model);
                     const auto indexes = staged.indexDir().entryList({ "*.pw.toml" }, QDir::Files);
                     QFile index(indexes.size() == 1 ? staged.indexDir().filePath(indexes.first()) : QString());
@@ -594,11 +624,40 @@ QJsonObject metadata(LauncherApi& api, const QJsonObject& p, UserInteraction& in
 
 void registerLauncherApiCatalogOperations(LauncherApi& api)
 {
+    api.registerOperation({ "java.catalog", "List Java providers supported by the GUI installer.", schema({}), "java" },
+        [](const QJsonObject&, UserInteraction&) {
+            return OperationService::success(QJsonArray{ QJsonObject{ { "uid", "net.minecraft.java" }, { "name", "Mojang" } },
+                QJsonObject{ { "uid", "net.adoptium.java" }, { "name", "Adoptium" } }, QJsonObject{ { "uid", "com.azul.java" }, { "name", "Azul Zulu" } },
+                QJsonObject{ { "uid", "com.ibm.java" }, { "name", "IBM Semeru Open" } } });
+        });
+    api.registerOperation({ "java.versions", "Read downloadable Java packages for a provider version, including checksums and platform compatibility. Use component.versions to list provider versions.",
+        schema({ { "uid", string("Java provider UID from java.catalog.") }, { "version", string("Provider version from component.versions.") },
+            { "offline", boolean() }, { "allPlatforms", boolean() } }, { "uid", "version" }), "java" },
+        [&api](const QJsonObject& p, UserInteraction& interaction) {
+            const auto uid = p.value("uid").toString(), version = p.value("version").toString();
+            if (!QStringList{ "net.minecraft.java", "net.adoptium.java", "com.azul.java", "com.ibm.java" }.contains(uid) || !identifier(version))
+                return OperationService::failure("Invalid Java provider or version.", 2);
+            const auto entity = APPLICATION->metadataIndex()->get(uid, version);
+            QString error;
+            if (!loadMetadata(api, *entity, p.value("offline").toBool(), interaction, error)) return OperationService::failure(error);
+            if (!entity->data()) return OperationService::failure("Java metadata has no runtime data.");
+            QJsonArray result;
+            const auto platform = SysInfo::getSupportedJavaArchitecture();
+            for (const auto& runtime : entity->data()->runtimes) {
+                if (!p.value("allPlatforms").toBool() && runtime->runtimeOS != platform) continue;
+                result.append(QJsonObject{ { "name", runtime->m_name }, { "vendor", runtime->vendor }, { "version", runtime->version.toString() },
+                    { "major", runtime->version.major() }, { "url", runtime->url }, { "runtimeOS", runtime->runtimeOS },
+                    { "compatible", runtime->runtimeOS == platform }, { "downloadType", Java::downloadTypeToString(runtime->downloadType) },
+                    { "checksumType", runtime->checksumType }, { "checksumHash", runtime->checksumHash },
+                    { "packageType", runtime->packageType }, { "releaseTime", runtime->releaseTime.toString(Qt::ISODate) } });
+            }
+            return OperationService::success(result);
+        });
     using namespace ApiSupport;
     const auto plans = std::make_shared<UpdatePlans>();
     api.registerOperation({ "resource.updates.check", "Check indexed resources and create a session update plan valid for ten minutes. Defaults to release builds and instance compatibility filters.",
         schema({ { "instance", string("Installed instance ID.") }, { "kind", string("mods, plugins, resourcepacks, shaderpacks, or datapacks.") },
-            { "minecraftVersion", string("Override the instance Minecraft version filter.") }, { "loaders", strings() },
+            { "world", string("Optional world folder for datapacks.") }, { "minecraftVersion", string("Override the instance Minecraft version filter.") }, { "loaders", strings() },
             { "pluginLoaders", strings() }, { "releaseTypes", strings() } }, { "instance", "kind" }), "catalog" },
         [&api, plans](const QJsonObject& p, UserInteraction& i) { return checkUpdates(api, *plans, p, i); });
     api.registerOperation({ "resource.updates.apply", "Apply selected plan items after stale-file checks, preserving disabled state. Inspect complete and per-item results; this is not a batch transaction.",
@@ -612,7 +671,9 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
     api.registerOperation({ "resource.providers", "List remote resource providers, resource kinds and sorting methods.", schema({}), "catalog" },
         [](const QJsonObject&, UserInteraction&) {
             QJsonArray result;
-            for (const auto& name : { QString("modrinth"), QString("curseforge"), QString("hangar") }) {
+            QStringList names{ "modrinth", "curseforge", "hangar" };
+            for (const auto& js : JSAPIManager::instance().getAllAPIs()) if (js->getMetadata().enabled) names.append("js:" + js->getMetadata().id);
+            for (const auto& name : names) {
                 const auto service = provider(name);
                 QJsonArray sorts;
                 for (const auto& sort : service->getSortingMethods()) sorts.append(QJsonObject{ { "id", sort.name }, { "name", sort.readable_name } });
@@ -621,7 +682,9 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
             }
             return OperationService::success(result);
         });
-    const QJsonObject common{ { "provider", string("modrinth, curseforge, or hangar.") }, { "kind", string("Resource kind from resource.providers.") },
+    api.registerOperation({ "resource.providers.reload", "Reload installed JavaScript resource providers.", schema({}), "catalog", true },
+        [](const QJsonObject&, UserInteraction&) { JSAPIManager::instance().reloadAll(); return OperationService::success(); });
+    const QJsonObject common{ { "provider", string("Provider ID from resource.providers, including js:<id>.") }, { "kind", string("Resource kind from resource.providers.") },
         { "minecraftVersion", string("Optional Minecraft version filter.") }, { "loaders", strings() }, { "pluginLoaders", strings() } };
     auto search = common;
     search.insert("query", string("Search text."));
@@ -642,6 +705,7 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
         schema(project, { "provider", "kind", "projectId", "minecraftVersion" }), "catalog" },
         [&api](const QJsonObject& p, UserInteraction& i) { return browse(api, "resource.resolve-dependency", p, i); });
     project.insert("instance", string("Installed instance ID."));
+    project.insert("world", string("Optional world folder for datapacks."));
     project.insert("replace", boolean());
     api.registerOperation({ "resource.install-version", "Install one selected provider version using the existing indexed resource download task. Dependencies are selected separately.",
         schema(project, { "provider", "kind", "projectId", "versionId", "instance" }), "catalog", true },
@@ -660,7 +724,7 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
             QJsonArray results;
             auto operationParameters = [](const QJsonObject& source) {
                 QJsonObject value;
-                for (const auto& key : { "provider", "kind", "projectId", "versionId", "instance", "minecraftVersion", "loaders", "pluginLoaders", "replace", "includeChangelog" })
+                for (const auto& key : { "provider", "kind", "projectId", "versionId", "instance", "world", "minecraftVersion", "loaders", "pluginLoaders", "replace", "includeChangelog" })
                     if (source.contains(key)) value.insert(key, source.value(key));
                 return value;
             };

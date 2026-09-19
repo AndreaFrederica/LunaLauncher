@@ -163,6 +163,8 @@ QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonOb
     if (source == "modrinth" || source == "curseforge" || source.startsWith("js:")) {
         if (p.value("offline").toBool()) return OperationService::failure("This provider does not expose a cached offline catalog.", 2);
         QJsonObject request{ { "provider", source }, { "kind", "modpacks" } };
+        for (const auto key : { "offset", "sort", "openSource", "minecraftVersion", "loaders", "includeChangelog" })
+            if (p.contains(key)) request.insert(key, p.value(key));
         if (search) request.insert("query", query); else request.insert("projectId", id);
         if (!installing) return api.execute("resource." + (search ? QString("search") : action == "versions" ? QString("versions") : QString("project")), request, ui);
         const auto versions = api.execute("resource.versions", request, ui);
@@ -324,6 +326,12 @@ void registerLauncherApiPackOperations(LauncherApi& api)
         QJsonObject properties{ { "provider", string("atlauncher, ftb, technic, legacy-ftb, modrinth, curseforge, or js:<id>.") },
             { "projectId", string("Pack ID returned by search.") }, { "query", string("Search term.") }, { "versionId", string("Selected pack version.") },
             { "offline", boolean() }, { "privateCode", string("Optional legacy FTB private pack code.") } };
+        properties.insert("offset", QJsonObject{ { "type", "integer" }, { "minimum", 0 }, { "maximum", 100000 } });
+        properties.insert("sort", string("Sort ID for resource-backed providers."));
+        properties.insert("openSource", boolean());
+        properties.insert("minecraftVersion", string("Minecraft filter for resource-backed providers."));
+        properties.insert("loaders", strings());
+        properties.insert("includeChangelog", boolean());
         if (action == "install") {
             for (const auto key : { "name", "group", "icon" }) properties.insert(key, string(QString::fromLatin1(key)));
             properties.insert("optionalMods", strings());

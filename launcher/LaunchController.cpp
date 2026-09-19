@@ -36,6 +36,7 @@
 
 #include "LaunchController.h"
 #include <QRegularExpression>
+#include <QTimer>
 #include "cli/ScopedUserInteraction.h"
 #include "Application.h"
 #include "launch/steps/PrintServers.h"
@@ -197,9 +198,21 @@ LaunchDecision LaunchController::decideLaunchMode()
         auto task = accountToCheck->currentTask();
         if (m_headless) {
             QEventLoop loop;
+            QTimer cancellation;
+            bool cancelled = false;
+            cancellation.setInterval(100);
+            connect(&cancellation, &QTimer::timeout, &loop, [&] {
+                if (activeInteractionCancellation && activeInteractionCancellation()) {
+                    cancelled = true;
+                    if (task->canAbort()) task->abort();
+                    loop.quit();
+                }
+            });
             connect(task.get(), &Task::finished, &loop, &QEventLoop::quit);
+            cancellation.start();
             if (!task->isFinished())
                 loop.exec();
+            if (cancelled) return LaunchDecision::Abort;
         } else {
             ProgressDialog progDialog(m_parentWidget);
             progDialog.setSkipButton(true, tr("Abort"));

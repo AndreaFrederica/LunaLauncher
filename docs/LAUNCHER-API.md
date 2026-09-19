@@ -129,13 +129,13 @@ the upstream GUI implementation remains easy to merge.
 
 ## Current coverage and remaining gaps
 
-The implementation exposes 120 operations and reuses existing models and tasks in additive domain adapters:
+The implementation currently exposes 208 operations and reuses existing models and tasks in additive domain adapters:
 
 | Domain | Implemented boundary | Remaining work |
 | --- | --- | --- |
-| Instances | list/info/create/import/copy/delete/restore, rename/group/icon/notes, launch/stop/kill, verify/update, shortcuts/folders, ZIP export | specialized managed-pack workflows, other export formats; server force-kill semantics still use the existing stop implementation |
+| Instances | list/info/create/import/copy/delete/restore, rename/group/icon/notes, launch/stop/kill, verify/update, shortcuts/folders, ZIP export, managed-pack info/versions/update | No known non-server GUI action remains outside the adapter; provider-specific failures are returned as typed operation failures |
 | Components | component catalog and version lists, installed list, version selection, enable/remove/reorder/customize/revert; install local component files, jar mods, replacement jars and Java agents | richer drag/drop validation and provider-specific component installers |
-| Resources | installed inspection/refresh, local/URL install, enable/disable/remove; remote search/project/version/dependency lookup, indexed installation; recursive required/optional dependency installation with bounds; batch upgrade check/select/apply with stale-file validation and disabled-state preservation | Hangar update metadata; restricted CurseForge files with no direct URL are not exposed by the common version list |
+| Resources | installed inspection/refresh, local/URL install, enable/disable/remove; remote search/project/version/dependency lookup, indexed installation; recursive required/optional dependency installation with bounds; batch upgrade check/select/apply with stale-file validation and disabled-state preservation; restricted CurseForge headless file handoff and hash validation | No known non-server GUI action remains outside the adapter |
 | Servers | properties, EULA, operator/whitelist/ban lists, start, terminal subscription/input/resize, YAML revisions, compatibility configuration; local mods/plugins CRUD; staged HTTP(S) server distribution installation | provider-specific automatic distribution catalogs and installer arguments beyond the supplied URL |
 | Worlds | list, rename/delete, reset icon, import directory/zip and export world zip | world creation from an empty template and advanced copy/replace policies |
 | Accounts | login/refresh/remove/default/order/profiles; skin library/upload/reset/cape | live profile changes outside current selection flow |

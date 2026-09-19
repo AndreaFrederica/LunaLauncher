@@ -153,7 +153,4 @@ if (!result.ok) showError(result.error);
 `log.reset`。`server.console.write` 最多 32 KiB，command 会补换行，resize 范围为
 1–1000。外观接口应用 Qt 后端主题，Neo UI 自己负责浏览器样式和文案翻译。
 
-当前接口目录为 **120 项**，仍未达到所有 GUI 功能的完全覆盖。递归依赖自动安装、
-世界管理、服务端软件安装、设置导入导出等缺口见
-[覆盖表](LAUNCHER-API.md#current-coverage-and-remaining-gaps)。目前有些设置需重启
-sidecar 才能应用到常驻服务；服务端 loader 配置也不等于安装服务端软件。
+当前接口目录为 **208 项**。已覆盖实例、组件、资源与依赖、整合包目录和安装、托管包更新、世界与 datapack、账户与 Java、设置导入导出、外观语言、日志截图、更新器、终端和联机整合。仍属于服务端边界的项目（例如远程服务端部署策略）会按服务端 API 的能力返回；可选第三方工具仍以 `integration.status` 报告运行时能力。

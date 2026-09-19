@@ -1397,7 +1397,6 @@ std::shared_ptr<CustomPlayerModelFolderModel> MinecraftInstance::customPlayerMod
 
 std::shared_ptr<SchematicsFolderModel> MinecraftInstance::schematicsList()
 {
-    static std::shared_ptr<SchematicsFolderModel> m_schematics_list;
     if (!m_schematics_list) {
         QDir dir(QDir(gameRoot()).filePath("schematics"));
         m_schematics_list.reset(new SchematicsFolderModel(dir, this));

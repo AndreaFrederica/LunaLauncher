@@ -11,6 +11,7 @@
 #include "Application.h"
 #include "BaseInstance.h"
 #include "cli/OperationService.h"
+#include "cli/HeadlessBlockedMods.h"
 #include "DesktopServices.h"
 #include "InstanceImportTask.h"
 #include "InstanceList.h"
@@ -348,24 +349,53 @@ void registerInstanceApiOperations(LauncherApi& api)
                 { "name", inst->getManagedPackName() }, { "versionName", inst->getManagedPackVersionName() },
                 { "url", inst->settings()->get("ManagedPackURL").toString() } });
         });
-    api.registerOperation({ "instance.managed-pack.versions", "List versions for a managed Modrinth or CurseForge pack.",
-        ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID.") } }, { "instance" }), "instances" },
+    api.registerOperation({ "instance.managed-pack.versions", "List provider versions for a managed pack.",
+        ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID.") }, { "offline", ApiSupport::boolean() } }, { "instance" }), "instances" },
         [&api](const QJsonObject& p, UserInteraction& i) {
             auto inst = findInstance(p.value("instance").toString());
             if (!inst || !inst->isManagedPack()) return OperationService::failure("Managed instance not found.", 2);
             const auto type = inst->getManagedPackType();
+            if (type == "ftb" || type == "atlauncher")
+                return api.execute("modpack.versions", { { "provider", type }, { "projectId", inst->getManagedPackID() },
+                    { "offline", p.value("offline").toBool() } }, i);
             if (type != "flame" && type != "modrinth") return OperationService::failure("This managed pack uses a local file or update URL.", 2);
+            if (p.value("offline").toBool()) return OperationService::failure("This provider does not expose a cached offline catalog.", 2);
             return api.execute("resource.versions", { { "provider", type == "flame" ? "curseforge" : "modrinth" }, { "kind", "modpacks" },
                 { "projectId", inst->getManagedPackID() }, { "includeChangelog", true } }, i);
         });
     api.registerOperation({ "instance.managed-pack.update", "Update an existing managed pack from a selected pack URL or local archive through the existing staged import workflow.",
         ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID.") }, { "source", ApiSupport::string("Selected version download URL or local pack file.") },
-            { "versionId", ApiSupport::string("Selected provider version ID.") }, { "confirm", ApiSupport::boolean() } }, { "instance", "source", "confirm" }), "instances", true },
+            { "versionId", ApiSupport::string("Selected provider version ID; resolves the archive when source is omitted.") }, { "confirm", ApiSupport::boolean() } }, { "instance", "confirm" }), "instances", true },
         [&api](const QJsonObject& p, UserInteraction& interaction) {
             auto inst = findInstance(p.value("instance").toString());
             if (!inst || !inst->isManagedPack()) return OperationService::failure("Managed instance not found.", 2);
             if (inst->isRunning() || !p.value("confirm").toBool()) return OperationService::failure("Stop the instance and confirm the pack update.", 2);
-            const auto source = p.value("source").toString();
+            auto source = p.value("source").toString();
+            if (source.isEmpty()) {
+                const auto versionId = p.value("versionId").toString();
+                if (versionId.isEmpty()) return OperationService::failure("Provide source or versionId for the pack update.", 2);
+                const auto type = inst->getManagedPackType();
+                if (type != "flame" && type != "modrinth") return OperationService::failure("This pack update requires an archive source.", 2);
+                const auto versions = api.execute("instance.managed-pack.versions", { { "instance", inst->id() } }, interaction);
+                if (!versions.value("ok").toBool()) return versions;
+                QJsonObject selected;
+                for (const auto& value : versions.value("data").toArray())
+                    if (value.toObject().value("versionId").toString() == versionId) { selected = value.toObject(); break; }
+                if (selected.isEmpty()) return OperationService::failure("Pack version not found.", 2);
+                source = selected.value("downloadUrl").toString();
+                if (source.isEmpty() && type == "flame") {
+                    const auto project = api.execute("resource.project", { { "provider", "curseforge" }, { "kind", "modpacks" },
+                        { "projectId", inst->getManagedPackID() } }, interaction);
+                    if (!project.value("ok").toBool()) return project;
+                    QList<BlockedMod> files{ { selected.value("fileName").toString(),
+                        project.value("data").toObject().value("websiteUrl").toString() + "/download/" + versionId,
+                        selected.value("hash").toString(), false, {} } };
+                    QString error;
+                    if (!resolveHeadlessBlockedMods(files, selected.value("hashType").toString(), error)) return OperationService::failure(error);
+                    source = files.first().localPath;
+                }
+                if (source.isEmpty()) return OperationService::failure("Provider did not supply a downloadable pack.", 2);
+            }
             const auto url = QFileInfo(source).isFile() ? QUrl::fromLocalFile(QFileInfo(source).absoluteFilePath()) : QUrl(source);
             if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https" && !url.isLocalFile())) return OperationService::failure("Invalid pack source.", 2);
             const auto id = inst->id();

@@ -132,6 +132,10 @@ class ApiSmoke(unittest.TestCase):
         (client / ".minecraft").mkdir(parents=True)
         (client / "instance.cfg").write_text("[General]\nInstanceType=OneSix\nname=Neo client fixture\n", encoding="utf-8")
         (client / "mmc-pack.json").write_text('{"formatVersion":1,"components":[]}', encoding="utf-8")
+        second = cls.root / "instances/neo-second"
+        (second / ".minecraft").mkdir(parents=True)
+        (second / "instance.cfg").write_text("[General]\nInstanceType=OneSix\nname=Second client fixture\n", encoding="utf-8")
+        (second / "mmc-pack.json").write_text('{"formatVersion":1,"components":[]}', encoding="utf-8")
         meta = cls.root / "meta"
         (meta / "net.minecraft").mkdir(parents=True)
         (meta / "index.json").write_text(json.dumps({"formatVersion": 1, "packages": [
@@ -682,6 +686,18 @@ class ApiSmoke(unittest.TestCase):
             "versions": [{"id": 99, "name": "1.0", "type": "release", "updated": 0, "specs": {"id": 1, "minimum": 1024, "recommended": 2048}}]})
         self.assertEqual(len(s.ok("modpack.search", provider="ftb", offline=True)), 1)
         self.assertEqual(s.ok("modpack.versions", provider="ftb", projectId="42", offline=True)[0]["versionId"], "99")
+        for key, value in {"ManagedPack": True, "ManagedPackType": "ftb", "ManagedPackID": "42"}.items():
+            s.ok("settings.set", scope="instance", instance="neo-client", key=key, value=value)
+        try:
+            self.assertEqual(s.ok("instance.managed-pack.versions", instance="neo-client", offline=True)[0]["versionId"], "99")
+            missing = s.execute("instance.managed-pack.update", instance="neo-client", confirm=True)
+            self.assertFalse(missing["ok"])
+            self.assertIn("source or versionId", missing["error"])
+            self.assertFalse(s.execute("instance.managed-pack.update", instance="neo-client", versionId="99", confirm=False)["ok"])
+        finally:
+            for key in ("ManagedPack", "ManagedPackType", "ManagedPackID"):
+                s.ok("settings.reset", scope="instance", instance="neo-client", key=key)
+        self.assertFalse(s.execute("modpack.search", provider="modrinth", offset=-1)["ok"])
         response("https://api.technicpack.net/modpack/fixture?build=multimc", {"name": "fixture", "version": "1.0", "minecraft": "1.21.1", "url": "https://example.invalid/pack.zip"})
         self.assertEqual(s.ok("modpack.versions", provider="technic", projectId="fixture", offline=True)[0]["versionId"], "1.0")
         for name in ("modpacks", "thirdparty"):
@@ -703,6 +719,17 @@ class ApiSmoke(unittest.TestCase):
         migrated = self.root / "instances" / result["instances"][0]
         self.assertTrue(any(p.read_text() == "preserve me" for p in migrated.rglob("marker.txt")))
         self.assertEqual((source / "marker.txt").read_text(), "preserve me")
+
+    def test_24_schematics_are_owned_by_each_instance(self):
+        s = self.sidecar
+        for instance, filename in (("neo-client", "first.schematic"), ("neo-second", "second.schematic")):
+            folder = self.root / "instances" / instance / ".minecraft/schematics"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / filename).write_bytes(b"instance-specific fixture")
+            s.ok("resource.inspect", instance=instance, kind="schematics", resource=filename)
+        self.assertFalse(s.execute("resource.inspect", instance="neo-client", kind="schematics", resource="second.schematic")["ok"])
+        self.assertFalse(s.execute("resource.inspect", instance="neo-second", kind="schematics", resource="first.schematic")["ok"])
+        # tearDownClass also asserts a clean sidecar exit after these models exist.
 
     def test_23_binary_screenshots_and_panel_state(self):
         import zlib

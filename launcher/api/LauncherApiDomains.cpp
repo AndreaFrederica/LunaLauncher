@@ -376,6 +376,19 @@ QJsonObject proxySet(const QJsonObject& p)
     return proxyInfo();
 }
 
+QJsonObject proxyTest(const QJsonObject& p)
+{
+    const auto url = QUrl(p.value("url").toString("https://api.minecraftservices.com/"));
+    if (!url.isValid() || url.scheme() != "https") return OperationService::failure("Only HTTPS test URLs are allowed.", 2);
+    QNetworkReply* reply = APPLICATION->network()->head(QNetworkRequest(url));
+    QEventLoop loop; QTimer timer; timer.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit); QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(qBound(1000, p.value("timeoutMs").toInt(10000), 60000)); loop.exec();
+    if (!reply->isFinished()) { reply->abort(); return OperationService::success(QJsonObject{ { "reachable", false }, { "timedOut", true }, { "url", url.toString() } }); }
+    return OperationService::success(QJsonObject{ { "reachable", reply->error() == QNetworkReply::NoError }, { "timedOut", false },
+                                                   { "statusCode", reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() }, { "error", reply->errorString() }, { "url", url.toString() } });
+}
+
 QSettings updateSettings()
 {
     return QSettings(QDir(APPLICATION->dataRoot()).filePath("lunalauncher_update.cfg"), QSettings::IniFormat);
@@ -582,6 +595,9 @@ void registerLauncherApiDomains(LauncherApi& api)
                                            { "port", QJsonObject{ { "type", "integer" } } }, { "username", stringProperty("Optional username.") },
                                            { "password", stringProperty("Optional password.") } }) },
                            [](const QJsonObject& p, UserInteraction&) { return proxySet(p); });
+    api.registerOperation({ "network.proxy.test", "Test HTTPS connectivity through the currently configured launcher proxy.",
+                            objectSchema({ { "url", stringProperty("HTTPS URL to test.") }, { "timeoutMs", QJsonObject{ { "type", "integer" } } } }) },
+                           [](const QJsonObject& p, UserInteraction&) { return proxyTest(p); });
     api.registerOperation({ "launcher.update.status", "Read launcher updater state and persisted preferences.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) { return updateStatus(); });
     api.registerOperation({ "launcher.update.configure", "Configure automatic, beta, and interval updater preferences.",
@@ -865,6 +881,30 @@ void registerLauncherApiDomains(LauncherApi& api)
                            [&api](const QJsonObject& p, UserInteraction& i) {
                                QJsonObject import{ { "instance", p.value("instance") }, { "source", p.value("template") }, { "name", p.value("name") }, { "replace", p.value("replace") } };
                                return api.execute("instance.world.import", import, i);
+                           });
+    api.registerOperation({ "instance.world.copy-to", "Copy a world from one Minecraft instance into another.",
+                            objectSchema({ { "sourceInstance", stringProperty("Source instance ID or name.") }, { "targetInstance", stringProperty("Target instance ID or name.") },
+                                           { "world", stringProperty("Source world folder or display name.") }, { "name", stringProperty("Destination world name.") },
+                                           { "replace", boolProperty("Replace an existing destination.") } },
+                                          { "sourceInstance", "targetInstance", "world", "name" }) },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               auto source = dynamic_cast<MinecraftInstance*>(findInstance(p.value("sourceInstance").toString()));
+                               auto target = dynamic_cast<MinecraftInstance*>(findInstance(p.value("targetInstance").toString()));
+                               if (!source || !target) return OperationService::failure(QObject::tr("Source or target instance was not found."), 2);
+                               if (source->isRunning() || target->isRunning()) return OperationService::failure(QObject::tr("Both instances must be stopped."), 2);
+                               const auto name = p.value("name").toString().trimmed();
+                               if (name.isEmpty() || name == "." || name == ".." || name.contains('/') || name.contains('\\')) return OperationService::failure(QObject::tr("Invalid destination world name."), 2);
+                               auto worlds = source->worldList(); worlds->update();
+                               auto world = findWorld(worlds.get(), p.value("world").toString());
+                               if (!world || !world->isOnFS()) return OperationService::failure(QObject::tr("Source world was not found."), 2);
+                               const auto destination = QDir(target->worldDir()).filePath(name);
+                               if (QFileInfo::exists(destination)) {
+                                   if (!p.value("replace").toBool()) return OperationService::failure(QObject::tr("Destination exists; set replace=true."), 2);
+                                   if (!QDir(destination).removeRecursively()) return OperationService::failure(QObject::tr("Destination could not be replaced."));
+                               }
+                               if (!FS::copy(world->container().absoluteFilePath(), destination)()) return OperationService::failure(QObject::tr("World could not be copied."));
+                               target->worldList()->update();
+                               return OperationService::success(QJsonObject{ { "sourceInstance", source->id() }, { "targetInstance", target->id() }, { "name", name }, { "path", destination }, { "changed", true } });
                            });
 
     api.registerOperation({ "instance.world.export", "Export a world directory as a zip archive.",

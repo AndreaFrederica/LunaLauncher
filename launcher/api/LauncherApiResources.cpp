@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QUrl>
+#include <QStandardPaths>
 
 #include <memory>
 
@@ -422,6 +423,28 @@ QJsonObject selectJava(const QJsonObject& parameters, UserInteraction& interacti
     return OperationService::success(QJsonObject{ { "path", executable }, { "scope", scope } });
 }
 
+QJsonObject diagnoseJava(const QJsonObject& parameters)
+{
+    const auto scope = parameters.value("scope").toString("launcher").toLower();
+    SettingsObject* settings = APPLICATION->settings();
+    BaseInstance* instance = nullptr;
+    if (scope == "instance") {
+        instance = findInstance(parameters.value("instance").toString());
+        if (!instance) return OperationService::failure(QObject::tr("Instance not found."), 2);
+        settings = instance->settings();
+    } else if (scope != "launcher" && scope != "global") {
+        return OperationService::failure(QObject::tr("Unknown Java diagnostic scope."), 2);
+    }
+    const auto configured = settings->get("JavaPath").toString();
+    const auto resolved = FS::ResolveExecutable(configured);
+    const QFileInfo file(resolved);
+    const auto found = QStandardPaths::findExecutable(resolved);
+    return OperationService::success(QJsonObject{ { "scope", scope }, { "configured", configured }, { "resolved", resolved },
+                                                   { "exists", file.exists() || !found.isEmpty() }, { "executable", found.isEmpty() ? resolved : found },
+                                                   { "automatic", settings->get("AutomaticJava").toBool() }, { "override", settings->get("OverrideJavaLocation").toBool() },
+                                                   { "javaRoot", javaRoot() } });
+}
+
 }  // namespace
 
 void registerLauncherApiResourceOperations(LauncherApi& api)
@@ -463,4 +486,7 @@ void registerLauncherApiResourceOperations(LauncherApi& api)
                                            { "instance", stringProperty("Instance ID when scope=instance.") } }),
                             "java" },
                           [](const QJsonObject& parameters, UserInteraction& interaction) { return selectJava(parameters, interaction); });
+    api.registerOperation({ "java.diagnose", "Inspect Java selection, resolution, and executable availability.",
+                            objectSchema({ { "scope", stringProperty("launcher or instance.") }, { "instance", stringProperty("Instance ID when scope=instance.") } }), "java" },
+                          [](const QJsonObject& parameters, UserInteraction&) { return diagnoseJava(parameters); });
 }

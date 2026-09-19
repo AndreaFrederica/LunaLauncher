@@ -3,6 +3,7 @@
 #include "LauncherApiInstances.h"
 
 #include <QDir>
+#include <QBuffer>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -429,6 +430,28 @@ void registerInstanceApiOperations(LauncherApi& api)
                             objectSchema({ { "instance", instance }, { "kind", stringProperty("root, game, mods, logs, or screenshots.") } },
                                           { "instance" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return openInstanceFolder(parameters); });
+    api.registerOperation({ "instance.icon", "Read the instance icon as a bounded PNG data URL for non-Qt frontends.",
+                            objectSchema({ { "instance", instance } }, { "instance" }) },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               auto inst = findInstance(p.value("instance").toString());
+                               if (!inst) return OperationService::failure("Instance not found.", 2);
+                               auto icon = APPLICATION->icons()->getIcon(inst->iconKey());
+                               if (icon.isNull()) {
+                                   // The CLI does not initialize a desktop icon theme.
+                                   const auto key = inst->iconKey() == "default" ? QStringLiteral("grass") : inst->iconKey();
+                                   if (!key.contains('/') && !key.contains('\\'))
+                                       icon = QIcon(":/icons/multimc/scalable/instances/" + key + ".svg");
+                                   if (icon.isNull()) icon = QIcon(":/icons/multimc/scalable/instances/grass.svg");
+                               }
+                               const auto pixmap = icon.pixmap(96, 96);
+                               QByteArray bytes;
+                               QBuffer buffer(&bytes);
+                               buffer.open(QIODevice::WriteOnly);
+                               if (pixmap.isNull() || !pixmap.save(&buffer, "PNG"))
+                                   return OperationService::failure("Instance icon could not be rendered.");
+                               return OperationService::success(QJsonObject{ { "icon", inst->iconKey() },
+                                   { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) } });
+                           });
     api.registerOperation({ "instance.set-icon", "Assign a built-in or imported icon to an instance.",
                             objectSchema({ { "instance", instance }, { "icon", stringProperty("Icon key.") },
                                            { "path", stringProperty("Icon file to import.") },

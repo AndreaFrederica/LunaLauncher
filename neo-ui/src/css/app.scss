@@ -23,4 +23,12 @@ body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; f
 .nav-list { padding: 0 12px; }.nav-list .q-item { min-height:46px; margin:4px 0; color:#94a3b8; }.nav-list .q-item .q-icon { color:#64748b; }.nav-list .nav-active { background:linear-gradient(90deg,rgba(99,102,241,.28),rgba(99,102,241,.08)); color:#fff; }.nav-list .nav-active .q-icon { color:#a5b4fc; }
 .drawer-footer { position:absolute; bottom:18px; left:24px; color:#475569; font-size:11px; display:flex; gap:7px; align-items:center; }
 .neo-page { max-width: 1440px; margin: 0 auto; padding: 34px clamp(18px,4vw,56px)!important; }
+.neo-page h1 { line-height:1.25; font-weight:700; }
+.neo-page h5 { font-size:26px; line-height:1.35; font-weight:650; margin:12px 0 24px; }
+.neo-page h6 { font-size:18px; line-height:1.4; font-weight:650; margin:24px 0 14px; }
+.neo-page .bg-grey-9 { background:var(--neo-panel)!important; }
+.neo-page .q-expansion-item { background:var(--neo-panel); border:1px solid var(--neo-border); border-radius:12px; }
+.neo-page .q-tab { text-transform:none; }
+.neo-page .q-item__label { overflow-wrap:anywhere; }
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 @media(max-width:700px){.neo-toolbar{padding:0 14px}.header-status{display:none}.neo-page{padding:24px 16px!important}}

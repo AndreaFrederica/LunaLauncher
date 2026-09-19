@@ -496,6 +496,24 @@ void registerLauncherApiServerOperations(LauncherApi& api)
     const QJsonObject propertiesObject{ { "type", "object" }, { "additionalProperties", QJsonObject{ { "type", "string" } } } };
     const QJsonObject entriesArray{ { "type", "array" }, { "items", QJsonObject{ { "type", "object" } } } };
 
+    api.registerOperation({ "server.distribution.catalog", "Describe server distribution providers and stable catalog endpoints for a replacement UI.",
+        objectSchema({ { "provider", stringProperty("Optional provider filter: vanilla, paper, purpur, fabric, forge.") } }), "server" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto requested = p.value("provider").toString().trimmed().toLower();
+            QJsonArray providers;
+            const auto add = [&providers, &requested](const QString& id, const QString& name, const QString& manifest, const QString& download) {
+                if (!requested.isEmpty() && requested != id) return;
+                providers.append(QJsonObject{ { "id", id }, { "name", name }, { "manifest", manifest }, { "downloadTemplate", download } });
+            };
+            add("vanilla", "Minecraft Vanilla", "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", "version.server.url");
+            add("paper", "Paper", "https://api.papermc.io/v2/projects/paper", "https://api.papermc.io/v2/projects/paper/versions/{version}/builds/{build}/downloads/{name}");
+            add("purpur", "Purpur", "https://api.purpurmc.org/v2/purpur", "https://api.purpurmc.org/v2/purpur/{version}/{build}/download");
+            add("fabric", "Fabric Loader", "https://meta.fabricmc.net/v2/versions/loader", "https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/1.0.0/server/jar");
+            add("forge", "Forge", "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json", "installer-url-from-manifest");
+            if (providers.isEmpty()) return OperationService::failure("Unknown server distribution provider.", 2);
+            return OperationService::success(QJsonObject{ { "providers", providers }, { "stable", true } });
+        });
+
     api.registerOperation({ "server.distribution.install", "Download and configure a server distribution from a verified HTTP(S) URL. The file is staged before replacement.",
         objectSchema({ { "instance", instance }, { "url", stringProperty("HTTP(S) distribution URL.") },
             { "fileName", stringProperty("Destination filename inside the server instance.") }, { "replace", boolProperty("Replace an existing file.") },

@@ -513,6 +513,36 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             if (providers.isEmpty()) return OperationService::failure("Unknown server distribution provider.", 2);
             return OperationService::success(QJsonObject{ { "providers", providers }, { "stable", true } });
         });
+    api.registerOperation({ "server.distribution.resolve", "Resolve a concrete server distribution download URL from provider, version, and build identifiers.",
+        objectSchema({ { "provider", stringProperty("vanilla, paper, purpur, or fabric.") }, { "version", stringProperty("Minecraft version.") },
+                       { "build", QJsonObject{ { "type", "integer" } } }, { "loader", stringProperty("Fabric loader version.") },
+                       { "file", stringProperty("Paper download filename.") } }, { "provider", "version" }), "server" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto provider = p.value("provider").toString().trimmed().toLower();
+            const auto version = p.value("version").toString().trimmed();
+            if (version.isEmpty() || version.contains('/') || version.contains('\\')) return OperationService::failure("Invalid version.", 2);
+            QString url; QString fileName; QString executable = "java";
+            if (provider == "vanilla") {
+                url = QString("https://piston-data.mojang.com/v1/objects/%1/server.jar").arg(version);
+                fileName = "server.jar";
+            } else if (provider == "paper") {
+                const auto build = p.value("build").toInt();
+                if (build <= 0) return OperationService::failure("Paper requires a positive build.", 2);
+                fileName = p.value("file").toString("paper-%1-%2.jar").arg(version).arg(build);
+                url = QString("https://api.papermc.io/v2/projects/paper/versions/%1/builds/%2/downloads/%3").arg(version).arg(build).arg(fileName);
+            } else if (provider == "purpur") {
+                const auto build = p.value("build").toInt();
+                if (build <= 0) return OperationService::failure("Purpur requires a positive build.", 2);
+                fileName = "purpur-" + version + ".jar";
+                url = QString("https://api.purpurmc.org/v2/purpur/%1/%2/download").arg(version).arg(build);
+            } else if (provider == "fabric") {
+                const auto loader = p.value("loader").toString().trimmed();
+                if (loader.isEmpty()) return OperationService::failure("Fabric requires a loader version.", 2);
+                fileName = "fabric-server-launch.jar";
+                url = QString("https://meta.fabricmc.net/v2/versions/loader/%1/%2/1.0.0/server/jar").arg(version, loader);
+            } else return OperationService::failure("Unknown distribution provider.", 2);
+            return OperationService::success(QJsonObject{ { "provider", provider }, { "version", version }, { "url", url }, { "fileName", fileName }, { "executable", executable } });
+        });
 
     api.registerOperation({ "server.distribution.install", "Download and configure a server distribution from a verified HTTP(S) URL. The file is staged before replacement.",
         objectSchema({ { "instance", instance }, { "url", stringProperty("HTTP(S) distribution URL.") },

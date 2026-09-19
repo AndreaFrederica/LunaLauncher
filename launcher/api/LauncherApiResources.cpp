@@ -9,6 +9,8 @@
 #include <QJsonObject>
 #include <QUrl>
 #include <QStandardPaths>
+#include <QProcess>
+#include <QRegularExpression>
 
 #include <memory>
 
@@ -439,10 +441,23 @@ QJsonObject diagnoseJava(const QJsonObject& parameters)
     const auto resolved = FS::ResolveExecutable(configured);
     const QFileInfo file(resolved);
     const auto found = QStandardPaths::findExecutable(resolved);
-    return OperationService::success(QJsonObject{ { "scope", scope }, { "configured", configured }, { "resolved", resolved },
-                                                   { "exists", file.exists() || !found.isEmpty() }, { "executable", found.isEmpty() ? resolved : found },
-                                                   { "automatic", settings->get("AutomaticJava").toBool() }, { "override", settings->get("OverrideJavaLocation").toBool() },
-                                                   { "javaRoot", javaRoot() } });
+    const auto executable = found.isEmpty() ? resolved : found;
+    QProcess process;
+    if (!executable.isEmpty() && (file.exists() || !found.isEmpty())) {
+        process.start(executable, { "-version" });
+        process.waitForFinished(10000);
+    }
+    const auto output = QString::fromLocal8Bit(process.readAllStandardError() + process.readAllStandardOutput()).trimmed();
+    QJsonObject result{ { "scope", scope }, { "configured", configured }, { "resolved", resolved },
+                        { "exists", file.exists() || !found.isEmpty() }, { "executable", executable },
+                        { "automatic", settings->get("AutomaticJava").toBool() }, { "override", settings->get("OverrideJavaLocation").toBool() },
+                        { "javaRoot", javaRoot() }, { "probeStarted", process.processId() != 0 }, { "probeExitCode", process.exitCode() },
+                        { "probeOutput", output } };
+    QRegularExpression versionRx("(?:openjdk|java) version \\\"([^\\\"]+)\\\"");
+    auto match = versionRx.match(output);
+    if (match.hasMatch()) result.insert("version", match.captured(1));
+    result.insert("usable", process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0 && !output.isEmpty());
+    return OperationService::success(result);
 }
 
 }  // namespace

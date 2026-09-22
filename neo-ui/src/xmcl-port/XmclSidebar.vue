@@ -18,6 +18,7 @@
     </div>
     <div class="xmcl-divider" />
     <div class="xmcl-sidebar-section xmcl-sidebar-bottom">
+      <button class="xmcl-sidebar-item non-moveable" :class="{active:page==='multiplayer'}" aria-label="多人游戏" @click="emit('navigate','multiplayer')"><span class="xmcl-sidebar-content"><q-icon name="hub" size="23px" /></span></button>
       <button class="xmcl-sidebar-item non-moveable" :class="{active:page==='settings'}" aria-label="设置" @click="emit('navigate','settings')"><span class="xmcl-sidebar-content"><q-icon name="settings" size="23px" /></span></button>
     </div>
   </aside>

@@ -47,6 +47,7 @@
  <InstanceExtras :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
  <XmclAccountWorkspace v-if="page==='accounts'" :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" />
+ <XmclStoreWorkspace v-if="page==='store'" :busy="busy" :execute="catalogExecute" @installed="refresh" />
  <XmclSettingsShell v-if="page==='settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
  <q-card v-if="selected && page==='manage'" class="bg-grey-9 q-mt-lg">
@@ -87,6 +88,7 @@ import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
 import XmclSettingsShell from './xmcl-port/XmclSettingsShell.vue';
 import XmclResourceWorkspace from './xmcl-port/XmclResourceWorkspace.vue';
 import XmclAccountWorkspace from './xmcl-port/XmclAccountWorkspace.vue';
+import XmclStoreWorkspace from './xmcl-port/XmclStoreWorkspace.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

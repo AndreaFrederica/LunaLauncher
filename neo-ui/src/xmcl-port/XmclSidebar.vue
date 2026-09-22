@@ -4,7 +4,7 @@
     <div class="xmcl-sidebar-section">
       <button class="xmcl-back non-moveable" aria-label="返回" @click="emit('back')"><q-icon name="arrow_back" size="18px" /></button>
       <button class="xmcl-sidebar-item non-moveable" :class="{active: page==='accounts'}" aria-label="账户" @click="emit('navigate','accounts')"><span class="xmcl-sidebar-content"><q-icon name="person" size="23px" /></span></button>
-      <button class="xmcl-sidebar-item non-moveable" :class="{active: page==='create'}" aria-label="下载中心" @click="emit('navigate','create')"><span class="xmcl-sidebar-content"><q-icon name="store" size="26px" /></span></button>
+      <button class="xmcl-sidebar-item non-moveable" :class="{active: page==='store'}" aria-label="下载中心" @click="emit('navigate','store')"><span class="xmcl-sidebar-content"><q-icon name="store" size="26px" /></span></button>
     </div>
     <div class="xmcl-divider" />
     <div class="xmcl-sidebar-instances" @dragover.prevent>

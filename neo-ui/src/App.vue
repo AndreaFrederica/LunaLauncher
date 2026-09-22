@@ -3,21 +3,15 @@
  <XmclSystemBar :connected="connected" :busy="busy" @refresh="refresh" />
  <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true" />
  <main class="xmcl-main">
- <XmclHomeHeader v-if="selected && (page==='manage' || page==='settings' || page==='instances')" :selected="selected" :tab="page==='settings'?'settings':'home'" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
+ <XmclHomeHeader v-if="selected && page==='settings'" :selected="selected" tab="settings" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
  <div class="xmcl-content neo-page">
- <XmclHomeGrid v-if="selected && page==='manage'" :instance="selected.id" :execute="catalogExecute" @navigate="xmclTab" @extras="page='manage'" />
+ <XmclDashboard v-if="page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @add="addDialog=true" @refresh="refresh" />
  <q-tabs v-if="openedInstances.length" :model-value="page==='manage'?selected?.id:''" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
  <q-banner v-if="error" class="bg-red-9 q-mb-md">{{ error }}</q-banner>
  <q-banner v-if="notice" class="bg-teal-9 q-mb-md">{{ notice }}</q-banner>
  <q-linear-progress v-if="busy" indeterminate class="q-mb-md" />
- <section v-if="page==='instances'" class="xmcl-instance-empty">
-  <span class="material-icons xmcl-instance-empty__icon">sports_esports</span>
-  <h1>选择一个实例开始</h1>
-  <p v-if="instances.length">从左侧 XMCL 实例栏选择实例，或双击实例直接启动。</p>
-  <p v-else>还没有实例。使用左侧的添加按钮导入或创建 Minecraft 实例。</p>
-  <button class="xmcl-primary-button" @click="addDialog=true"><span class="material-icons">add</span>添加实例</button>
- </section>
+ <XmclInstanceWorkspace v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="readLogFile" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
  <div v-if="page==='create'" class="form"><h5>添加实例</h5>
   <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" label="服务端"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
   <CatalogBrowser v-if="createMode==='catalog'" packs :busy="busy" :execute="catalogExecute" @installed="navigate('instances')"/>
@@ -32,7 +26,7 @@
   <q-input v-else dark outlined v-model="creation.source" label="整合包本地完整路径或下载 URL" class="q-mb-md"/>
   <q-btn color="primary" label="创建实例" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : (createMode==='import' && !creation.source))" @click="create"/></template>
  </div>
- <div v-if="page==='manage' && selected"><h5>{{ selected.name }} · 实例管理</h5><div class="row q-gutter-sm q-mb-lg">
+ <div v-if="false && page==='manage' && selected"><h5>{{ selected.name }} · 实例管理</h5><div class="row q-gutter-sm q-mb-lg">
   <q-btn color="primary" label="启动并查看日志" :disable="busy" @click="launch(selected)"/>
   <q-btn v-for="a in actions" :key="a.op" :label="a.label" :disable="busy" @click="instanceAction(a.op,a.field,a.label)"/>
   <q-btn label="更换图标" :disable="busy" @click="changeIcon"/><q-btn label="打开实例目录" :disable="busy" @click="run('instance.open-folder',{instance:selected.id})"/><q-btn label="实例设置" @click="scope='instance'; page='settings'; refresh()"/>
@@ -66,6 +60,7 @@
  </div>
  </main>
  <XmclAddInstanceDialog v-model="addDialog" :busy="busy" :execute="catalogExecute" @created="refresh" />
+ <XmclTaskCenter :busy="busy" :execute="call" :status="status" @cancel="cancel" />
  <q-dialog v-model="dialog" persistent><q-card class="bg-grey-9 text-white" style="width:520px;max-width:90vw"><q-card-section class="text-h6">{{ prompt }}</q-card-section><q-card-section>
   <q-select v-if="choices" dark outlined v-model="answer" :options="choices" emit-value map-options label="请选择"/>
   <q-input v-else-if="!confirmation" dark outlined v-model="answer" :type="secret ? 'password' : 'textarea'" autofocus/>
@@ -86,7 +81,10 @@ import ResourceUpdatesPanel from './components/ResourceUpdatesPanel.vue';
 import XmclSidebar from './xmcl-port/XmclSidebar.vue';
 import XmclHomeHeader from './xmcl-port/XmclHomeHeader.vue';
 import XmclHomeGrid from './xmcl-port/XmclHomeGrid.vue';
+import XmclDashboard from './xmcl-port/XmclDashboard.vue';
+import XmclInstanceWorkspace from './xmcl-port/XmclInstanceWorkspace.vue';
 import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
+import XmclTaskCenter from './xmcl-port/XmclTaskCenter.vue';
 import XmclSettingsShell from './xmcl-port/XmclSettingsShell.vue';
 import XmclResourceWorkspace from './xmcl-port/XmclResourceWorkspace.vue';
 import XmclAccountWorkspace from './xmcl-port/XmclAccountWorkspace.vue';
@@ -183,7 +181,12 @@ function ask(title:string, value:any='', confirm=false, options:any[]|null=null,
 }
 function finishDialog(ok:boolean){dialog.value=false;resolveDialog?.(ok ? (confirmation.value ? true : answer.value) : null);resolveDialog=undefined;}
 function message(e:any){return e?.message || String(e);}
-async function catalogExecute(op:string,p:Record<string,unknown>){if(busy.value)throw new Error('请等待当前操作完成');busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';}}
+const readOnlyOperations=new Set(['resource.list','instance.info','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','catalog.search','catalog.projects']);
+async function catalogExecute(op:string,p:Record<string,unknown>){
+ if(busy.value && !readOnlyOperations.has(op))throw new Error('请等待当前操作完成');
+ if(readOnlyOperations.has(op))return call(op,p);
+ busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';}
+}
 async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||'操作失败');connected.value=true;return r.data;}
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
 let resourceRequest=0;
@@ -208,6 +211,7 @@ async function openInstance(i:any,forceRead=false){
 }
 async function changeIcon(){const path=await ask('图标文件完整路径（PNG / ICO 等）');if(path===null||!path.trim())return;await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});icons.value[selected.value.id]=icon.dataUrl;}}
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}
+async function workspaceAction(op:string){const labels:Record<string,string>={rename:'重命名',copy:'复制实例',group:'修改分组'};if(labels[op]){await instanceAction(op,op==='group'?'group':'name',labels[op]);return;}await instanceAction(op,undefined,op);}
 async function askDelete(op:string,p:any,name:string){if(await ask('确认移除 '+name+'？','',true))await run(op,{...p,confirm:true});}
 async function editSetting(s:any){const value=await ask('编辑 '+s.key,JSON.stringify(s.value));if(value===null)return;try{await run('settings.set',{...settingScope(),key:s.key,value:JSON.parse(value)});}catch(e){error.value='请输入有效的 JSON 值，例如 true、1024 或 "文本"';}}
 async function cancel(){try{await call('task.cancel');}catch(e){error.value=message(e);}}

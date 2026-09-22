@@ -1,14 +1,9 @@
 <template>
-<q-layout view="hHh Lpr fFf" class="neo-shell text-white">
- <q-header class="neo-header"><q-toolbar class="neo-toolbar"><q-btn aria-label="打开导航" flat round icon="menu" class="lt-md" @click="drawerOpen=!drawerOpen"/><q-avatar square size="34px" class="brand-mark"><q-icon name="auto_awesome"/></q-avatar><q-toolbar-title class="brand-title">Luna <span>Neo</span><small>{{ buildLabel }}</small></q-toolbar-title><div class="header-status"><q-icon name="circle" size="9px" :color="connected?'positive':'grey'"/> {{ connected ? '已连接启动器' : '未连接启动器' }}</div><q-btn aria-label="刷新" flat round icon="refresh" :disable="busy" @click="refresh" /></q-toolbar></q-header>
- <q-drawer v-model="drawerOpen" :behavior="$q.screen.lt.md ? 'mobile' : 'desktop'" :width="248" class="neo-drawer">
-  <div class="drawer-brand"><q-avatar square size="42px" class="brand-mark"><q-icon name="auto_awesome"/></q-avatar><div><strong>Luna Neo</strong><small>现代启动器</small></div></div>
-  <div class="drawer-label">工作区</div><q-list class="nav-list">
-   <q-item v-for="item in pages" :key="item.id" clickable :active="page===item.id" active-class="nav-active" @click="navigate(item.id);closeMobileNav()"><q-item-section avatar><q-icon :name="item.icon"/></q-item-section><q-item-section>{{ item.label }}</q-item-section></q-item>
-   <q-item v-if="selected" clickable :active="page==='manage'" active-class="nav-active" @click="navigate('manage');closeMobileNav()"><q-item-section avatar><q-icon name="tune"/></q-item-section><q-item-section>实例管理</q-item-section></q-item>
-  </q-list><div class="drawer-footer"><q-icon name="info"/> Neo UI {{ buildLabel }}</div>
- </q-drawer>
- <q-page-container><q-page padding class="neo-page">
+<q-layout view="lHh Lpr lFf" class="neo-shell text-white">
+ <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" />
+ <q-page-container class="xmcl-page-container"><q-page class="neo-page">
+ <XmclHomeHeader v-if="selected && (page==='manage' || page==='settings')" :selected="selected" :tab="page==='settings'?'settings':'home'" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
+ <XmclHomeGrid v-if="selected && page==='manage'" :instance="selected.id" :execute="catalogExecute" @navigate="xmclTab" @extras="page='manage'" />
  <q-tabs v-if="openedInstances.length" :model-value="page==='manage'?selected?.id:''" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
  <q-banner v-if="error" class="bg-red-9 q-mb-md">{{ error }}</q-banner>
@@ -100,6 +95,9 @@ import AccountPanel from './components/AccountPanel.vue';
 import InstanceSettingsPanel from './components/InstanceSettingsPanel.vue';
 import ServerPanel from './components/ServerPanel.vue';
 import ResourceUpdatesPanel from './components/ResourceUpdatesPanel.vue';
+import XmclSidebar from './xmcl-port/XmclSidebar.vue';
+import XmclHomeHeader from './xmcl-port/XmclHomeHeader.vue';
+import XmclHomeGrid from './xmcl-port/XmclHomeGrid.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';
@@ -197,6 +195,7 @@ let resourceRequest=0;
 async function loadResources(){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind});if(request===resourceRequest){if(!Array.isArray(data))throw new Error('资源接口返回格式错误');resources.value=data;}}catch(e){if(request===resourceRequest)resourceError.value=message(e);}finally{if(request===resourceRequest)resourcesLoading.value=false;}}
 async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage'){await loadResources();await loadComponents();await loadLogFiles();}else {instances.value=await call('instance.list');await loadIcons();}}catch(e){error.value=message(e);}}
 async function navigate(id:string){if(preparingLaunch)return;page.value=id;error.value='';notice.value='';if(id==='settings')scope.value='launcher';if(!busy.value)await refresh();}
+function xmclTab(tab:string){if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;}}
 async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function openInstance(i:any,forceRead=false){

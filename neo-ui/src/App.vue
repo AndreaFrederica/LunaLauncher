@@ -2,7 +2,7 @@
 <q-layout view="lHh Lpr lFf" class="neo-shell text-white">
  <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true" />
  <q-page-container class="xmcl-page-container"><q-page class="neo-page">
- <XmclHomeHeader v-if="selected && (page==='manage' || page==='settings')" :selected="selected" :tab="page==='settings'?'settings':'home'" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
+ <XmclHomeHeader v-if="selected && (page==='manage' || page==='settings' || page==='instances')" :selected="selected" :tab="page==='settings'?'settings':'home'" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
  <XmclHomeGrid v-if="selected && page==='manage'" :instance="selected.id" :execute="catalogExecute" @navigate="xmclTab" @extras="page='manage'" />
  <q-tabs v-if="openedInstances.length" :model-value="page==='manage'?selected?.id:''" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
@@ -42,15 +42,7 @@
  <h6 class="q-mb-md">版本组件</h6>
  <q-banner v-if="componentError" class="bg-red-9 q-my-sm">{{ componentError }}</q-banner>
  <q-list bordered separator><q-item v-for="c in components" :key="c.id"><q-item-section><q-item-label>{{ c.name || c.id }} · {{ c.version }} {{ c.custom ? '（自定义）' : '' }}</q-item-label><q-item-label caption class="text-grey-4">{{ c.id }} · {{ c.enabled ? '已启用' : '已禁用' }}</q-item-label><q-item-label v-for="(p,index) in c.problems" :key="index" class="text-orange">{{ p.description }}</q-item-label></q-item-section><q-item-section side><q-btn v-if="c.canChangeVersion" flat label="更改版本" :disable="busy" @click="changeComponentVersion(c)"/><q-btn v-if="c.canDisable" flat :label="c.enabled?'禁用':'启用'" :disable="busy" @click="run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled:!c.enabled})"/></q-item-section></q-item></q-list>
- <h6 class="q-mb-md">资源管理</h6>
- <q-expansion-item v-if="['mods','resourcepacks','shaderpacks','datapacks'].includes(resourceKind)" label="下载模组 / 资源" icon="download" class="q-my-md"><CatalogBrowser :instance="selected.id" :kind="resourceKind" :minecraft-version="instanceDetails?.minecraftVersion" :busy="busy" :execute="catalogExecute" @installed="loadResources"/></q-expansion-item>
- <q-select dark outlined v-model="resourceKind" :options="resourceKinds" emit-value map-options label="资源类型" @update:model-value="loadResources" />
- <div class="row q-gutter-sm q-my-md"><q-input class="col" dark outlined v-model="resourceSource" label="资源本地完整路径或下载 URL"/><q-btn label="安装资源" :disable="busy || !resourceSource" @click="run('resource.install',{instance:selected.id,kind:resourceKind,source:resourceSource})"/></div>
- <q-linear-progress v-if="resourcesLoading" indeterminate class="q-my-sm"/>
- <q-banner v-if="resourceError" class="bg-red-9 q-my-sm">资源读取失败：{{ resourceError }}</q-banner>
- <p v-else-if="!resourcesLoading && !resources.length">当前目录中没有此类资源。请核对上方实例目录是否与老 UI 相同。</p>
- <p v-else-if="!resourcesLoading">共 {{ resources.length }} 项资源</p>
-  <q-list bordered separator><q-item v-for="r in resources" :key="r.fileName"><q-item-section>{{ r.name || r.fileName }}<q-item-label caption class="text-grey-4">{{ r.fileName }} · {{ r.enabled ? '已启用' : '已禁用' }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat :label="r.enabled ? '禁用' : '启用'" :disable="busy" @click="run(r.enabled?'resource.disable':'resource.enable',{instance:selected.id,kind:resourceKind,resource:r.fileName})"/><q-btn flat color="red-4" label="删除" :disable="busy" @click="askDelete('resource.remove',{instance:selected.id,kind:resourceKind,resource:r.fileName},r.fileName)"/></div></q-item-section></q-item></q-list>
+ <XmclResourceWorkspace :instance="selected.id" :kind="resourceKind" :minecraft-version="instanceDetails?.minecraftVersion" :busy="busy" :execute="catalogExecute" />
  <ResourceUpdatesPanel :instance="selected.id" :kind="resourceKind" :busy="busy" :execute="catalogExecute" />
  <InstanceExtras :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
@@ -96,6 +88,7 @@ import XmclHomeHeader from './xmcl-port/XmclHomeHeader.vue';
 import XmclHomeGrid from './xmcl-port/XmclHomeGrid.vue';
 import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
 import XmclSettingsShell from './xmcl-port/XmclSettingsShell.vue';
+import XmclResourceWorkspace from './xmcl-port/XmclResourceWorkspace.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

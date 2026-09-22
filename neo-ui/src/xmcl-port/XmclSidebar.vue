@@ -14,7 +14,7 @@
         </button>
         <span v-if="pinned.includes(instance.id)" class="xmcl-pin"><q-icon name="push_pin" size="10px" /></span>
       </div>
-      <button id="create-instance-button" class="xmcl-sidebar-item xmcl-add non-moveable" aria-label="添加实例" @click="emit('navigate','create')"><span class="xmcl-sidebar-content"><q-icon name="add" size="25px" /></span></button>
+      <button id="create-instance-button" class="xmcl-sidebar-item xmcl-add non-moveable" aria-label="添加实例" @click="emit('add')"><span class="xmcl-sidebar-content"><q-icon name="add" size="25px" /></span></button>
     </div>
     <div class="xmcl-divider" />
     <div class="xmcl-sidebar-section xmcl-sidebar-bottom">
@@ -26,7 +26,7 @@
 import { ref } from 'vue';
 import fallback from './assets/minecraft.webp';
 defineProps<{instances:any[];selected:any;icons:Record<string,string>;page:string; pinned?:string[]}>();
-const emit=defineEmits<{navigate:[page:string];select:[instance:any];launch:[instance:any];back:[]}>();
+const emit=defineEmits<{navigate:[page:string];select:[instance:any];launch:[instance:any];back:[];add:[]}>();
 const dragging=ref('');
 function onDrop(target:any){if(dragging.value && dragging.value!==target.id)emit('select',target);dragging.value='';}
 </script>

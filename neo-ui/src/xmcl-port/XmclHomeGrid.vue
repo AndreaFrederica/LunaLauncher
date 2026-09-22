@@ -8,10 +8,10 @@
   </section>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 const props=defineProps<{instance:string;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{navigate:[page:string];extras:[]}>();
-const resources=ref<Record<string,any[]>>({mods:[],resourcepacks:[]}),worlds=ref<any[]>([]),screenshots=ref<any[]>([]);const counts={mods:0,resourcepacks:0};
+const resources=ref<Record<string,any[]>>({mods:[],resourcepacks:[]}),worlds=ref<any[]>([]),screenshots=ref<any[]>([]);const counts=reactive({mods:0,resourcepacks:0});
 async function load(){try{const [mods,packs,w,s]=await Promise.all([props.execute('resource.list',{instance:props.instance,kind:'mods'}),props.execute('resource.list',{instance:props.instance,kind:'resourcepacks'}),props.execute('instance.world.list',{instance:props.instance}),props.execute('instance.screenshot.list',{instance:props.instance})]);resources.value={mods:Array.isArray(mods)?mods:[],resourcepacks:Array.isArray(packs)?packs:[]};counts.mods=resources.value.mods.length;counts.resourcepacks=resources.value.resourcepacks.length;worlds.value=Array.isArray(w)?w:[];screenshots.value=Array.isArray(s)?s:[];}catch{/* The detailed page displays the operation error. */}}
 watch(()=>props.instance,load);onMounted(load);
 </script>

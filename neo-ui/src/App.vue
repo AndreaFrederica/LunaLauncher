@@ -1,6 +1,6 @@
 <template>
 <q-layout view="lHh Lpr lFf" class="neo-shell text-white">
- <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" />
+ <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true" />
  <q-page-container class="xmcl-page-container"><q-page class="neo-page">
  <XmclHomeHeader v-if="selected && (page==='manage' || page==='settings')" :selected="selected" :tab="page==='settings'?'settings':'home'" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
  <XmclHomeGrid v-if="selected && page==='manage'" :instance="selected.id" :execute="catalogExecute" @navigate="xmclTab" @extras="page='manage'" />
@@ -78,6 +78,7 @@
  <div v-if="status" class="q-mt-md text-grey-4">{{ status }}</div>
  <q-btn v-if="busy" flat color="orange" label="取消当前任务" @click="cancel"/>
  </q-page></q-page-container>
+ <XmclAddInstanceDialog v-model="addDialog" :busy="busy" :execute="catalogExecute" @created="refresh" />
  <q-dialog v-model="dialog" persistent><q-card class="bg-grey-9 text-white" style="width:520px;max-width:90vw"><q-card-section class="text-h6">{{ prompt }}</q-card-section><q-card-section>
   <q-select v-if="choices" dark outlined v-model="answer" :options="choices" emit-value map-options label="请选择"/>
   <q-input v-else-if="!confirmation" dark outlined v-model="answer" :type="secret ? 'password' : 'textarea'" autofocus/>
@@ -98,6 +99,7 @@ import ResourceUpdatesPanel from './components/ResourceUpdatesPanel.vue';
 import XmclSidebar from './xmcl-port/XmclSidebar.vue';
 import XmclHomeHeader from './xmcl-port/XmclHomeHeader.vue';
 import XmclHomeGrid from './xmcl-port/XmclHomeGrid.vue';
+import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';
@@ -161,7 +163,7 @@ async function readLogFile(){try{const r=await call('instance.log.read',{instanc
 const resources=ref<any[]>([]),resourceKind=ref('mods'),resourceSource=ref('');
 const resourceKinds=[{label:'模组',value:'mods'},{label:'资源包',value:'resourcepacks'},{label:'光影包',value:'shaderpacks'},{label:'材质包',value:'texturepacks'},{label:'数据包',value:'datapacks'},{label:'投影',value:'schematics'},{label:'Yes Steve Model',value:'yesstevemodels'},{label:'Customizable Player Models',value:'customplayermodels'}];
 const pages=[{id:'instances',label:'实例库',icon:'apps'},{id:'create',label:'添加实例',icon:'add_box'},{id:'accounts',label:'账户管理',icon:'person'},{id:'settings',label:'设置',icon:'settings'}];
-const drawerOpen=ref(true), page=ref('instances'), busy=ref(false), error=ref(''), notice=ref(''), status=ref(''), search=ref(''), username=ref(''), notes=ref('');
+const drawerOpen=ref(true), addDialog=ref(false), page=ref('instances'), busy=ref(false), error=ref(''), notice=ref(''), status=ref(''), search=ref(''), username=ref(''), notes=ref('');
 watch(busy,async value=>{if(!value && launchQueue.value.length){await nextTick();if(!busy.value){const next=launchQueue.value.shift();if(next)void launch(next);}}});
 const instances=ref<any[]>([]),accounts=ref<any[]>([]),settings=ref<any[]>([]),selected=ref<any>(null),device=ref<any>(null);
 const scope=ref('launcher'),settingSearch=ref(''),createMode=ref('vanilla');

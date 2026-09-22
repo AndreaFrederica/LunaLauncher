@@ -1,8 +1,10 @@
 <template>
-<q-layout view="lHh Lpr lFf" class="neo-shell text-white">
+<div class="xmcl-app text-white">
+ <XmclSystemBar :connected="connected" :busy="busy" @refresh="refresh" />
  <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true" />
- <q-page-container class="xmcl-page-container"><q-page class="neo-page">
+ <main class="xmcl-main">
  <XmclHomeHeader v-if="selected && (page==='manage' || page==='settings' || page==='instances')" :selected="selected" :tab="page==='settings'?'settings':'home'" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
+ <div class="xmcl-content neo-page">
  <XmclHomeGrid v-if="selected && page==='manage'" :instance="selected.id" :execute="catalogExecute" @navigate="xmclTab" @extras="page='manage'" />
  <q-tabs v-if="openedInstances.length" :model-value="page==='manage'?selected?.id:''" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
@@ -10,7 +12,7 @@
  <q-banner v-if="notice" class="bg-teal-9 q-mb-md">{{ notice }}</q-banner>
  <q-linear-progress v-if="busy" indeterminate class="q-mb-md" />
  <div v-if="page==='instances'">
-  <div class="workspace-heading"><div><div class="eyebrow">MY WORKSPACE</div><h1>实例库</h1><p>管理你的 Minecraft 世界、整合包和运行环境。</p></div><div class="heading-actions"><q-btn unelevated color="primary" icon="add" label="添加实例" @click="navigate('create')" /><q-btn flat icon="restore" label="恢复删除" :disable="busy" @click="run('instance.undo-delete')" /></div></div>
+  <div class="workspace-heading"><div><div class="eyebrow">MY WORKSPACE</div><h1>实例库</h1><p>管理你的 Minecraft 世界、整合包和运行环境。</p></div><div class="heading-actions"><q-btn unelevated color="primary" icon="add" label="添加实例" @click="addDialog=true" /><q-btn flat icon="restore" label="恢复删除" :disable="busy" @click="run('instance.undo-delete')" /></div></div>
   <div class="library-toolbar"><q-input dark borderless v-model="search" placeholder="搜索实例或分组" class="library-search"><template #prepend><q-icon name="search"/></template></q-input><div class="library-count"><strong>{{ instances.length }}</strong> 个实例</div></div>
   <p v-if="!instances.length && !busy && !error">还没有实例，点击添加实例创建或导入。</p>
   <div class="row q-col-gutter-lg"><div class="col-12 col-sm-6 col-lg-4" v-for="i in instances.filter(x => [x.name,x.id,x.group].join(' ').toLowerCase().includes(search.toLowerCase()))" :key="i.id">
@@ -63,13 +65,14 @@
  <q-banner v-if="device" class="bg-blue-grey-9 q-mt-md">请在浏览器中访问 {{ device.url }}，输入代码：<strong>{{ device.code }}</strong></q-banner>
  <div v-if="status" class="q-mt-md text-grey-4">{{ status }}</div>
  <q-btn v-if="busy" flat color="orange" label="取消当前任务" @click="cancel"/>
- </q-page></q-page-container>
+ </div>
+ </main>
  <XmclAddInstanceDialog v-model="addDialog" :busy="busy" :execute="catalogExecute" @created="refresh" />
  <q-dialog v-model="dialog" persistent><q-card class="bg-grey-9 text-white" style="width:520px;max-width:90vw"><q-card-section class="text-h6">{{ prompt }}</q-card-section><q-card-section>
   <q-select v-if="choices" dark outlined v-model="answer" :options="choices" emit-value map-options label="请选择"/>
   <q-input v-else-if="!confirmation" dark outlined v-model="answer" :type="secret ? 'password' : 'textarea'" autofocus/>
  </q-card-section><q-card-actions align="right"><q-btn flat label="取消" @click="finishDialog(false)"/><q-btn color="primary" label="确认" @click="finishDialog(true)"/></q-card-actions></q-card></q-dialog>
-</q-layout>
+</div>
 </template>
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue';
@@ -91,6 +94,7 @@ import XmclResourceWorkspace from './xmcl-port/XmclResourceWorkspace.vue';
 import XmclAccountWorkspace from './xmcl-port/XmclAccountWorkspace.vue';
 import XmclStoreWorkspace from './xmcl-port/XmclStoreWorkspace.vue';
 import XmclMultiplayerWorkspace from './xmcl-port/XmclMultiplayerWorkspace.vue';
+import XmclSystemBar from './xmcl-port/XmclSystemBar.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

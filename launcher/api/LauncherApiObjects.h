@@ -13,6 +13,7 @@
 #include "BaseInstance.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/PackProfile.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "java/JavaInstall.h"

@@ -9,6 +9,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .neo-shell { background: radial-gradient(circle at 15% -10%, rgba(79,70,229,.18), transparent 34%), var(--neo-bg); }
+.xmcl-page-container { margin-left: 80px; }
 .neo-header { background: rgba(11,15,23,.82)!important; border-bottom: 1px solid var(--neo-border); backdrop-filter: blur(18px); }
 .neo-toolbar { min-height: 68px; padding: 0 24px; }
 .brand-mark { background: linear-gradient(135deg,#818cf8,#6366f1); color: white; box-shadow: 0 6px 20px rgba(99,102,241,.28); }

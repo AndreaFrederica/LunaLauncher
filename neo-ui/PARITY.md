@@ -19,17 +19,26 @@ Implemented in the Neo UI:
   Launch preparation remains serialized by the shared API session. Existing
   games continue running; during another launch, cached instance tabs remain
   accessible. This is not parallel preparation/download support.
+- Launcher appearance, language, proxy, updater, news, cache, and Prism import
+  controls are available in the launcher settings workspace.
+- Account profile, skin library, skin upload/reset, cape selection, and account
+  ordering are available in the account workspace.
+- Component ordering, enable/disable, customization, custom component install,
+  instance export, and resource update plans are available in instance tools.
+- Server start, console commands, properties, EULA, player lists, and YAML
+  editing are available for server instances.
 
 Still needed for equivalent workflows:
 
 - Native file/directory pickers, drag-and-drop import and built-in icon picker.
 - Full settings enum choices, override dependencies, unsaved draft preservation,
-  localized labels/help, and dedicated global appearance/network/update pages.
+  and localized labels/help remain incremental improvements.
 - FTB local migration, ATLauncher share codes, legacy FTB private codes, and
   provider-specific sorting, categories and JS provider selection.
-- Resource project details/changelogs, optional dependency selection, bulk
-  operations, and update workflows matching the original mod pages.
-- Full instance editor tabs for worlds/screenshots/exports and remaining tools.
+- Resource project details/changelogs, optional dependency selection, and
+  provider-specific bulk operations remain incremental improvements.
+- Native picker and drag-and-drop integration remain for instance and resource
+  paths; the corresponding backend operations are already available.
 - Independent concurrently executing API sessions or a backend scheduler for
   true parallel launch preparation. A separate frontend queue alone cannot
   provide this safely against a single locked launcher data directory.

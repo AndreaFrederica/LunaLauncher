@@ -1,0 +1,36 @@
+<template>
+  <div class="account-panel">
+    <q-list bordered separator>
+      <q-item v-for="account in accounts" :key="account.id" clickable :active="selected===account.id" active-class="account-active" @click="select(account)">
+        <q-item-section avatar><q-avatar color="primary" text-color="white">{{ (account.profileName||'?').slice(0,1).toUpperCase() }}</q-avatar></q-item-section>
+        <q-item-section><q-item-label>{{ account.profileName }} <q-badge v-if="account.default" color="positive">默认</q-badge></q-item-label><q-item-label caption>{{ account.type }} · {{ account.state }}</q-item-label></q-item-section>
+        <q-item-section side><div class="row q-gutter-xs"><q-btn flat label="上移" :disable="busy" @click.stop="move(account,-1)"/><q-btn flat label="下移" :disable="busy" @click.stop="move(account,1)"/><q-btn flat label="默认" :disable="busy" @click.stop="execute('account.set-default',{account:account.id})"/><q-btn flat color="negative" label="移除" :disable="busy" @click.stop="remove(account)"/></div></q-item-section>
+      </q-item>
+    </q-list>
+    <div v-if="profile" class="q-mt-lg">
+      <q-card class="profile-card"><q-card-section><div class="text-h6">{{ profile.name }}</div><div class="text-caption text-grey-5">{{ profile.state }} · {{ profile.canPlayMinecraft ? '可以启动 Minecraft' : '无法启动 Minecraft' }}</div></q-card-section>
+        <q-card-section><div class="row q-col-gutter-lg"><div class="col-12 col-md-5"><q-img v-if="profile.skin?.url" :src="profile.skin.url" ratio="1" fit="contain" class="skin-preview"/><div v-else class="skin-empty">没有已装备皮肤</div><div class="row q-gutter-sm q-mt-md"><q-input class="col" dark outlined v-model="skinPath" label="皮肤 PNG 路径"/><q-btn label="导入" :disable="busy || !skinPath" @click="installSkin"/></div><div class="row q-gutter-sm q-mt-sm"><q-select class="col" dark outlined v-model="skinName" :options="skinNames" label="选择本地皮肤"/><q-select class="col" dark outlined v-model="variant" :options="['classic','slim']" label="模型"/><q-btn label="上传并装备" :disable="busy || !skinName" @click="uploadSkin"/></div><q-btn flat color="negative" label="重置远程皮肤" :disable="busy" class="q-mt-sm" @click="resetSkin"/></div>
+          <div class="col-12 col-md-7"><div class="text-subtitle1">披风</div><q-list bordered separator class="q-mt-sm"><q-item v-for="cape in profile.capes||[]" :key="cape.id" clickable @click="selectCape(cape)"><q-item-section>{{ cape.alias || cape.id }}</q-item-section><q-item-section side><q-icon :name="cape.current?'check_circle':'radio_button_unchecked'" :color="cape.current?'positive':'grey'"/></q-item-section></q-item></q-list><q-btn flat label="移除披风" :disable="busy" class="q-mt-sm" @click="chooseCape('')"/><div class="text-subtitle1 q-mt-lg">本地皮肤库</div><q-list bordered separator><q-item v-for="skin in skins" :key="skin.name || skin.path"><q-item-section>{{ skin.name || skin.path }}</q-item-section><q-item-section side><q-btn flat color="negative" label="删除" :disable="busy" @click="deleteSkin(skin)"/></q-item-section></q-item></q-list></div></div></q-card-section>
+      </q-card>
+    </div>
+    <q-banner v-if="error" class="bg-red-9 q-mt-md">{{ error }}</q-banner>
+  </div>
+</template>
+<script setup lang="ts">
+import { ref } from 'vue';
+const props=defineProps<{accounts:any[];busy:boolean;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
+const emit=defineEmits<{changed:[]}>();
+const selected=ref(''),profile=ref<any>(null),skins=ref<any[]>([]),skinPath=ref(''),skinName=ref(''),variant=ref('classic'),error=ref('');
+const skinNames=ref<any[]>([]);
+async function attempt(action:()=>Promise<any>){error.value='';try{return await action();}catch(e){error.value=String(e);}}
+async function select(account:any){selected.value=account.id;await attempt(async()=>{profile.value=await props.execute('account.profile',{account:account.id});skins.value=await props.execute('account.skin.list',{account:account.id});skinNames.value=skins.value.map((s:any)=>s.name||s.path);});}
+async function move(a:any,delta:number){await attempt(async()=>{await props.execute('account.move',{account:a.id,delta});emit('changed');});}
+async function remove(a:any){await attempt(async()=>{await props.execute('account.remove',{account:a.id,confirm:true});profile.value=null;selected.value='';emit('changed');});}
+async function installSkin(){await attempt(async()=>{await props.execute('account.skin.install',{account:selected.value,path:skinPath.value});skinPath.value='';await select({id:selected.value});});}
+async function uploadSkin(){await attempt(async()=>{await props.execute('account.skin.upload',{account:selected.value,skin:skinName.value,variant:variant.value});await select({id:selected.value});});}
+async function resetSkin(){await attempt(async()=>{await props.execute('account.skin.reset',{account:selected.value,confirm:true});await select({id:selected.value});});}
+async function deleteSkin(s:any){await attempt(async()=>{await props.execute('account.skin.delete',{account:selected.value,skin:s.name||s.path,confirm:true});await select({id:selected.value});});}
+async function chooseCape(cape:string){await attempt(async()=>{await props.execute('account.cape.select',{account:selected.value,cape});await select({id:selected.value});});}
+function selectCape(cape:any){return chooseCape(cape.id);}
+</script>
+<style scoped>.account-panel{max-width:1100px}.profile-card{background:var(--neo-panel);border:1px solid var(--neo-border)}.skin-preview{max-width:320px;background:#101827;border-radius:14px}.skin-empty{height:260px;display:grid;place-items:center;background:#101827;border-radius:14px;color:var(--neo-muted)}.account-active{background:rgba(99,102,241,.18)}</style>

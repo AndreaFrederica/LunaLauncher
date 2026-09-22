@@ -55,16 +55,20 @@
  <p v-else-if="!resourcesLoading && !resources.length">当前目录中没有此类资源。请核对上方实例目录是否与老 UI 相同。</p>
  <p v-else-if="!resourcesLoading">共 {{ resources.length }} 项资源</p>
   <q-list bordered separator><q-item v-for="r in resources" :key="r.fileName"><q-item-section>{{ r.name || r.fileName }}<q-item-label caption class="text-grey-4">{{ r.fileName }} · {{ r.enabled ? '已启用' : '已禁用' }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat :label="r.enabled ? '禁用' : '启用'" :disable="busy" @click="run(r.enabled?'resource.disable':'resource.enable',{instance:selected.id,kind:resourceKind,resource:r.fileName})"/><q-btn flat color="red-4" label="删除" :disable="busy" @click="askDelete('resource.remove',{instance:selected.id,kind:resourceKind,resource:r.fileName},r.fileName)"/></div></q-item-section></q-item></q-list>
-  <InstanceExtras :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
+ <ResourceUpdatesPanel :instance="selected.id" :kind="resourceKind" :busy="busy" :execute="catalogExecute" />
+ <InstanceExtras :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
  <div v-if="page==='accounts'"><h5>账户管理</h5>
   <div class="row q-gutter-md q-mb-lg"><q-btn color="primary" label="添加 Microsoft 账户" :disable="busy" @click="run('account.login',{type:'microsoft'})"/><q-input dark outlined dense v-model="username" label="离线玩家名"/><q-btn label="添加离线账户" :disable="busy || !username" @click="run('account.login',{type:'offline',username})"/></div>
-  <q-list bordered separator><q-item v-for="a in accounts" :key="a.id"><q-item-section><q-item-label>{{ a.profileName }} {{ a.default ? '（默认）' : '' }}</q-item-label><q-item-label class="text-grey-4">{{ a.type }} · {{ a.state }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat label="设为默认" :disable="busy" @click="run('account.set-default',{account:a.id})"/><q-btn flat label="刷新" :disable="busy" @click="run('account.refresh',{account:a.id})"/><q-btn flat color="red-4" label="移除" :disable="busy" @click="askDelete('account.remove',{account:a.id},a.profileName)"/></div></q-item-section></q-item></q-list>
+  <AccountPanel :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
  <div v-if="page==='settings'"><h5>{{ scope==='instance' ? selected?.name+' · 实例设置' : '启动器设置' }}</h5>
+ <LauncherControlPanel v-if="scope==='launcher'" :busy="busy" :execute="catalogExecute" />
+ <InstanceSettingsPanel v-else-if="selected" :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  <JavaPanel :scope="settingScope()" :settings="settings" :busy="busy" :execute="catalogExecute" @changed="refresh"/>
  <SettingsPanel :settings="settings" :busy="busy" @save="(key,value)=>run('settings.set',{...settingScope(),key,value})" @reset="key=>run('settings.reset',{...settingScope(),key})"/>
  </div>
+ <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
  <q-card v-if="selected && page==='manage'" class="bg-grey-9 q-mt-lg">
   <q-card-section><div class="text-h6">{{ selected.name }} · 日志</div>
    <q-tabs v-model="logMode" align="left"><q-tab name="live" label="实时控制台"/><q-tab name="files" label="历史日志"/></q-tabs>
@@ -90,6 +94,11 @@ import JavaPanel from './components/JavaPanel.vue';
 import CatalogBrowser from './components/CatalogBrowser.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import InstanceExtras from './components/InstanceExtras.vue';
+import LauncherControlPanel from './components/LauncherControlPanel.vue';
+import AccountPanel from './components/AccountPanel.vue';
+import InstanceSettingsPanel from './components/InstanceSettingsPanel.vue';
+import ServerPanel from './components/ServerPanel.vue';
+import ResourceUpdatesPanel from './components/ResourceUpdatesPanel.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

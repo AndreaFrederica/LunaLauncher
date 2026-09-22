@@ -27,6 +27,10 @@ Implemented in the Neo UI:
   instance export, and resource update plans are available in instance tools.
 - Server start, console commands, properties, EULA, player lists, and YAML
   editing are available for server instances.
+- XMCL UI shell port now supplies the sidebar, instance icons and status
+  overlays, sticky home header, add-instance dialog, home card workspace,
+  settings navigation, account workspace, and market-style resource workspace.
+  The source snapshot and MIT notice are kept under `src/xmcl-port`.
 
 Still needed for equivalent workflows:
 
@@ -37,8 +41,9 @@ Still needed for equivalent workflows:
   provider-specific sorting, categories and JS provider selection.
 - Resource project details/changelogs, optional dependency selection, and
   provider-specific bulk operations remain incremental improvements.
-- Native picker and drag-and-drop integration remain for instance and resource
-  paths; the corresponding backend operations are already available.
+- Native path resolution for drag-and-drop and richer project detail dialogs
+  remain for the next XMCL component port; browser file selection currently
+  forwards the Tauri file path when available.
 - Independent concurrently executing API sessions or a backend scheduler for
   true parallel launch preparation. A separate frontend queue alone cannot
   provide this safely against a single locked launcher data directory.

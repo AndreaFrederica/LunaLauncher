@@ -18,6 +18,7 @@
 #include <QVariant>
 
 #include "Application.h"
+#include "api/LauncherApiObjects.h"
 #include "BaseInstance.h"
 #include "FileSystem.h"
 #include "InstanceCopyPrefs.h"
@@ -432,12 +433,11 @@ QJsonObject OperationService::listAccounts()
     const auto defaultAccount = list->defaultAccount();
     for (int i = 0; i < list->count(); ++i) {
         const auto account = list->at(i);
-        accounts.append(QJsonObject{ { "id", account->profileId() },
-                                     { "profileName", account->profileName() },
-                                     { "type", accountTypeName(account->accountType()) },
-                                     { "state", accountStateName(account->accountState()) },
-                                     { "default", account == defaultAccount },
-                                     { "ownsMinecraft", account->ownsMinecraft() } });
+        const auto object = LauncherApiModel::AccountObject(account.get());
+        auto snapshot = object.snapshot(account == defaultAccount);
+        snapshot.insert("type", accountTypeName(account->accountType()));
+        snapshot.insert("state", accountStateName(account->accountState()));
+        accounts.append(snapshot);
     }
     return success(accounts);
 }
@@ -775,8 +775,7 @@ QJsonObject OperationService::listJava(UserInteraction& interaction)
         const auto java = std::dynamic_pointer_cast<JavaInstall>(list->at(i));
         if (!java)
             continue;
-        installations.append(QJsonObject{
-            { "version", java->id.toString() }, { "architecture", java->arch }, { "path", java->path }, { "is64Bit", java->is_64bit } });
+        installations.append(LauncherApiModel::JavaObject(java).snapshot());
     }
     return success(installations);
 }

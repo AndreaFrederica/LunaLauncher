@@ -5,6 +5,7 @@
 #include "Application.h"
 #include "DesktopServices.h"
 #include "api/LauncherApi.h"
+#include "api/LauncherApiObjects.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/World.h"
@@ -872,23 +873,7 @@ void registerLauncherApiDomains(LauncherApi& api)
         [&api](const QJsonObject& p, UserInteraction& interaction) { return uploadScreenshotAlbum(api, p, interaction); });
     api.registerOperation({ "runtime.info", "Read launcher paths, platform, and optional integration capabilities.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) {
-                               const auto caps = APPLICATION->capabilities();
-                               QJsonArray capabilities;
-                               if (caps & Application::SupportsMSA)
-                                   capabilities.append("microsoft-auth");
-                               if (caps & Application::SupportsFlame)
-                                   capabilities.append("curseforge");
-                               if (caps & Application::SupportsGameMode)
-                                   capabilities.append("game-mode");
-                               if (caps & Application::SupportsMangoHud)
-                                   capabilities.append("mangohud");
-                               return OperationService::success(QJsonObject{ { "applicationVersion", QCoreApplication::applicationVersion() },
-                                                                               { "root", APPLICATION->root() },
-                                                                               { "dataRoot", APPLICATION->dataRoot() },
-                                                                               { "javaRoot", APPLICATION->javaPath() },
-                                                                               { "portable", APPLICATION->isPortable() },
-                                                                               { "headless", APPLICATION->isHeadless() },
-                                                                               { "capabilities", capabilities } });
+                               return OperationService::success(LauncherApiModel::LauncherObject().snapshot());
                            });
     api.registerOperation({ "launcher.get", "Read the stable launcher object used by alternate frontends.", objectSchema({}), "launcher" },
                            [&api](const QJsonObject&, UserInteraction& interaction) {

@@ -25,6 +25,7 @@
 #include "api/LauncherApiAppearance.h"
 #include "api/LauncherApiPacks.h"
 #include "api/LauncherApiStreams.h"
+#include "api/LauncherApiObjects.h"
 #include "tasks/Task.h"
 
 namespace {
@@ -77,38 +78,6 @@ QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
     if (!required.isEmpty())
         schema.insert("required", required);
     return schema;
-}
-
-QString taskStateName(Task::State state)
-{
-    switch (state) {
-        case Task::State::Inactive:
-            return QStringLiteral("inactive");
-        case Task::State::Running:
-            return QStringLiteral("running");
-        case Task::State::Succeeded:
-            return QStringLiteral("succeeded");
-        case Task::State::Failed:
-            return QStringLiteral("failed");
-        case Task::State::AbortedByUser:
-            return QStringLiteral("aborted");
-    }
-    return QStringLiteral("unknown");
-}
-
-QString taskStepStateName(TaskStepState state)
-{
-    switch (state) {
-        case TaskStepState::Waiting:
-            return QStringLiteral("waiting");
-        case TaskStepState::Running:
-            return QStringLiteral("running");
-        case TaskStepState::Failed:
-            return QStringLiteral("failed");
-        case TaskStepState::Succeeded:
-            return QStringLiteral("succeeded");
-    }
-    return QStringLiteral("unknown");
 }
 
 QList<ApiOperation> legacyOperations()
@@ -357,43 +326,7 @@ Task* LauncherApi::currentTask() const
 
 QJsonObject LauncherApi::snapshotTask(const QString& taskId, Task* task) const
 {
-    if (!task)
-        return QJsonObject{ { "id", taskId } };
-
-    const auto state = task->getState();
-    QJsonArray warnings;
-    for (const auto& warning : task->warnings())
-        warnings.append(warning);
-    QJsonArray steps;
-    for (const auto& progress : task->getStepProgress()) {
-        if (!progress)
-            continue;
-        steps.append(QJsonObject{ { "id", progress->uid.toString(QUuid::WithoutBraces) },
-                                  { "current", progress->current },
-                                  { "total", progress->total },
-                                  { "oldCurrent", progress->old_current },
-                                  { "oldTotal", progress->old_total },
-                                  { "status", progress->status },
-                                  { "details", progress->details },
-                                  { "state", taskStepStateName(progress->state) },
-                                  { "finished", progress->isDone() } });
-    }
-    return QJsonObject{ { "id", taskId },
-                        { "type", QString::fromLatin1(task->metaObject()->className()) },
-                        { "name", task->objectName() },
-                        { "state", taskStateName(state) },
-                        { "running", task->isRunning() },
-                        { "finished", task->isFinished() },
-                        { "successful", task->wasSuccessful() },
-                        { "canAbort", task->canAbort() },
-                        { "status", task->getStatus() },
-                        { "details", task->getDetails() },
-                        { "progress", task->getProgress() },
-                        { "totalProgress", task->getTotalProgress() },
-                        { "transferRate", task->getTransferRate() },
-                        { "failReason", task->failReason() },
-                        { "warnings", warnings },
-                        { "steps", steps } };
+    return LauncherApiModel::TaskObject(task).snapshot(taskId);
 }
 
 QJsonObject LauncherApi::taskStatus(const QJsonObject& parameters) const

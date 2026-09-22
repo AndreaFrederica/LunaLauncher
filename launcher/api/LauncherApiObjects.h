@@ -4,11 +4,22 @@
 
 #include <QJsonObject>
 #include <QPointer>
+#include <QJsonArray>
+#include <QCoreApplication>
+
+#include <memory>
 
 #include "Application.h"
 #include "BaseInstance.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/MinecraftAccount.h"
+#include "java/JavaInstall.h"
+#include "java/JavaInstallList.h"
+#include "tasks/Task.h"
+#include "minecraft/mod/Resource.h"
+#include "minecraft/mod/ResourceFolderModel.h"
 
 /**
  * Object handles used by the transport-neutral API.
@@ -18,6 +29,207 @@
  * rebuilding the public instance shape independently.
  */
 namespace LauncherApiModel {
+
+class LauncherObject {
+   public:
+    LauncherObject() : m_application(APPLICATION) {}
+    explicit LauncherObject(Application* application) : m_application(application) {}
+
+    bool isValid() const { return !m_application.isNull(); }
+
+    QJsonObject snapshot() const
+    {
+        if (!isValid())
+            return {};
+        QJsonArray capabilities;
+        const auto caps = m_application->capabilities();
+        if (caps & Application::SupportsMSA) capabilities.append("microsoft-auth");
+        if (caps & Application::SupportsFlame) capabilities.append("curseforge");
+        if (caps & Application::SupportsGameMode) capabilities.append("game-mode");
+        if (caps & Application::SupportsMangoHud) capabilities.append("mangohud");
+        return QJsonObject{ { "applicationVersion", QCoreApplication::applicationVersion() },
+                            { "root", m_application->root() },
+                            { "dataRoot", m_application->dataRoot() },
+                            { "javaRoot", m_application->javaPath() },
+                            { "portable", m_application->isPortable() },
+                            { "headless", m_application->isHeadless() },
+                            { "capabilities", capabilities } };
+    }
+
+   private:
+    QPointer<Application> m_application;
+};
+
+class AccountObject {
+   public:
+    AccountObject() = default;
+    explicit AccountObject(MinecraftAccount* account) : m_account(account) {}
+
+    static AccountObject resolve(const QString& reference)
+    {
+        auto* list = APPLICATION->accounts();
+        for (int i = 0; i < list->count(); ++i) {
+            const auto account = list->at(i);
+            if (account->profileId() == reference || account->internalId() == reference ||
+                account->profileName().compare(reference, Qt::CaseInsensitive) == 0)
+                return AccountObject(account.get());
+        }
+        return {};
+    }
+
+    MinecraftAccount* get() const { return m_account.data(); }
+    explicit operator bool() const { return !m_account.isNull(); }
+
+    QJsonObject snapshot(bool isDefault = false) const
+    {
+        auto* account = get();
+        if (!account)
+            return {};
+        return QJsonObject{ { "id", account->profileId() },
+                            { "internalId", account->internalId() },
+                            { "profileName", account->profileName() },
+                            { "displayName", account->displayName() },
+                            { "type", account->typeString() },
+                            { "state", static_cast<int>(account->accountState()) },
+                            { "active", account->isActive() },
+                            { "default", isDefault },
+                            { "ownsMinecraft", account->ownsMinecraft() },
+                            { "hasProfile", account->hasProfile() },
+                            { "lastError", account->lastError() } };
+    }
+
+   private:
+    QPointer<MinecraftAccount> m_account;
+};
+
+class JavaObject {
+   public:
+    JavaObject() = default;
+    explicit JavaObject(JavaInstallPtr java) : m_java(std::move(java)) {}
+
+    static JavaObject resolve(const QString& reference)
+    {
+        auto* list = APPLICATION->javalist();
+        for (int i = 0; i < list->count(); ++i) {
+            auto java = std::dynamic_pointer_cast<JavaInstall>(list->at(i));
+            if (java && (java->path == reference || java->id.toString() == reference))
+                return JavaObject(std::move(java));
+        }
+        return {};
+    }
+
+    bool isValid() const { return static_cast<bool>(m_java); }
+    const JavaInstallPtr& get() const { return m_java; }
+
+    QJsonObject snapshot() const
+    {
+        if (!isValid())
+            return {};
+        return QJsonObject{ { "id", m_java->id.toString() },
+                            { "version", m_java->id.toString() },
+                            { "architecture", m_java->arch },
+                            { "path", m_java->path },
+                            { "is64Bit", m_java->is_64bit } };
+    }
+
+   private:
+    JavaInstallPtr m_java;
+};
+
+class TaskObject {
+   public:
+    TaskObject() = default;
+    explicit TaskObject(Task* task) : m_task(task) {}
+
+    Task* get() const { return m_task.data(); }
+    bool isValid() const { return !m_task.isNull(); }
+
+    QJsonObject snapshot(const QString& taskId = {}) const
+    {
+        auto* task = get();
+        if (!task)
+            return taskId.isEmpty() ? QJsonObject{} : QJsonObject{ { "id", taskId } };
+        QJsonArray warnings;
+        for (const auto& warning : task->warnings()) warnings.append(warning);
+        QJsonArray steps;
+        for (const auto& progress : task->getStepProgress()) {
+            if (!progress) continue;
+            steps.append(QJsonObject{ { "id", progress->uid.toString(QUuid::WithoutBraces) },
+                                      { "current", progress->current }, { "total", progress->total },
+                                      { "status", progress->status }, { "details", progress->details },
+                                      { "state", stepStateName(progress->state) },
+                                      { "oldCurrent", progress->old_current }, { "oldTotal", progress->old_total },
+                                      { "finished", progress->isDone() } });
+        }
+        const auto id = taskId.isEmpty() ? task->getUid().toString(QUuid::WithoutBraces) : taskId;
+        return QJsonObject{ { "id", id },
+                            { "type", QString::fromLatin1(task->metaObject()->className()) },
+                            { "name", task->objectName() },
+                            { "state", stateName(task->getState()) },
+                            { "running", task->isRunning() }, { "finished", task->isFinished() },
+                            { "successful", task->wasSuccessful() }, { "canAbort", task->canAbort() },
+                            { "status", task->getStatus() }, { "details", task->getDetails() },
+                            { "progress", task->getProgress() }, { "totalProgress", task->getTotalProgress() },
+                            { "transferRate", task->getTransferRate() }, { "failReason", task->failReason() },
+                            { "warnings", warnings }, { "steps", steps } };
+    }
+
+   private:
+    static QString stateName(Task::State state)
+    {
+        switch (state) {
+            case Task::State::Inactive: return "inactive";
+            case Task::State::Running: return "running";
+            case Task::State::Succeeded: return "succeeded";
+            case Task::State::Failed: return "failed";
+            case Task::State::AbortedByUser: return "aborted";
+        }
+        return "unknown";
+    }
+
+    static QString stepStateName(TaskStepState state)
+    {
+        switch (state) {
+            case TaskStepState::Waiting: return "waiting";
+            case TaskStepState::Running: return "running";
+            case TaskStepState::Failed: return "failed";
+            case TaskStepState::Succeeded: return "succeeded";
+        }
+        return "unknown";
+    }
+
+    QPointer<Task> m_task;
+};
+
+class ResourceObject {
+   public:
+    ResourceObject() = default;
+    explicit ResourceObject(Resource* resource) : m_resource(resource) {}
+    ResourceObject(ResourceFolderModel* model, Resource* resource) : m_model(model), m_resource(resource) {}
+
+    bool isValid() const { return !m_resource.isNull(); }
+    Resource* get() const { return m_resource.data(); }
+    ResourceFolderModel* model() const { return m_model.data(); }
+
+    QJsonObject snapshot() const
+    {
+        auto* resource = get();
+        if (!isValid()) return {};
+        return QJsonObject{ { "id", resource->internal_id() }, { "name", resource->name() },
+                            { "fileName", resource->fileinfo().fileName() },
+                            { "originalFileName", resource->getOriginalFileName() },
+                            { "enabled", resource->enabled() }, { "size", resource->sizeInfo() },
+                            { "sizeString", resource->sizeStr() }, { "path", resource->fileinfo().absoluteFilePath() },
+                            { "modified", resource->dateTimeChanged().toString(Qt::ISODate) },
+                            { "provider", resource->provider() }, { "homepage", resource->homepage() },
+                            { "valid", resource->valid() }, { "resolved", resource->isResolved() },
+                            { "resolving", resource->isResolving() } };
+    }
+
+   private:
+    QPointer<ResourceFolderModel> m_model;
+    QPointer<Resource> m_resource;
+};
 
 class InstanceObject {
    public:

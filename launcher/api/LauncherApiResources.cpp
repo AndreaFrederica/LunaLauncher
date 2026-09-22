@@ -20,6 +20,7 @@
 #include "InstanceList.h"
 #include "api/ApiTypes.h"
 #include "api/LauncherApi.h"
+#include "api/LauncherApiObjects.h"
 #include "api/ResourceModelSupport.h"
 #include "cli/OperationService.h"
 #include "cli/UserInteraction.h"
@@ -156,22 +157,9 @@ QString resourceStatusName(ResourceStatus status)
 
 QJsonObject resourceInfo(const Resource& resource)
 {
-    QJsonObject result{ { "id", resource.internal_id() },
-                        { "name", resource.name() },
-                        { "fileName", resource.fileinfo().fileName() },
-                        { "originalFileName", resource.getOriginalFileName() },
-                        { "enabled", resource.enabled() },
-                        { "type", resourceTypeName(resource.type()) },
-                        { "status", resourceStatusName(resource.status()) },
-                        { "valid", resource.valid() },
-                        { "size", resource.sizeInfo() },
-                        { "sizeString", resource.sizeStr() },
-                        { "path", resource.fileinfo().absoluteFilePath() },
-                        { "modified", resource.dateTimeChanged().toString(Qt::ISODate) },
-                        { "provider", resource.provider() },
-                        { "homepage", resource.homepage() },
-                        { "resolved", resource.isResolved() },
-                        { "resolving", resource.isResolving() } };
+    auto result = LauncherApiModel::ResourceObject(const_cast<Resource*>(&resource)).snapshot();
+    result.insert("type", resourceTypeName(resource.type()));
+    result.insert("status", resourceStatusName(resource.status()));
 
     QJsonArray issues;
     for (const auto& issue : resource.issues())

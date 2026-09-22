@@ -36,6 +36,7 @@ class OperationService final : public QObject {
     QJsonObject listInstances();
     QJsonObject listAccounts();
     QJsonObject setDefaultAccount(const QJsonObject& parameters);
+    QJsonObject configureAccount(const QJsonObject& parameters);
     QJsonObject removeAccount(const QJsonObject& parameters);
     QJsonObject refreshAccount(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject instanceInfo(const QJsonObject& parameters);

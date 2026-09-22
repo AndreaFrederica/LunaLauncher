@@ -86,17 +86,62 @@ class AccountObject {
         auto* account = get();
         if (!account)
             return {};
-        return QJsonObject{ { "id", account->profileId() },
+        const auto* data = account->accountData();
+        QString stateName;
+        switch (data->accountState) {
+            case AccountState::Unchecked: stateName = "unchecked"; break;
+            case AccountState::Offline: stateName = "offline"; break;
+            case AccountState::Working: stateName = "working"; break;
+            case AccountState::Online: stateName = "online"; break;
+            case AccountState::Disabled: stateName = "disabled"; break;
+            case AccountState::Errored: stateName = "errored"; break;
+            case AccountState::Expired: stateName = "expired"; break;
+            case AccountState::Gone: stateName = "gone"; break;
+        }
+        QJsonObject result{ { "id", account->profileId() },
                             { "internalId", account->internalId() },
                             { "profileName", account->profileName() },
                             { "displayName", account->displayName() },
                             { "type", account->typeString() },
-                            { "state", static_cast<int>(account->accountState()) },
+                            { "state", static_cast<int>(data->accountState) },
+                            { "stateName", stateName },
                             { "active", account->isActive() },
                             { "default", isDefault },
                             { "ownsMinecraft", account->ownsMinecraft() },
+                            { "canPlayMinecraft", data->minecraftEntitlement.canPlayMinecraft },
                             { "hasProfile", account->hasProfile() },
-                            { "lastError", account->lastError() } };
+                            { "lastError", account->lastError() },
+                            { "profile", QJsonObject{ { "id", data->minecraftProfile.id },
+                                                        { "name", data->minecraftProfile.name },
+                                                        { "skin", QJsonObject{ { "id", data->minecraftProfile.skin.id },
+                                                                                  { "url", data->minecraftProfile.skin.url },
+                                                                                  { "variant", data->minecraftProfile.skin.variant } } },
+                                                        { "currentCape", data->minecraftProfile.currentCape } } } };
+        QJsonArray capes;
+        for (auto it = data->minecraftProfile.capes.constBegin(); it != data->minecraftProfile.capes.constEnd(); ++it)
+            capes.append(QJsonObject{ { "id", it.value().id }, { "url", it.value().url }, { "alias", it.value().alias },
+                                      { "current", it.key() == data->minecraftProfile.currentCape } });
+        auto profile = result.value("profile").toObject();
+        profile.insert("capes", capes);
+        result.insert("profile", profile);
+        if (data->type == AccountType::Yggdrasil) {
+            result.insert("yggdrasil", QJsonObject{ { "authUrl", data->yggdrasilConfig.authServerUrl },
+                                                       { "sessionUrl", data->yggdrasilConfig.sessionServerUrl },
+                                                       { "sourceName", data->yggdrasilConfig.sourceName },
+                                                       { "authenticateEndpoint", data->yggdrasilConfig.authenticateEndpoint },
+                                                       { "refreshEndpoint", data->yggdrasilConfig.refreshEndpoint },
+                                                       { "validateEndpoint", data->yggdrasilConfig.validateEndpoint },
+                                                       { "profileEndpoint", data->yggdrasilConfig.profileEndpoint },
+                                                       { "oauthTokenEndpoint", data->yggdrasilConfig.oauthTokenEndpoint },
+                                                       { "tokenType", data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth ? "OAuth" : "Standard" } });
+        } else if (data->type == AccountType::UnifiedPass) {
+            result.insert("unifiedPass", QJsonObject{ { "serverId", data->unifiedPassConfig.serverId },
+                                                        { "baseUrl", data->unifiedPassConfig.baseUrl },
+                                                        { "serverName", data->unifiedPassConfig.serverName },
+                                                        { "serverIP", data->unifiedPassConfig.serverIP },
+                                                        { "jarHash", data->unifiedPassConfig.jarHash } });
+        }
+        return result;
     }
 
    private:

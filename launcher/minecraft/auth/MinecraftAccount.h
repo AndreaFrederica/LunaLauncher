@@ -163,6 +163,9 @@ class MinecraftAccount : public QObject, public Usable {
             case AccountType::Yggdrasil: {
                 return "yggdrasil";
             } break;
+            case AccountType::UnifiedPass: {
+                return "unified-pass";
+            } break;
             default: {
                 return "unknown";
             }

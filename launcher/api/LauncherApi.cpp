@@ -100,6 +100,7 @@ QList<ApiOperation> legacyOperations()
              { "account.profile.check-name", "Check a Minecraft Java profile name before creation.", objectSchema({ { "account", account }, { "name", stringProperty("Minecraft profile name.") } }, { "account", "name" }), "accounts" },
              { "account.profile.create", "Create a missing Java profile for an authenticated Microsoft account.", objectSchema({ { "account", account }, { "name", stringProperty("Minecraft profile name.") } }, { "account", "name" }), "accounts", true },
              { "account.login", "Add a launcher account.", objectSchema({ { "type", stringProperty("microsoft, offline, yggdrasil, or unified-pass.") }, { "username", stringProperty("Username.") }, { "password", stringProperty("Password.") }, { "authUrl", stringProperty("Yggdrasil auth URL.") }, { "sessionUrl", stringProperty("Yggdrasil session URL.") } }, { "type" }) },
+             { "account.configure", "Update non-secret configuration for an existing account.", objectSchema({ { "account", account }, { "authUrl", stringProperty("Yggdrasil authentication URL.") }, { "sessionUrl", stringProperty("Yggdrasil session URL.") }, { "sourceName", stringProperty("Yggdrasil provider name.") }, { "authenticateEndpoint", stringProperty("Yggdrasil authenticate endpoint.") }, { "refreshEndpoint", stringProperty("Yggdrasil refresh endpoint.") }, { "validateEndpoint", stringProperty("Yggdrasil validate endpoint.") }, { "profileEndpoint", stringProperty("Yggdrasil profile endpoint.") }, { "oauthTokenEndpoint", stringProperty("Yggdrasil OAuth token endpoint.") }, { "tokenType", stringProperty("Standard or OAuth.") }, { "serverId", stringProperty("UnifiedPass server ID.") }, { "baseUrl", stringProperty("UnifiedPass API base URL.") } }, { "account" }) },
              { "account.set-default", "Set or clear the default account.", objectSchema({ { "account", account } }, { "account" }) },
              { "account.refresh", "Refresh an account.", objectSchema({ { "account", account } }, { "account" }) },
              { "account.remove", "Remove an account.", objectSchema({ { "account", account }, { "confirm", boolProperty("Confirm removal.") } }, { "account", "confirm" }), {}, true },
@@ -129,7 +130,7 @@ QList<ApiOperation> legacyOperations()
                 properties.insert(key, stringProperty(QString::fromLatin1(key)));
         }
         if (operation.name == "account.login") {
-            for (const auto key : { "sourceName", "serverId", "minecraftProfileName", "refreshEndpoint", "validateEndpoint", "authenticateEndpoint", "profileEndpoint", "oauthTokenEndpoint", "tokenType" })
+            for (const auto key : { "sourceName", "serverId", "baseUrl", "minecraftProfileName", "refreshEndpoint", "validateEndpoint", "authenticateEndpoint", "profileEndpoint", "oauthTokenEndpoint", "tokenType" })
                 properties.insert(key, stringProperty(QString::fromLatin1(key)));
         }
         if (operation.name == "instance.launch") {

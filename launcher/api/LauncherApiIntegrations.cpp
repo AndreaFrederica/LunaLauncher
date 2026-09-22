@@ -18,6 +18,9 @@
 #include "tools/MCEditTool.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
 
+#include <QJsonDocument>
+#include <QUrl>
+
 namespace {
 using namespace ApiSupport;
 
@@ -172,6 +175,26 @@ void registerLauncherApiIntegrationOperations(LauncherApi& api)
                     { "version", authlib && file.isFile() ? AuthlibInjector::instance().getVersion() : QString() } });
             });
     }
+    // The authlib-injector metadata endpoint is useful to account UIs before a
+    // user creates a Yggdrasil account. Keep it separate from installation so
+    // frontends can validate a skin server without downloading a Java agent.
+    api.registerOperation({ "authentication.yggdrasil.metadata", "Fetch and parse Yggdrasil server metadata.",
+                            schema({ { "url", string("Yggdrasil metadata URL.") }, { "includeRaw", boolean() } }, { "url" }), "accounts" },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               const QUrl url(p.value("url").toString(), QUrl::TolerantMode);
+                               if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https"))
+                                   return OperationService::failure("url must be an HTTP(S) URL.", 2);
+                               const auto encoded = AuthlibInjector::instance().getYggdrasilMeta(url.toString());
+                               if (encoded.isEmpty()) return OperationService::failure("The Yggdrasil metadata request failed.");
+                               const auto bytes = QByteArray::fromBase64(encoded.toUtf8());
+                               QJsonParseError parseError;
+                               const auto document = QJsonDocument::fromJson(bytes, &parseError);
+                               if (parseError.error != QJsonParseError::NoError || !document.isObject())
+                                   return OperationService::failure("The Yggdrasil server returned invalid metadata JSON.");
+                               QJsonObject result{ { "url", url.toString() }, { "metadata", document.object() } };
+                               if (p.value("includeRaw").toBool()) result.insert("raw", encoded);
+                               return OperationService::success(result);
+                           });
     using namespace ApiSupport;
     api.registerOperation({ "integration.status", "Read installation and process state for optional integrations.", schema({}), "integrations" },
         [](const QJsonObject&, UserInteraction&) { return OperationService::success(QJsonArray{

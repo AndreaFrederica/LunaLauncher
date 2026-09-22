@@ -755,22 +755,14 @@ QJsonObject launcherAccountSnapshot()
     const auto list = APPLICATION->accounts();
     const auto selected = list->defaultAccount();
     QJsonArray accounts;
-    const QStringList states{ "unchecked", "offline", "working", "online", "disabled", "errored", "expired", "gone" };
     for (int i = 0; i < list->count(); ++i) {
         const auto account = list->at(i);
-        const auto data = account->accountData();
-        const auto& profile = data->minecraftProfile;
-        QJsonArray capes;
-        for (auto it = profile.capes.constBegin(); it != profile.capes.constEnd(); ++it)
-            capes.append(QJsonObject{ { "id", it.value().id }, { "url", it.value().url }, { "alias", it.value().alias },
-                                     { "current", it.key() == profile.currentCape } });
-        accounts.append(QJsonObject{ { "index", i }, { "id", account->profileId() }, { "internalId", account->internalId() },
-            { "name", account->profileName() }, { "type", account->typeString() }, { "state", static_cast<int>(data->accountState) },
-            { "stateName", states.value(static_cast<int>(data->accountState), "unknown") }, { "active", account->isActive() },
-            { "lastError", account->lastError() }, { "default", account == selected },
-            { "ownsMinecraft", data->minecraftEntitlement.ownsMinecraft }, { "canPlayMinecraft", data->minecraftEntitlement.canPlayMinecraft },
-            { "skinUrl", profile.skin.url }, { "cape", profile.currentCape }, { "capes", capes },
-            { "skin", QJsonObject{ { "id", profile.skin.id }, { "url", profile.skin.url }, { "variant", profile.skin.variant } } } });
+        auto snapshot = LauncherApiModel::AccountObject(account.get()).snapshot(account == selected);
+        snapshot.insert("index", i);
+        snapshot.insert("name", account->profileName());
+        snapshot.insert("skinUrl", snapshot.value("profile").toObject().value("skin").toObject().value("url"));
+        snapshot.insert("cape", snapshot.value("profile").toObject().value("currentCape"));
+        accounts.append(snapshot);
     }
     return { { "accounts", accounts }, { "count", accounts.size() }, { "active", list->isActive() },
              { "defaultAccount", selected ? QJsonValue(selected->internalId()) : QJsonValue(QJsonValue::Null) } };

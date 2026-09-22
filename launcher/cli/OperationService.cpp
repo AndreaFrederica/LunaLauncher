@@ -355,6 +355,8 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
     }
     if (operation == "account.set-default")
         return setDefaultAccount(parameters);
+    if (operation == "account.configure")
+        return configureAccount(parameters);
     if (operation == "account.remove")
         return removeAccount(parameters);
     if (operation == "account.refresh")
@@ -490,9 +492,7 @@ QJsonObject OperationService::refreshAccount(const QJsonObject& parameters, User
     if (!waitForTask(task.get(), interaction, &error))
         return failure(error);
     APPLICATION->accounts()->saveList();
-    return success(QJsonObject{ { "id", account->profileId() },
-                                { "profileName", account->profileName() },
-                                { "state", accountStateName(account->accountState()) } });
+    return success(LauncherApiModel::AccountObject(account.get()).snapshot(APPLICATION->accounts()->defaultAccount() == account));
 }
 
 QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
@@ -888,6 +888,67 @@ QJsonObject OperationService::resetSetting(const QJsonObject& parameters)
     return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));
 }
 
+QJsonObject OperationService::configureAccount(const QJsonObject& parameters)
+{
+    const auto reference = parameters.value("account").toString();
+    const auto account = findAccount(reference);
+    if (!account)
+        return failure(tr("Account not found: %1").arg(reference), 2);
+
+    auto* data = account->accountData();
+    const auto validUrl = [](const QString& value) {
+        if (value.isEmpty()) return true;
+        const QUrl url(value, QUrl::TolerantMode);
+        return url.isValid() && !url.host().isEmpty() && (url.scheme() == "http" || url.scheme() == "https");
+    };
+
+    if (data->type == AccountType::Yggdrasil) {
+        auto authUrl = data->yggdrasilConfig.authServerUrl;
+        auto sessionUrl = data->yggdrasilConfig.sessionServerUrl;
+        for (const auto key : { "authUrl", "sessionUrl" }) {
+            if (!parameters.contains(key)) continue;
+            const auto value = parameters.value(key).toString().trimmed();
+            if (!validUrl(value)) return failure(tr("%1 must be an HTTP(S) URL.").arg(QString::fromLatin1(key)), 2);
+            if (QString::fromLatin1(key) == "authUrl") authUrl = value;
+            else sessionUrl = value;
+        }
+        if (!validUrl(authUrl) || !validUrl(sessionUrl)) return failure(tr("Yggdrasil authUrl and sessionUrl must be HTTP(S) URLs."), 2);
+        data->yggdrasilConfig.authServerUrl = authUrl;
+        data->yggdrasilConfig.sessionServerUrl = sessionUrl;
+        if (parameters.contains("sourceName")) data->yggdrasilConfig.sourceName = parameters.value("sourceName").toString().trimmed();
+        if (parameters.contains("authenticateEndpoint")) data->yggdrasilConfig.authenticateEndpoint = parameters.value("authenticateEndpoint").toString().trimmed();
+        if (parameters.contains("refreshEndpoint")) data->yggdrasilConfig.refreshEndpoint = parameters.value("refreshEndpoint").toString().trimmed();
+        if (parameters.contains("validateEndpoint")) data->yggdrasilConfig.validateEndpoint = parameters.value("validateEndpoint").toString().trimmed();
+        if (parameters.contains("profileEndpoint")) data->yggdrasilConfig.profileEndpoint = parameters.value("profileEndpoint").toString().trimmed();
+        if (parameters.contains("oauthTokenEndpoint")) data->yggdrasilConfig.oauthTokenEndpoint = parameters.value("oauthTokenEndpoint").toString().trimmed();
+        if (parameters.contains("tokenType")) {
+            const auto tokenType = parameters.value("tokenType").toString();
+            if (tokenType.compare("Standard", Qt::CaseInsensitive) != 0 && tokenType.compare("OAuth", Qt::CaseInsensitive) != 0)
+                return failure(tr("tokenType must be Standard or OAuth."), 2);
+            data->yggdrasilConfig.tokenType = tokenType.compare("OAuth", Qt::CaseInsensitive) == 0 ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard;
+        }
+        if (data->yggdrasilConfig.authServerUrl.isEmpty() || data->yggdrasilConfig.sessionServerUrl.isEmpty())
+            return failure(tr("Yggdrasil accounts require both authUrl and sessionUrl."), 2);
+    } else if (data->type == AccountType::UnifiedPass) {
+        if (parameters.contains("serverId")) {
+            const auto serverId = parameters.value("serverId").toString().trimmed();
+            if (serverId.isEmpty()) return failure(tr("UnifiedPass serverId cannot be empty."), 2);
+            data->unifiedPassConfig.serverId = serverId;
+        }
+        if (parameters.contains("baseUrl")) {
+            const auto baseUrl = parameters.value("baseUrl").toString().trimmed();
+            if (!validUrl(baseUrl)) return failure(tr("baseUrl must be an HTTP(S) URL."), 2);
+            data->unifiedPassConfig.baseUrl = baseUrl;
+        }
+    } else {
+        return failure(tr("This account type has no editable authentication configuration."), 2);
+    }
+
+    account->changed();
+    APPLICATION->accounts()->saveList();
+    return success(LauncherApiModel::AccountObject(account.get()).snapshot(APPLICATION->accounts()->defaultAccount() == account));
+}
+
 QJsonObject OperationService::exportSettings(const QJsonObject& parameters)
 {
     QString error;
@@ -985,7 +1046,8 @@ QJsonObject OperationService::setupMicrosoftProfile(const MinecraftAccountPtr& a
 
 QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserInteraction& interaction)
 {
-    const auto type = parameters.value("type").toString();
+    auto type = parameters.value("type").toString().trimmed().toLower();
+    if (type == "msa" || type == "microsoft-account") type = "microsoft";
     auto username = parameters.value("username").toString();
     if (username.isEmpty() && type != "microsoft") {
         const auto value = interaction.input(tr("Username"), false);
@@ -1008,16 +1070,28 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
             const auto sessionUrl = parameters.value("sessionUrl").toString();
             if (authUrl.isEmpty() || sessionUrl.isEmpty())
                 return failure(tr("Yggdrasil login requires authUrl and sessionUrl."), 2);
+            const auto isHttpUrl = [](const QString& value) {
+                const QUrl url(value, QUrl::TolerantMode);
+                return url.isValid() && !url.host().isEmpty() && (url.scheme() == "http" || url.scheme() == "https");
+            };
+            if (!isHttpUrl(authUrl) || !isHttpUrl(sessionUrl))
+                return failure(tr("Yggdrasil authUrl and sessionUrl must be HTTP(S) URLs."), 2);
             account =
                 MinecraftAccount::createYggdrasil(username, *password, authUrl, sessionUrl, parameters.value("sourceName").toString(),
                     parameters.value("refreshEndpoint").toString(), parameters.value("validateEndpoint").toString(),
                     parameters.value("authenticateEndpoint").toString(), parameters.value("profileEndpoint").toString(),
-                    parameters.value("oauthTokenEndpoint").toString(), parameters.value("tokenType").toString() == "OAuth" ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard);
+                    parameters.value("oauthTokenEndpoint").toString(), parameters.value("tokenType").toString().compare("OAuth", Qt::CaseInsensitive) == 0 ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard);
         } else {
             const auto serverId = parameters.value("serverId").toString();
             if (serverId.isEmpty())
                 return failure(tr("UnifiedPass login requires serverId."), 2);
-            account = MinecraftAccount::createUnifiedPass(username, *password, serverId);
+            const auto baseUrl = parameters.value("baseUrl").toString().trimmed();
+            if (!baseUrl.isEmpty()) {
+                const QUrl url(baseUrl, QUrl::TolerantMode);
+                if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https"))
+                    return failure(tr("UnifiedPass baseUrl must be an HTTP(S) URL."), 2);
+            }
+            account = MinecraftAccount::createUnifiedPass(username, *password, serverId, baseUrl);
         }
     } else {
         return failure(tr("Unsupported account type: %1").arg(type), 2);
@@ -1063,8 +1137,7 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
     if (!accounts->defaultAccount())
         accounts->setDefaultAccount(account);
     accounts->saveList();
-    return success(QJsonObject{
-        { "id", account->profileId() }, { "profileName", account->profileName() }, { "type", accountTypeName(account->accountType()) } });
+    return success(LauncherApiModel::AccountObject(account.get()).snapshot(accounts->defaultAccount() == account));
 }
 
 QJsonObject OperationService::fetchJson(const QUrl& url, const QString& taskName, QJsonDocument* document, UserInteraction& interaction)

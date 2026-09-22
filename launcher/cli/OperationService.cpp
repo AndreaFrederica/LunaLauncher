@@ -413,8 +413,12 @@ QJsonObject OperationService::listInstances()
         const auto instance = list->at(i);
         instances.append(QJsonObject{ { "id", instance->id() },
                                       { "name", instance->name() },
+                                      { "type", instance->typeName() },
                                       { "group", list->getInstanceGroup(instance->id()) },
+                                      { "icon", instance->iconKey() },
+                                      { "notes", instance->notes() },
                                       { "running", instance->isRunning() },
+                                      { "managed", instance->isManagedPack() },
                                       { "lastLaunch", instance->lastLaunch() },
                                       { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) } });
     }

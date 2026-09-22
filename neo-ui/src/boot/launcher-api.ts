@@ -2,6 +2,28 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type ApiResult<T = unknown> = { ok: boolean; data?: T; error?: string; operation?: string };
+
+/** Stable object-shaped instance contract used by Neo UI and future UI adapters. */
+export interface LauncherInstance {
+  id: string;
+  name: string;
+  type: string;
+  group: string;
+  icon: string;
+  notes: string;
+  paths?: { root: string; game: string; mods: string };
+  lifecycle?: { running: boolean; lastLaunch: string; playTimeSeconds: number };
+  managed?: { enabled: boolean; type: string; projectId: string; versionId: string };
+  runtime?: { minecraftVersion?: string };
+  capabilities?: Record<string, boolean>;
+  running?: boolean;
+  managedType?: string;
+  managedId?: string;
+  managedVersionId?: string;
+  lastLaunch?: string;
+  playTimeSeconds?: number;
+}
+
 export class LauncherApiClient {
   private requireDesktop(): void {
     if (!isTauri()) throw new Error('当前为网页预览。请启动安装目录中的 luna-neo-ui.exe，以连接启动器并读取实例、账户和设置。');
@@ -16,6 +38,12 @@ export class LauncherApiClient {
   onEvent(handler: (event: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();
     return listen('launcher-event', event => handler(event.payload));
+  }
+  async getInstance(reference: string): Promise<ApiResult<LauncherInstance>> {
+    return this.execute<LauncherInstance>('instance.get', { instance: reference });
+  }
+  async listInstances(): Promise<ApiResult<LauncherInstance[]>> {
+    return this.execute<LauncherInstance[]>('instance.list');
   }
   onStream(handler: (batch: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();

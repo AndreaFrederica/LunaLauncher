@@ -890,6 +890,20 @@ void registerLauncherApiDomains(LauncherApi& api)
                                                                                { "headless", APPLICATION->isHeadless() },
                                                                                { "capabilities", capabilities } });
                            });
+    api.registerOperation({ "launcher.get", "Read the stable launcher object used by alternate frontends.", objectSchema({}), "launcher" },
+                           [&api](const QJsonObject&, UserInteraction& interaction) {
+                               const auto runtime = api.execute("runtime.info", {}, interaction);
+                               const auto settings = api.execute("settings.list", { { "scope", "launcher" } }, interaction);
+                               const auto accounts = api.execute("account.list", {}, interaction);
+                               if (!runtime.value("ok").toBool() || !settings.value("ok").toBool() || !accounts.value("ok").toBool())
+                                   return OperationService::failure("Could not construct the launcher snapshot.");
+                               return OperationService::success(QJsonObject{
+                                   { "runtime", runtime.value("data") },
+                                   { "settings", QJsonObject{ { "scope", "launcher" }, { "entries", settings.value("data") } } },
+                                   { "accounts", accounts.value("data") },
+                                   { "capabilities", runtime.value("data").toObject().value("capabilities") },
+                               });
+                           });
     api.registerOperation({ "network.proxy.get", "Read the effective launcher proxy configuration.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) { return proxyInfo(); });
     api.registerOperation({ "network.proxy.set", "Set the launcher HTTP/SOCKS5/system proxy configuration.",

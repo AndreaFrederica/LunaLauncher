@@ -24,6 +24,23 @@ export interface LauncherInstance {
   playTimeSeconds?: number;
 }
 
+export interface LauncherSettingsEntry {
+  key: string;
+  type: string;
+  value: unknown;
+  default: unknown;
+  isDefault: boolean;
+  sensitive: boolean;
+  redacted: boolean;
+}
+
+export interface LauncherProfile {
+  runtime: Record<string, unknown>;
+  settings: { scope: 'launcher'; entries: LauncherSettingsEntry[] };
+  accounts: unknown[];
+  capabilities: string[];
+}
+
 export class LauncherApiClient {
   private requireDesktop(): void {
     if (!isTauri()) throw new Error('当前为网页预览。请启动安装目录中的 luna-neo-ui.exe，以连接启动器并读取实例、账户和设置。');
@@ -44,6 +61,9 @@ export class LauncherApiClient {
   }
   async listInstances(): Promise<ApiResult<LauncherInstance[]>> {
     return this.execute<LauncherInstance[]>('instance.list');
+  }
+  async getLauncher(): Promise<ApiResult<LauncherProfile>> {
+    return this.execute<LauncherProfile>('launcher.get');
   }
   onStream(handler: (batch: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();

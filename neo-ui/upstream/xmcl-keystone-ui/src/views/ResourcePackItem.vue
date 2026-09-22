@@ -1,0 +1,192 @@
+<template>
+  <MarketItem
+    data-testid="resource-pack-item"
+    :data-resource-pack-id="pack.id"
+    :item="pack"
+    :selection-mode="selectionMode"
+    :disabled="isVirtual"
+    :selected="selected"
+    :has-update="hasUpdate"
+    :checked="checked"
+    :draggable="draggable"
+    :dense="dense"
+    :height="itemHeight"
+    :indent="indent"
+    :indent-color="indentColor"
+    :get-context-menu-items="isBuiltIn ? undefined : getContextMenuItems"
+    :install="install"
+    @drop="emit('drop', $event)"
+    @click="isVirtual ? undefined : emit('click', $event)"
+    @checked="emit('check', $event)"
+  >
+    <template v-if="draggable" #prepend>
+      <v-icon
+        data-testid="resource-pack-drag-handle"
+        class="mr-2 cursor-move opacity-60"
+        size="20"
+        draggable="true"
+        aria-hidden="true"
+        @click.stop
+      >
+        drag_indicator
+      </v-icon>
+    </template>
+    <template
+      v-if="pack.installed.length > 0"
+      #labels
+    >
+      <v-chip
+        v-shared-tooltip="tooltip"
+        label
+        variant="outlined"
+        size="small"
+      >
+        <template #prepend>
+          <v-avatar start>
+            <v-img
+              :src="BuiltinImages.minecraft"
+            />
+          </v-avatar>
+        </template>
+        {{ pack.installed[0].acceptingRange }}
+        <template #append>
+          <v-avatar end>
+            {{ icon }}
+          </v-avatar>
+        </template>
+      </v-chip>
+      <v-icon
+        v-if="pack.modrinth || pack.curseforge || pack.modrinthProjectId || pack.curseforgeProjectId"
+        class="mt-1"
+        size="small"
+      >
+        {{ (pack.modrinth || pack.modrinthProjectId) ? 'xmcl:modrinth' : (pack.curseforge || pack.curseforgeProjectId) ? 'xmcl:curseforge' : '' }}
+      </v-icon>
+    </template>
+  </MarketItem>
+</template>
+<script setup lang="ts">
+import MarketItem from '@/components/MarketItem.vue'
+import { useService } from '@/composables'
+import { ContextMenuItem } from '@/composables/contextMenu'
+import { kInstance } from '@/composables/instance'
+import { ResourcePackProject } from '@/composables/resourcePackSearch'
+import { vSharedTooltip } from '@/directives/sharedTooltip'
+import { injection } from '@/util/inject'
+import { ProjectEntry } from '@/util/search'
+import { BaseServiceKey, InstanceResourcePacksServiceKey, isCompatible } from '@xmcl/runtime-api'
+import { BuiltinImages } from '../constant'
+
+const props = defineProps<{
+  pack: ResourcePackProject
+  selectionMode: boolean
+  checked: boolean
+  draggable?: boolean
+  selected: boolean
+  hasUpdate?: boolean
+  dense?: boolean
+  itemHeight?: number
+  indent?: boolean
+  indentColor?: string
+  getContextMenuItems?: (item: ResourcePackProject) => ContextMenuItem[]
+  install: (p: ProjectEntry) => Promise<void>
+}>()
+
+const emit = defineEmits<{
+  (event: 'click', pack: ResourcePackProject): void
+  (event: 'check', pack: ResourcePackProject): void
+  (event: 'drop', id: string): void
+  (event: 'install'): void
+}>()
+
+const { runtime } = injection(kInstance)
+const compatible = computed(() => {
+  return isCompatible(props.pack.installed[0].acceptingRange, runtime.value.minecraft)
+})
+const icon = computed(() => {
+  return compatible.value ? '✔️' : '❌'
+})
+
+const tooltip = computed(() => compatible.value
+  ? t('resourcepack.compatible', {
+    format: props.pack.installed[0].pack_format,
+    version: runtime.value.minecraft,
+  })
+  : t('resourcepack.incompatible', {
+    accept: props.pack.installed[0].acceptingRange,
+    actual: runtime.value.minecraft,
+    format: props.pack.installed[0].pack_format,
+  }))
+
+const { t } = useI18n()
+const { uninstall } = useService(InstanceResourcePacksServiceKey)
+const { showItemInDirectory } = useService(BaseServiceKey)
+const { path } = injection(kInstance)
+const isVirtual = computed(() => props.pack.installed[0] && !props.pack.installed[0].path)
+
+const isBuiltIn = computed(() => props.pack.id === 'vanilla' || props.pack.id === 'fabric' || props.pack.id === 'file/mod_resources')
+const getContextMenuItems = () => {
+  const all = [] as ContextMenuItem[]
+  if (props.pack.installed.length > 0) {
+    if (isVirtual.value) {
+      // virtual pack
+      return all
+    }
+    all.push({
+      text: t('resourcepack.showFile', { file: props.pack.installed[0].path }),
+      onClick: () => {
+        showItemInDirectory(props.pack.installed[0].path)
+      },
+      icon: 'folder',
+      section: 'action',
+    })
+    all.push({
+      text: t('delete.name', { name: props.pack.title }),
+      onClick: () => {
+        uninstall({ path: path.value, files: props.pack.installed.map(f => f.path).filter(p => !!p) })
+      },
+      icon: 'delete',
+      color: 'error',
+      section: 'danger',
+    })
+  }
+
+  // if (props.pack.curseforgeProjectId || props.pack.curseforge) {
+  //   all.push({
+  //     text: t('resourcepack.showInCurseforge', { name: props.pack.title }),
+  //     onClick: () => {
+  //       goCurseforgeProject(props.pack.curseforgeProjectId || props.pack.curseforge?.id || 0, 'texture-packs')
+  //     },
+  //     icon: 'xmcl:curseforge',
+  //   })
+  // } else {
+  //   all.push({
+  //     text: t('resourcepack.searchOnCurseforge', { name: props.pack.title }),
+  //     onClick: () => {
+  //       searchInCurseforge(props.pack.title, 'texture-packs')
+  //     },
+  //     icon: 'search',
+  //   })
+  // }
+
+  // if (props.pack.modrinthProjectId || props.pack.modrinth) {
+  //   all.push({
+  //     text: t('mod.showInModrinth', { name: props.pack.title }),
+  //     onClick: () => {
+  //       goModrinthProject(props.pack.modrinthProjectId || props.pack.modrinth?.project_id || '')
+  //     },
+  //     icon: 'xmcl:modrinth',
+  //   })
+  // } else {
+  //   all.push({
+  //     text: t('resourcepack.searchOnModrinth', { name: props.pack.title }),
+  //     onClick: () => {
+  //       searchInModrinth(props.pack.title, 'resourcepack')
+  //     },
+  //     icon: 'search',
+  //   })
+  // }
+  return all.concat(props.getContextMenuItems?.(props.pack) ?? [])
+}
+
+</script>

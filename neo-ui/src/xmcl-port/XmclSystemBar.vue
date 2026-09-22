@@ -1,10 +1,17 @@
 <template>
-  <!-- Port of XMCL AppSystemBar with browser-safe controls. -->
-  <div class="xmcl-system-bar"><div class="xmcl-system-brand"><img :src="logo" alt="Luna"/><span>Luna</span><small>XMCL UI port</small></div><div class="xmcl-system-status"><q-icon name="circle" size="8px" :color="connected?'positive':'grey'"/> {{ connected?'已连接启动器':'未连接启动器' }}<q-btn flat dense round icon="refresh" :disable="busy" aria-label="刷新" @click="emit('refresh')"/></div></div>
+  <div class="system-bar" role="toolbar" aria-label="XMCL system bar">
+    <button class="system-bar-back" aria-label="刷新实例库" @click="emit('refresh')"><span class="material-icons">arrow_back</span></button>
+    <div class="system-bar-spacer" />
+    <button class="system-bar-badge" aria-label="搜索"><span class="material-icons">search</span></button>
+    <button class="system-bar-badge" aria-label="任务"><span class="material-icons">assignment</span><i v-if="busy" /></button>
+    <span class="system-bar-status"><span class="status-dot" :class="{ connected }" />{{ connected ? '已连接' : '未连接' }}</span>
+    <button class="system-bar-badge" :disabled="busy" aria-label="刷新" @click="emit('refresh')"><span class="material-icons">refresh</span></button>
+  </div>
 </template>
 <script setup lang="ts">
-import logo from './assets/logo.webp';
-defineProps<{connected:boolean;busy:boolean}>();const emit=defineEmits<{refresh:[]}>();
+defineProps<{ connected: boolean; busy: boolean }>();
+const emit = defineEmits<{ refresh: [] }>();
 </script>
-<style scoped>.xmcl-system-bar{position:fixed;top:0;left:0;right:0;height:34px;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 92px;background:rgba(17,17,22,.68);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08);user-select:none}.xmcl-system-brand{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}.xmcl-system-brand img{width:18px;height:18px;border-radius:5px}.xmcl-system-brand small{color:rgba(255,255,255,.4);font-weight:400;margin-left:4px}.xmcl-system-status{display:flex;align-items:center;gap:7px;color:rgba(255,255,255,.6);font-size:11px}.xmcl-system-status .q-btn{margin-left:6px}@media(max-width:600px){.xmcl-system-bar{padding-left:86px}.xmcl-system-brand small{display:none}}
+<style scoped>
+.system-bar{position:fixed;top:0;left:0;right:0;height:30px;z-index:100;display:flex;align-items:center;gap:3px;padding:0 8px;background:rgba(17,17,22,.55);backdrop-filter:blur(18px);color:rgba(255,255,255,.7);font-size:12px}.system-bar-spacer{flex:1}.system-bar-back,.system-bar-badge{height:30px;min-width:30px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;cursor:pointer}.system-bar-back:hover,.system-bar-badge:hover{background:rgba(255,255,255,.12);color:#fff}.system-bar-badge{position:relative}.system-bar-badge i{position:absolute;right:4px;top:5px;width:5px;height:5px;border-radius:50%;background:#fbc02d}.system-bar-status{display:flex;align-items:center;gap:5px;margin:0 4px;color:rgba(255,255,255,.55)}.status-dot{width:7px;height:7px;border-radius:50%;background:#777}.status-dot.connected{background:#4caf50}.material-icons{font-size:18px;line-height:1}
 </style>

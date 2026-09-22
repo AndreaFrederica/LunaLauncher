@@ -1,0 +1,771 @@
+<template>
+  <v-card
+    ref="root"
+    flat
+    data-gamepad-section
+    class="surface-card-subsection overflow-hidden tabs-card"
+    v-context-menu="getBackgroundMenu"
+  >
+    <HomeScreenshotCard
+      v-if="selected === 0 && !isScreenshotHidden"
+      class="h-full"
+      :height="240"
+      :instance="instance"
+      :galleries="galleries"
+      v-context-menu="() => getCardMenu(String(CardType.Screenshots))"
+    >
+      <template v-if="hasPinnedServer" #leading>
+        <div class="flex items-center justify-center h-full w-full px-3">
+          <InstanceServerCard
+            class="w-full mt-0"
+            :instance="instance"
+            :server-name="pinnedServerName"
+          />
+        </div>
+      </template>
+    </HomeScreenshotCard>
+    <InstanceServerCard
+      v-else-if="selected === 1 && upstream?.type === 'server'"
+      class="h-full mt-0"
+      :instance="instance"
+      :server-name="upstream.name"
+    />
+    <HomeUpstreamHeader
+      v-else-if="headerData"
+      class="h-full"
+      :value="headerData"
+      dense
+    />
+    <div
+      v-roving-tabindex
+      class="flex h-full flex-col transition-all duration-500 home-card"
+      style="box-sizing: border-box"
+    >
+      <v-card-text class="flex flex-col gap-2 p-3 pt-2">
+        <div class="flex gap-4 items-center">
+        <div class="tabs flex gap-4 items-center" role="tablist" :style="{ '--underline-left': underlineLeft + 'px', '--underline-width': underlineWidth + 'px' }">
+          <span
+            ref="contentRef"
+            role="tab"
+            tabindex="0"
+            :aria-selected="selected === 0"
+            @click="onSelectContent"
+            @keydown.enter.prevent="onSelectContent"
+            @keydown.space.prevent="onSelectContent"
+            class="cursor-pointer"
+            :class="{ 'selected': selected === 0 }"
+          >
+            {{ t('instance.contents') }}
+          </span>
+          <span
+            v-if="!!upstream"
+            ref="newsRef"
+            role="tab"
+            tabindex="-1"
+            :aria-selected="selected === 1"
+            @click="onSelectUpdates"
+            @keydown.enter.prevent="onSelectUpdates"
+            @keydown.space.prevent="onSelectUpdates"
+            class="cursor-pointer"
+            :class="{ 'selected': selected === 1 }"
+          >
+            {{ t('instance.updates') }}
+          </span>
+        </div>
+          <div class="flex-grow" />
+          <div class="controls" style="margin-right: 0.18rem">
+            <v-btn icon variant="text" density="comfortable" :aria-label="t('setting.layout.default')" @click="onViewDashboard" size="small">
+              <v-icon size="20" class="rotate-[45deg]" aria-hidden="true">
+                unfold_more
+              </v-icon>
+            </v-btn>
+          </div>
+        </div>
+        <div class="invisible-scroll flex min-h-0 flex-col gap-2 overflow-x-hidden overflow-y-auto transition-all duration-400" :style="{ height: contentListHeight }">
+          <template v-if="selected === 1 && upstream?.type === 'server'">
+            <HomeCardListItem
+              v-if="serverUpstream.suggestedMinecraft.value"
+              icon="update"
+              :text="t('server.upstreamUpdateAvailable', { version: serverUpstream.suggestedMinecraft.value })"
+              :tooltip="t('server.upstreamUpdateHint')"
+              highlighted
+              data-testid="server-upstream-update-row"
+              @install="serverUpstream.applyUpdate"
+              @setting="serverUpstream.applyUpdate"
+              @drop="() => {}"
+            />
+            <HomeCardListItem
+              v-else
+              icon="check_circle"
+              :text="t('server.upstreamUpToDate', { version: instance?.runtime.minecraft || '?' })"
+              :tooltip="t('server.upstreamUpToDateHint')"
+              @install="serverUpstream.refresh"
+              @setting="serverUpstream.refresh"
+              @drop="() => {}"
+            />
+          </template>
+          <v-menu
+            v-else-if="selected === 0 && items.length === 0"
+          >
+            <template #activator="{ props }">
+              <div class="flex items-center justify-center h-full py-4">
+                <v-btn
+                  v-bind="props"
+                  variant="text"
+                  size="small"
+                  prepend-icon="visibility"
+                >
+                  {{ t('instance.showHiddenCards') }}
+                </v-btn>
+              </div>
+            </template>
+            <v-list density="compact">
+              <v-list-item
+                v-for="card in hiddenCards"
+                :key="card.id"
+                :title="card.label"
+                @click="restoreCard(card.id)"
+              >
+                <template #prepend>
+                  <v-icon>{{ cardIcon[card.type] || 'visibility' }}</v-icon>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <div
+            v-else-if="selected === 1 && items.length === 0"
+            class="flex items-center justify-center h-full text-xs text-medium-emphasis py-4"
+          >
+            <v-progress-circular
+              v-if="loadingUpdates"
+              indeterminate
+              size="20"
+              width="2"
+            />
+            <span v-else>{{ t('launcherUpdate.noUpdateAvailable') }}</span>
+          </div>
+          <HomeCardListItem
+            v-else
+            v-for="item in items"
+            :id="item.id"
+            :key="item.id || (item.icon + item.text)"
+            :draggable="!!item.id"
+            :icon="item.icon"
+            :tooltip="item.tooltip"
+            :text="item.text"
+            :highlighted="item.highlighted"
+            :loading="updating"
+            :button-text="item.buttonText"
+            :button-icon="item.buttonIcon"
+            v-context-menu="() => getCardMenu(item.id, currentItemIds)"
+            @reorder="onReorder($event, item.id!)"
+            @install="item.install"
+            @setting="item.setting"
+            @drop="item.drop"
+          />
+        </div>
+      </v-card-text>
+      <StoreProjectInstallVersionDialog
+        v-model="showVersionDialog"
+        :versions="dialogVersions"
+        :initial-selected-detail="selectedVersion"
+        :get-version-detail="getVersionDetail"
+        :installing="updating"
+        @install="onInstallVersion"
+      />
+    </div>
+  </v-card>
+</template>
+<script lang="ts" setup>
+import HomeCardListItem from '@/components/HomeCardListItem.vue'
+import InstanceServerCard from '@/components/InstanceServerCard.vue'
+import type { StoreProjectVersion, StoreProjectVersionDetail } from '@/components/StoreProjectInstallVersionDialog.vue'
+import StoreProjectInstallVersionDialog from '@/components/StoreProjectInstallVersionDialog.vue'
+import { useService } from '@/composables'
+import { getCurseforgeProjectFilesModel } from '@/composables/curseforge'
+import { getDropFilePaths, kDropHandler } from '@/composables/dropHandler'
+import { useUpstreamData } from '@/composables/upstreamData'
+import { kInstance } from '@/composables/instance'
+import { kInstanceLaunch } from '@/composables/instanceLaunch'
+import { kInstanceModsContext } from '@/composables/instanceMods'
+import { kInstanceResourcePacks } from '@/composables/instanceResourcePack'
+import { kInstanceSave } from '@/composables/instanceSave'
+import { kInstanceShaderPacks } from '@/composables/instanceShaderPack'
+import { useServerUpstream } from '@/composables/serverUpstream'
+import { getModrinthVersionModel } from '@/composables/modrinthVersions'
+import { useSWRVModel } from '@/composables/swrv'
+import { useInFocusMode } from '@/composables/uiLayout'
+import { vRovingTabindex } from '@/directives/rovingTabindex'
+import { vContextMenu } from '@/directives/contextMenu'
+import { CardType, cardIcon, getParam, useHomeFocusCards } from '@/composables/homeCards'
+import { getCurseforgeFileGameVersions, getCursforgeFileModLoaders } from '@/util/curseforge'
+import { injection } from '@/util/inject'
+import { useElementHover, useElementSize } from '@vueuse/core'
+import { InstanceModsServiceKey, InstanceResourcePacksServiceKey, InstanceSavesServiceKey, InstanceShaderPacksServiceKey, ModpackServiceKey, parseServerAddress } from '@xmcl/runtime-api'
+import HomeScreenshotCard from './HomeScreenshotCard.vue'
+import HomeUpstreamHeader from './HomeUpstreamHeader.vue'
+import { useDialog } from '@/composables/dialog'
+import { InstanceInstallDialog } from '@/composables/instanceUpdate'
+import { useDateString } from '@/composables/date'
+
+const { enabledMods } = injection(kInstanceModsContext)
+const { enabled: enabledResourcePacks } = injection(kInstanceResourcePacks)
+const { shaderPack } = injection(kInstanceShaderPacks)
+const { launch } = injection(kInstanceLaunch)
+
+const {
+  serverCards,
+  worldCards,
+  cardOrder,
+  reorderCards,
+  isHidden,
+  hiddenCards,
+  restoreCard,
+  getCardMenu,
+  getBackgroundMenu,
+} = useHomeFocusCards()
+
+const currentItemIds = computed(() => items.value.map((i) => i.id).filter(Boolean) as string[])
+
+function onReorder(fromId: string, toId: string) {
+  reorderCards(fromId, toId, currentItemIds.value)
+}
+
+const isScreenshotHidden = computed(() => isHidden(CardType.Screenshots))
+
+const isFocus = useInFocusMode()
+
+function onViewDashboard() {
+  isFocus.value = false
+}
+
+const { push } = useRouter()
+const { t } = useI18n()
+
+const { dragover } = injection(kDropHandler)
+const { path, instance } = injection(kInstance)
+const isBedrock = computed(() => instance.value?.edition === 'bedrock')
+
+const upstream = computed(() => instance.value?.upstream)
+const modrinthProjectId = ref<string>()
+const curseforgeProjectId = ref<number>()
+const minecraftVersion = computed(() => instance.value?.runtime.minecraft)
+const modLoaderType = computed(() => {
+  const runtime = instance.value?.runtime
+  if (!runtime) return undefined
+  if (runtime.forge) return 'forge'
+  if (runtime.fabricLoader) return 'fabric'
+  if (runtime.neoForged) return 'neoforge'
+  if (runtime.quiltLoader) return 'quilt'
+  return undefined
+})
+
+watch(upstream, (u) => {
+  if (u?.type === 'modrinth-modpack') {
+    modrinthProjectId.value = u.projectId
+  } else {
+    modrinthProjectId.value = undefined
+  }
+  if (u?.type === 'curseforge-modpack') {
+    curseforgeProjectId.value = u.modId
+  } else {
+    curseforgeProjectId.value = undefined
+  }
+}, { immediate: true })
+const modrinthVersions = useSWRVModel(getModrinthVersionModel(modrinthProjectId, undefined, modLoaderType , computed(() => minecraftVersion.value ? [minecraftVersion.value] : undefined)))
+const curseforgeModLoaderTypeRef = computed(() => {
+  const type = modLoaderType.value
+  if (type === 'forge') return 1
+  if (type === 'fabric') return 4
+  if (type === 'neoforge') return 6
+  if (type === 'quilt') return 5
+  return undefined
+})
+const curseforgeFiles = useSWRVModel(getCurseforgeProjectFilesModel(curseforgeProjectId, minecraftVersion , curseforgeModLoaderTypeRef ) )
+
+const showVersionDialog = ref(false)
+const selectedVersion = ref<StoreProjectVersion | undefined>(undefined)
+
+const latestVersions = computed(() => {
+  if (upstream.value?.type === 'modrinth-modpack') {
+    return modrinthVersions.data.value || []
+  } else if (upstream.value?.type === 'curseforge-modpack') {
+    return (curseforgeFiles.data.value )?.data || []
+  }
+  return []
+})
+const loadingUpdates = computed(() => {
+  if (upstream.value?.type === 'modrinth-modpack') return modrinthVersions.isValidating.value
+  if (upstream.value?.type === 'curseforge-modpack') return curseforgeFiles.isValidating.value
+  return false
+})
+
+// Convert versions to StoreProjectVersion format
+const dialogVersions = computed(() => {
+  if (upstream.value?.type === 'modrinth-modpack') {
+    const versions = modrinthVersions.data.value || []
+    return versions.map((v): StoreProjectVersion => ({
+      id: v.id,
+      name: v.name,
+      version_type: v.version_type,
+      game_versions: v.game_versions,
+      loaders: v.loaders,
+    }))
+  } else if (upstream.value?.type === 'curseforge-modpack') {
+    const versions = (curseforgeFiles.data.value)?.data || []
+    return versions.map((v): StoreProjectVersion => ({
+      id: v.id.toString(),
+      name: v.displayName,
+      version_type: v.releaseType === 1 ? 'release' : v.releaseType === 2 ? 'beta' : 'alpha',
+      game_versions: getCurseforgeFileGameVersions(v),
+      loaders: getCursforgeFileModLoaders(v),
+    }))
+  }
+  return []
+})
+
+// Get version detail for the dialog
+async function getVersionDetail(version: StoreProjectVersion): Promise<StoreProjectVersionDetail> {
+  if (upstream.value?.type === 'modrinth-modpack') {
+    const target = (modrinthVersions.data.value || []).find(v => v.id === version.id)
+    if (!target) return { changelog: '', dependencies: [], version }
+
+    const projects = target.dependencies?.map(v => v.project_id).filter(v => !!v) || []
+    const lookup = Object.fromEntries(target.dependencies?.map(p => [p.project_id, p.dependency_type]) || [])
+
+    try {
+      const { clientModrinthV2 } = await import('@/util/clients')
+      const matched = projects.length > 0 ? await clientModrinthV2.getProjects(projects) : []
+      const dependencies = matched.map((p) => ({
+        title: p.title,
+        description: p.description,
+        icon: p.icon_url ?? '',
+        href: `https://modrinth.com/${p.project_type}/${p.slug}`,
+        dependencyType: lookup[p.id] || 'optional',
+      }))
+      return {
+        version,
+        changelog: target.changelog ?? '',
+        dependencies,
+      }
+    } catch (e) {
+      console.error(e)
+      return { changelog: target.changelog ?? '', dependencies: [], version }
+    }
+  } else if (upstream.value?.type === 'curseforge-modpack') {
+    const target = ((curseforgeFiles.data.value)?.data || []).find(v => v.id.toString() === version.id)
+    if (!target) return { changelog: '', dependencies: [], version }
+
+    try {
+      const { clientCurseforgeV1 } = await import('@/util/clients')
+      const { FileRelationType } = await import('@xmcl/curseforge')
+
+      const mapping = {
+        [FileRelationType.EmbeddedLibrary]: 'embedded',
+        [FileRelationType.Include]: 'embedded',
+        [FileRelationType.RequiredDependency]: 'required',
+        [FileRelationType.OptionalDependency]: 'optional',
+        [FileRelationType.Tool]: 'optional',
+        [FileRelationType.Incompatible]: 'incompatible',
+      }
+      const lookup = Object.fromEntries(target.dependencies?.map(p => [p.modId, mapping[p.relationType]]) || [])
+      const detail = target.dependencies && target.dependencies.length > 0
+        ? await clientCurseforgeV1.getMods(target.dependencies.map(d => d.modId))
+        : []
+      const dependencies = detail.map(d => ({
+        title: d.name,
+        description: d.summary,
+        icon: d.logo?.url || '',
+        href: d?.links.websiteUrl ?? '',
+        dependencyType: lookup[d.id] || 'optional',
+      }))
+
+      // Fetch changelog
+      let changelog = ''
+      if (curseforgeProjectId.value) {
+        try {
+          const changelogHtml = await clientCurseforgeV1.getModFileChangelog(curseforgeProjectId.value, target.id)
+          changelog = changelogHtml
+        } catch (e) {
+          console.error('Failed to fetch changelog:', e)
+        }
+      }
+
+      return {
+        changelog,
+        dependencies,
+        version,
+      }
+    } catch (e) {
+      console.error(e)
+      return { changelog: '', dependencies: [], version }
+    }
+  }
+
+  return { changelog: '', dependencies: [], version }
+}
+
+const { headerData, galleries } = useUpstreamData()
+
+const root = ref<HTMLElement | null>(null)
+const active = useElementHover(root)
+
+const contentRef = ref<HTMLElement>()
+const newsRef = ref<HTMLElement>()
+const contentSize = useElementSize(contentRef)
+function noop(v: any) {
+}
+
+/* Underline offsets are computed by summing the widths of the tabs that
+   precede the selected one. */
+function tabAt(idx: number): HTMLElement | undefined {
+  if (idx === 0) return contentRef.value
+  if (idx === 1) return newsRef.value
+  return undefined
+}
+
+const underlineLeft = computed(() => {
+  const _ = contentSize.width.value
+  noop(_)
+  let offset = 0
+  for (let i = 0; i < selected.value; i++) {
+    offset += (tabAt(i)?.offsetWidth || 0) + 16
+  }
+  return offset
+})
+
+const underlineWidth = computed(() => {
+  const _ = contentSize.width.value
+  noop(_)
+  return tabAt(selected.value)?.offsetWidth || 0
+})
+
+const { install: installMod } = useService(InstanceModsServiceKey)
+function onDropMod(e: DragEvent) {
+  if (e.dataTransfer) {
+    const filePaths = getDropFilePaths(e.dataTransfer.files)
+    if (filePaths.length === 0) return
+    installMod({
+      path: path.value,
+      files: filePaths,
+    })
+    e.preventDefault()
+  }
+}
+
+const { install: installResourcePack } = useService(InstanceResourcePacksServiceKey)
+function onDropResourcePack(e: DragEvent) {
+  if (e.dataTransfer) {
+    const filePaths = getDropFilePaths(e.dataTransfer.files)
+    if (filePaths.length === 0) return
+    installResourcePack({ path: path.value, files: filePaths })
+    e.preventDefault()
+  }
+}
+
+const { install: installShaderPack } = useService(InstanceShaderPacksServiceKey)
+function onDropShaderPack(e: DragEvent) {
+  if (e.dataTransfer) {
+    const filePaths = getDropFilePaths(e.dataTransfer.files)
+    if (filePaths.length === 0) return
+    installShaderPack({ path: path.value, files: filePaths })
+    e.preventDefault()
+  }
+}
+
+const { saves } = injection(kInstanceSave)
+const savesLength = computed(() => saves.value.length)
+const { importSave } = useService(InstanceSavesServiceKey)
+function onDropSave(e: DragEvent) {
+  if (e.dataTransfer) {
+    const [filePath] = getDropFilePaths(e.dataTransfer.files)
+    if (!filePath) return
+    importSave({ instancePath: path.value, path: filePath })
+    e.preventDefault()
+  }
+}
+
+// Install version handler
+const { show: showInstallDialog } = useDialog(InstanceInstallDialog)
+const updating = ref(false)
+const { installModapckFromMarket } = useService(ModpackServiceKey)
+async function onInstallVersion(v: StoreProjectVersion) {
+  if (updating.value) return
+  try {
+    updating.value = true
+    const instancePath = instance.value.path
+    const [modpack] = await installModapckFromMarket(upstream.value?.type === 'curseforge-modpack' ? {
+      market: 1,
+      file: { fileId: Number(v.id), icon: headerData.value?.icon || '' },
+    } : {
+      market: 0,
+      version: { versionId: v.id, icon: headerData.value?.icon || '' }
+    })
+    showVersionDialog.value = false
+    showInstallDialog({
+      type: 'upstream',
+      modpack,
+      instancePath,
+      upstream: upstream.value?.type === 'curseforge-modpack' ? {
+        type: 'curseforge-modpack',
+        modId: curseforgeProjectId.value || 0,
+        fileId: Number(v.id),
+      } : {
+        type: 'modrinth-modpack',
+        projectId: modrinthProjectId.value || '',
+        versionId: v.id,
+      }
+    })
+  } finally {
+    updating.value = false
+  }
+}
+
+export interface FooterItem {
+  id?: string
+  icon: string
+  tooltip?: string
+  text?: string
+  highlighted?: boolean
+  loading?: boolean
+  buttonText?: string
+  buttonIcon?: string
+  install: () => void
+  setting: () => void
+  drop: (e: DragEvent) => void
+}
+
+const { getDateString } = useDateString()
+const items = computed<FooterItem[]>(() => {
+  if (selected.value === 0) {
+    const defaultItems: FooterItem[] = isBedrock.value ? [
+      {
+        id: String(CardType.Save),
+        icon: 'map',
+        tooltip: t('save.name'),
+        text: dragover.value ? t('save.dropHint') : t('save.createdWorlds', { count: savesLength.value }),
+        install: () => push('/save?source=remote'),
+        setting: () => push('/save'),
+        drop: onDropSave,
+      },
+    ] : [
+      {
+        id: String(CardType.Mod),
+        icon: 'extension',
+        tooltip: t('mod.name'),
+        text: dragover.value ? t('mod.dropHint') : t('mod.enabled', { count: enabledMods.value.length }),
+        install: () => push('/mods?source=remote'),
+        setting: () => push('/mods'),
+        drop: onDropMod,
+      },
+      {
+        id: String(CardType.ResourcePack),
+        icon: 'palette',
+        tooltip: t('resourcepack.name'),
+        text: dragover.value ? t('resourcepack.dropHint') : t('resourcepack.enable', { count: enabledResourcePacks.value.length }),
+        install: () => push('/resourcepacks?source=remote'),
+        setting: () => push('/resourcepacks'),
+        drop: onDropResourcePack,
+      },
+      {
+        id: String(CardType.ShaderPack),
+        icon: 'gradient',
+        tooltip: t('shaderPack.name'),
+        text: dragover.value ? t('shaderPack.dropHint') : (shaderPack.value || t('shaderPack.empty')),
+        install: () => push('/shaderpacks?source=remote'),
+        setting: () => push('/shaderpacks'),
+        drop: onDropShaderPack,
+      },
+      {
+        id: String(CardType.Save),
+        icon: 'map',
+        tooltip: t('save.name'),
+        text: dragover.value ? t('save.dropHint') : t('save.createdWorlds', { count: savesLength.value }),
+        install: () => push('/save?source=remote'),
+        setting: () => push('/save'),
+        drop: onDropSave,
+      },
+      {
+        id: String(CardType.Blueprint),
+        icon: 'view_in_ar',
+        tooltip: t('blueprint.name', 2),
+        text: t('blueprint.name', 2),
+        install: () => push('/blueprints?source=market'),
+        setting: () => push('/blueprints'),
+        drop: () => {},
+      },
+    ]
+
+    const serverItems: FooterItem[] = serverCards.value.map((c) => {
+      const address = getParam(c.id) || ''
+      return {
+        id: c.id,
+        icon: 'dns',
+        tooltip: `${t('server.serverName')} · ${c.label}`,
+        text: c.label,
+        buttonText: t('launch.launch'),
+        buttonIcon: 'play_arrow',
+        install: () => {
+          const parsed = address ? parseServerAddress(address) : undefined
+          if (parsed) launch('client', { server: { host: parsed.host, port: parsed.port } })
+        },
+        setting: () => push('/servers'),
+        drop: () => {},
+      }
+    })
+
+    const worldItems: FooterItem[] = worldCards.value.map((c) => {
+      const worldName = getParam(c.id) || ''
+      return {
+        id: c.id,
+        icon: 'public',
+        tooltip: `${t('save.world', 1)} · ${c.label}`,
+        text: c.label,
+        buttonText: t('launch.launch'),
+        buttonIcon: 'play_arrow',
+        install: () => {
+          if (worldName) launch('client', { world: worldName })
+        },
+        setting: () => push('/save'),
+        drop: onDropSave,
+      }
+    })
+
+    const unordered = [...defaultItems, ...serverItems, ...worldItems].filter((i) => !isHidden(i.id!))
+    if (!cardOrder.value.length) return unordered
+
+    const map = new Map(unordered.map((i) => [i.id!, i]))
+    const ordered: FooterItem[] = []
+    for (const id of cardOrder.value) {
+      const item = map.get(id)
+      if (item) {
+        ordered.push(item)
+        map.delete(id)
+      }
+    }
+    for (const item of map.values()) {
+      ordered.push(item)
+    }
+    return ordered
+  } else if (selected.value === 1) {
+    return latestVersions.value.map((v) => {
+      const version: StoreProjectVersion = 'name' in v ? {
+        id: v.id,
+        name: v.name,
+        version_type: v.version_type,
+        game_versions: v.game_versions,
+        loaders: v.loaders,
+      } : {
+        id: v.id.toString(),
+        name: v.displayName,
+        version_type: v.releaseType === 1 ? 'release' : v.releaseType === 2 ? 'beta' : 'alpha',
+        game_versions: getCurseforgeFileGameVersions(v),
+        loaders: getCursforgeFileModLoaders(v),
+      }
+      return {
+        icon: 'update',
+        tooltip: getDateString('fileDate' in v ? v.fileDate : v.date_published),
+        text: 'name' in v ? v.name : v.displayName,
+        highlighted: upstream.value?.type === 'modrinth-modpack' && upstream.value.versionId === v.id || upstream.value?.type === 'curseforge-modpack' && upstream.value.fileId === v.id,
+        install: () => {
+          onInstallVersion(version)
+          showVersionDialog.value = false
+        },
+        setting: () => {
+          selectedVersion.value = version
+          showVersionDialog.value = true
+        },
+        drop: () => {}
+      }
+    })
+  } else {
+    return [{
+      icon: 'extension',
+      tooltip: t('mod.name'),
+      text: dragover.value ? t('mod.dropHint') : t('mod.enabled', { count: enabledMods.value.length }),
+      highlighted: false,
+      install: () => push('/mods?source=remote'),
+      setting: () => push('/mods'),
+      drop: onDropMod
+    }]
+  }
+})
+
+const contentListHeight = computed(() => {
+  if (!((active.value || dragover.value) && !isBedrock.value)) {
+    return '4rem'
+  }
+  const count = Math.max(1, items.value.length)
+  const displayCount = count > 5 ? 5.2 : Math.max(2, count)
+  return `${displayCount * 2.25 - 0.5}rem`
+})
+
+const selected = ref(0)
+function onSelectContent() {
+  selected.value = 0
+}
+
+function onSelectUpdates() {
+  selected.value = 1
+}
+watch(instance, () => {
+  selected.value = 0
+})
+
+const serverUpstream = useServerUpstream()
+
+const hasPinnedServer = computed(() => !!instance.value?.server?.host)
+const pinnedServerName = computed(() => instance.value?.server?.name)
+</script>
+<style scoped>
+.tabs-card>.icons, .tabs-card>.tabs-items {
+transition: all 0.2s ease-in-out;
+  opacity: 0;
+}
+
+.dark .controls .v-icon {
+  color: var(--icon-color);
+}
+
+.dark .controls .v-icon:hover {
+  color: var(--icon-color-hovered);
+}
+
+.tabs {
+  position: relative;
+}
+
+.tabs::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  height: 3px;
+  background: var(--highlight-color);
+  border-radius: 2px;
+  left: var(--underline-left);
+  width: var(--underline-width);
+  transition: left 0.3s ease, width 0.3s ease;
+}
+
+.tabs-card {
+  max-width: 450px;
+  min-width: 450px;
+}
+
+.tabs-card>.icons, .tabs-card>.tabs-items {
+transition: all 0.2s ease-in-out;
+  opacity: 0;
+}
+
+.dark .tabs-card>.icons .v-icon {
+  color: var(--icon-color);
+}
+
+.dark .tabs-card>.icons .v-icon:hover {
+  color: var(--icon-color-hovered);
+}
+
+.visibled {
+  opacity: 1 !important;
+}
+</style>

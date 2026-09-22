@@ -1,0 +1,637 @@
+<template>
+  <MarketBase
+    :items="all"
+    :item-height="itemHeight"
+    :plans="plans"
+    :error="error"
+    :selection-mode="currentView === 'local' && selectionMode"
+    :class="{
+      dragover,
+    }"
+    :loading="loading"
+    @load="loadMore"
+    @update:selection-mode="onUpdateSelectionMode"
+  >
+    <template #actions>
+      <MarketListHeader
+        v-model:dense="denseView"
+        :label="`${originalItems.length} ${t('shaderPack.name', originalItems.length)}`"
+      >
+        <v-btn
+          v-if="currentView === 'local'"
+          :class="{ 'v-btn--active': selectionMode }"
+          icon
+          variant="text"
+          density="comfortable"
+          data-testid="market-multi-select-toggle"
+          @click="onUpdateSelectionMode(!selectionMode)"
+        >
+          <v-icon> checklist </v-icon>
+        </v-btn>
+        <AppCollectionInstallAll
+          v-if="showInstallAll"
+          :items="collectionItems"
+          content-type="shaderpacks"
+          :runtime="runtime"
+        />
+      </MarketListHeader>
+    </template>
+    <template #placeholder>
+      <MarketEmptyPlaceholder />
+    </template>
+    <template #filter>
+      <MarketFilterPanel
+        :modrinth-categories="modrinthCategories"
+        modrinth-category-filter="shader"
+        :enable-modrinth="isModrinthActive"
+        :curseforge-category="curseforgeCategory"
+        curseforge-category-filter="shaders"
+        :enable-curseforge="isCurseforgeActive"
+        :game-version="gameVersion"
+        :local-sort="sortBy"
+        v-model:sort="marketSort"
+        :mode="source"
+        :collection="selectedCollection"
+        @update:modrinth-categories="modrinthCategories = $event"
+        @update:enable-modrinth="isModrinthActive = $event"
+        @update:curseforge-category="curseforgeCategory = $event"
+        @update:enable-curseforge="isCurseforgeActive = $event"
+        @update:game-version="gameVersion = $event"
+        @update:local-sort="sortBy = $event"
+        @update:mode="source = $event"
+        @update:collection="selectedCollection = $event"
+      >
+        <template #local>
+          <LinkSharedFolderSetting domain="shaderpacks" @changed="revalidate" />
+          <MarketUpgradePanel
+            :plans="plans"
+            v-model:upgrade-policy="upgradePolicy"
+            :refreshing="refreshing"
+            :upgrading="upgrading"
+            @check-upgrade="refresh({ skipVersion: false, policy: upgradePolicy as any })"
+            @upgrade="upgrade"
+          />
+        </template>
+      </MarketFilterPanel>
+    </template>
+    <template #item="{ item, hasUpdate, checked, selectionMode, selected, on, index }">
+      <v-list-subheader
+        v-if="typeof item === 'string'"
+        :style="{ height: itemHeight + 'px' }"
+        class="flex"
+      >
+        {{ item === 'enabled' ? t("shaderPack.enabled") : item === 'disabled' ? t("shaderPack.disabled") :
+          t('modInstall.search') }}
+      </v-list-subheader>
+      <ShaderPackItem
+        v-else-if="typeof item === 'object' && 'id' in item"
+        :pack="(item as ShaderPackProject)"
+        :selection-mode="selectionMode"
+        :selected="selected"
+        :dense="denseView"
+        :item-height="itemHeight"
+        :indent="isLocalView && isInGroup((item as ShaderPackProject).installed?.[0]?.fileName)"
+        :indent-color="getGroupColor((item as ShaderPackProject).installed?.[0]?.fileName)"
+        :has-update="hasUpdate"
+        :checked="checked"
+        :install="onInstallProject"
+        :get-context-menu-items="getGroupingContextMenuItems"
+        @click="on.click"
+      />
+      <ModGroupEntryItem
+        v-else-if="typeof item === 'object'"
+        :key="`folder-${item.name}-${item.projects.length}`"
+        :items="item.projects"
+        :height="itemHeight"
+        :name="item.name"
+        :expanded="!groupCollapsedState[item.name]"
+        :dense="denseView"
+        :count-label="shaderPackCountLabel"
+        :toggle-all="false"
+        :group-rules="false"
+        @ungroup="ungroup(item.name)"
+        @expand="onGroupCollapse(item as ProjectGroup<InstanceShaderFile>, $event)"
+        @setting="renameGroup(item.name, $event.name)"
+      />
+    </template>
+    <template #content="{ selectedModrinthId, selectedCurseforgeId, selectedItem }">
+      <Hint
+        v-if="dragover"
+        icon="save_alt"
+        :text="t('shaderPack.dropHint')"
+        class="h-full"
+      />
+      <MarketProjectDetailModrinth
+        v-if="(selectedItem?.modrinth || selectedModrinthId)"
+        :modrinth="selectedItem?.modrinth"
+        :project-id="selectedModrinthId"
+        :installed="selectedItem?.installed || getInstalledModrinth(selectedModrinthId)"
+        :game-version="gameVersion"
+        :categories="modrinthCategories"
+        :all-files="shaderPacks"
+        :curseforge="selectedItem?.curseforge?.id || selectedItem?.curseforgeProjectId"
+        collection-content-type="shaderpacks"
+        @uninstall="onUninstall"
+        @enable="onEnable"
+        @disable="onDisable"
+        @category="toggleCategory"
+      />
+      <MarketProjectDetailCurseforge
+        v-else-if="(selectedItem?.curseforge || selectedCurseforgeId)"
+        :curseforge="selectedItem?.curseforge"
+        :curseforge-id="Number(selectedCurseforgeId)"
+        :installed="selectedItem?.installed || getInstalledCurseforge(Number(selectedCurseforgeId))"
+        :game-version="gameVersion"
+        :category="curseforgeCategory"
+        :all-files="shaderPacks"
+        :modrinth="selectedModrinthId"
+        collection-content-type="shaderpacks"
+        @uninstall="onUninstall"
+        @enable="onEnable"
+        @disable="onDisable"
+        @category="curseforgeCategory = $event"
+      />
+      <ShaderPackDetailResource
+        v-else-if="isShaderPackProject(selectedItem)"
+        :shader-pack="selectedItem"
+        :installed="selectedItem.files || []"
+        :runtime="runtime"
+        @enable="onEnable"
+      />
+    </template>
+    <v-dialog
+      v-model="model"
+      width="600"
+    >
+      <v-card :title="t('shaderPack.noShaderMod')">
+        <v-card-text>
+          {{ t('shaderPack.noShaderModHint') }}
+          <div>
+            {{ t('shaderPack.noShaderModInstallHint') }}
+          </div>
+          <v-list nav>
+            <v-list-item
+              :disabled="shouldDisableIris"
+              @click="navigateToMod('iris')"
+            >
+              <template #prepend><v-avatar>
+                <img :src="BuiltinImages.iris">
+              </v-avatar></template>
+              <v-list-item-title>
+                  Iris
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  <a
+                    href="https://modrinth.com/mod/iris"
+                    @click.stop
+                  >https://modrinth.com/mod/iris</a>
+                </v-list-item-subtitle>
+<v-list-item-action class="flex flex-row flex-grow-0 gap-1">
+                <AvatarChip
+                  :avatar="BuiltinImages.fabric"
+                  small
+                  text="Fabric"
+                />
+                <AvatarChip
+                  :avatar="BuiltinImages.neoForged"
+                  small
+                  text="Neoforge"
+                />
+                <AvatarChip
+                  :avatar="BuiltinImages.quilt"
+                  small
+                  text="Quilt"
+                />
+              </v-list-item-action>
+            </v-list-item>
+            <v-list-item
+              :disabled="shouldDisableOptifine"
+              @click="navigateToMod('optifine')"
+            >
+              <template #prepend><v-avatar>
+                <img :src="BuiltinImages.optifine">
+              </v-avatar></template>
+              <v-list-item-title>
+                  Optifine
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  <a
+                    href="https://optifine.net/home"
+                    @click.stop
+                  >https://optifine.net/home</a>
+                </v-list-item-subtitle>
+<v-list-item-action class="flex flex-row gap-1 flex-grow-0">
+                <AvatarChip
+                  :avatar="BuiltinImages.forge"
+                  small
+                  text="Forge"
+                />
+                <AvatarChip
+                  :avatar="BuiltinImages.minecraft"
+                  small
+                  text="Vanilla"
+                />
+              </v-list-item-action>
+            </v-list-item>
+            <v-list-item
+              :disabled="shouldDisableOculus"
+              @click="navigateToMod('oculus')"
+            >
+              <template #prepend><v-avatar>
+                <img :src="BuiltinImages.oculus">
+              </v-avatar></template>
+              <v-list-item-title>
+                  Oculus
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  <a
+                    href="https://www.curseforge.com/minecraft/mc-mods/oculus"
+                    @click.stop
+                  >https://www.curseforge.com/minecraft/mc-mods/oculus</a>
+                </v-list-item-subtitle>
+<v-list-item-action class="flex flex-row gap-1 flex-grow-0">
+                <AvatarChip
+                  :avatar="BuiltinImages.forge"
+                  small
+                  text="Forge"
+                />
+                <AvatarChip
+                  :avatar="BuiltinImages.neoForged"
+                  small
+                  text="Neoforge"
+                />
+              </v-list-item-action>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            @click="skip"
+           variant="text">
+            {{ t('shared.skipForNow') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <!-- <DeleteDialog
+      :title="t('shaderPack.deletion') "
+      :width="400"
+      persistent
+      @confirm="onConfirmDeleted"
+      @cancel="onCancelDelete"
+    >
+      <div
+        style="overflow: hidden; word-break: break-all;"
+      >
+        {{ t('shaderPack.deletionHint', { path: deletingPack ? deletingPack.path : '' }) }}
+      </div>
+    </DeleteDialog> -->
+  </MarketBase>
+</template>
+
+<script lang="ts" setup>
+import AvatarChip from '@/components/AvatarChip.vue'
+import Hint from '@/components/Hint.vue'
+import MarketBase from '@/components/MarketBase.vue'
+import MarketFilterPanel from '@/components/MarketFilterPanel.vue'
+import MarketListHeader from '@/components/MarketListHeader.vue'
+import MarketUpgradePanel from '@/components/MarketUpgradePanel.vue'
+import MarketEmptyPlaceholder from '@/components/MarketEmptyPlaceholder.vue'
+import LinkSharedFolderSetting from '@/components/LinkSharedFolderSetting.vue'
+import MarketProjectDetailCurseforge from '@/components/MarketProjectDetailCurseforge.vue'
+import MarketProjectDetailModrinth from '@/components/MarketProjectDetailModrinth.vue'
+import AppCollectionInstallAll from '@/components/AppCollectionInstallAll.vue'
+import { useModUpgrade } from '@/composables/modUpgrade'
+import { useLocalStorage } from '@vueuse/core'
+import { kCurseforgeInstaller, useCurseforgeInstaller } from '@/composables/curseforgeInstaller'
+import { useDialog, useSimpleDialog } from '@/composables/dialog'
+import { getDropFilePaths, useGlobalDrop } from '@/composables/dropHandler'
+import { kInstance } from '@/composables/instance'
+import { useInstanceModLoaderDefault } from '@/composables/instanceModLoaderDefault'
+import { InstanceShaderFile, kInstanceShaderPacks } from '@/composables/instanceShaderPack'
+import { ProjectGroup, useModGroups } from '@/composables/modGroup'
+import { kModrinthInstaller, useModrinthInstaller } from '@/composables/modrinthInstaller'
+import { usePresence } from '@/composables/presence'
+import { useTutorial } from '@/composables/tutorial'
+import { useProjectInstall } from '@/composables/projectInstall'
+import { kCompact } from '@/composables/scrollTop'
+import { useService } from '@/composables/service'
+import { ShaderPackProject, useShaderPackSearch } from '@/composables/shaderPackSearch'
+import { useToggleCategories } from '@/composables/toggleCategories'
+import { BuiltinImages } from '@/constant'
+import { basename } from '@/util/basename'
+import { injection } from '@/util/inject'
+import { ProjectEntry, ProjectFile } from '@/util/search'
+import { ContextMenuItem } from '@/composables/contextMenu'
+import { flattenVisibleModGroups } from '@/util/modGroupFilter'
+import { InstanceShaderPacksServiceKey } from '@xmcl/runtime-api'
+import ShaderPackDetailResource from './ShaderPackDetailResource.vue'
+import ShaderPackItem from './ShaderPackItem.vue'
+import { kSearchModel } from '@/composables/search'
+import { sort } from '@/composables/sortBy'
+import { kModrinthAuthenticatedAPI } from '@/composables/modrinthAuthenticatedAPI'
+import ModGroupEntryItem from './ModGroupEntryItem.vue'
+
+const searchModel = injection(kSearchModel)
+const {
+  gameVersion,
+  modrinthCategories,
+  curseforgeCategory,
+  currentView,
+  keyword,
+  isModrinthActive,
+  isCurseforgeActive,
+  sort: marketSort,
+  source,
+  selectedCollection,
+} = searchModel
+
+const { runtime, path } = injection(kInstance)
+const { shaderPacks, revalidate } = injection(kInstanceShaderPacks)
+
+const {
+  error,
+  loading,
+  loadMore,
+  effect,
+  items: originalItems,
+  collectionItems,
+  sortBy,
+} = useShaderPackSearch(shaderPacks, injection(kModrinthAuthenticatedAPI), searchModel)
+
+const isLocalView = computed(() => currentView.value === 'local')
+const {
+  localGroupedItems,
+  groupCollapsedState,
+  renameGroup,
+  ungroup,
+  group,
+  addToGroup,
+  isInGroup,
+  getGroupColor,
+  getContextMenuItemsForGroup,
+  groupsRaw,
+  groupModCounts,
+} = useModGroups(isLocalView, path, originalItems, sortBy, 'shaderpacks')
+
+const { model, show: showInstallShaderWizard, confirm } = useSimpleDialog<(bypass: boolean) => void>((f) => {
+  console.log('skip')
+  f?.(true)
+}, (f) => {
+  f?.(false)
+})
+
+const shouldDisableIris = computed(() => !!runtime.value.forge || !!runtime.value.optifine)
+const shouldDisableOculus = computed(() => !!runtime.value.fabricLoader || !!runtime.value.optifine || !!runtime.value.quiltLoader)
+const shouldDisableOptifine = computed(() => !!runtime.value.fabricLoader || !!runtime.value.neoForged || !!runtime.value.quiltLoader)
+
+effect()
+
+const { refresh, refreshing, upgrade, plans, upgradePolicy, upgrading } = useModUpgrade(
+  path,
+  runtime,
+  shaderPacks,
+  revalidate,
+  'shaderpacks',
+)
+
+// Install-all works for any collection open in the Favorites view (local or
+// Modrinth collections/follows).
+const showInstallAll = computed(() => source.value === 'favorite')
+const getInstalledModrinth = (projectId: string) => {
+  const allPacks = shaderPacks.value
+  return allPacks.filter((m) => m.modrinth?.projectId === projectId)
+}
+const getInstalledCurseforge = (modId: number | undefined) => {
+  const allPacks = shaderPacks.value
+  return allPacks.filter((m) => m.curseforge?.projectId === modId)
+}
+
+const all = computed(() => {
+  const result: (string | ProjectEntry)[] = []
+
+  if (currentView.value === 'local') {
+    if (Object.keys(groupsRaw.value).length > 0) {
+      return flattenVisibleModGroups(localGroupedItems.value, () => true, groupCollapsedState.value)
+    }
+    const {
+      enabled,
+      disabled,
+      others,
+    } = originalItems.value.reduce((arrays, item) => {
+      if (item.installed && item.installed.length > 0) {
+        if (item.disabled) {
+          arrays.disabled.push(item)
+        } else {
+          arrays.enabled.push(item)
+        }
+      } else {
+        arrays.others.push(item)
+      }
+      return arrays
+    }, {
+      enabled: [] as ProjectEntry[],
+      disabled: [] as ProjectEntry[],
+      others: [] as ProjectEntry[],
+    })
+    if (enabled.length > 0) {
+      result.push('enabled' as string)
+      result.push(...enabled)
+    }
+    if (disabled.length > 0) {
+      result.push('disabled' as string)
+      sort(sortBy.value, disabled)
+      result.push(...disabled)
+    }
+    if (others.length > 0) {
+      result.push('search' as string)
+      result.push(...others)
+    }
+  } else if (currentView.value === 'remote') {
+    result.push('search' as string)
+    result.push(...originalItems.value)
+  } else {
+    result.push(...originalItems.value)
+  }
+
+  return result
+})
+
+const toggleCategory = useToggleCategories(modrinthCategories)
+
+const { t } = useI18n()
+const shaderPackCountLabel = (count: number) => `${count} ${t('shaderPack.name', count)}`
+
+const isShaderPackProject = (p: ProjectEntry<ProjectFile> | undefined): p is ShaderPackProject => !!p
+
+const { shaderPack } = injection(kInstanceShaderPacks)
+
+const onUninstall = (files: ProjectFile[]) => {
+  shaderPack.value = ''
+  uninstall({ path: path.value, files: files.map(f => f.path) })
+}
+const onDisable = () => {
+  shaderPack.value = ''
+}
+const onEnable = async (f: ProjectFile | string) => {
+  if (!shaderMod.value && !runtime.value.optifine) {
+    await new Promise<void>((resolve, reject) => {
+      showInstallShaderWizard((v) => {
+        if (v) resolve()
+        else reject(new Error('cancel'))
+      })
+    })
+  }
+  shaderPack.value = typeof f === 'string' ? f : (f as InstanceShaderFile).fileName
+}
+
+const skip = () => {
+  confirm()
+}
+
+// Presence
+const { name } = injection(kInstance)
+usePresence(computed(() => t('presence.shaderPack', { instance: name.value })))
+
+// Drop
+const { dragover } = useGlobalDrop({
+  onEnter: () => { },
+  onDrop: async (t) => {
+    const paths = getDropFilePaths(t.files)
+    if (paths.length === 0) return
+    const resources = await install({ path: path.value, files: paths })
+    shaderPack.value = basename(resources[0])
+  },
+  onLeave: () => { },
+})
+
+// Page compact
+const compact = injection(kCompact)
+onMounted(() => {
+  compact.value = true
+})
+
+const installModloaders = useInstanceModLoaderDefault()
+const { shaderMod } = injection(kInstanceShaderPacks)
+
+const { push } = useRouter()
+function navigateToMod(type: string) {
+  if (type === 'iris') {
+    push('/mods?id=modrinth:YL57xq9U')
+  } else if (type === 'oculus') {
+    push('/mods?id=curseforge:581495')
+  } else if (type === 'optifine') {
+    push('/mods?keyword=optifine')
+  }
+}
+
+const { resolveFromMarket, install, uninstall } = useService(InstanceShaderPacksServiceKey)
+// modrinth installer
+const modrinthInstaller = useModrinthInstaller(
+  path,
+  runtime,
+  shaderPacks,
+  resolveFromMarket,
+  installModloaders,
+)
+provide(kModrinthInstaller, modrinthInstaller)
+
+// curseforge installer
+const curseforgeInstaller = useCurseforgeInstaller(
+  path,
+  runtime,
+  shaderPacks,
+  resolveFromMarket,
+  installModloaders,
+)
+provide(kCurseforgeInstaller, curseforgeInstaller)
+
+const selections = ref({} as Record<string, boolean>)
+provide('selections', selections)
+
+const selectionMode = ref(false)
+function onUpdateSelectionMode(v: boolean) {
+  selectionMode.value = v
+  if (!v) selections.value = {}
+}
+watch(currentView, (view) => {
+  if (view !== 'local') onUpdateSelectionMode(false)
+})
+
+const { show: showGroupSelectDialog } = useDialog('mod-group-select')
+
+function showGroupDialog(fileNames: string[]) {
+  showGroupSelectDialog({
+    groups: groupsRaw.value,
+    groupModCounts: groupModCounts.value,
+    countLabel: shaderPackCountLabel,
+    onSelect: (groupName: string | null, newName?: string) => {
+      if (groupName) addToGroup(fileNames, groupName)
+      else if (newName) group(fileNames, newName)
+    },
+  })
+}
+
+function getGroupingContextMenuItems(project: ShaderPackProject) {
+  const selected = new Set(Object.keys(selections.value).filter(key => selections.value[key]))
+  if (selected.size <= 1) return getContextMenuItemsForGroup(project, showGroupDialog)
+
+  const fileNames = originalItems.value
+    .filter(item => selected.has(item.id))
+    .map(item => item.installed[0]?.fileName)
+    .filter((name): name is string => !!name)
+  const result: ContextMenuItem[] = [{
+    text: t('mod.group'),
+    icon: 'label',
+    section: 'group',
+    onClick: () => showGroupDialog(fileNames),
+  }]
+  return result
+}
+
+function onGroupCollapse(group: ProjectGroup<InstanceShaderFile>, expanded: boolean) {
+  groupCollapsedState.value = { ...groupCollapsedState.value, [group.name]: expanded }
+}
+
+const onInstallProject = useProjectInstall(
+  runtime,
+  ref(undefined),
+  curseforgeInstaller,
+  modrinthInstaller,
+  (f) => {
+    install({ path: path.value, files: [f.path] })
+    onEnable(f)
+  },
+)
+
+// dense
+const denseView = useLocalStorage('shader-pack-dense-view', false, { writeDefaults: false })
+const itemHeight = computed(() => denseView.value ? 48 : 80)
+
+useTutorial(
+  computed(() => [
+    {
+      element: '#search-text-field',
+      popover: {
+        title: t('tutorial.shaderpack.searchTitle') + ' (ctrl + f)',
+        description: t('tutorial.shaderpack.searchDescription'),
+      },
+    },
+    {
+      element: '#left-pane',
+      popover: {
+        title: t('tutorial.shaderpack.listTitle'),
+        description: t('tutorial.shaderpack.listDescription'),
+      },
+    },
+    {
+      element: '#right-pane',
+      popover: {
+        title: t('tutorial.shaderpack.detailTitle'),
+        description: t('tutorial.shaderpack.detailDescription'),
+      },
+    },
+  ]),
+)
+</script>

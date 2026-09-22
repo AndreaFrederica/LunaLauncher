@@ -11,15 +11,13 @@
  <q-banner v-if="error" class="bg-red-9 q-mb-md">{{ error }}</q-banner>
  <q-banner v-if="notice" class="bg-teal-9 q-mb-md">{{ notice }}</q-banner>
  <q-linear-progress v-if="busy" indeterminate class="q-mb-md" />
- <div v-if="page==='instances'">
-  <div class="workspace-heading"><div><div class="eyebrow">MY WORKSPACE</div><h1>实例库</h1><p>管理你的 Minecraft 世界、整合包和运行环境。</p></div><div class="heading-actions"><q-btn unelevated color="primary" icon="add" label="添加实例" @click="addDialog=true" /><q-btn flat icon="restore" label="恢复删除" :disable="busy" @click="run('instance.undo-delete')" /></div></div>
-  <div class="library-toolbar"><q-input dark borderless v-model="search" placeholder="搜索实例或分组" class="library-search"><template #prepend><q-icon name="search"/></template></q-input><div class="library-count"><strong>{{ instances.length }}</strong> 个实例</div></div>
-  <p v-if="!instances.length && !busy && !error">还没有实例，点击添加实例创建或导入。</p>
-  <div class="row q-col-gutter-lg"><div class="col-12 col-sm-6 col-lg-4" v-for="i in instances.filter(x => [x.name,x.id,x.group].join(' ').toLowerCase().includes(search.toLowerCase()))" :key="i.id">
-   <q-card class="instance-card"><div class="instance-art"><img v-if="icons[i.id]" :src="icons[i.id]" :alt="i.name+' 图标'" width="64" height="64" style="object-fit:contain"/><q-icon v-else name="sports_esports" size="34px"/><span>{{ i.running ? '运行中' : '就绪' }}</span></div><q-card-section><div class="instance-name">{{ i.name }}</div><div class="instance-meta"><q-icon name="folder"/> {{ i.group || '未分组' }}</div><div class="instance-id">{{ i.id }}</div></q-card-section>
-   <q-card-actions class="instance-actions"><q-btn unelevated color="primary" icon="play_arrow" :label="busy ? '加入启动队列' : '启动'" @click="launch(i)" /><q-btn aria-label="管理实例" flat round icon="more_horiz" @click="openInstance(i)" /></q-card-actions></q-card>
-  </div></div>
- </div>
+ <section v-if="page==='instances'" class="xmcl-instance-empty">
+  <span class="material-icons xmcl-instance-empty__icon">sports_esports</span>
+  <h1>选择一个实例开始</h1>
+  <p v-if="instances.length">从左侧 XMCL 实例栏选择实例，或双击实例直接启动。</p>
+  <p v-else>还没有实例。使用左侧的添加按钮导入或创建 Minecraft 实例。</p>
+  <button class="xmcl-primary-button" @click="addDialog=true"><span class="material-icons">add</span>添加实例</button>
+ </section>
  <div v-if="page==='create'" class="form"><h5>添加实例</h5>
   <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" label="服务端"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
   <CatalogBrowser v-if="createMode==='catalog'" packs :busy="busy" :execute="catalogExecute" @installed="navigate('instances')"/>

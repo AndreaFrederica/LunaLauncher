@@ -1,0 +1,101 @@
+import { InjectionKey, Ref, CSSProperties } from 'vue'
+import { basename } from '@/util/basename'
+import { injection } from '@/util/inject'
+import { kInstanceModsContext } from './instanceMods'
+import { InstanceFile } from '@xmcl/instance'
+
+export interface InstanceFileNode<T = never> {
+  name: string
+  path: string
+  modrinth?: boolean
+  curseforge?: boolean
+  descrription?: string
+  icon?: string
+  avatar?: string
+  style?: CSSProperties
+  size: number
+  data?: T
+  children?: InstanceFileNode<T>[]
+}
+
+export const FileNodesSymbol: InjectionKey<Ref<InstanceFileNode<any>[]>> = Symbol('InstanceFileNode')
+
+export type InstanceFileExportData = {
+  forceOverride: boolean
+  downloads?: string[]
+}
+
+export function useInstanceFileNodesFromLocal(local: Ref<InstanceFile[]>) {
+  const { modsIconsMap } = injection(kInstanceModsContext)
+  function getFileNode(f: InstanceFile): InstanceFileNode<InstanceFileExportData> {
+    return markRaw({
+      name: basename(f.path),
+      path: f.path,
+      size: f.size ?? 0,
+      data: {
+        forceOverride: false,
+        downloads: f.downloads,
+      },
+      children: undefined,
+      curseforge: !!f.curseforge,
+      modrinth: !!f.modrinth,
+      avatar: modsIconsMap.value[basename(f.path, '/')],
+    })
+  }
+  const result = ref(local.value.map(getFileNode))
+  watch(local, (newVal) => {
+    if (newVal.length > 0) {
+      result.value = local.value.map(getFileNode)
+    } else {
+      result.value = []
+    }
+  })
+  return result
+}
+
+export function provideFileNodes<T>(files: Ref<InstanceFileNode<T>[]>) {
+  function buildEdges(cwd: InstanceFileNode<T>[], filePaths: string[], parent: string, file: InstanceFileNode<T>) {
+    const remained = filePaths.slice(1)
+    if (remained.length > 0) { // edge
+      const name = filePaths[0]
+      let edgeNode = cwd.find(n => n.name === name)
+      const current = parent ? (parent + '/' + name) : name
+      if (!edgeNode) {
+        edgeNode = markRaw({
+          name,
+          path: current,
+          size: 0,
+          children: [],
+        })
+        cwd.push(edgeNode)
+      }
+      buildEdges(edgeNode.children!, remained, current, file)
+    } else { // leaf
+      cwd.push(markRaw(file))
+    }
+  }
+
+  const leaves: Ref<InstanceFileNode<T>[]> = shallowRef([])
+  const nodes: Ref<InstanceFileNode<T>[]> = shallowRef([])
+
+  function update(files: InstanceFileNode<T>[]) {
+    const leavesNodes = files
+    const result: InstanceFileNode<T>[] = []
+    leavesNodes.sort((a, b) => a.path.localeCompare(b.path))
+    for (const file of leavesNodes) {
+      buildEdges(result, file.path.split('/'), '', file)
+    }
+    leaves.value = leavesNodes
+    nodes.value = result
+  }
+
+  watch(files, (files) => {
+    update(files)
+  })
+
+  update(files.value)
+
+  provide(FileNodesSymbol, nodes)
+
+  return { nodes, leaves }
+}

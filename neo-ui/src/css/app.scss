@@ -1,4 +1,9 @@
 :root {
+  --v-theme-primary: 76 175 80;
+  --v-theme-surface: 18 23 35;
+  --v-theme-on-surface: 255 255 255;
+  --v-border-color: 255 255 255;
+  --v-border-opacity: .1;
   --neo-bg: #0b0f17;
   --neo-panel: #121925;
   --neo-panel-raised: #182233;
@@ -9,8 +14,9 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .xmcl-app { min-height: 100vh; background: radial-gradient(circle at 15% -10%, rgba(79,70,229,.18), transparent 34%), var(--neo-bg); }
-.xmcl-main { min-height: calc(100vh - 34px); margin-left: 96px; padding: 0 24px 36px; }
+.xmcl-main { min-height: calc(100vh - 30px); margin-left: 96px; padding: 0 24px 36px; }
 .xmcl-content { max-width: 1440px; margin: 0 auto; }
+.sidebar button, .header button, .system-bar button { -webkit-app-region: no-drag; }
 .neo-header { background: rgba(11,15,23,.82)!important; border-bottom: 1px solid var(--neo-border); backdrop-filter: blur(18px); }
 .neo-toolbar { min-height: 68px; padding: 0 24px; }
 .brand-mark { background: linear-gradient(135deg,#818cf8,#6366f1); color: white; box-shadow: 0 6px 20px rgba(99,102,241,.28); }
@@ -32,5 +38,6 @@ body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; f
 .neo-page .q-expansion-item { background:var(--neo-panel); border:1px solid var(--neo-border); border-radius:12px; }
 .neo-page .q-tab { text-transform:none; }
 .neo-page .q-item__label { overflow-wrap:anywhere; }
+.xmcl-instance-empty{min-height:68vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,.75)}.xmcl-instance-empty__icon{font-size:64px;color:rgba(255,255,255,.2);margin-bottom:18px}.xmcl-instance-empty h1{margin:0 0 8px;font-size:2rem;font-weight:500;color:#fff}.xmcl-instance-empty p{margin:0 0 18px;color:rgba(255,255,255,.55)}.xmcl-primary-button{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:8px;background:#4caf50;color:#fff;padding:11px 18px;font:inherit;font-weight:600;cursor:pointer}.xmcl-primary-button:hover{background:#66bb6a}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 @media(max-width:700px){.neo-toolbar{padding:0 14px}.header-status{display:none}.xmcl-main{margin-left:88px;padding-left:8px;padding-right:8px}.neo-page{padding:24px 8px!important}}

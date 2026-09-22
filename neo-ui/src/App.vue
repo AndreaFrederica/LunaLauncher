@@ -58,12 +58,7 @@
   <div class="row q-gutter-md q-mb-lg"><q-btn color="primary" label="添加 Microsoft 账户" :disable="busy" @click="run('account.login',{type:'microsoft'})"/><q-input dark outlined dense v-model="username" label="离线玩家名"/><q-btn label="添加离线账户" :disable="busy || !username" @click="run('account.login',{type:'offline',username})"/></div>
   <AccountPanel :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
- <div v-if="page==='settings'"><h5>{{ scope==='instance' ? selected?.name+' · 实例设置' : '启动器设置' }}</h5>
- <LauncherControlPanel v-if="scope==='launcher'" :busy="busy" :execute="catalogExecute" />
- <InstanceSettingsPanel v-else-if="selected" :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
- <JavaPanel :scope="settingScope()" :settings="settings" :busy="busy" :execute="catalogExecute" @changed="refresh"/>
- <SettingsPanel :settings="settings" :busy="busy" @save="(key,value)=>run('settings.set',{...settingScope(),key,value})" @reset="key=>run('settings.reset',{...settingScope(),key})"/>
- </div>
+ <XmclSettingsShell v-if="page==='settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
  <q-card v-if="selected && page==='manage'" class="bg-grey-9 q-mt-lg">
   <q-card-section><div class="text-h6">{{ selected.name }} · 日志</div>
@@ -100,6 +95,7 @@ import XmclSidebar from './xmcl-port/XmclSidebar.vue';
 import XmclHomeHeader from './xmcl-port/XmclHomeHeader.vue';
 import XmclHomeGrid from './xmcl-port/XmclHomeGrid.vue';
 import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
+import XmclSettingsShell from './xmcl-port/XmclSettingsShell.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

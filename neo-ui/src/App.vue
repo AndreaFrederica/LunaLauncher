@@ -24,7 +24,7 @@
   </div></div>
  </div>
  <div v-if="page==='create'" class="form"><h5>添加实例</h5>
-  <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
+  <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" label="服务端"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
   <CatalogBrowser v-if="createMode==='catalog'" packs :busy="busy" :execute="catalogExecute" @installed="navigate('instances')"/>
   <template v-else>
   <q-input dark outlined v-model="creation.name" label="实例名称" class="q-my-md"/><q-input dark outlined v-model="creation.group" label="分组（可选）" class="q-mb-md"/>
@@ -33,8 +33,9 @@
    <q-select dark outlined v-model="creation.loader" :options="['','fabric','forge','neoforge','quilt']" label="Mod Loader（可选）" class="q-mb-md" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/>
    <div v-if="creation.loader" class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.loaderVersion" :options="loaderVersions" label="Loader 版本"/><q-btn label="加载兼容版本" :disable="busy || !creation.version" @click="loadVersions(true)"/></div>
   </template>
+  <template v-else-if="createMode==='server'"><q-input dark outlined v-model="creation.version" label="Minecraft 服务端版本" class="q-mb-md"/><q-input dark outlined v-model="creation.source" label="服务端 Jar 路径或下载 URL（可选）" class="q-mb-md"/></template>
   <q-input v-else dark outlined v-model="creation.source" label="整合包本地完整路径或下载 URL" class="q-mb-md"/>
-  <q-btn color="primary" label="创建实例" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : !creation.source)" @click="create"/></template>
+  <q-btn color="primary" label="创建实例" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : (createMode==='import' && !creation.source))" @click="create"/></template>
  </div>
  <div v-if="page==='manage' && selected"><h5>{{ selected.name }} · 实例管理</h5><div class="row q-gutter-sm q-mb-lg">
   <q-btn color="primary" label="启动并查看日志" :disable="busy" @click="launch(selected)"/>
@@ -197,7 +198,7 @@ async function loadResources(){const request=++resourceRequest;const id=selected
 async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage'){await loadResources();await loadComponents();await loadLogFiles();}else {instances.value=await call('instance.list');await loadIcons();}}catch(e){error.value=message(e);}}
 async function navigate(id:string){if(preparingLaunch)return;page.value=id;error.value='';notice.value='';if(id==='settings')scope.value='launcher';if(!busy.value)await refresh();}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;}}
-async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
+async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function openInstance(i:any,forceRead=false){
  if(preparingLaunch&&!forceRead)return;
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});

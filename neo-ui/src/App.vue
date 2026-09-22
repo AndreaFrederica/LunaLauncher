@@ -1,11 +1,11 @@
 <template>
 <div class="xmcl-app text-white">
- <XmclSystemBar :connected="connected" :busy="busy" @refresh="refresh" />
+ <XmclSystemBar :connected="connected" :busy="busy" @refresh="refresh" @tasks="taskCenterOpen=true" />
  <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true" />
  <main class="xmcl-main">
  <XmclHomeHeader v-if="selected && page==='settings'" :selected="selected" tab="settings" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
  <div class="xmcl-content neo-page">
- <XmclDashboard v-if="page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @add="addDialog=true" @refresh="refresh" />
+ <XmclDashboard v-if="page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
  <q-tabs v-if="openedInstances.length" :model-value="page==='manage'?selected?.id:''" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
  <q-banner v-if="error" class="bg-red-9 q-mb-md">{{ error }}</q-banner>
@@ -45,22 +45,13 @@
  <XmclMultiplayerWorkspace v-if="page==='multiplayer'" :instance="selected" :busy="busy" :execute="catalogExecute" />
  <XmclSettingsShell v-if="page==='settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
- <q-card v-if="selected && page==='manage'" class="bg-grey-9 q-mt-lg">
-  <q-card-section><div class="text-h6">{{ selected.name }} · 日志</div>
-   <q-tabs v-model="logMode" align="left"><q-tab name="live" label="实时控制台"/><q-tab name="files" label="历史日志"/></q-tabs>
-   <template v-if="logMode==='live'"><div class="row items-center q-gutter-sm"><q-btn flat label="连接控制台" :disable="busy" @click="connectConsole(selected)"/><q-btn flat label="清空显示" @click="consoleLines=[]"/><q-checkbox dark v-model="followLog" label="自动滚动"/><span>{{ consoleState }}</span></div>
-    <pre ref="consoleElement" class="console" tabindex="0">{{ consoleLines.join('\n') || '启动时自动连接；也可以连接已运行实例的控制台。' }}</pre>
-   </template>
-   <template v-else><div class="row q-gutter-sm q-my-md"><q-select class="col" dark outlined v-model="logFile" :options="logFiles.map(f=>({label:f.name,value:f.path}))" emit-value map-options label="日志文件"/><q-btn label="刷新文件" :disable="busy" @click="loadLogFiles"/><q-btn label="读取" :disable="busy || !logFile" @click="readLogFile"/></div><pre class="console" tabindex="0">{{ fileLog || '选择文件后点击读取。' }}</pre></template>
-  </q-card-section>
- </q-card>
  <q-dialog v-model="deviceShown" persistent><q-card class="device-card text-white"><q-card-section><div class="eyebrow">MICROSOFT LOGIN</div><div class="text-h6">需要完成账户授权</div><p>请在浏览器打开下面的地址，并输入设备代码。</p><q-input dark outlined readonly :model-value="device?.url || ''" class="q-mb-md"><template #append><q-btn flat icon="content_copy" @click="copyText(device?.url || '')" /></template></q-input><div class="device-code">{{ device?.code || '等待设备代码…' }}</div><div class="text-caption text-grey-5 q-mt-md">代码有效期：{{ device?.expiresIn ? `${device.expiresIn} 秒` : '以浏览器提示为准' }}</div></q-card-section><q-card-actions align="right"><q-btn flat label="关闭" @click="deviceShown=false" /></q-card-actions></q-card></q-dialog>
  <div v-if="status" class="q-mt-md text-grey-4">{{ status }}</div>
  <q-btn v-if="busy" flat color="orange" label="取消当前任务" @click="cancel"/>
  </div>
  </main>
  <XmclAddInstanceDialog v-model="addDialog" :busy="busy" :execute="catalogExecute" @created="refresh" />
- <XmclTaskCenter :busy="busy" :execute="call" :status="status" :snapshot="taskSnapshot" @cancel="cancel" />
+ <XmclTaskCenter :busy="busy" :execute="call" :status="status" :snapshot="taskSnapshot" :open="taskCenterOpen" @cancel="cancel" @closed="taskCenterOpen=false" />
  <q-dialog v-model="dialog" persistent><q-card class="bg-grey-9 text-white" style="width:520px;max-width:90vw"><q-card-section class="text-h6">{{ prompt }}</q-card-section><q-card-section>
   <q-select v-if="choices" dark outlined v-model="answer" :options="choices" emit-value map-options label="请选择"/>
   <q-input v-else-if="!confirmation" dark outlined v-model="answer" :type="secret ? 'password' : 'textarea'" autofocus/>
@@ -100,7 +91,7 @@ async function loadIcons(){for(const i of instances.value){if(busy.value)break;t
 const components=ref<any[]>([]),componentError=ref('');
 async function loadComponents(){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});components.value=r.components;}catch(e){componentError.value=message(e);}}
 async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name||c.id)+' 版本',c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
-const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null);
+const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false);
 const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
 const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
 const openedInstances=ref<any[]>([]),launchQueue=ref<any[]>([]);
@@ -148,6 +139,13 @@ async function launch(i:any){
   notice.value=`启动请求已返回（PID ${result.pid}），请查看控制台确认客户端运行状态。`;
  }catch(e){error.value=message(e);void appendConsole('[启动失败] '+error.value,launchingId);}
  finally{busy.value=false;launchInFlight=false;launchingId='';device.value=null;status.value='';}
+}
+function launchMany(items:any[]){
+ const queue=items.filter((item:any)=>!item.running && item.id);
+ if(!queue.length)return;
+ if(busy.value){for(const item of queue)if(item.id!==launchingId&&!launchQueue.value.some(x=>x.id===item.id))launchQueue.value.push(item);return;}
+ launchQueue.value=queue.slice(1);
+ void launch(queue[0]);
 }
 async function loadLogFiles(){try{logFiles.value=await call('instance.log.list',{instance:selected.value.id});}catch(e){error.value=message(e);}}
 async function readLogFile(){try{const r=await call('instance.log.read',{instance:selected.value.id,file:logFile.value,maxBytes:1048576});fileLog.value=r.content+(r.truncated?'\n[文件超过 1 MiB，仅显示前部分]':'');}catch(e){error.value=message(e);}}

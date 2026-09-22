@@ -46,10 +46,7 @@
  <ResourceUpdatesPanel :instance="selected.id" :kind="resourceKind" :busy="busy" :execute="catalogExecute" />
  <InstanceExtras :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
- <div v-if="page==='accounts'"><h5>账户管理</h5>
-  <div class="row q-gutter-md q-mb-lg"><q-btn color="primary" label="添加 Microsoft 账户" :disable="busy" @click="run('account.login',{type:'microsoft'})"/><q-input dark outlined dense v-model="username" label="离线玩家名"/><q-btn label="添加离线账户" :disable="busy || !username" @click="run('account.login',{type:'offline',username})"/></div>
-  <AccountPanel :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" />
- </div>
+ <XmclAccountWorkspace v-if="page==='accounts'" :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  <XmclSettingsShell v-if="page==='settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
  <q-card v-if="selected && page==='manage'" class="bg-grey-9 q-mt-lg">
@@ -89,6 +86,7 @@ import XmclHomeGrid from './xmcl-port/XmclHomeGrid.vue';
 import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
 import XmclSettingsShell from './xmcl-port/XmclSettingsShell.vue';
 import XmclResourceWorkspace from './xmcl-port/XmclResourceWorkspace.vue';
+import XmclAccountWorkspace from './xmcl-port/XmclAccountWorkspace.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

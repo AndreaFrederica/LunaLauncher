@@ -54,7 +54,8 @@
  <q-banner v-if="resourceError" class="bg-red-9 q-my-sm">资源读取失败：{{ resourceError }}</q-banner>
  <p v-else-if="!resourcesLoading && !resources.length">当前目录中没有此类资源。请核对上方实例目录是否与老 UI 相同。</p>
  <p v-else-if="!resourcesLoading">共 {{ resources.length }} 项资源</p>
- <q-list bordered separator><q-item v-for="r in resources" :key="r.fileName"><q-item-section>{{ r.name || r.fileName }}<q-item-label caption class="text-grey-4">{{ r.fileName }} · {{ r.enabled ? '已启用' : '已禁用' }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat :label="r.enabled ? '禁用' : '启用'" :disable="busy" @click="run(r.enabled?'resource.disable':'resource.enable',{instance:selected.id,kind:resourceKind,resource:r.fileName})"/><q-btn flat color="red-4" label="删除" :disable="busy" @click="askDelete('resource.remove',{instance:selected.id,kind:resourceKind,resource:r.fileName},r.fileName)"/></div></q-item-section></q-item></q-list>
+  <q-list bordered separator><q-item v-for="r in resources" :key="r.fileName"><q-item-section>{{ r.name || r.fileName }}<q-item-label caption class="text-grey-4">{{ r.fileName }} · {{ r.enabled ? '已启用' : '已禁用' }}</q-item-label></q-item-section><q-item-section side><div><q-btn flat :label="r.enabled ? '禁用' : '启用'" :disable="busy" @click="run(r.enabled?'resource.disable':'resource.enable',{instance:selected.id,kind:resourceKind,resource:r.fileName})"/><q-btn flat color="red-4" label="删除" :disable="busy" @click="askDelete('resource.remove',{instance:selected.id,kind:resourceKind,resource:r.fileName},r.fileName)"/></div></q-item-section></q-item></q-list>
+  <InstanceExtras :instance="selected.id" :busy="busy" :execute="catalogExecute" @changed="refresh" />
  </div>
  <div v-if="page==='accounts'"><h5>账户管理</h5>
   <div class="row q-gutter-md q-mb-lg"><q-btn color="primary" label="添加 Microsoft 账户" :disable="busy" @click="run('account.login',{type:'microsoft'})"/><q-input dark outlined dense v-model="username" label="离线玩家名"/><q-btn label="添加离线账户" :disable="busy || !username" @click="run('account.login',{type:'offline',username})"/></div>
@@ -88,6 +89,7 @@ import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import JavaPanel from './components/JavaPanel.vue';
 import CatalogBrowser from './components/CatalogBrowser.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import InstanceExtras from './components/InstanceExtras.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 const buildLabel = '2026-09-20.1';

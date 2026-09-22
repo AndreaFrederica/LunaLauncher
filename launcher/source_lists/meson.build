@@ -11,6 +11,7 @@ launcher_logic_sources = [
   'api/LauncherApi.h',
   'api/LauncherApiInstances.cpp',
   'api/LauncherApiInstances.h',
+  'api/LauncherApiObjects.h',
   'api/LauncherApiDomains.cpp',
   'api/LauncherApiDomains.h',
   'api/LauncherApiFiles.cpp',

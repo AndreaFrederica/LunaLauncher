@@ -20,6 +20,7 @@
 #include "LaunchController.h"
 #include "LauncherApi.h"
 #include "api/LauncherApiSupport.h"
+#include "api/LauncherApiObjects.h"
 #include "icons/IconList.h"
 #include "icons/IconUtils.h"
 #include "minecraft/ShortcutUtils.h"
@@ -340,49 +341,12 @@ QJsonObject createInstanceShortcut(const QJsonObject& parameters)
 
 void registerInstanceApiOperations(LauncherApi& api)
 {
-    // A stable, object-shaped view for frontends which model an instance as a
-    // long-lived resource (for example XMCL's instance services).  Keep the
-    // flat fields below for existing CLI/MCP consumers, but group related
-    // values so a frontend does not have to reconstruct an instance by
-    // issuing several unrelated requests.
-    const auto instanceSnapshot = [](BaseInstance* instance) {
-        const auto id = instance->id();
-        const auto group = APPLICATION->instances()->getInstanceGroup(id);
-        QJsonObject snapshot{
-            { "id", id },
-            { "name", instance->name() },
-            { "type", instance->typeName() },
-            { "group", group },
-            { "icon", instance->iconKey() },
-            { "notes", instance->notes() },
-            { "paths", QJsonObject{ { "root", instance->instanceRoot() },
-                                    { "game", instance->gameRoot() },
-                                    { "mods", instance->modsRoot() } } },
-            { "lifecycle", QJsonObject{ { "running", instance->isRunning() },
-                                         { "lastLaunch", instance->lastLaunch() },
-                                         { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) } } },
-            { "managed", QJsonObject{ { "enabled", instance->isManagedPack() },
-                                       { "type", instance->getManagedPackType() },
-                                       { "projectId", instance->getManagedPackID() },
-                                       { "versionId", instance->getManagedPackVersionID() } } },
-            { "capabilities", QJsonObject{ { "launch", true },
-                                            { "stop", true },
-                                            { "resources", true },
-                                            { "settings", true } } } };
-        if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance)) {
-            snapshot.insert("runtime", QJsonObject{ { "minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft") } });
-        } else {
-            snapshot.insert("runtime", QJsonObject{});
-        }
-        return snapshot;
-    };
-
     api.registerOperation({ "instance.get", "Read one complete instance object for frontend adapters.",
                             ApiSupport::schema({ { "instance", ApiSupport::string("Installed instance ID, managed name, or display name.") } }, { "instance" }), "instances" },
-                           [instanceSnapshot](const QJsonObject& p, UserInteraction&) {
-                               auto instance = findInstance(p.value("instance").toString());
+                           [](const QJsonObject& p, UserInteraction&) {
+                               const auto instance = LauncherApiModel::InstanceObject::resolve(p.value("instance").toString());
                                if (!instance) return OperationService::failure("Instance not found.", 2);
-                               return OperationService::success(instanceSnapshot(instance));
+                               return OperationService::success(instance.snapshot());
                            });
 
     api.registerOperation({ "instance.managed-pack.info", "Read managed pack identity and update source.",

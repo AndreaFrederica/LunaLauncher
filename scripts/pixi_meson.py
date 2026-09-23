@@ -363,7 +363,28 @@ def clean_all(root: Path) -> None:
 
 
 def copy_runtime_dlls(root: Path, profile: str) -> None:
-    return
+    """Copy Qt modules that are part of the launcher runtime contract.
+
+    ``windeployqt`` discovers DLLs by walking imports from an executable.  The
+    launcher keeps the WebSockets and Multimedia dependencies available at the
+    Meson level, but some build configurations do not leave a direct import
+    for both modules in every installed executable.  Keep these modules in the
+    deployed layout explicitly so the runtime is stable across those builds.
+    """
+    if profile_system(profile) != "windows":
+        return
+
+    qt_bin = qt_target_root(root, profile) / "bin"
+    install_root = install_dir(root, profile)
+    suffix = "d" if profile_mode(profile) == "debug" else ""
+
+    for module in ("Qt6WebSockets", "Qt6Multimedia"):
+        source = qt_bin / f"{module}{suffix}.dll"
+        if not source.exists():
+            raise SystemExit(f"missing Qt runtime DLL: {source}")
+        destination = install_root / source.name
+        shutil.copy2(source, destination)
+        print(f"Copied {source.name} to {destination}")
 
 
 def deploy(root: Path, profile: str) -> None:

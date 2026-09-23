@@ -9,6 +9,7 @@ neo_ui_sources = files(
   'src/components/CatalogBrowser.vue',
   'src/components/JavaPanel.vue',
   'src/settings-schema.ts',
+  'src/settings-categories.ts',
   'src/main.ts',
   'src/types.d.ts',
   'src/css/app.scss',

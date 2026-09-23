@@ -157,41 +157,7 @@ QString resourceStatusName(ResourceStatus status)
 
 QJsonObject resourceInfo(const Resource& resource)
 {
-    auto result = LauncherApiModel::ResourceObject(const_cast<Resource*>(&resource)).snapshot();
-    result.insert("type", resourceTypeName(resource.type()));
-    result.insert("status", resourceStatusName(resource.status()));
-
-    QJsonArray issues;
-    for (const auto& issue : resource.issues())
-        issues.append(issue);
-    result.insert("issues", issues);
-
-    if (const auto metadata = resource.metadata()) {
-        QJsonObject metadataObject{ { "slug", metadata->slug },
-                                    { "name", metadata->name },
-                                    { "filename", metadata->filename },
-                                    { "side", static_cast<int>(metadata->side) },
-                                    { "mode", metadata->mode },
-                                    { "url", metadata->url.toString() },
-                                    { "hashFormat", metadata->hash_format },
-                                    { "hash", metadata->hash },
-                                    { "provider", static_cast<int>(metadata->provider) },
-                                    { "projectId", QJsonValue::fromVariant(metadata->project_id) },
-                                    { "fileId", QJsonValue::fromVariant(metadata->file_id) },
-                                    { "version", metadata->version_number } };
-        QJsonArray gameVersions;
-        for (const auto& version : metadata->mcVersions)
-            gameVersions.append(version);
-        metadataObject.insert("minecraftVersions", gameVersions);
-        QJsonArray dependencies;
-        for (const auto& dependency : metadata->dependencies)
-            dependencies.append(QJsonObject{ { "addonId", QJsonValue::fromVariant(dependency.addonId) },
-                                             { "type", static_cast<int>(dependency.type) },
-                                             { "version", dependency.version } });
-        metadataObject.insert("dependencies", dependencies);
-        result.insert("metadata", metadataObject);
-    }
-    return result;
+    return ApiSupport::resourceSnapshot(resource);
 }
 
 bool waitForTask(Task* task, UserInteraction& interaction, QString* error, LauncherApi* api = nullptr)
@@ -228,6 +194,7 @@ QJsonObject inspectResource(const QJsonObject& parameters)
     if (!model)
         return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
                                          2);
+    ApiSupport::ensureResourceModelReady(model);
     const auto reference = parameters.value("resource").toString();
     if (const auto* loaded = findLoadedResource(model, reference))
         return OperationService::success(resourceInfo(*loaded));

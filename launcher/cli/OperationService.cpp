@@ -195,6 +195,17 @@ bool isSensitiveSetting(const QString& id)
            lower.endsWith("keyoverride");
 }
 
+Resource* findLoadedResource(const std::shared_ptr<ResourceFolderModel>& model, const QString& reference)
+{
+    for (auto* resource : model->allResources()) {
+        if (resource->internal_id() == reference || resource->fileinfo().fileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->getOriginalFileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->name().compare(reference, Qt::CaseInsensitive) == 0)
+            return resource;
+    }
+    return nullptr;
+}
+
 QString settingCategory(const QString& id)
 {
     // Keep this list limited to values that are consumed exclusively by the
@@ -750,20 +761,10 @@ QJsonObject OperationService::listResources(const QJsonObject& parameters)
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
 
+    ApiSupport::ensureResourceModelReady(model);
     QJsonArray resources;
-    const auto entries = model->dir().entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
-    for (const auto& entry : entries) {
-        if (entry.fileName() == ".index")
-            continue;
-        Resource resource(entry);
-        resources.append(QJsonObject{ { "id", resource.internal_id() },
-                                      { "name", resource.name() },
-                                      { "fileName", resource.fileinfo().fileName() },
-                                      { "enabled", resource.enabled() },
-                                      { "type", resourceTypeName(resource.type()) },
-                                      { "size", resource.sizeInfo() },
-                                      { "path", resource.fileinfo().absoluteFilePath() } });
-    }
+    for (const auto* resource : model->allResources())
+        resources.append(ApiSupport::resourceSnapshot(*resource));
     return success(resources);
 }
 
@@ -819,7 +820,14 @@ QJsonObject OperationService::setResourceEnabled(const QJsonObject& parameters, 
     const auto model = findResourceModel(instance, kind, parameters.value("world").toString());
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
-    const auto resource = findResource(model, parameters.value("resource").toString());
+    ApiSupport::ensureResourceModelReady(model);
+    const auto resourceReference = parameters.value("resource").toString();
+    auto* resource = findLoadedResource(model, resourceReference);
+    std::unique_ptr<Resource> fallback;
+    if (!resource) {
+        fallback = findResource(model, resourceReference);
+        resource = fallback.get();
+    }
     if (!resource)
         return failure(tr("Resource not found: %1").arg(parameters.value("resource").toString()), 2);
     if (resource->enabled() == enabled)
@@ -843,7 +851,14 @@ QJsonObject OperationService::removeResource(const QJsonObject& parameters)
     const auto model = findResourceModel(instance, kind, parameters.value("world").toString());
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
-    const auto resource = findResource(model, parameters.value("resource").toString());
+    ApiSupport::ensureResourceModelReady(model);
+    const auto resourceReference = parameters.value("resource").toString();
+    auto* resource = findLoadedResource(model, resourceReference);
+    std::unique_ptr<Resource> fallback;
+    if (!resource) {
+        fallback = findResource(model, resourceReference);
+        resource = fallback.get();
+    }
     if (!resource)
         return failure(tr("Resource not found: %1").arg(parameters.value("resource").toString()), 2);
     const auto fileName = resource->fileinfo().fileName();

@@ -33,8 +33,8 @@ fn open_path(path: String) -> Result<(), String> {
         return Err("目录路径为空".into());
     }
     let path = std::path::Path::new(path);
-    if !path.exists() {
-        return Err(format!("目录不存在: {}", path.display()));
+    if !path.is_dir() {
+        return Err(format!("目录不存在或不是目录: {}", path.display()));
     }
     #[cfg(target_os = "windows")]
     let result = Command::new("explorer.exe").arg(path).spawn();

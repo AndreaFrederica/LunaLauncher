@@ -182,7 +182,7 @@ function ask(title:string, value:any='', confirm=false, options:any[]|null=null,
 }
 function finishDialog(ok:boolean){dialog.value=false;resolveDialog?.(ok ? (confirmation.value ? true : answer.value) : null);resolveDialog=undefined;}
 function message(e:any){return e?.message || String(e);}
-const readOnlyOperations=new Set(['resource.list','instance.info','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','catalog.search','catalog.projects','task.status']);
+const readOnlyOperations=new Set(['resource.list','instance.info','instance.get','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','catalog.search','catalog.projects','task.status']);
 async function catalogExecute(op:string,p:Record<string,unknown>){
  if(busy.value && !readOnlyOperations.has(op))throw new Error('请等待当前操作完成');
  if(readOnlyOperations.has(op))return call(op,p);
@@ -221,11 +221,13 @@ async function cancel(){try{await call('task.cancel');}catch(e){error.value=mess
 async function openFolder(){
  if(!selected.value)return;
  try{
-  const info=instanceDetails.value || await call('instance.info',{instance:selected.value.id});
-  const path=info?.root || info?.paths?.root;
+  // Always resolve the current instance. Cached details can belong to the
+  // previously selected instance when the user switches tabs quickly.
+  const info=await call('instance.get',{instance:selected.value.id});
+  const path=info?.paths?.root;
   if(!path)throw new Error('实例目录尚未读取');
   await launcher.openPath(path);
-  quasar.notify({type:'positive',message:'已打开实例目录',timeout:2500,position:'top',progress:true});
+  quasar.notify({type:'positive',message:`已打开实例目录：${path}`,timeout:2500,position:'top',progress:true});
  }catch(e){error.value=message(e);}
 }
 async function copyText(value:string){try{await navigator.clipboard?.writeText(value);notice.value='已复制到剪贴板';}catch{/* Clipboard may be unavailable in the web preview. */}}

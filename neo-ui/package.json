@@ -11,10 +11,11 @@
   "dependencies": {
     "@quasar/extras": "^1.16.15",
     "@tauri-apps/api": "^2.8.0",
-    "vue-router": "^4.5.1",
+    "@tauri-apps/plugin-opener": "^2.5.5",
     "pinia": "^3.0.3",
     "quasar": "^2.18.2",
-    "vue": "^3.5.18"
+    "vue": "^3.5.18",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@quasar/app-vite": "^2.2.0",

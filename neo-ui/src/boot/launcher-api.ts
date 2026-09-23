@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 
 export type ApiResult<T = unknown> = { ok: boolean; data?: T; error?: string; operation?: string };
 
@@ -54,7 +55,10 @@ export class LauncherApiClient {
   }
   async openPath(path: string): Promise<void> {
     this.requireDesktop();
-    await invoke('open_path', { path });
+    // Directories must use the plugin's Explorer/reveal operation. `openPath`
+    // delegates to the default file association and can reopen Documents on
+    // Windows when Explorer is already running.
+    await revealItemInDir(path);
   }
   onEvent(handler: (event: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();

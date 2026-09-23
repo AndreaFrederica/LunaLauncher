@@ -26,29 +26,6 @@ struct ApiError {
     message: String,
 }
 
-#[tauri::command]
-fn open_path(path: String) -> Result<(), String> {
-    let path = path.trim();
-    if path.is_empty() {
-        return Err("目录路径为空".into());
-    }
-    let path = std::path::Path::new(path);
-    if !path.is_dir() {
-        return Err(format!("目录不存在或不是目录: {}", path.display()));
-    }
-    #[cfg(target_os = "windows")]
-    let result = Command::new("explorer.exe")
-        // /e, forces Explorer to treat the argument as the folder to browse.
-        // Passing it as one argument also preserves spaces in instance names.
-        .arg(format!("/e,{}", path.display()))
-        .spawn();
-    #[cfg(target_os = "macos")]
-    let result = Command::new("open").arg(path).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let result = Command::new("xdg-open").arg(path).spawn();
-    result.map(|_| ()).map_err(|error| format!("无法打开目录: {error}"))
-}
-
 fn sidecar_path() -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("LUNA_LAUNCHER_CLI") {
         return Ok(PathBuf::from(path));
@@ -227,7 +204,8 @@ async fn launcher_request(
 fn main() {
     tauri::Builder::default()
         .manage(AppState(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![launcher_request, open_path])
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![launcher_request])
         .build(tauri::generate_context!())
         .expect("error while building Neo UI")
         .run(|app, event| {

@@ -33,6 +33,7 @@
             "core:window:allow-maximize",
             "core:window:allow-unmaximize",
             "core:window:allow-is-maximized",
+            "opener:default",
             "core:window:allow-start-dragging"
           ]
         }

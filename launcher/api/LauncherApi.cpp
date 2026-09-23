@@ -164,12 +164,12 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerOperation({ "api.describe", "Describe all operations and their input schemas." },
                       [this](const QJsonObject&, UserInteraction&) { return OperationService::success(describe()); });
     registerOperation({ "task.list",
-                        "List tasks tracked by the launcher API, including completed task snapshots.",
+                        "List tasks tracked by the launcher API, including completed snapshots, nested child tasks, and transfer metadata.",
                         objectSchema({ { "runningOnly", boolProperty("Only return tasks that are currently running.") } }),
                         "tasks" },
                       [this](const QJsonObject& parameters, UserInteraction&) { return taskList(parameters); });
     registerOperation({ "task.status",
-                        "Read progress, status, and cancellation capabilities for a tracked task.",
+                        "Read progress, status, cancellation capabilities, nested child tasks, byte counters, transfer speed, and failure details for a tracked task.",
                         objectSchema({ { "taskId", stringProperty("Task UUID. Omit to inspect the current operation task.") } }),
                         "tasks" },
                       [this](const QJsonObject& parameters, UserInteraction&) { return taskStatus(parameters); });

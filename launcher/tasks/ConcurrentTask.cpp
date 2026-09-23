@@ -57,6 +57,19 @@ auto ConcurrentTask::getStepProgress() const -> TaskStepProgressList
     return m_task_progress.values();
 }
 
+QList<Task*> ConcurrentTask::getSubTasks() const
+{
+    QList<Task*> result;
+    result.reserve(m_queue.size() + m_doing.size() + m_done.size());
+    for (const auto& task : m_queue)
+        if (task) result.append(task.get());
+    for (const auto& task : m_doing)
+        if (task) result.append(task.get());
+    for (const auto& task : m_done)
+        if (task) result.append(task.get());
+    return result;
+}
+
 void ConcurrentTask::addTask(Task::Ptr task)
 {
     m_queue.append(task);

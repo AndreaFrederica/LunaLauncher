@@ -6,6 +6,8 @@
 #include <QPointer>
 #include <QJsonArray>
 #include <QCoreApplication>
+#include <QFileInfo>
+#include <QUrl>
 
 #include <memory>
 
@@ -19,6 +21,7 @@
 #include "java/JavaInstall.h"
 #include "java/JavaInstallList.h"
 #include "tasks/Task.h"
+#include "tasks/ConcurrentTask.h"
 #include "minecraft/mod/Resource.h"
 #include "minecraft/mod/ResourceFolderModel.h"
 
@@ -208,7 +211,14 @@ class TaskObject {
                                       { "finished", progress->isDone() } });
         }
         const auto id = taskId.isEmpty() ? task->getUid().toString(QUuid::WithoutBraces) : taskId;
-        return QJsonObject{ { "id", id },
+        QJsonArray children;
+        if (const auto concurrent = dynamic_cast<const ConcurrentTask*>(task)) {
+            for (auto* child : concurrent->getSubTasks()) {
+                if (!child || child == task) continue;
+                children.append(TaskObject(child).snapshot());
+            }
+        }
+        QJsonObject result{ { "id", id },
                             { "type", QString::fromLatin1(task->metaObject()->className()) },
                             { "name", task->objectName() },
                             { "state", stateName(task->getState()) },
@@ -217,7 +227,29 @@ class TaskObject {
                             { "status", task->getStatus() }, { "details", task->getDetails() },
                             { "progress", task->getProgress() }, { "totalProgress", task->getTotalProgress() },
                             { "transferRate", task->getTransferRate() }, { "failReason", task->failReason() },
-                            { "warnings", warnings }, { "steps", steps } };
+                            { "warnings", warnings }, { "steps", steps }, { "children", children } };
+
+        // Download tasks use an internal object name such as FILE:<url> or
+        // ARIA2_CACHE:<url>. Keep the useful, non-sensitive part available to
+        // UI clients without exposing signed query strings in the API.
+        const auto objectName = task->objectName();
+        const QList<QPair<QString, QString>> sourcePrefixes = {
+            { "ARIA2_FILE:", "aria2" }, { "ARIA2_CACHE:", "aria2-cache" },
+            { "PCL_FILE:", "pcl" },     { "PCL_CACHE:", "pcl-cache" },
+            { "FILE:", "qt" },          { "CACHE:", "cache" },
+            { "BYTES:", "memory" },
+        };
+        for (const auto& prefix : sourcePrefixes) {
+            if (!objectName.startsWith(prefix.first))
+                continue;
+            const QUrl url(objectName.mid(prefix.first.size()));
+            const auto fileName = QFileInfo(url.path()).fileName();
+            result.insert("source", QJsonObject{ { "kind", "download" },
+                                                  { "transport", prefix.second },
+                                                  { "fileName", fileName } });
+            break;
+        }
+        return result;
     }
 
    private:

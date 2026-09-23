@@ -63,6 +63,9 @@ class ConcurrentTask : public Task {
     inline auto isMultiStep() const -> bool override { return totalSize() > 1; }
     auto getStepProgress() const -> TaskStepProgressList override;
 
+    /** Return the queued, active and completed child tasks for API/UI inspection. */
+    QList<Task*> getSubTasks() const;
+
     //! Adds a task to execute in this ConcurrentTask
     void addTask(Task::Ptr task);
 

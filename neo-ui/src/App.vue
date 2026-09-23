@@ -135,7 +135,7 @@ async function launch(i:any){
   const result=await call('instance.launch',{instance:i.id});
   notice.value=`启动请求已返回（PID ${result.pid}），请查看控制台确认客户端运行状态。`;
  }catch(e){error.value=message(e);void appendConsole('[启动失败] '+error.value,launchingId);}
- finally{busy.value=false;launchInFlight=false;launchingId='';device.value=null;status.value='';}
+ finally{busy.value=false;launchInFlight=false;launchingId='';device.value=null;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
 }
 function launchMany(items:any[]){
  const queue=items.filter((item:any)=>!item.running && item.id);
@@ -180,11 +180,11 @@ function ask(title:string, value:any='', confirm=false, options:any[]|null=null,
 }
 function finishDialog(ok:boolean){dialog.value=false;resolveDialog?.(ok ? (confirmation.value ? true : answer.value) : null);resolveDialog=undefined;}
 function message(e:any){return e?.message || String(e);}
-const readOnlyOperations=new Set(['resource.list','resource.enable','resource.disable','instance.info','instance.get','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','catalog.search','catalog.projects','task.status','appearance.catalog','appearance.refresh','language.list','network.proxy.get','launcher.update.status']);
+const readOnlyOperations=new Set(['resource.list','resource.enable','resource.disable','instance.info','instance.get','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','task.status','appearance.catalog','appearance.refresh','language.list','network.proxy.get','launcher.update.status']);
 async function catalogExecute(op:string,p:Record<string,unknown>){
  if(busy.value && !readOnlyOperations.has(op))throw new Error('请等待当前操作完成');
  if(readOnlyOperations.has(op))return call(op,p);
- busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';}
+ busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
 }
 async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||'操作失败');connected.value=true;return r.data;}
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
@@ -195,7 +195,7 @@ async function navigate(id:string){if(preparingLaunch)return;page.value=id;error
 function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
 function openSearchResult(instance:any){searchShown.value=false;void openInstance(instance);}
 function xmclTab(tab:string){if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
-async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;}}
+async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
 async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function openInstance(i:any,forceRead=false){
  if(preparingLaunch&&!forceRead)return;

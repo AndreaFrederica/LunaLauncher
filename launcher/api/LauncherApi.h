@@ -43,6 +43,9 @@ class LauncherApi final : public QObject {
     void cancelCurrent();
     bool isCancellationRequested() const { return m_cancelRequested; }
     QJsonArray streamNotifications();
+    /** Snapshot of the most recently registered task, including its terminal state. */
+    QString latestTaskId() const;
+    QJsonObject latestTaskSnapshot() const;
 
    private:
     struct RegisteredOperation {

@@ -306,6 +306,7 @@ void McpServer::executeOperation(const QJsonValue& id, const QString& operation,
         writeError(id, -32000, QStringLiteral("Another launcher operation is already running. Task controls remain available."));
         return;
     }
+    const auto taskBefore = m_service.latestTaskId();
     const std::function<void(const QJsonObject&)> notify = [this, id, native, progressToken = metadata.value("progressToken"), progress = 0](const QJsonObject& event) mutable {
         if (native) {
             auto params = event;
@@ -343,6 +344,14 @@ void McpServer::executeOperation(const QJsonValue& id, const QString& operation,
     }
     const auto result = m_service.execute(operation, arguments, interaction);
     progressTimer.stop();
+    // The progress timer can miss the final `finished` signal because the
+    // synchronous operation returns immediately after its task completes.
+    // Send one terminal snapshot for the task created by this request so
+    // alternate UIs can close their task center deterministically.
+    if (native && !control && m_service.latestTaskId() != taskBefore) {
+        const auto finalTask = m_service.latestTaskSnapshot();
+        if (!finalTask.isEmpty()) notify({ { "kind", "task" }, { "data", finalTask } });
+    }
     if (ownsRequest) {
         m_activeService = nullptr;
         m_activeRequestId = QJsonValue();

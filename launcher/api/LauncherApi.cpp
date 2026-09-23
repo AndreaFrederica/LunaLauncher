@@ -330,6 +330,20 @@ QJsonObject LauncherApi::snapshotTask(const QString& taskId, Task* task) const
     return LauncherApiModel::TaskObject(task).snapshot(taskId);
 }
 
+QString LauncherApi::latestTaskId() const
+{
+    return m_taskOrder.isEmpty() ? QString() : m_taskOrder.constLast();
+}
+
+QJsonObject LauncherApi::latestTaskSnapshot() const
+{
+    const auto taskId = latestTaskId();
+    if (taskId.isEmpty()) return {};
+    const auto it = m_tasks.constFind(taskId);
+    if (it == m_tasks.constEnd()) return {};
+    return it->task ? snapshotTask(taskId, it->task) : it->snapshot;
+}
+
 QJsonObject LauncherApi::taskStatus(const QJsonObject& parameters) const
 {
     const auto requestedId = parameters.value("taskId").toString().trimmed();

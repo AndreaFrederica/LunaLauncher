@@ -23,8 +23,8 @@ function ratio(current:any, total:any) { const c = Number(current), t = Number(t
 function formatBytes(value:any) { const n = Number(value); if (!Number.isFinite(n) || n < 0) return ''; if (n < 1024) return `${Math.round(n)} B`; const units = ['KB','MB','GB','TB']; let size = n / 1024, index = 0; while (size >= 1024 && index < units.length - 1) { size /= 1024; index++; } return `${size.toFixed(size >= 100 ? 0 : 1)} ${units[index]}`; }
 function formatDuration(value:any) { const seconds = Math.max(0, Math.round(Number(value))); if (seconds < 60) return `${seconds}s`; const minutes = Math.floor(seconds / 60); return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
 function formatRate(value: any) { const n = Number(value); return Number.isFinite(n) && n > 0 ? `${formatBytes(n)}/s` : ''; }
-async function poll() { if (!props.busy && !shown.value) return; try { const value = await props.execute('task.status'); if (value) { polled.value = value; emit('updated', value); shown.value = !isFinished(value); } } catch { /* There may be no active task between operations. */ } }
-watch(() => props.busy, (busy) => { if (busy) { shown.value = true; void poll(); } else if (done.value) { shown.value = false; } });
+async function poll() { if (!props.busy && !shown.value) return; try { const value = await props.execute('task.status'); if (value) { polled.value = value; emit('updated', value); shown.value = !isFinished(value); } else if (!props.snapshot && !polled.value) { shown.value = false; } } catch { /* Ordinary API calls can run without a tracked task. */ if (!props.snapshot && !polled.value) shown.value = false; } }
+watch(() => props.busy, (busy) => { if (busy) { void poll(); } else if (done.value || !props.snapshot) { shown.value = false; } });
 watch(() => props.snapshot, (value) => { if (value) { polled.value = value; shown.value = !isFinished(value); } });
 watch(() => props.open, (value) => { if (value) { shown.value = true; void poll(); } });
 onMounted(() => { timer = setInterval(() => void poll(), 450); }); onUnmounted(() => { if (timer) clearInterval(timer); });

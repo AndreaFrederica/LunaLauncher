@@ -180,7 +180,7 @@ function ask(title:string, value:any='', confirm=false, options:any[]|null=null,
 }
 function finishDialog(ok:boolean){dialog.value=false;resolveDialog?.(ok ? (confirmation.value ? true : answer.value) : null);resolveDialog=undefined;}
 function message(e:any){return e?.message || String(e);}
-const readOnlyOperations=new Set(['resource.list','instance.info','instance.get','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','catalog.search','catalog.projects','task.status']);
+const readOnlyOperations=new Set(['resource.list','instance.info','instance.get','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','catalog.search','catalog.projects','task.status','appearance.catalog','appearance.refresh','language.list','network.proxy.get','launcher.update.status']);
 async function catalogExecute(op:string,p:Record<string,unknown>){
  if(busy.value && !readOnlyOperations.has(op))throw new Error('请等待当前操作完成');
  if(readOnlyOperations.has(op))return call(op,p);

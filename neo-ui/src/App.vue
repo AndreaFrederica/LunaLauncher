@@ -3,15 +3,13 @@
  <XmclSystemBar :connected="connected" :busy="busy" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" />
  <XmclSidebar :instances="instances" :selected="selected" :icons="icons" :page="page" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true" />
  <main class="xmcl-main">
- <XmclHomeHeader v-if="selected && page==='settings'" :selected="selected" tab="settings" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @tab="xmclTab" />
+ <XmclHomeHeader v-if="selected && page==='settings'" :selected="selected" tab="settings" :dragover="false" @settings="scope='instance';page='settings';refresh()" @launch="launch(selected)" @open-folder="openFolder" @tab="xmclTab" />
  <div class="xmcl-content neo-page">
  <XmclDashboard v-if="page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
  <q-tabs v-if="openedInstances.length" :model-value="page==='manage'?selected?.id:''" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
- <q-banner v-if="error" class="bg-red-9 q-mb-md">{{ error }}</q-banner>
- <q-banner v-if="notice" class="bg-teal-9 q-mb-md">{{ notice }}</q-banner>
  <q-linear-progress v-if="busy" indeterminate class="q-mb-md" />
- <XmclInstanceWorkspace v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="run('instance.open-folder',{instance:selected.id})" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
+ <XmclInstanceWorkspace v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
  <div v-if="page==='create'" class="form"><h5>添加实例</h5>
   <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" label="服务端"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
   <CatalogBrowser v-if="createMode==='catalog'" packs :busy="busy" :execute="catalogExecute" @installed="navigate('instances')"/>
@@ -29,7 +27,7 @@
  <div v-if="false && page==='manage' && selected"><h5>{{ selected.name }} · 实例管理</h5><div class="row q-gutter-sm q-mb-lg">
   <q-btn color="primary" label="启动并查看日志" :disable="busy" @click="launch(selected)"/>
   <q-btn v-for="a in actions" :key="a.op" :label="a.label" :disable="busy" @click="instanceAction(a.op,a.field,a.label)"/>
-  <q-btn label="更换图标" :disable="busy" @click="changeIcon"/><q-btn label="打开实例目录" :disable="busy" @click="run('instance.open-folder',{instance:selected.id})"/><q-btn label="实例设置" @click="scope='instance'; page='settings'; refresh()"/>
+  <q-btn label="更换图标" :disable="busy" @click="changeIcon"/><q-btn label="打开实例目录" :disable="busy" @click="openFolder"/><q-btn label="实例设置" @click="scope='instance'; page='settings'; refresh()"/>
   <q-btn color="negative" label="删除到回收站" :disable="busy" @click="askDelete('instance.delete',{instance:selected.id},selected.name)"/>
  </div><q-input dark outlined autogrow v-model="notes" label="实例备注"/><q-btn class="q-mt-md" label="保存备注" :disable="busy" @click="run('instance.set-notes',{instance:selected.id,notes})"/>
  <p class="text-grey-4" style="overflow-wrap:anywhere">实例目录：{{ instanceDetails?.root || '尚未读取' }}<br>游戏目录：{{ instanceDetails?.gameRoot || '尚未读取' }}</p>
@@ -154,6 +152,9 @@ const resources=ref<any[]>([]),resourceKind=ref('mods'),resourceSource=ref('');
 const resourceKinds=[{label:'模组',value:'mods'},{label:'资源包',value:'resourcepacks'},{label:'光影包',value:'shaderpacks'},{label:'材质包',value:'texturepacks'},{label:'数据包',value:'datapacks'},{label:'投影',value:'schematics'},{label:'Yes Steve Model',value:'yesstevemodels'},{label:'Customizable Player Models',value:'customplayermodels'}];
 const pages=[{id:'instances',label:'实例库',icon:'apps'},{id:'create',label:'添加实例',icon:'add_box'},{id:'accounts',label:'账户管理',icon:'person'},{id:'settings',label:'设置',icon:'settings'}];
 const drawerOpen=ref(true), addDialog=ref(false), page=ref('instances'), busy=ref(false), error=ref(''), notice=ref(''), status=ref(''), search=ref(''), username=ref(''), notes=ref('');
+let lastErrorNotification='';
+watch(error,(value)=>{if(value && value!==lastErrorNotification){lastErrorNotification=value;quasar.notify({type:'negative',message:value,timeout:6000,position:'top',progress:true,actions:[{icon:'close',color:'white'}]});}});
+watch(notice,(value)=>{if(value)quasar.notify({type:'positive',message:value,timeout:3500,position:'top',progress:true});});
 watch(busy,async value=>{if(!value && launchQueue.value.length){await nextTick();if(!busy.value){const next=launchQueue.value.shift();if(next)void launch(next);}}});
 const instances=ref<any[]>([]),accounts=ref<any[]>([]),settings=ref<any[]>([]),selected=ref<any>(null),device=ref<any>(null),deviceShown=ref(false);
 const searchResults=computed(()=>{const q=globalSearch.value.trim().toLowerCase();if(!q)return instances.value.slice(0,12);return instances.value.filter((i:any)=>`${i.name} ${i.id} ${i.group||''} ${i.type||''} ${i.runtime?.minecraft||i.minecraftVersion||''}`.toLowerCase().includes(q)).slice(0,20);});
@@ -217,6 +218,16 @@ async function workspaceAction(op:string){const labels:Record<string,string>={re
 async function askDelete(op:string,p:any,name:string){if(await ask('确认移除 '+name+'？','',true))await run(op,{...p,confirm:true});}
 async function editSetting(s:any){const value=await ask('编辑 '+s.key,JSON.stringify(s.value));if(value===null)return;try{await run('settings.set',{...settingScope(),key:s.key,value:JSON.parse(value)});}catch(e){error.value='请输入有效的 JSON 值，例如 true、1024 或 "文本"';}}
 async function cancel(){try{await call('task.cancel');}catch(e){error.value=message(e);}}
+async function openFolder(){
+ if(!selected.value)return;
+ try{
+  const info=instanceDetails.value || await call('instance.info',{instance:selected.value.id});
+  const path=info?.root || info?.paths?.root;
+  if(!path)throw new Error('实例目录尚未读取');
+  await launcher.openPath(path);
+  quasar.notify({type:'positive',message:'已打开实例目录',timeout:2500,position:'top',progress:true});
+ }catch(e){error.value=message(e);}
+}
 async function copyText(value:string){try{await navigator.clipboard?.writeText(value);notice.value='已复制到剪贴板';}catch{/* Clipboard may be unavailable in the web preview. */}}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
 onMounted(async()=>{try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit(()=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';error.value='启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){if(launchInFlight)void appendConsole('[启动] '+(raw.message || raw.data?.message || ''),launchingId);status.value=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');}else if(raw.kind==='task'){taskSnapshot.value=raw.data || null;status.value=raw.data?.status||raw.data?.state||'正在执行';}});await refresh();}catch(e){error.value=message(e);}});

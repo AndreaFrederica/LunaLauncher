@@ -12,13 +12,16 @@
   --neo-primary: #a5b4fc;
 }
 * { box-sizing: border-box; }
+* { scrollbar-width: thin; scrollbar-color: rgba(129, 140, 248, .72) rgba(255, 255, 255, .06); }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: rgba(255, 255, 255, .045); border-radius: 10px; }
+*::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(129, 140, 248, .82), rgba(99, 102, 241, .72)); border: 2px solid rgba(11, 15, 23, .72); border-radius: 10px; }
+*::-webkit-scrollbar-thumb:hover { background: #a5b4fc; }
 body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .xmcl-app { min-height: 100vh; background: radial-gradient(circle at 15% -10%, rgba(79,70,229,.18), transparent 34%), var(--neo-bg); }
 .xmcl-main { min-height: calc(100vh - 38px); margin-left: 96px; padding: 0 24px 36px; }
 .xmcl-content { max-width: 1440px; margin: 0 auto; }
 .sidebar button, .header button, .system-bar button { -webkit-app-region: no-drag; }
-.system-bar{position:fixed;top:0;left:0;right:0;height:30px;z-index:100;display:flex;align-items:center;gap:3px;padding:0 8px;background:rgba(17,17,22,.55);backdrop-filter:blur(18px);color:rgba(255,255,255,.7);font-size:12px}
-.system-bar-spacer{flex:1}.system-bar button{appearance:none!important;min-width:30px;height:30px;padding:0 7px;border:0!important;border-radius:0;background:transparent!important;box-shadow:none!important;color:inherit;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}.system-bar button:hover{background:rgba(255,255,255,.12)!important;color:#fff}.system-bar-status{display:flex;align-items:center;gap:5px;margin:0 4px;color:rgba(255,255,255,.55)}.status-dot{width:7px;height:7px;border-radius:50%;background:#777}.status-dot.connected{background:#4caf50}
 .neo-header { background: rgba(11,15,23,.82)!important; border-bottom: 1px solid var(--neo-border); backdrop-filter: blur(18px); }
 .neo-toolbar { min-height: 68px; padding: 0 24px; }
 .brand-mark { background: linear-gradient(135deg,#818cf8,#6366f1); color: white; box-shadow: 0 6px 20px rgba(99,102,241,.28); }

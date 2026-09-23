@@ -11,13 +11,13 @@
       <div class="row q-gutter-sm q-mt-md"><q-input class="col" dark outlined v-model="customPath" label="自定义组件 / Jar / Java agent 路径"/><q-btn color="primary" label="安装自定义组件" :disable="busy || !customPath" @click="installCustom" /></div>
     </div>
     <div v-else-if="tab==='runtime'" class="q-mt-md"><p class="text-grey-5">完整的实例覆盖项在下方设置编辑器中按类型保存；Java 选择和诊断也位于同一设置页面。</p><q-btn color="primary" label="校验并修复文件" :disable="busy" @click="execute('instance.verify',{instance})" /><q-btn flat label="创建快捷方式" :disable="busy" class="q-ml-sm" @click="execute('instance.create-shortcut',{instance})" /></div>
-    <div v-else class="q-mt-md"><div class="row q-gutter-sm"><q-input class="col" dark outlined v-model="exportPath" label="导出文件路径"/><q-select dark outlined v-model="exportFormat" :options="['launcher','modrinth','curseforge']" label="格式"/><q-btn color="primary" label="导出实例" :disable="busy || !exportPath" @click="exportInstance"/></div><q-btn flat label="打开实例目录" :disable="busy" class="q-mt-md" @click="execute('instance.open-folder',{instance})" /></div>
+    <div v-else class="q-mt-md"><div class="row q-gutter-sm"><q-input class="col" dark outlined v-model="exportPath" label="导出文件路径"/><q-select dark outlined v-model="exportFormat" :options="['launcher','modrinth','curseforge']" label="格式"/><q-btn color="primary" label="导出实例" :disable="busy || !exportPath" @click="exportInstance"/></div><q-btn flat label="打开实例目录" :disable="busy" class="q-mt-md" @click="emit('open-folder')" /></div>
   </div>
 </template>
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 const props=defineProps<{instance:string;busy:boolean;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
-const emit=defineEmits<{changed:[]}>();
+const emit=defineEmits<{changed:[];'open-folder':[]}>();
 const tab=ref('components'),components=ref<any[]>([]),error=ref(''),customPath=ref(''),exportPath=ref(''),exportFormat=ref('launcher');
 async function load(){error.value='';try{const r=await props.execute('instance.components.list',{instance:props.instance});components.value=r.components||r||[];}catch(e){error.value=String(e);}}
 async function mutate(op:string,p:Record<string,unknown>){error.value='';try{await props.execute(op,{instance:props.instance,...p});emit('changed');await load();}catch(e){error.value=String(e);}}

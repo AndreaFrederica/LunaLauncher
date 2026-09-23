@@ -52,6 +52,10 @@ export class LauncherApiClient {
   respond(parameters: Record<string, unknown>): Promise<unknown> {
     return invoke('launcher_request', { method: 'launcher/respond', parameters });
   }
+  async openPath(path: string): Promise<void> {
+    this.requireDesktop();
+    await invoke('open_path', { path });
+  }
   onEvent(handler: (event: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();
     return listen('launcher-event', event => handler(event.payload));

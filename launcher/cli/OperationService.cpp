@@ -195,6 +195,95 @@ bool isSensitiveSetting(const QString& id)
            lower.endsWith("keyoverride");
 }
 
+QString settingCategory(const QString& id)
+{
+    // Keep this list limited to values that are consumed exclusively by the
+    // legacy Qt widgets. Settings which affect launching, downloads, or the
+    // launcher service stay in a shared category so alternative UIs can use
+    // them through the API.
+    static const QSet<QString> qtOnly{
+        "IconTheme", "ApplicationTheme", "BackgroundCat", "ThemeDownloadSources", "ThemeDownloadSource",
+        "LastUsedGroupForNewInstance", "MenuBarInsteadOfToolBar", "UseNewUI", "ShowNewsBar", "StatusBarVisible",
+        "ShowServerPreview",
+        "ServerPreviewDynamicWidth", "ShowTerracottaToolBar", "ShowYukariConnectToolBar", "ShowTerracottaStatusBar",
+        "ShowYukariConnectStatusBar", "ConsoleFont", "ConsoleFontSize", "ConsoleColorScheme", "JsonEditor",
+        "Language", "UseSystemLocale", "TheCat", "CatOpacity", "CatFit", "ToolbarsLocked", "InstSortMode",
+        "InstRenamingMode", "SelectedInstance", "MainWindowState", "MainWindowGeometry", "ConsoleWindowState",
+        "ConsoleWindowGeometry", "SettingsGeometry", "PagedGeometry", "NewInstanceGeometry", "UpdateDialogGeometry",
+        "NewsGeometry", "ModDownloadGeometry", "RPDownloadGeometry", "TPDownloadGeometry", "ShaderDownloadGeometry",
+        "DataPackDownloadGeometry", "WorldManagementGeometry"
+    };
+    static const QSet<QString> paths{
+        "InstanceDir", "CentralModsDir", "IconsDir", "DownloadsDir", "SkinsDir", "JavaDir", "GlobalDataPacksPath",
+        "JavaPath", "CustomGLFWPath", "CustomOpenALPath", "Aria2ExecutablePath", "CurseForgeExternalToolPath",
+        "FTBAppInstancesPath", "InstanceDirBookmark", "CentralModsDirBookmark", "IconsDirBookmark",
+        "DownloadsDirBookmark", "SkinsDirBookmark", "JavaDirBookmark"
+    };
+    static const QSet<QString> network{
+        "ProxyType", "ProxyAddr", "ProxyPort", "ProxyUser", "ProxyPass", "RequestTimeout", "UserAgentOverride",
+        "Aria2ProxyType", "Aria2ProxyAddr", "Aria2ProxyPort", "Aria2ProxyUser", "Aria2ProxyPass"
+    };
+    static const QSet<QString> downloads{
+        "NumberOfConcurrentTasks", "NumberOfConcurrentDownloads", "NumberOfManualRetries", "AssetCacheExpiryDays",
+        "DownloadsDirWatchRecursive", "MoveModsFromDownloadsDir", "ModMetadataDisabled", "ModDependenciesDisabled",
+        "SkipModpackUpdatePrompt", "GlobalDataPacksEnabled", "ModDownloadLoaders", "OverrideModDownloadLoaders",
+        "AssetVerificationMode", "DownloadBackend", "PclDownloadFallbackToQt", "PclDownloadThreadLimit",
+        "PclDownloadSpeedLimitKBps", "Aria2Enabled", "Aria2AutoInstall", "Aria2FallbackToQt",
+        "Aria2FollowLauncherDownloadLimits", "Aria2MaxConcurrentDownloads", "Aria2MaxConnectionPerServer",
+        "Aria2Split", "Aria2MinSplitSize", "Aria2FileAllocation", "Aria2Continue", "Aria2RpcPort",
+        "Aria2PollInterval", "Aria2ExtraArgs", "Aria2UseLauncherProxy", "CurseForgeDownloadBrowser",
+        "ShowModIncompat", "FallbackMRBlockedMods", "MetaURLOverride", "ResourceURLOverride", "DownloadMirrorType",
+        "ModrinthMirror", "CurseForgeMirror", "LibrariesURL", "LegacyFMLLibsURLOverride", "MojangDownloadsMirrorURL",
+        "CFKeyOverride", "FlameKeyOverride", "ModrinthToken"
+    };
+    static const QSet<QString> java{
+        "OverrideJavaLocation", "IgnoreJavaCompatibility", "JvmArgs", "IgnoreJavaWizard", "AutomaticJavaSwitch",
+        "AutomaticJavaDownload", "PermGen", "LowMemWarning", "MinMemAlloc", "MaxMemAlloc", "JavaSignature",
+        "JavaArchitecture", "JavaRealArchitecture", "JavaVersion", "JavaVendor", "LastHostname",
+        "UserAskedAboutAutomaticJavaDownload"
+    };
+    static const QSet<QString> launch{
+        "LaunchMaximized", "MinecraftWinWidth", "MinecraftWinHeight", "CloseAfterLaunch", "QuitAfterGameStop",
+        "JoinServerOnLaunch", "JoinServerOnLaunchAddress", "JoinWorldOnLaunch", "InstanceAccountId",
+        "PreLaunchCommand", "WrapperCommand", "PostExitCommand", "Env", "LastOfflinePlayerName", "MSAClientIDOverride",
+        "JProfilerPath", "JVisualVMPath", "MCEditPath", "Profiler"
+    };
+    static const QSet<QString> console{
+        "ShowConsole", "AutoCloseConsole", "ShowConsoleOnError", "LogPrePostOutput", "ConsoleMaxLines", "ConsoleOverflowStop"
+    };
+    static const QSet<QString> compatibility{
+        "OnlineFixes", "UseNativeGLFW", "UseNativeOpenAL", "EnableFeralGamemode", "EnableMangoHud", "UseDiscreteGpu",
+        "UseZink", "OverrideLegacySettings"
+    };
+    static const QSet<QString> time{ "ShowGameTime", "RecordGameTime", "ShowGlobalGameTime", "ShowGameTimeWithoutDays" };
+    static const QSet<QString> instance{
+        "name", "iconKey", "notes", "WindowTitle", "InstanceType", "linkedInstances", "shortcuts", "ManagedPack",
+        "ManagedPackType", "ManagedPackID", "ManagedPackName", "ManagedPackVersionID", "ManagedPackVersionName",
+        "ManagedPackURL", "lastLaunchTime", "totalTimePlayed", "lastTimePlayed", "AutomaticJava"
+    };
+    static const QSet<QString> instanceOverrides{
+        "OverrideJava", "OverrideJavaLocation", "OverrideWindowTitle", "OverrideGameTime", "OverrideCommands",
+        "OverrideLaunchCmd", "OverrideConsole"
+    };
+    if (qtOnly.contains(id)) return "qt-ui";
+    if (instance.contains(id)) return "instance";
+    if (instanceOverrides.contains(id) || id.startsWith("Override")) return "instance-overrides";
+    if (paths.contains(id)) return "paths";
+    if (network.contains(id)) return "network";
+    if (downloads.contains(id)) return "downloads";
+    if (java.contains(id)) return "java";
+    if (console.contains(id)) return "console";
+    if (launch.contains(id)) return "launch";
+    if (compatibility.contains(id)) return "compatibility";
+    if (time.contains(id)) return "playtime";
+    return "advanced";
+}
+
+QString settingSurface(const QString& id)
+{
+    return settingCategory(id) == "qt-ui" ? QStringLiteral("qt") : QStringLiteral("shared");
+}
+
 QJsonValue variantToJson(const QVariant& value)
 {
     if (!value.isValid() || value.isNull())
@@ -225,7 +314,9 @@ QJsonObject describeSetting(SettingsObject* settings, const std::shared_ptr<Sett
              { "default", redacted ? QJsonValue(QStringLiteral("***")) : variantToJson(defaultValue) },
              { "isDefault", value == defaultValue },
              { "sensitive", sensitive },
-             { "redacted", redacted } };
+             { "redacted", redacted },
+             { "category", settingCategory(setting->id()) },
+             { "surface", settingSurface(setting->id()) } };
 }
 
 bool convertSettingValue(const QJsonValue& input, const QVariant& reference, QVariant* output, QString* error)

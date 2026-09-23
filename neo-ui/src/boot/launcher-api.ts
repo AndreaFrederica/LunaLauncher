@@ -33,6 +33,8 @@ export interface LauncherSettingsEntry {
   isDefault: boolean;
   sensitive: boolean;
   redacted: boolean;
+  category?: string;
+  surface?: 'shared' | 'qt';
 }
 
 export interface LauncherProfile {

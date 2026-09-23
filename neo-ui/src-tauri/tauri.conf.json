@@ -11,7 +11,10 @@
       {
         "title": "Luna Neo UI",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "decorations": false,
+        "transparent": false,
+        "shadow": true
       }
     ],
     "security": {
@@ -24,7 +27,13 @@
           ],
           "permissions": [
             "core:event:allow-listen",
-            "core:event:allow-unlisten"
+            "core:event:allow-unlisten",
+            "core:window:allow-close",
+            "core:window:allow-minimize",
+            "core:window:allow-maximize",
+            "core:window:allow-unmaximize",
+            "core:window:allow-is-maximized",
+            "core:window:allow-start-dragging"
           ]
         }
       ]

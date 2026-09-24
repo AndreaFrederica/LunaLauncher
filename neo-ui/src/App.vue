@@ -85,7 +85,13 @@ import './neo-ui-preferences';
 const buildLabel = '2026-09-20.1';
 const quasar=useQuasar(),connected=ref(false),icons=ref<Record<string,string>>({});
 function closeMobileNav(){if(quasar.screen.lt.md)drawerOpen.value=false;}
-async function loadIcons(){for(const i of instances.value){if(busy.value)break;try{const result=await call('instance.icon',{instance:i.id});icons.value[i.id]=result.dataUrl;}catch{ /* Older backends retain the fallback icon. */ }}}
+async function loadIcons(){
+ const currentIds=new Set(instances.value.map((i:any)=>i.id));
+ for(const id of Object.keys(icons.value))if(!currentIds.has(id))delete icons.value[id];
+ // instance.icon is read-only and must also run immediately after an import or
+ // pack install, while the parent operation is still settling its busy flag.
+ await Promise.all(instances.value.map(async(i:any)=>{try{const result=await call('instance.icon',{instance:i.id});if(result?.dataUrl)icons.value[i.id]=result.dataUrl;}catch{ /* Keep the dashboard fallback when an old backend has no icon API. */ }}));
+}
 const components=ref<any[]>([]),componentError=ref('');
 async function loadComponents(){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});components.value=r.components;}catch(e){componentError.value=message(e);}}
 async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name||c.id)+' 版本',c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}

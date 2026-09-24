@@ -167,7 +167,22 @@ void Task::emitSucceeded()
 
 void Task::propagateStepProgress(TaskStepProgress const& task_progress)
 {
+    bool updated = false;
+    for (const auto& progress : m_step_progress) {
+        if (progress && progress->uid == task_progress.uid) {
+            *progress = task_progress;
+            updated = true;
+            break;
+        }
+    }
+    if (!updated)
+        m_step_progress.append(std::make_shared<TaskStepProgress>(task_progress));
     emit stepProgress(task_progress);
+}
+
+TaskStepProgressList Task::getStepProgress() const
+{
+    return m_step_progress;
 }
 
 QString Task::describe()

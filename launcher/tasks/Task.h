@@ -124,7 +124,7 @@ class Task : public QObject, public QRunnable {
     qint64 getProgress() { return m_progress; }
     qint64 getTotalProgress() { return m_progressTotal; }
     qint64 getTransferRate() const { return m_transferRate; }
-    virtual auto getStepProgress() const -> TaskStepProgressList { return {}; }
+    virtual auto getStepProgress() const -> TaskStepProgressList;
 
     QUuid getUid() { return m_uid; }
 
@@ -213,6 +213,10 @@ class Task : public QObject, public QRunnable {
     qint64 m_progress = 0;
     qint64 m_progressTotal = 100;
     qint64 m_transferRate = 0;
+
+    // Proxy tasks forward stepProgress signals from their active child. Keep
+    // the latest values so API clients can display per-file download details.
+    TaskStepProgressList m_step_progress;
 
     // TODO: Nuke in favor of QLoggingCategory
     bool m_show_debug = true;

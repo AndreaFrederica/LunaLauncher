@@ -6,7 +6,6 @@
  <div class="xmcl-content neo-page">
  <XmclDashboard v-if="page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
- <q-linear-progress v-if="busy" indeterminate class="q-mb-md" />
  <XmclInstanceWorkspace v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
  <div v-if="page==='create'" class="form"><h5>添加实例</h5>
   <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" label="服务端"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
@@ -42,8 +41,6 @@
  <XmclSettingsShell v-if="page==='settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
  <q-dialog v-model="deviceShown" persistent><q-card class="device-card text-white"><q-card-section><div class="eyebrow">MICROSOFT LOGIN</div><div class="text-h6">需要完成账户授权</div><p>请在浏览器打开下面的地址，并输入设备代码。</p><q-input dark outlined readonly :model-value="device?.url || ''" class="q-mb-md"><template #append><q-btn flat icon="content_copy" @click="copyText(device?.url || '')" /></template></q-input><div class="device-code">{{ device?.code || '等待设备代码…' }}</div><div class="text-caption text-grey-5 q-mt-md">代码有效期：{{ device?.expiresIn ? `${device.expiresIn} 秒` : '以浏览器提示为准' }}</div></q-card-section><q-card-actions align="right"><q-btn flat label="关闭" @click="deviceShown=false" /></q-card-actions></q-card></q-dialog>
- <div v-if="status" class="q-mt-md text-grey-4">{{ status }}</div>
- <q-btn v-if="busy" flat color="orange" label="取消当前任务" @click="cancel"/>
  </div>
  </main>
  <XmclAddInstanceDialog v-model="addDialog" :busy="busy" :execute="catalogExecute" @created="refresh" />

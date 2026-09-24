@@ -956,6 +956,11 @@ class InstanceStaging : public Task {
         connect(child, &Task::status, this, &InstanceStaging::setStatus);
         connect(child, &Task::details, this, &InstanceStaging::setDetails);
         connect(child, &Task::progress, this, &InstanceStaging::setProgress);
+        // Preserve the byte-per-second rate at the API-visible wrapper. The
+        // staging task is what OperationService tracks for instance imports;
+        // without this forwarding, the underlying download can be active
+        // while task.status incorrectly reports 0 B/s.
+        connect(child, &Task::transferRate, this, &InstanceStaging::setTransferRate);
         connect(child, &Task::stepProgress, this, &InstanceStaging::propagateStepProgress);
         connect(&m_backoffTimer, &QTimer::timeout, this, &InstanceStaging::childSucceeded);
     }

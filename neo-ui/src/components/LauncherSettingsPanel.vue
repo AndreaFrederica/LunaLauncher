@@ -37,8 +37,9 @@
         <div class="row q-gutter-sm q-mt-md"><q-btn flat label="刷新 Aria2 队列" :disable="busy" @click="loadDownloads" /><q-btn flat label="清理已完成" :disable="busy" @click="clearDownloads" /></div>
         <q-list v-if="downloads.length" bordered separator class="q-mt-md"><q-item v-for="item in downloads" :key="item.gid"><q-item-section><q-item-label>{{ item.name || item.gid }}</q-item-label><q-item-label caption>{{ item.status || item.state }} · {{ item.completedLength || 0 }} / {{ item.totalLength || 0 }}</q-item-label></q-item-section><q-item-section side><q-btn flat color="negative" label="取消" :disable="busy" @click="cancelDownload(item)" /></q-item-section></q-item></q-list>
       </section>
+      <SettingsPanel class="q-mt-lg" :settings="downloadSettings" category="all" :busy="busy" @save="save" @reset="reset" />
     </div>
-    <div v-else-if="tab==='mirrors'" class="q-mt-md"><SettingsPanel :settings="settings" category="downloads" :busy="busy" @save="save" @reset="reset" /></div>
+    <div v-else-if="tab==='mirrors'" class="q-mt-md"><SettingsPanel :settings="mirrorSettings" category="all" :busy="busy" @save="save" @reset="reset" /></div>
     <div v-else-if="tab==='integrations'" class="q-mt-md"><SettingsPanel :settings="settings" category="advanced" :busy="busy" @save="save" @reset="reset" /><q-banner class="bg-blue-grey-9 q-mt-lg">Yggdrasil 账户、预设和 authlib-injector 在“账户管理”中维护；这里保留认证辅助工具和外部工具设置。</q-banner><div class="row q-col-gutter-md q-mt-md"><q-select class="col" dark outlined v-model="helper" :options="['authlib-injector','nide8auth']" label="认证辅助工具" /><q-btn class="q-mt-sm" flat label="查看状态" :disable="busy" @click="helperStatus" /></div><div class="row q-col-gutter-md q-mt-md"><q-select class="col" dark outlined v-model="externalTool" :options="['jprofiler','jvisualvm','mcedit','curseforge']" label="外部工具" /><q-input class="col" dark outlined v-model="externalPath" label="工具路径" /><q-btn class="q-mt-sm" flat label="检查路径" :disable="busy || !externalPath" @click="externalCheck" /></div><q-list v-if="integrationResult" bordered class="q-mt-md"><q-item><q-item-section><pre>{{ JSON.stringify(integrationResult,null,2) }}</pre></q-item-section></q-item></q-list></div>
     <div v-else-if="tab==='network'" class="q-mt-md"><LauncherControlPanel :busy="busy" :execute="execute" /><SettingsPanel class="q-mt-lg" :settings="settings" category="network" :busy="busy" @save="save" @reset="reset" /></div>
     <div v-else class="q-mt-md"><LauncherControlPanel :busy="busy" :execute="execute" /><SettingsPanel class="q-mt-lg" :settings="settings" category="qt-ui" :busy="busy" @save="save" @reset="reset" /></div>
@@ -46,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import SettingsPanel from './SettingsPanel.vue';
 import JavaPanel from './JavaPanel.vue';
 import LauncherControlPanel from './LauncherControlPanel.vue';
@@ -55,6 +56,9 @@ const emit=defineEmits<{changed:[]}>();
 const tab=ref('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref('authlib-injector'),externalTool=ref('jprofiler'),externalPath=ref('');
 const backends=[{label:'Qt 原生下载',value:0},{label:'Aria2',value:1},{label:'PCL 多线程下载',value:2}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);
+const mirrorKeys=new Set(['ModMetadataDisabled','ModDependenciesDisabled','SkipModpackUpdatePrompt','ModDownloadLoaders','OverrideModDownloadLoaders','CurseForgeDownloadBrowser','ShowModIncompat','FallbackMRBlockedMods','MetaURLOverride','ResourceURLOverride','DownloadMirrorType','ModrinthMirror','CurseForgeMirror','LibrariesURL','LegacyFMLLibsURLOverride','MojangDownloadsMirrorURL','CFKeyOverride','FlameKeyOverride','ModrinthToken']);
+const downloadSettings=computed(()=>props.settings.filter(x=>x.category==='downloads'));
+const mirrorSettings=computed(()=>downloadSettings.value.filter(x=>mirrorKeys.has(x.key)));
 async function save(key:string,value:any){await props.execute('settings.set',{...props.scope,key,value});emit('changed');}
 function saveKey(key:string,value:any){void save(key,value);}
 function reset(key:string){void props.execute('settings.reset',{...props.scope,key}).then(()=>emit('changed'));}

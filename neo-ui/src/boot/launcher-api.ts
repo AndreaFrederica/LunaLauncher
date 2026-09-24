@@ -45,12 +45,44 @@ export interface LauncherProfile {
 }
 
 export class LauncherApiClient {
+  // The MCP sidecar executes normal launcher operations one at a time.  A
+  // number of XMCL views intentionally load independent panels together, so
+  // serialize ordinary calls here instead of letting the sidecar reject the
+  // second request with "Another launcher operation is already running".
+  private operationTail: Promise<void> = Promise.resolve();
+
+  private isTaskControl(operation: string): boolean {
+    return new Set([
+      'task.list',
+      'task.status',
+      'task.cancel',
+      'api.describe',
+      'event.poll',
+      'event.subscriptions',
+      'event.unsubscribe',
+      'server.console.command',
+      'server.console.write',
+      'server.console.resize',
+    ]).has(operation);
+  }
+
   private requireDesktop(): void {
     if (!isTauri()) throw new Error('当前为网页预览。请启动安装目录中的 luna-neo-ui.exe，以连接启动器并读取实例、账户和设置。');
   }
   async execute<T = unknown>(operation: string, parameters: Record<string, unknown> = {}): Promise<ApiResult<T>> {
     this.requireDesktop();
-    return invoke<ApiResult<T>>('launcher_request', { method: 'launcher/execute', parameters: { operation, parameters } });
+    const request = () => invoke<ApiResult<T>>('launcher_request', { method: 'launcher/execute', parameters: { operation, parameters } });
+    if (this.isTaskControl(operation)) return request();
+
+    const previous = this.operationTail;
+    let release!: () => void;
+    this.operationTail = new Promise<void>(resolve => { release = resolve; });
+    await previous;
+    try {
+      return await request();
+    } finally {
+      release();
+    }
   }
   respond(parameters: Record<string, unknown>): Promise<unknown> {
     return invoke('launcher_request', { method: 'launcher/respond', parameters });

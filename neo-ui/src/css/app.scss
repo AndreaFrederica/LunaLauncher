@@ -11,6 +11,15 @@
   --neo-muted: #94a3b8;
   --neo-primary: #a5b4fc;
 }
+:root[data-neo-theme="light"] {
+  --neo-bg: #f1f5f9;
+  --neo-panel: #ffffff;
+  --neo-panel-raised: #f8fafc;
+  --neo-border: rgba(15, 23, 42, .14);
+  --neo-muted: #64748b;
+  --v-theme-surface: 255 255 255;
+  --v-theme-on-surface: 15 23 42;
+}
 * { box-sizing: border-box; }
 * { scrollbar-width: thin; scrollbar-color: rgba(129, 140, 248, .72) rgba(255, 255, 255, .06); }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -20,6 +29,11 @@
 html, body, #q-app { width: 100%; height: 100%; overflow: hidden; }
 body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow-x: hidden; }
 .xmcl-app { width: 100%; height: 100vh; min-height: 0; overflow: hidden; background: radial-gradient(circle at 15% -10%, rgba(79,70,229,.18), transparent 34%), var(--neo-bg); }
+:root[data-neo-background="solid"] .xmcl-app { background: var(--neo-bg); }
+:root[data-neo-density="compact"] .neo-toolbar { min-height: 56px; }
+:root[data-neo-density="compact"] .nav-list .q-item { min-height: 40px; margin: 2px 0; }
+:root[data-neo-density="compact"] .neo-page { padding-top: 22px!important; padding-bottom: 22px!important; }
+:root[data-neo-animations="off"] *, :root[data-neo-animations="off"] *::before, :root[data-neo-animations="off"] *::after { transition-duration: 0s!important; animation-duration: 0s!important; }
 .xmcl-main { width: calc(100% - 96px); height: calc(100vh - 38px); min-height: 0; overflow-y: auto; overflow-x: hidden; margin-top: 38px; margin-left: 96px; padding: 0 24px 36px; }
 .xmcl-content, .xmcl-main > * { min-width: 0; max-width: 100%; }
 .xmcl-content { max-width: 1440px; margin: 0 auto; }

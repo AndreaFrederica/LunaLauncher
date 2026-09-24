@@ -81,6 +81,7 @@ import XmclMultiplayerWorkspace from './xmcl-port/XmclMultiplayerWorkspace.vue';
 import XmclSystemBar from './xmcl-port/XmclSystemBar.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
+import './neo-ui-preferences';
 const buildLabel = '2026-09-20.1';
 const quasar=useQuasar(),connected=ref(false),icons=ref<Record<string,string>>({});
 function closeMobileNav(){if(quasar.screen.lt.md)drawerOpen.value=false;}

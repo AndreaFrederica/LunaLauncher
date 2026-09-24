@@ -6,8 +6,9 @@
       <section v-if="section==='all'" class="xmcl-setting-section"><header><q-icon name="tune"/><div><h5>{{ isInstance ? '客户端设置' : '启动器设置' }}</h5><p>设置项由 Launcher API 返回，按功能和 UI 作用范围分类。</p></div></header><SettingsPanel v-model:category="category" :settings="settings" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
       <section v-else-if="isCategorySection" class="xmcl-setting-section"><header><q-icon :name="categoryIcon"/><div><h5>{{ categoryLabel }}</h5><p>{{ categoryDescription }}</p></div></header><SettingsPanel v-model:category="category" :settings="settings" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
       <section v-else-if="section==='runtime'" class="xmcl-setting-section"><header><q-icon name="code"/><div><h5>Java 与运行环境</h5><p>检测 Java、诊断兼容性并选择运行时。</p></div></header><JavaPanel :scope="scope" :settings="settings" :busy="busy" :execute="execute" @changed="emit('changed')"/></section>
-      <section v-else-if="section==='tools'" class="xmcl-setting-section"><header><q-icon name="tune"/><div><h5>外观、网络与更新</h5><p>这些能力通过 API 操作接口管理，不混入设置值列表。</p></div></header><LauncherControlPanel :busy="busy" :execute="execute"/></section>
-      <section v-else class="xmcl-setting-section"><header><q-icon name="info"/><div><h5>关于与维护</h5><p>导入设置、清理缓存和启动器新闻。</p></div></header><LauncherControlPanel :busy="busy" :execute="execute"/></section>
+      <section v-else-if="section==='tools'" class="xmcl-setting-section"><header><q-icon name="palette"/><div><h5>Neo UI 外观</h5><p>管理 Neo UI 自己的主题、强调色、密度和界面动效。</p></div></header><NeoUiAppearancePanel /></section>
+      <section v-else-if="section==='qt'" class="xmcl-setting-section"><header><q-icon name="desktop_windows"/><div><h5>Qt 兼容界面</h5><p>这里的设置只影响传统 C++ Qt 界面和其维护功能。</p></div></header><LauncherControlPanel :busy="busy" :execute="execute"/><SettingsPanel class="q-mt-xl" :settings="settings" category="qt-ui" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
+      <section v-else-if="section==='about'" class="xmcl-setting-section"><header><q-icon name="info"/><div><h5>关于 Neo UI</h5><p>查看 Neo UI、Launcher API 和运行时信息。</p></div></header><NeoUiAboutPanel :execute="execute"/></section>
     </main>
   </div>
 </template>
@@ -16,6 +17,8 @@ import { computed, ref, watch } from 'vue';
 import JavaPanel from '../components/JavaPanel.vue';
 import SettingsPanel from '../components/SettingsPanel.vue';
 import LauncherControlPanel from '../components/LauncherControlPanel.vue';
+import NeoUiAppearancePanel from '../components/NeoUiAppearancePanel.vue';
+import NeoUiAboutPanel from '../components/NeoUiAboutPanel.vue';
 import { settingCategoryIcons, settingCategoryLabels, settingCategoryOrder } from '../settings-categories';
 import { settingMetadata } from '../settings-schema';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
@@ -30,14 +33,16 @@ function settingCategory(setting: any) {
   return setting.category || legacyGroups[metadata?.group || ''] || metadata?.group || 'advanced';
 }
 const presentCategories=computed(()=>new Set(props.settings.map(settingCategory)));
-const categorySections=computed(()=>settingCategoryOrder.filter(id=>presentCategories.value.has(id)).map(id=>({id,label:settingCategoryLabels[id],icon:settingCategoryIcons[id],count:props.settings.filter(setting=>settingCategory(setting)===id).length})));
+// Qt compatibility settings have their own dedicated page so they are not
+// mixed into the Neo UI appearance navigation.
+const categorySections=computed(()=>settingCategoryOrder.filter(id=>id !== 'qt-ui' && presentCategories.value.has(id)).map(id=>({id,label:settingCategoryLabels[id],icon:settingCategoryIcons[id],count:props.settings.filter(setting=>settingCategory(setting)===id).length})));
 const sections=computed(()=>[
   {id:'all',label:isInstance.value ? '全部客户端设置' : '全部启动器设置',icon:'tune',count:props.settings.length},
   ...categorySections.value,
   {id:'runtime',label:'Java 与运行环境',icon:'code',count:0},
-  ...(!isInstance.value ? [{id:'tools',label:'外观、网络与更新',icon:'palette',count:0},{id:'about',label:'关于与维护',icon:'info',count:0}] : []),
+  ...(!isInstance.value ? [{id:'tools',label:'Neo UI 外观',icon:'palette',count:0},{id:'qt',label:'Qt 兼容界面',icon:'desktop_windows',count:0},{id:'about',label:'关于 Neo UI',icon:'info',count:0}] : []),
 ]);
-const isCategorySection=computed(()=>section.value !== 'all' && section.value !== 'runtime' && section.value !== 'tools' && section.value !== 'about');
+const isCategorySection=computed(()=>section.value !== 'all' && section.value !== 'runtime' && section.value !== 'tools' && section.value !== 'qt' && section.value !== 'about');
 const categoryLabel=computed(()=>settingCategoryLabels[section.value] || section.value);
 const categoryIcon=computed(()=>settingCategoryIcons[section.value] || 'tune');
 const categoryDescription=computed(()=>section.value === 'qt-ui' ? '这些选项只影响 Qt 旧界面的布局、工具栏或外部集成。' : '按 API 分类显示设置项，修改后立即写回当前配置对象。');

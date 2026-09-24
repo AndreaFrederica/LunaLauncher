@@ -95,6 +95,18 @@ bool FlameCreationTask::abort()
     return InstanceCreationTask::abort();
 }
 
+QList<Task*> FlameCreationTask::getSubTasks() const
+{
+    auto result = InstanceCreationTask::getSubTasks();
+    if (m_processUpdateFileInfoJob)
+        result.append(m_processUpdateFileInfoJob.get());
+    if (m_filesJob)
+        result.append(m_filesJob.get());
+    if (m_modIdResolver)
+        result.append(m_modIdResolver.get());
+    return result;
+}
+
 bool FlameCreationTask::updateInstance()
 {
     auto instance_list = APPLICATION->instances();

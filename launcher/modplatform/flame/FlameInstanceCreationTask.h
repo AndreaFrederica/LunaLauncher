@@ -65,6 +65,7 @@ class FlameCreationTask final : public InstanceCreationTask {
     }
 
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
     bool updateInstance() override;
     std::unique_ptr<BaseInstance> createInstance() override;

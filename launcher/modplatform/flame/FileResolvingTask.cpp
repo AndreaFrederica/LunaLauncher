@@ -45,6 +45,11 @@ bool Flame::FileResolvingTask::abort()
     return aborted ? Task::abort() : false;
 }
 
+QList<Task*> Flame::FileResolvingTask::getSubTasks() const
+{
+    return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{};
+}
+
 void Flame::FileResolvingTask::executeTask()
 {
     if (m_manifest.files.isEmpty()) {  // no file to resolve so leave it empty and emit success immediately

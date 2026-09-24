@@ -23,6 +23,11 @@ bool InstanceCreationTask::abort()
     return true;
 }
 
+QList<Task*> InstanceCreationTask::getSubTasks() const
+{
+    return m_gameFilesTask ? QList<Task*>{ m_gameFilesTask.get() } : QList<Task*>{};
+}
+
 void InstanceCreationTask::executeTask()
 {
     setAbortable(true);

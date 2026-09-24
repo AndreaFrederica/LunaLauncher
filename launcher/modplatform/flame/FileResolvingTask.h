@@ -29,6 +29,7 @@ class FileResolvingTask : public Task {
 
     bool canAbort() const override { return true; }
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
     const Flame::Manifest& getResults() const { return m_manifest; }
 

@@ -41,7 +41,10 @@ bool ModrinthCreationTask::abort()
 
 QList<Task*> ModrinthCreationTask::getSubTasks() const
 {
-    return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{};
+    auto result = InstanceCreationTask::getSubTasks();
+    if (m_task)
+        result.append(m_task.get());
+    return result;
 }
 
 bool ModrinthCreationTask::updateInstance()

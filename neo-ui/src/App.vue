@@ -184,10 +184,10 @@ function ask(title:string, value:any='', confirm=false, options:any[]|null=null,
  return new Promise(resolve=>{resolveDialog=resolve;});
 }
 function finishDialog(ok:boolean){dialog.value=false;resolveDialog?.(ok ? (confirmation.value ? true : answer.value) : null);resolveDialog=undefined;}
-function message(e:any){return e?.message || String(e);}
-const readOnlyOperations=new Set(['resource.list','resource.enable','resource.disable','instance.info','instance.get','instance.world.list','instance.screenshot.list','instance.components.list','instance.log.list','component.versions','task.status','appearance.catalog','appearance.refresh','language.list','network.proxy.get','launcher.update.status']);
+function message(e:any){if(e instanceof Error)return e.message;if(typeof e==='string')return e;if(e?.message)return message(e.message);if(e?.error)return message(e.error);try{return JSON.stringify(e);}catch{return String(e);}}
+const readOnlyOperations=new Set(['task.status']);
 async function catalogExecute(op:string,p:Record<string,unknown>){
- if(busy.value && !readOnlyOperations.has(op))throw new Error('请等待当前操作完成');
+ if(busy.value && !readOnlyOperations.has(op)){taskCenterOpen.value=true;throw new Error('当前任务仍在执行，请先在任务中心查看或取消任务。');}
  if(readOnlyOperations.has(op))return call(op,p);
  busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
 }
@@ -196,21 +196,21 @@ function settingScope(){return scope.value==='instance' ? {scope:'instance',inst
 let resourceRequest=0;
 async function loadResources(){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind});if(request===resourceRequest){if(!Array.isArray(data))throw new Error('资源接口返回格式错误');resources.value=data;}}catch(e){if(request===resourceRequest)resourceError.value=message(e);}finally{if(request===resourceRequest)resourcesLoading.value=false;}}
 async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage'){await loadResources();await loadComponents();await loadLogFiles();}else {instances.value=await call('instance.list');await loadIcons();}}catch(e){error.value=message(e);}}
-async function navigate(id:string){if(preparingLaunch)return;page.value=id;error.value='';notice.value='';if(id==='settings')scope.value='launcher';if(!busy.value)await refresh();}
+async function navigate(id:string){if(preparingLaunch)return;if(busy.value){taskCenterOpen.value=true;return;}page.value=id;error.value='';notice.value='';if(id==='settings')scope.value='launcher';await refresh();}
 function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
 function openSearchResult(instance:any){searchShown.value=false;void openInstance(instance);}
-function xmclTab(tab:string){if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
+function xmclTab(tab:string){if(busy.value){taskCenterOpen.value=true;return;}if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
 async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function openInstance(i:any,forceRead=false){
  if(preparingLaunch&&!forceRead)return;
+ if(busy.value&&!forceRead){taskCenterOpen.value=true;return;}
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});
  if(selected.value?.id!==i.id){
   const old=sessions.get(selected.value?.id);if(old){old.lines=consoleLines.value;old.state=consoleState.value;}
   const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||'未连接';logFile.value='';fileLog.value='';logFiles.value=[];
  }
  selected.value=i;page.value='manage';notes.value='';error.value='';instanceDetails.value=null;
- if(busy.value&&!forceRead){const cached=detailCache.get(i.id);instanceDetails.value=cached?.info;notes.value=cached?.notes||'';components.value=cached?.components||[];resources.value=cached?.resources||[];resourceKind.value=cached?.kind||'mods';logFiles.value=cached?.logFiles||[];notice.value='正在处理其他任务；显示缓存内容，任务完成后可刷新。';return;}
  try{const info=await call('instance.info',{instance:i.id});instanceDetails.value=info;notes.value=info.notes || '';}catch(e){error.value=message(e);}
  await loadResources();await loadComponents();await loadLogFiles();
 }

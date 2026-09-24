@@ -444,7 +444,13 @@ void registerInstanceApiOperations(LauncherApi& api)
                            [](const QJsonObject& p, UserInteraction&) {
                                auto inst = findInstance(p.value("instance").toString());
                                if (!inst) return OperationService::failure("Instance not found.", 2);
-                               auto icon = APPLICATION->icons()->getIcon(inst->iconKey());
+                                // Qt refreshes IconList through its file watcher after an
+                                // imported pack copies a custom icon. API clients can ask
+                                // immediately after the task completes, before that watcher
+                                // event is delivered, so perform the same directory scan
+                                // synchronously before reading the icon.
+                                APPLICATION->icons()->directoryChanged(APPLICATION->icons()->getDirectory());
+                                auto icon = APPLICATION->icons()->getIcon(inst->iconKey());
                                if (icon.isNull()) {
                                    // The CLI does not initialize a desktop icon theme.
                                    const auto key = inst->iconKey() == "default" ? QStringLiteral("grass") : inst->iconKey();

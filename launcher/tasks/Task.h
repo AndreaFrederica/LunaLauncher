@@ -55,6 +55,8 @@ struct TaskStepProgress {
     QString label = "";
     qint64 current = 0;
     qint64 total = -1;
+    // Instantaneous transfer speed in bytes per second for download steps.
+    qint64 transferRate = 0;
 
     qint64 old_current = 0;
     qint64 old_total = -1;

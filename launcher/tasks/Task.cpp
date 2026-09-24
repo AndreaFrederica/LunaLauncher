@@ -171,9 +171,14 @@ void Task::propagateStepProgress(TaskStepProgress const& task_progress)
     for (const auto& progress : m_step_progress) {
         if (progress && progress->uid == task_progress.uid) {
             const auto label = progress->label;
+            const auto transferRate = progress->transferRate;
             *progress = task_progress;
             if (progress->label.isEmpty())
                 progress->label = label;
+            // Progress updates and transfer-rate updates are separate signals.
+            // Keep the last sampled rate when a progress-only update arrives.
+            if (progress->transferRate == 0 && !progress->isDone())
+                progress->transferRate = transferRate;
             updated = true;
             break;
         }

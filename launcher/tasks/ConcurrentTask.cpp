@@ -228,6 +228,7 @@ void ConcurrentTask::subTaskFinished(Task::Ptr task, TaskStepState state)
 
     auto task_progress = *m_task_progress.value(task->getUid());
     task_progress.state = state;
+    task_progress.transferRate = 0;
     disconnect(task.get(), 0, this, 0);
 
     emit stepProgress(task_progress);
@@ -288,6 +289,12 @@ void ConcurrentTask::subTaskProgress(Task::Ptr task, qint64 current, qint64 tota
 void ConcurrentTask::subTaskTransferRate(Task::Ptr task, qint64 bytesPerSecond)
 {
     m_task_transfer_rates.insert(task.get(), bytesPerSecond);
+    auto task_progress = m_task_progress.value(task->getUid());
+    if (task_progress) {
+        task_progress->transferRate = bytesPerSecond;
+        task_progress->state = TaskStepState::Running;
+        emit stepProgress(*task_progress);
+    }
     updateTransferRate();
 }
 

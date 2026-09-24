@@ -206,6 +206,7 @@ class TaskObject {
             steps.append(QJsonObject{ { "id", progress->uid.toString(QUuid::WithoutBraces) },
                                       { "label", progress->label },
                                       { "current", progress->current }, { "total", progress->total },
+                                      { "transferRate", progress->transferRate },
                                       { "status", progress->status }, { "details", progress->details },
                                       { "state", stepStateName(progress->state) },
                                       { "oldCurrent", progress->old_current }, { "oldTotal", progress->old_total },

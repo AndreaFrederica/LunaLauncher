@@ -36,8 +36,27 @@
 #include "ConcurrentTask.h"
 
 #include <QDebug>
+#include <QFileInfo>
+#include <QUrl>
 #include <utility>
 #include "tasks/Task.h"
+
+namespace {
+QString childLabel(Task* task)
+{
+    if (!task) return {};
+    const auto name = task->objectName();
+    for (const auto& prefix : { QStringLiteral("FILE:"), QStringLiteral("CACHE:"), QStringLiteral("BYTES:"),
+                                QStringLiteral("ARIA2_FILE:"), QStringLiteral("ARIA2_CACHE:"),
+                                QStringLiteral("PCL_FILE:"), QStringLiteral("PCL_CACHE:") }) {
+        if (name.startsWith(prefix)) {
+            const auto fileName = QFileInfo(QUrl(name.mid(prefix.size())).path()).fileName();
+            if (!fileName.isEmpty()) return fileName;
+        }
+    }
+    return name;
+}
+}
 
 ConcurrentTask::ConcurrentTask(QString task_name, int max_concurrent) : Task(), m_total_max_size(max_concurrent)
 {
@@ -72,6 +91,11 @@ QList<Task*> ConcurrentTask::getSubTasks() const
 
 void ConcurrentTask::addTask(Task::Ptr task)
 {
+    if (task) {
+        auto progress = std::make_shared<TaskStepProgress>(task->getUid());
+        progress->label = childLabel(task.get());
+        m_task_progress.insert(task->getUid(), progress);
+    }
     m_queue.append(task);
 }
 
@@ -181,8 +205,12 @@ void ConcurrentTask::startSubTask(Task::Ptr next)
 
     m_doing.insert(next.get(), next);
 
-    auto task_progress = std::make_shared<TaskStepProgress>(next->getUid());
-    m_task_progress.insert(next->getUid(), task_progress);
+    auto task_progress = m_task_progress.value(next->getUid());
+    if (!task_progress) {
+        task_progress = std::make_shared<TaskStepProgress>(next->getUid());
+        m_task_progress.insert(next->getUid(), task_progress);
+    }
+    task_progress->label = childLabel(next.get());
 
     updateState();
 
@@ -200,8 +228,6 @@ void ConcurrentTask::subTaskFinished(Task::Ptr task, TaskStepState state)
 
     auto task_progress = *m_task_progress.value(task->getUid());
     task_progress.state = state;
-    m_task_progress.remove(task->getUid());
-
     disconnect(task.get(), 0, this, 0);
 
     emit stepProgress(task_progress);

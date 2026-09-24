@@ -170,7 +170,10 @@ void Task::propagateStepProgress(TaskStepProgress const& task_progress)
     bool updated = false;
     for (const auto& progress : m_step_progress) {
         if (progress && progress->uid == task_progress.uid) {
+            const auto label = progress->label;
             *progress = task_progress;
+            if (progress->label.isEmpty())
+                progress->label = label;
             updated = true;
             break;
         }

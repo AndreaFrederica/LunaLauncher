@@ -50,6 +50,9 @@ Q_DECLARE_METATYPE(TaskStepState)
 
 struct TaskStepProgress {
     QUuid uid;
+    // Human-readable child label preserved across queued, running and
+    // completed snapshots. Download tasks use this for the file name.
+    QString label = "";
     qint64 current = 0;
     qint64 total = -1;
 

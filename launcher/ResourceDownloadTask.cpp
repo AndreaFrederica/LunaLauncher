@@ -70,6 +70,7 @@ ResourceDownloadTask::ResourceDownloadTask(ModPlatform::IndexedPack::Ptr pack,
     m_filesNetJob->addNetAction(action);
     connect(m_filesNetJob.get(), &NetJob::succeeded, this, &ResourceDownloadTask::downloadSucceeded);
     connect(m_filesNetJob.get(), &NetJob::progress, this, &ResourceDownloadTask::downloadProgressChanged);
+    connect(m_filesNetJob.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(m_filesNetJob.get(), &NetJob::stepProgress, this, &ResourceDownloadTask::propagateStepProgress);
     connect(m_filesNetJob.get(), &NetJob::failed, this, &ResourceDownloadTask::downloadFailed);
 

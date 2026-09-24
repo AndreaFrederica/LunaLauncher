@@ -111,6 +111,7 @@ void InstanceImportTask::downloadFromUrl()
 
     connect(filesNetJob.get(), &NetJob::succeeded, this, &InstanceImportTask::processZipPack);
     connect(filesNetJob.get(), &NetJob::progress, this, &InstanceImportTask::setProgress);
+    connect(filesNetJob.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(filesNetJob.get(), &NetJob::stepProgress, this, &InstanceImportTask::propagateStepProgress);
     connect(filesNetJob.get(), &NetJob::failed, this, &InstanceImportTask::emitFailed);
     connect(filesNetJob.get(), &NetJob::aborted, this, &InstanceImportTask::emitAborted);
@@ -361,6 +362,7 @@ void InstanceImportTask::processZipPack()
         progressStep->update(current, total);
         propagateStepProgress(*progressStep);
     });
+    connect(zipTask.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(zipTask.get(), &Task::status, this, [this, progressStep](QString status) {
         progressStep->status = status;
         propagateStepProgress(*progressStep);
@@ -522,6 +524,7 @@ void InstanceImportTask::processFlame()
     });
     connect(inst_creation_task.get(), &Task::failed, this, &InstanceImportTask::emitFailed);
     connect(inst_creation_task.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+    connect(inst_creation_task.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(inst_creation_task.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
     connect(inst_creation_task.get(), &Task::status, this, &InstanceImportTask::setStatus);
     connect(inst_creation_task.get(), &Task::details, this, &InstanceImportTask::setDetails);
@@ -628,6 +631,7 @@ void InstanceImportTask::processModrinth()
     });
     connect(inst_creation_task.get(), &Task::failed, this, &InstanceImportTask::emitFailed);
     connect(inst_creation_task.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+    connect(inst_creation_task.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(inst_creation_task.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
     connect(inst_creation_task.get(), &Task::status, this, &InstanceImportTask::setStatus);
     connect(inst_creation_task.get(), &Task::details, this, &InstanceImportTask::setDetails);

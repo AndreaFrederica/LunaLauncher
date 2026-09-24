@@ -100,6 +100,7 @@ void PackInstallTask::executeTask()
     QObject::connect(netJob.get(), &NetJob::failed, this, &PackInstallTask::onManifestDownloadFailed);
     QObject::connect(netJob.get(), &NetJob::aborted, this, &PackInstallTask::abort);
     QObject::connect(netJob.get(), &NetJob::progress, this, &PackInstallTask::setProgress);
+    QObject::connect(netJob.get(), &Task::transferRate, this, &Task::setTransferRate);
 
     m_net_job = netJob;
 
@@ -327,6 +328,7 @@ void PackInstallTask::downloadPack()
     connect(jobPtr.get(), &NetJob::failed, this, &PackInstallTask::onModDownloadFailed);
     connect(jobPtr.get(), &NetJob::aborted, this, &PackInstallTask::abort);
     connect(jobPtr.get(), &NetJob::progress, this, &PackInstallTask::setProgress);
+    connect(jobPtr.get(), &Task::transferRate, this, &Task::setTransferRate);
 
     m_net_job = jobPtr;
 

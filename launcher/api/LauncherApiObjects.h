@@ -204,6 +204,7 @@ class TaskObject {
         for (const auto& progress : task->getStepProgress()) {
             if (!progress) continue;
             steps.append(QJsonObject{ { "id", progress->uid.toString(QUuid::WithoutBraces) },
+                                      { "label", progress->label },
                                       { "current", progress->current }, { "total", progress->total },
                                       { "status", progress->status }, { "details", progress->details },
                                       { "state", stepStateName(progress->state) },

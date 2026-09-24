@@ -292,6 +292,7 @@ std::unique_ptr<BaseInstance> ModrinthCreationTask::createInstance()
         setDetails(tr("%1 out of %2 complete").arg(current).arg(total));
         setProgress(current, total);
     });
+    connect(downloadMods.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(downloadMods.get(), &NetJob::stepProgress, this, &ModrinthCreationTask::propagateStepProgress);
 
     setStatus(tr("Downloading mods..."));
@@ -316,6 +317,7 @@ std::unique_ptr<BaseInstance> ModrinthCreationTask::createInstance()
         setDetails(tr("%1 out of %2 complete").arg(current).arg(total));
         setProgress(current, total);
     });
+    connect(ensureMetadataTask.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(ensureMetadataTask.get(), &Task::stepProgress, this, &ModrinthCreationTask::propagateStepProgress);
 
     ensureMetadataTask->start();

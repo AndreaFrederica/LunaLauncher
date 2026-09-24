@@ -129,6 +129,11 @@ QString cleanPath(QString path)
     return result;
 }
 
+QList<Task*> InstanceImportTask::getSubTasks() const
+{
+    return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{};
+}
+
 class DiscardWriteDevice final : public QIODevice {
    public:
     DiscardWriteDevice() { open(QIODevice::WriteOnly); }

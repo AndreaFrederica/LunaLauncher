@@ -214,11 +214,9 @@ class TaskObject {
         }
         const auto id = taskId.isEmpty() ? task->getUid().toString(QUuid::WithoutBraces) : taskId;
         QJsonArray children;
-        if (const auto concurrent = dynamic_cast<const ConcurrentTask*>(task)) {
-            for (auto* child : concurrent->getSubTasks()) {
-                if (!child || child == task) continue;
-                children.append(TaskObject(child).snapshot());
-            }
+        for (auto* child : task->getSubTasks()) {
+            if (!child || child == task) continue;
+            children.append(TaskObject(child).snapshot());
         }
         QJsonObject result{ { "id", id },
                             { "type", QString::fromLatin1(task->metaObject()->className()) },

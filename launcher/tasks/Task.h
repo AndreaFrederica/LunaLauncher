@@ -130,6 +130,7 @@ class Task : public QObject, public QRunnable {
     qint64 getTotalProgress() { return m_progressTotal; }
     qint64 getTransferRate() const { return m_transferRate; }
     virtual auto getStepProgress() const -> TaskStepProgressList;
+    virtual QList<Task*> getSubTasks() const { return {}; }
 
     QUuid getUid() { return m_uid; }
 

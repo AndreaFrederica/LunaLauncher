@@ -967,6 +967,11 @@ class InstanceStaging : public Task {
 
     ~InstanceStaging() override = default;
 
+    QList<Task*> getSubTasks() const override
+    {
+        return m_child ? QList<Task*>{ m_child.get() } : QList<Task*>{};
+    }
+
     // FIXME/TODO: add ability to abort during instance commit retries
     bool abort() override
     {

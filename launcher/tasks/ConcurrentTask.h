@@ -64,7 +64,7 @@ class ConcurrentTask : public Task {
     auto getStepProgress() const -> TaskStepProgressList override;
 
     /** Return the queued, active and completed child tasks for API/UI inspection. */
-    QList<Task*> getSubTasks() const;
+    QList<Task*> getSubTasks() const override;
 
     //! Adds a task to execute in this ConcurrentTask
     void addTask(Task::Ptr task);

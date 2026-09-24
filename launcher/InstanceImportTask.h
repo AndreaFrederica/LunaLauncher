@@ -48,6 +48,7 @@ class InstanceImportTask : public InstanceTask {
     explicit InstanceImportTask(const QUrl& sourceUrl, QWidget* parent = nullptr, QMap<QString, QString>&& extra_info = {});
     virtual ~InstanceImportTask() = default;
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
    protected:
     //! Entry point for tasks.

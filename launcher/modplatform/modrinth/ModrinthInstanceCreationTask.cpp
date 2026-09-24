@@ -39,6 +39,11 @@ bool ModrinthCreationTask::abort()
     return InstanceCreationTask::abort();
 }
 
+QList<Task*> ModrinthCreationTask::getSubTasks() const
+{
+    return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{};
+}
+
 bool ModrinthCreationTask::updateInstance()
 {
     auto instance_list = APPLICATION->instances();

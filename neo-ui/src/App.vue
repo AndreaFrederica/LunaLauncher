@@ -5,7 +5,6 @@
  <main class="xmcl-main">
  <div class="xmcl-content neo-page">
  <XmclDashboard v-if="page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
- <q-tabs v-if="page==='manage' && openedInstances.length" :model-value="selected?.id" align="left" outside-arrows mobile-arrows class="q-mb-lg"><q-tab v-for="i in openedInstances" :key="i.id" :name="i.id" :label="i.name" icon="sports_esports" @click="openInstance(i)"/></q-tabs>
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
  <q-linear-progress v-if="busy" indeterminate class="q-mb-md" />
  <XmclInstanceWorkspace v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
@@ -64,7 +63,6 @@ import SettingsPanel from './components/SettingsPanel.vue';
 import InstanceExtras from './components/InstanceExtras.vue';
 import LauncherControlPanel from './components/LauncherControlPanel.vue';
 import AccountPanel from './components/AccountPanel.vue';
-import InstanceSettingsPanel from './components/InstanceSettingsPanel.vue';
 import ServerPanel from './components/ServerPanel.vue';
 import ResourceUpdatesPanel from './components/ResourceUpdatesPanel.vue';
 import XmclSidebar from './xmcl-port/XmclSidebar.vue';
@@ -98,7 +96,7 @@ async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name
 const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false),searchShown=ref(false),globalSearch=ref('');
 const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
 const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
-const openedInstances=ref<any[]>([]),launchQueue=ref<any[]>([]);
+const launchQueue=ref<any[]>([]);
 const detailCache=new Map<string,any>();
 let launchingId='',preparingLaunch=false;
 const sessions=new Map<string,{subscription:string;lines:string[];state:string}>();
@@ -112,13 +110,16 @@ async function appendConsole(text:string,instanceId=selected.value?.id){
 function receiveStream(batch:any){
  const entry=[...sessions.entries()].find(([,v])=>v.subscription===batch.subscriptionId);
  if(!entry)return;
- if(entry[0]!==selected.value?.id){for(const event of batch.events||[]){if(event.kind==='console.line')entry[1].lines.push(event.text);if(event.kind==='instance.state')entry[1].state=event.running?'客户端运行中':'客户端已停止';}entry[1].lines.splice(0,Math.max(0,entry[1].lines.length-3000));return;}
+ const instanceId=entry[0];
+ const updateRunning=(running:boolean)=>{instances.value=instances.value.map((item:any)=>item.id===instanceId?{...item,running}:item);if(selected.value?.id===instanceId)selected.value={...selected.value,running};};
+ if(entry[0]!==selected.value?.id){for(const event of batch.events||[]){if(event.kind==='console.line')entry[1].lines.push(event.text);if(event.kind==='instance.state'){entry[1].state=event.running?'客户端运行中':'客户端已停止';updateRunning(Boolean(event.running));}}entry[1].lines.splice(0,Math.max(0,entry[1].lines.length-3000));return;}
  if(batch.dropped)void appendConsole(`[日志缓冲区已省略 ${batch.dropped} 条消息]`);
  for(const event of batch.events || []){
   if(event.kind==='console.line')void appendConsole(event.text);
   else if(event.kind==='console.data')void appendConsole(new TextDecoder().decode(Uint8Array.from(atob(event.data),c=>c.charCodeAt(0))));
   else if(event.kind==='instance.state'){
    consoleState.value=event.running?'客户端运行中':'客户端已停止';
+   updateRunning(Boolean(event.running));
    void appendConsole(`[${consoleState.value}]`);
   }else if(event.kind==='console.reset')consoleState.value=event.available?'控制台已连接':'等待启动';
  }
@@ -207,7 +208,6 @@ async function create(){const p:any={...creation.value};for(const k of Object.ke
 async function openInstance(i:any,forceRead=false){
  if(preparingLaunch&&!forceRead)return;
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});
- if(!openedInstances.value.some(x=>x.id===i.id))openedInstances.value.push(i);
  if(selected.value?.id!==i.id){
   const old=sessions.get(selected.value?.id);if(old){old.lines=consoleLines.value;old.state=consoleState.value;}
   const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||'未连接';logFile.value='';fileLog.value='';logFiles.value=[];
@@ -243,7 +243,7 @@ async function openFolder(){
 }
 async function copyText(value:string){try{await navigator.clipboard?.writeText(value);notice.value='已复制到剪贴板';}catch{/* Clipboard may be unavailable in the web preview. */}}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
-onMounted(async()=>{try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit(()=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';error.value='启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){if(launchInFlight)void appendConsole('[启动] '+(raw.message || raw.data?.message || ''),launchingId);status.value=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');}else if(raw.kind==='task'){handleTaskUpdate(raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
+onMounted(async()=>{try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit(()=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value='启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){if(launchInFlight)void appendConsole('[启动] '+(raw.message || raw.data?.message || ''),launchingId);status.value=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');}else if(raw.kind==='task'){handleTaskUpdate(raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
 onUnmounted(()=>{unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>

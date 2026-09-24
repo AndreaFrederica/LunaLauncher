@@ -3,7 +3,7 @@
   <div class="xmcl-setting-page">
     <nav class="xmcl-setting-sidebar" aria-label="设置导航"><div class="xmcl-setting-card"><div class="xmcl-setting-label">{{ isInstance ? '客户端设置' : '启动器设置' }}</div><button v-for="item in sections" :key="item.id" :class="{active:section===item.id}" @click="section=item.id"><q-icon :name="item.icon" size="18px"/><span>{{ item.label }}</span><small v-if="item.count !== undefined">{{ item.count }}</small></button></div></nav>
     <main class="xmcl-setting-content">
-      <section v-if="section==='all'" class="xmcl-setting-section"><header><q-icon name="tune"/><div><h5>{{ isInstance ? '客户端设置' : '启动器设置' }}</h5><p>设置项由 Launcher API 返回，按功能和 UI 作用范围分类。</p></div></header><SettingsPanel v-model:category="category" :settings="settings" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
+      <section v-if="section==='all'" class="xmcl-setting-section"><header><q-icon name="tune"/><div><h5>{{ isInstance ? '客户端设置' : '启动器设置' }}</h5><p>设置项由 Launcher API 返回，按功能和 UI 作用范围分类。</p></div></header><InstanceSettingsPanel v-if="isInstance" :settings="settings" :busy="busy" :scope="scope" :execute="execute" @changed="emit('changed')"/><LauncherSettingsPanel v-else :settings="settings" :busy="busy" :scope="scope" :execute="execute" @changed="emit('changed')"/></section>
       <section v-else-if="isCategorySection" class="xmcl-setting-section"><header><q-icon :name="categoryIcon"/><div><h5>{{ categoryLabel }}</h5><p>{{ categoryDescription }}</p></div></header><SettingsPanel v-model:category="category" :settings="settings" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
       <section v-else-if="section==='runtime'" class="xmcl-setting-section"><header><q-icon name="code"/><div><h5>Java 与运行环境</h5><p>检测 Java、诊断兼容性并选择运行时。</p></div></header><JavaPanel :scope="scope" :settings="settings" :busy="busy" :execute="execute" @changed="emit('changed')"/></section>
       <section v-else-if="section==='tools'" class="xmcl-setting-section"><header><q-icon name="palette"/><div><h5>Neo UI 外观</h5><p>管理 Neo UI 自己的主题、强调色、密度和界面动效。</p></div></header><NeoUiAppearancePanel /></section>
@@ -15,6 +15,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import JavaPanel from '../components/JavaPanel.vue';
+import InstanceSettingsPanel from '../components/InstanceSettingsPanel.vue';
+import LauncherSettingsPanel from '../components/LauncherSettingsPanel.vue';
 import SettingsPanel from '../components/SettingsPanel.vue';
 import LauncherControlPanel from '../components/LauncherControlPanel.vue';
 import NeoUiAppearancePanel from '../components/NeoUiAppearancePanel.vue';

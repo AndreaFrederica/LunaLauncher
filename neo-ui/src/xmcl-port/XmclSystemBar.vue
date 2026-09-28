@@ -3,6 +3,7 @@
     <button class="system-bar-back" aria-label="刷新实例库" @click="emit('refresh')"><span class="material-icons">arrow_back</span></button>
     <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging"><strong>Luna Launcher</strong><small>NEO UI</small></div>
     <div class="system-bar-spacer" data-tauri-drag-region @mousedown="startDragging" />
+    <button class="system-bar-badge" aria-label="Web UI 管理" title="Web UI 管理 (Ctrl+Shift+U)" @click="openWebUiManager"><span class="material-icons">web</span></button>
     <button class="system-bar-badge" aria-label="搜索" @click="emit('search')"><span class="material-icons">search</span></button>
     <button class="system-bar-badge" aria-label="任务" @click="emit('tasks')"><span class="material-icons">assignment</span><i v-if="busy" /></button>
     <span class="system-bar-status"><span class="status-dot" :class="{ connected }" />{{ connected ? '已连接' : '未连接' }}</span>
@@ -14,6 +15,13 @@
 </template>
 <script setup lang="ts">
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { launcher } from '../boot/launcher-api';
+import { useQuasar } from 'quasar';
+const quasar = useQuasar();
+async function openWebUiManager() {
+  try { await launcher.openWebUiManager(); }
+  catch (e: any) { quasar.notify({ type: 'negative', message: e.message || String(e), timeout: 4000 }); }
+}
 defineProps<{ connected: boolean; busy: boolean }>();
 const emit = defineEmits<{ refresh: []; tasks: []; search: [] }>();
 async function minimize() { try { await getCurrentWindow().minimize(); } catch { /* Web preview has no native window. */ } }

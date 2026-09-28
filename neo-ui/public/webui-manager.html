@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Web UI 管理</title>
+<style>
+*{box-sizing:border-box}body{background:#101722;color:#e2e8f0;font:14px/1.6 system-ui;margin:0;padding:24px}h1{margin:0;font-size:24px}p{color:#94a3b8}header{display:flex;justify-content:space-between;align-items:center;gap:12px}button{background:#263247;color:#e2e8f0;border:1px solid #43516b;border-radius:8px;padding:8px 14px;cursor:pointer;white-space:nowrap}button:disabled{opacity:.5;cursor:default}button:hover:enabled{background:#364560}.entry{padding:16px;margin-top:12px;border:1px solid #334155;border-radius:12px;background:#182233}.entry.active{border-color:#818cf8}.entry p{margin:8px 0}.path{font:12px monospace;overflow-wrap:anywhere;white-space:normal}.error{color:#fca5a5;white-space:pre-wrap}.roots{border-top:1px solid #334155;margin-top:22px;padding-top:14px}.root{margin-bottom:12px}small{color:#94a3b8}strong{font-size:16px}#status:empty{display:none}
+</style></head><body>
+<header><h1>Web UI 管理</h1><button id="refresh">刷新列表</button></header>
+<p>将编译后的静态文件放在 webui 下的独立文件夹，入口为 index.html。可选 webui.json 用于描述名称和版本。</p>
+<p>切换会重新加载页面，未保存的界面输入会丢失。运行中的客户端继续运行；请先完成当前下载或登录。</p>
+<p id="status" role="status" class="error"></p><div id="entries"></div><section class="roots"><strong>扫描目录</strong><div id="roots"></div></section>
+<p><small>Ctrl / ⌘ + Shift + U 可随时打开此窗口。仅使用你信任的 Web UI，它可以调用启动器 API。</small></p>
+<script>
+const invoke = (name, parameters) => window.__TAURI__.core.invoke(name, parameters);
+const status = document.getElementById('status');
+function element(tag, text, className) { const e=document.createElement(tag); e.textContent=text; if(className)e.className=className; return e; }
+async function refresh(){
+  try {
+    const result=await invoke('webui_list'); status.textContent=result.warning || '';
+    const list=document.getElementById('entries'); list.replaceChildren();
+    for(const entry of result.entries){
+      const card=element('article','','entry'+(entry.id===result.active?' active':''));
+      const header=element('header',''); header.append(element('strong',entry.name));
+      const button=element('button',entry.id===result.active?'重新加载':'使用此界面'); button.disabled=!!entry.error;
+      button.onclick=async()=>{button.disabled=true;try{await invoke('webui_select',{id:entry.id});status.textContent='已切换到 '+entry.name;setTimeout(refresh,500);}catch(e){status.textContent=e.message||String(e);button.disabled=false;}};
+      header.append(button);card.append(header,element('small',`${entry.source} ${entry.version}`));
+      if(entry.description)card.append(element('p',entry.description));
+      if(entry.path)card.append(element('p',entry.path,'path'));
+      if(entry.error)card.append(element('p',entry.error,'error'));
+      list.append(card);
+    }
+    const roots=document.getElementById('roots');roots.replaceChildren();
+    for(const root of result.roots){const row=element('div','','root');const button=element('button',root.source==='data'?'打开数据目录下的 webui':'打开安装目录下的 webui');button.onclick=()=>invoke('webui_open_folder',{source:root.source}).catch(e=>status.textContent=e.message||String(e));row.append(element('p',root.path,'path'),button);roots.append(row);}
+  }catch(e){status.textContent=e.message||String(e);}
+}
+document.getElementById('refresh').onclick=refresh;refresh();
+</script></body></html>

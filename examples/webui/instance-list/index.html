@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Luna · 实例列表</title>
+<style>body{margin:0;padding:32px;background:#101722;color:#e2e8f0;font:15px/1.6 system-ui}header{display:flex;align-items:center;gap:14px}h1{flex:1;font-size:26px}button{background:#334155;color:#fff;border:0;border-radius:8px;padding:10px 16px;cursor:pointer}.instance{display:flex;gap:16px;align-items:center;padding:16px;margin-top:12px;border:1px solid #334155;border-radius:12px}.instance img{width:54px;height:54px;object-fit:contain}.instance div{flex:1}.instance small,p{color:#94a3b8}#error{color:#fda4af;white-space:pre-wrap}</style></head>
+<body><header><h1>实例列表</h1><button id="refresh">刷新</button><button id="uis">切换 Web UI</button></header><p>这是一套独立于内置 Neo UI 的静态界面示例。完整管理功能请切回内置界面。</p><p id="error" role="alert"></p><main id="instances"></main>
+<script>
+async function load(){
+  try {
+    if(!window.luna)throw new Error('请在 Luna Neo UI 中加载此目录');
+    const result=await luna.execute('instance.list');if(!result.ok)throw new Error(result.error);
+    const list=document.getElementById('instances');list.replaceChildren();
+    for(const instance of result.data){
+      const row=document.createElement('article');row.className='instance';const image=document.createElement('img');image.alt=instance.name;
+      const copy=document.createElement('div');const title=document.createElement('strong');title.textContent=instance.name;
+      const detail=document.createElement('small');detail.textContent=[instance.group||'未分组',instance.running?'运行中':'未运行'].join(' · ');
+      copy.append(title,document.createElement('br'),detail);row.append(image,copy);list.append(row);
+      const icon=await luna.execute('instance.icon',{instance:instance.id});if(icon.ok)image.src=icon.data.dataUrl;
+    }
+    if(!result.data.length)list.textContent='尚无实例';
+  }catch(e){document.getElementById('error').textContent=e.message||String(e);}
+}
+document.getElementById('refresh').onclick=load;
+document.getElementById('uis').onclick=()=>luna.openWebUiManager();
+load();
+</script></body></html>

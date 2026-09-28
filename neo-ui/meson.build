@@ -14,6 +14,11 @@ neo_ui_sources = files(
   'src/types.d.ts',
   'src/css/app.scss',
   'src/boot/launcher-api.ts',
+  'src/components/NeoUiAppearancePanel.vue',
+  'src/neo-ui-preferences.ts',
+  'public/webui-bootstrap.html',
+  'public/webui-manager.html',
+  'public/webui-bridge.js',
   'src/router/index.ts',
   'src/pages/IndexPage.vue',
   'src/components/AccountPanel.vue',
@@ -40,11 +45,13 @@ neo_ui_sources = files(
   'src-tauri/build.rs',
   'src-tauri/tauri.conf.json',
   'src-tauri/src/main.rs',
+  'src-tauri/src/webui.rs',
   '../program_info/lunalauncher.ico',
   '../scripts/build_neo_ui.py',
 )
 
 neo_ui_name = is_windows ? 'luna-neo-ui.exe' : 'luna-neo-ui'
+install_emptydir(binary_dest_dir / 'webui')
 neo_ui_target = custom_target(
   'luna-neo-ui',
   input: neo_ui_sources,

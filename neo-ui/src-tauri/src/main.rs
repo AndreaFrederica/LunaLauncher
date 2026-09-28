@@ -11,6 +11,7 @@ use std::{
     thread,
 };
 use tauri::{Emitter, Manager, State};
+mod webui;
 
 struct Sidecar {
     child: Child,
@@ -140,6 +141,7 @@ async fn launcher_request(
     method: String,
     parameters: Value,
 ) -> Result<Value, ApiError> {
+    let _lease = webui::RequestLease::acquire(&app).map_err(|message| ApiError { message })?;
     if !["launcher/execute", "launcher/respond", "launcher/catalog"].contains(&method.as_str()) {
         return Err(ApiError {
             message: "Unsupported protocol method".into(),
@@ -204,8 +206,44 @@ async fn launcher_request(
 fn main() {
     tauri::Builder::default()
         .manage(AppState(Mutex::new(None)))
+        .manage(webui::WebUiState(Mutex::new(webui::Registry::default())))
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![launcher_request])
+        .plugin(
+            tauri::plugin::Builder::<_, ()>::new("webui")
+                .js_init_script(include_str!("../../public/webui-bridge.js").to_string())
+                .build(),
+        )
+        .register_uri_scheme_protocol("webui", |context, request| {
+            webui::serve(context.app_handle(), request)
+        })
+        .setup(webui::setup)
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                // New documents call the bridge while scripts are loading,
+                // before PageLoadEvent::Finished (including external modules).
+                if let Ok(mut state) = webview.state::<webui::WebUiState>().0.lock() {
+                    state.switching = false;
+                }
+            }
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                // The recovery window must not keep a closed launcher alive.
+                if let Some(manager) = window.get_webview_window("webui-manager") {
+                    let _ = manager.close();
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            launcher_request,
+            webui::webui_list,
+            webui::webui_select,
+            webui::webui_initialize,
+            webui::webui_manager,
+            webui::webui_open_folder
+        ])
         .build(tauri::generate_context!())
         .expect("error while building Neo UI")
         .run(|app, event| {

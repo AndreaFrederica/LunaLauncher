@@ -1,6 +1,10 @@
 <template>
   <div class="neo-appearance-panel">
     <div class="preference-card">
+      <div class="preference-heading"><q-icon name="web"/><div><strong>Web UI</strong><p>从启动器目录或数据目录的 webui 文件夹加载独立界面。</p></div></div>
+      <q-btn class="q-mt-md" color="primary" icon="web" label="管理与切换 Web UI" @click="openWebUiManager" />
+    </div>
+    <div class="preference-card">
       <div class="preference-heading"><q-icon name="palette"/><div><strong>Neo UI 外观</strong><p>这些选项只影响当前 Web/Tauri 界面，不会修改 Qt 旧界面的主题。</p></div></div>
       <div class="preference-grid">
         <q-select v-model="preferences.theme" dark outlined label="颜色模式" :options="themeOptions" emit-value map-options />
@@ -18,6 +22,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { neoUiPreferences, resetNeoUiPreferences } from '../neo-ui-preferences';
+import { launcher } from '../boot/launcher-api';
+import { useQuasar } from 'quasar';
+const quasar = useQuasar();
+async function openWebUiManager() {
+  try { await launcher.openWebUiManager(); }
+  catch (e: any) { quasar.notify({ type: 'negative', message: e.message || String(e), timeout: 4000 }); }
+}
 const preferences = neoUiPreferences;
 const accents = ['#818cf8', '#38bdf8', '#34d399', '#f59e0b', '#f472b6', '#fb7185'];
 const themeOptions = [{ label: '深色', value: 'dark' }, { label: '浅色', value: 'light' }, { label: '跟随系统', value: 'system' }];

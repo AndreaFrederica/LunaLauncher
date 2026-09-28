@@ -438,9 +438,8 @@ def deploy(root: Path, profile: str) -> None:
 
 def install(root: Path, profile: str) -> None:
     validate_profile(profile)
-    idir = install_dir(root, profile)
-    if idir.exists():
-        shutil.rmtree(idir)
+    # Install in place: users may keep external Web UIs and portable data here.
+    # Meson overwrites installed artifacts without removing unmanaged files.
     run(["meson", "install", "-C", str(build_dir(root, profile)), "--no-rebuild"], cwd=root, env=task_env(root, profile))
     deploy(root, profile)
 

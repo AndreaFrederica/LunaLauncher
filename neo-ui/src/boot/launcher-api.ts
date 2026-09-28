@@ -94,6 +94,10 @@ export class LauncherApiClient {
     // Windows when Explorer is already running.
     await revealItemInDir(path);
   }
+  async openWebUiManager(): Promise<void> {
+    this.requireDesktop();
+    await invoke('webui_manager');
+  }
   onEvent(handler: (event: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();
     return listen('launcher-event', event => handler(event.payload));

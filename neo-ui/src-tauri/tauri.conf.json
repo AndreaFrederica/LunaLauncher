@@ -7,9 +7,11 @@
     "frontendDist": "../dist/spa"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Luna Neo UI",
+        "url": "webui-bootstrap.html",
         "width": 1200,
         "height": 800,
         "decorations": false,
@@ -23,7 +25,8 @@
         {
           "identifier": "main-events",
           "windows": [
-            "main"
+            "main",
+            "webui-manager"
           ],
           "permissions": [
             "core:event:allow-listen",

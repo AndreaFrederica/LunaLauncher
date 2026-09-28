@@ -9,6 +9,7 @@
 #include "cli/HeadlessBlockedMods.h"
 #include "Json.h"
 #include "cli/OperationService.h"
+#include "icons/IconList.h"
 #include "meta/Version.h"
 #include "meta/VersionList.h"
 #include "modplatform/atlauncher/ATLPackIndex.h"
@@ -24,12 +25,15 @@
 #include "net/ApiDownload.h"
 #include "settings/SettingsObject.h"
 #include <QCryptographicHash>
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QSet>
 #include <QUrlQuery>
+#include <memory>
 
 namespace {
 using namespace ApiSupport;
@@ -135,20 +139,85 @@ public:
     void displayMessage(QString message) override { ui.status(message); }
 };
 
-QJsonObject install(LauncherApi& api, InstanceTask* raw, const QJsonObject& p, const QString& defaultName, UserInteraction& ui)
+QString savePackIcon(const QImage& image, QString& error)
 {
+    if (image.isNull()) {
+        error = QObject::tr("The pack cover is not a readable image.");
+        return {};
+    }
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+        error = QObject::tr("Could not encode the pack cover.");
+        return {};
+    }
+    // Content-derived keys avoid collisions between projects and preserve
+    // existing instances' icons when a project changes its cover.
+    const auto key = "pack_" + QString::fromLatin1(QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex());
+    auto* icons = APPLICATION->icons();
+    const auto path = QDir(icons->getDirectory()).filePath(key + ".png");
+    QSaveFile file(path);
+    if (!QDir().mkpath(icons->getDirectory()) || !file.open(QIODevice::WriteOnly) ||
+        file.write(png) != png.size() || !file.commit()) {
+        error = QObject::tr("Could not save the pack cover: %1").arg(file.errorString());
+        return {};
+    }
+    // Register it immediately, just as Qt does before extracting the task.
+    if (!icons->addIcon(key, key, path, IconType::FileBased)) {
+        error = QObject::tr("Could not register the pack cover.");
+        return {};
+    }
+    return key;
+}
+
+QString downloadPackIcon(LauncherApi& api, const QUrl& url, UserInteraction& ui, QString& error)
+{
+    if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "https" && url.scheme() != "http")) {
+        error = QObject::tr("The provider returned an invalid pack cover URL.");
+        return {};
+    }
+    auto job = makeShared<NetJob>(QObject::tr("Downloading pack cover"), APPLICATION->network());
+    job->setAskRetry(false);
+    auto [request, response] = Net::ApiDownload::makeByteArray(url);
+    job->addNetAction(request);
+    if (!wait(api, job, ui, error)) return {};
+    return savePackIcon(QImage::fromData(*response), error);
+}
+
+QJsonObject install(LauncherApi& api, InstanceTask* raw, const QJsonObject& p, const QString& defaultName, UserInteraction& ui,
+                    const QUrl& iconUrl = {}, const QImage& localIcon = {})
+{
+    std::unique_ptr<InstanceTask> pending(raw);
+    auto icon = p.value("icon").toString("default");
+    if (icon.isEmpty()) icon = "default";
+    QJsonArray warnings;
+    // Provider pages in Qt download a project cover and pass its installed key
+    // through NewInstanceDialog::extractTask(). The archive importer alone only
+    // knows about bundled icons and provider fallbacks, not catalog covers.
+    if (icon == "default" && (!iconUrl.isEmpty() || !localIcon.isNull())) {
+        QString iconError;
+        const auto cover = localIcon.isNull() ? downloadPackIcon(api, iconUrl, ui, iconError) : savePackIcon(localIcon, iconError);
+        if (!cover.isEmpty()) icon = cover;
+        if (!iconError.isEmpty()) {
+            const auto warning = QObject::tr("Could not install the pack cover; using the pack's fallback icon. %1").arg(iconError);
+            warnings.append(warning);
+            ui.status(warning);
+        }
+    }
+    if (api.isCancellationRequested()) return OperationService::failure("Pack installation cancelled.");
     raw->setName(p.value("name").toString(defaultName));
-    raw->setGroup(p.value("group").toString()); raw->setIcon(p.value("icon").toString("default"));
+    raw->setGroup(p.value("group").toString()); raw->setIcon(icon);
     QSet<QString> before;
     const auto instances = APPLICATION->instances();
     for (int i = 0; i < instances->count(); ++i) before.insert(instances->at(i)->id());
-    Task::Ptr task(instances->wrapInstanceTask(raw));
+    Task::Ptr task(instances->wrapInstanceTask(pending.release()));
     QString error;
     if (!wait(api, task, ui, error)) return OperationService::failure(error);
     instances->saveNow();
     QJsonArray added;
     for (int i = 0; i < instances->count(); ++i) if (!before.contains(instances->at(i)->id())) added.append(instances->at(i)->id());
-    return OperationService::success(QJsonObject{ { "installed", true }, { "instances", added } });
+    return OperationService::success(QJsonObject{ { "installed", true }, { "instances", added }, { "warnings", warnings } });
 }
 
 QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonObject& p, UserInteraction& ui)
@@ -172,18 +241,20 @@ QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonOb
         for (const auto& value : versions.value("data").toArray()) {
             const auto entry = value.toObject();
             if (entry.value("versionId").toString() == version) {
+                const auto projectResult = api.execute("resource.project", request, ui);
+                if (!projectResult.value("ok").toBool()) return projectResult;
+                const auto project = projectResult.value("data").toObject();
                 auto download = entry.value("downloadUrl").toString();
                 if (download.isEmpty()) {
                     if (source != "curseforge") return OperationService::failure("Provider did not supply a downloadable pack.", 2);
-                    const auto project = api.execute("resource.project", request, ui);
-                    if (!project.value("ok").toBool()) return project;
-                    QList<BlockedMod> blocked{ { entry.value("fileName").toString(), project.value("data").toObject().value("websiteUrl").toString() + "/download/" + version,
+                    QList<BlockedMod> blocked{ { entry.value("fileName").toString(), project.value("websiteUrl").toString() + "/download/" + version,
                         entry.value("hash").toString(), false, {} } };
                     QString error;
                     if (!resolveHeadlessBlockedMods(blocked, entry.value("hashType").toString(), error)) return OperationService::failure(error);
                     download = QUrl::fromLocalFile(blocked.first().localPath).toString();
                 }
-                return install(api, new InstanceImportTask(QUrl(download), nullptr, { { "pack_id", id }, { "pack_version_id", version } }), p, id, ui);
+                return install(api, new InstanceImportTask(QUrl(download), nullptr, { { "pack_id", id }, { "pack_version_id", version } }),
+                               p, project.value("name").toString(id), ui, QUrl(project.value("iconUrl").toString()));
             }
         }
         return OperationService::failure("Pack version not found.", 2);
@@ -206,7 +277,8 @@ QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonOb
                 QJsonObject entry{ { "projectId", pack.safeName }, { "name", pack.name }, { "description", pack.description }, { "versions", versions }, { "raw", object } };
                 if (installing) {
                     if (!found) return OperationService::failure("Pack version not found.", 2);
-                    return install(api, new ATLauncher::PackInstallTask(new AtlInteraction(api, ui, p), pack.name, version), p, pack.name, ui);
+                    return install(api, new ATLauncher::PackInstallTask(new AtlInteraction(api, ui, p), pack.name, version), p, pack.name, ui,
+                                   QUrl(BuildConfig.ATL_DOWNLOAD_SERVER_URL + "launcher/images/" + pack.safeName));
                 }
                 if (!search) return OperationService::success(action == "versions" ? QJsonValue(versions) : QJsonValue(entry));
                 result.append(entry);
@@ -237,7 +309,9 @@ QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonOb
             for (const auto& v : pack.versions) { versions.append(QJsonObject{ { "versionId", QString::number(v.id) }, { "name", v.name }, { "type", v.type } }); if (QString::number(v.id) == version || v.name == version) selected = v.name; }
             if (installing) {
                 if (selected.isEmpty()) return OperationService::failure("Pack version not found.", 2);
-                return install(api, new FTB::PackInstallTask(pack, selected), p, pack.name, ui);
+                QUrl cover;
+                for (const auto& art : pack.art) if (art.type == "square") cover = QUrl(art.url);
+                return install(api, new FTB::PackInstallTask(pack, selected), p, pack.name, ui, cover);
             }
             return OperationService::success(action == "versions" ? QJsonValue(versions) : QJsonValue(object));
         }
@@ -269,7 +343,7 @@ QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonOb
             if (!found || !downloadUrl.isValid() || downloadUrl.host().isEmpty() || (downloadUrl.scheme() != "http" && downloadUrl.scheme() != "https")) return OperationService::failure("Invalid pack version or download URL.", 2);
             InstanceTask* task = solder ? static_cast<InstanceTask*>(new Technic::SolderPackInstallTask(APPLICATION->network().get(), download, id, version, object.value("minecraft").toString())) :
                 static_cast<InstanceTask*>(new Technic::SingleZipPackInstallTask(download, object.value("minecraft").toString()));
-            return install(api, task, p, object.value("displayName").toString(id), ui);
+            return install(api, task, p, object.value("displayName").toString(id), ui, QUrl(object.value("icon").toObject().value("url").toString()));
         }
         if (source == "legacy-ftb") {
             LegacyFTB::ModpackList packs;
@@ -290,7 +364,8 @@ QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonOb
                 for (const auto& v : pack.oldVersions) versions.append(QJsonObject{ { "versionId", v } });
                 if (installing) {
                     if (!pack.oldVersions.contains(version)) return OperationService::failure("Pack version not found.", 2);
-                    return install(api, new LegacyFTB::PackInstallTask(APPLICATION->network().get(), pack, version), p, pack.name, ui);
+                    const auto cover = pack.logo.isEmpty() ? QUrl{} : QUrl(BuildConfig.LEGACY_FTB_CDN_BASE_URL + "static/" + pack.logo);
+                    return install(api, new LegacyFTB::PackInstallTask(APPLICATION->network().get(), pack, version), p, pack.name, ui, cover);
                 }
                 QJsonObject entry{ { "projectId", pack.dir }, { "name", pack.name }, { "description", pack.description },
                     { "author", pack.author }, { "minecraftVersion", pack.mcVersion }, { "versions", versions } };
@@ -359,7 +434,7 @@ void registerLauncherApiPackOperations(LauncherApi& api)
         [&api](const QJsonObject& p, UserInteraction& ui) {
             const auto pack = FTBImportAPP::parseDirectory(p.value("path").toString());
             if (pack.path.isEmpty()) return OperationService::failure("Invalid FTB App instance.", 2);
-            return install(api, new FTBImportAPP::PackInstallTask(pack), p, pack.name, ui);
+            return install(api, new FTBImportAPP::PackInstallTask(pack), p, pack.name, ui, {}, pack.icon.pixmap(128, 128).toImage());
         });
     api.registerOperation({ "modpack.atlauncher.share-code", "Resolve an ATLauncher share code, including optional mod choices.",
         schema({ { "code", string("Share code.") }, { "offline", boolean() } }, { "code" }), "modpacks" },

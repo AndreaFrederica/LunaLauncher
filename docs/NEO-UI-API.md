@@ -1,5 +1,8 @@
 # Tauri / Neo UI 接入
 
+独立 Web UI 的构建、目录约定和 `window.luna` 接口见
+[Web UI 开发与构建](WEBUI-DEVELOPMENT.md)。本文说明宿主与后端之间的原始协议。
+
 采用常驻子进程即可复用当前启动器核心。Neo UI 不需要链接 Qt；后端仍使用
 Qt 和现有实例、账户、下载、设置实现。新增接口集中在 `launcher/api`，GUI
 和核心任务保持原有结构，方便继续合并上游。
@@ -153,4 +156,4 @@ if (!result.ok) showError(result.error);
 `log.reset`。`server.console.write` 最多 32 KiB，command 会补换行，resize 范围为
 1–1000。外观接口应用 Qt 后端主题，Neo UI 自己负责浏览器样式和文案翻译。
 
-当前接口目录为 **208 项**。已覆盖实例、组件、资源与依赖、整合包目录和安装、托管包更新、世界与 datapack、账户与 Java、设置导入导出、外观语言、日志截图、更新器、终端和联机整合。仍属于服务端边界的项目（例如远程服务端部署策略）会按服务端 API 的能力返回；可选第三方工具仍以 `integration.status` 报告运行时能力。
+接口目录以运行中后端的 `api.describe` / `launcher/catalog` 为准，不要硬编码接口数量。领域包含实例、组件、资源与依赖、整合包目录和安装、托管包更新、世界与 datapack、账户与 Java、设置导入导出、外观语言、日志截图、更新器、终端和联机整合。仍属于服务端边界的项目（例如远程服务端部署策略）会按服务端 API 的能力返回；可选第三方工具仍以 `integration.status` 报告运行时能力。

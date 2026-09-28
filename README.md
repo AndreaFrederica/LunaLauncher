@@ -106,6 +106,15 @@ pixi run install
 | `pixi run install` | Build and install with Meson |
 | `pixi run deploy` | Run `windeployqt` and copy runtime DLLs (Windows only) |
 | `pixi run install_qt` | Download/install Qt into `third_party/qt` |
+| `pixi run install-webui` | Configure, compile, install and deploy launcher + optional Neo Web UI |
+| `pixi run run-webui` | Run the installed Neo UI |
+| `pixi run webui-assets` | Type-check and export a standalone Web UI bundle |
+| `pixi run webui-dev` | Start frontend browser preview |
+
+For the complete Web UI workflow, bridge API, external bundles, and lifecycle
+contract, see [Web UI development](docs/WEBUI-DEVELOPMENT.md) (Chinese).
+`install-webui` defaults to `install-webui-release`; the standard `install` task
+keeps Neo UI disabled. Both workflows use Pixi's pnpm/Rust and Meson.
 
 #### Build Profiles
 
@@ -117,10 +126,10 @@ pixi run install
 
 ```bash
 # Build in debug mode
-pixi run build --profile debug
+pixi run build debug
 
 # Build for Linux (cross-compile from Windows)
-pixi run build --profile linux-x64-gcc-release
+pixi run build linux-x64-gcc-release
 ```
 
 ### Linux Native Build

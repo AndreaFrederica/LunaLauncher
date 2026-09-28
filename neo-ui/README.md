@@ -1,5 +1,18 @@
 # Neo UI
 
+完整中文开发文档：[Web UI 开发与构建](../docs/WEBUI-DEVELOPMENT.md)。
+
+```sh
+pixi run install-webui  # Configure, build, install and deploy everything
+pixi run run-webui      # Run the installed application
+pixi run webui-assets   # Export frontend only to neo-ui/dist/spa
+```
+
+The default complete installation is `install-webui-release`; optional `debug`
+selects `install-webui-debug`. Set `LUNA_BUILD_DIR` / `LUNA_INSTALL_DIR` to reuse
+an existing build/installation. `webui-dev` provides browser preview and
+`webui-check` runs type checking. The browser preview has no native API bridge.
+
 This is an optional Quasar/Vue frontend and a separate Tauri application. It is
 independent of `tools/curseforge-webview`, which remains the Tauri helper used by
 the CurseForge downloader.
@@ -10,7 +23,8 @@ directory. Enable it explicitly with `-Dneo_ui=enabled`.
 
 For development, set `LUNA_LAUNCHER_CLI` to the installed CLI executable and
 `LUNA_LAUNCHER_DATA` to a disposable launcher data directory before starting
-Tauri. Installed builds discover `lunalauncher-cli` beside the Neo UI binary.
+Tauri. Installed builds discover `lunalauncher-cli.exe` on Windows and
+`lunalauncher` on other platforms beside the Neo UI binary.
 
 Without `LUNA_LAUNCHER_DATA`, Neo UI uses the CLI's normal data-directory
 selection, including portable installations and the launcher's environment
@@ -110,7 +124,7 @@ External bundles remain separate files and do not increase the embedded UI size.
 The entire Neo UI host still stays optional via `-Dneo_ui=disabled`.
 
 To export this repository's complete Neo UI as an external bundle, run
-`pixi run pnpm --dir neo-ui build` and copy the **contents** of `neo-ui/dist/spa`
+`pixi run webui-assets` and copy the **contents** of `neo-ui/dist/spa`
 into `webui/neo-ui/`. Select that folder in Web UI management. Subsequent frontend
 changes only need another frontend build and file copy; Rust/C++ recompilation is
 unnecessary. Frontends from other projects need an adapter for the Luna API.
@@ -118,7 +132,8 @@ Reinstalling with Meson or the Pixi install task preserves external UI files.
 
 ### Verification
 
-`pixi run python tests/webui_smoke.py --exe install-neo-ui-api/luna-neo-ui.exe`
+`pixi run test-webui` (after `install-webui`), or
+`pixi run python tests/webui_smoke.py --exe install-neo-ui-api/luna-neo-ui.exe`,
 runs the installed Tauri application with disposable launcher and WebView data.
 It checks real asset loading, the injected API, login events and cancellation,
 switch protection during a request, native manager creation, navigation between

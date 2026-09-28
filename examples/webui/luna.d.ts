@@ -44,10 +44,19 @@ interface WebUiEntry {
   name: string;
   version: string;
   description: string;
-  source: 'builtin' | 'install' | 'data';
+  source: 'builtin' | 'install' | 'data' | `custom:${string}`;
   path: string | null;
   error: string | null;
   nativeFrame: boolean;
+}
+
+interface WebUiSettings {
+  rememberLastUi: boolean;
+  startupUi: string;
+  scanInstallDirectory: boolean;
+  scanDataDirectory: boolean;
+  additionalDirectories: string[];
+  showManagerOnStart: boolean;
 }
 
 interface LunaBridge {
@@ -62,10 +71,14 @@ interface LunaBridge {
   openPath(path: string): Promise<void>;
   webUis(): Promise<{
     entries: WebUiEntry[];
-    roots: Array<{ source: 'install' | 'data'; path: string }>;
+    roots: Array<{ source: 'install' | 'data' | `custom:${string}`; path: string }>;
     active: string;
     warning: string | null;
+    settingsPath: string;
+    startupOverride: string | null;
   }>;
+  webUiSettings(): Promise<WebUiSettings>;
+  updateWebUiSettings(patch: Partial<WebUiSettings>): Promise<WebUiSettings>;
   switchWebUi(id: string): Promise<void>;
   openWebUiManager(): Promise<void>;
 }

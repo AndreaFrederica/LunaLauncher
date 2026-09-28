@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
+    io::Write,
     path::{Component, Path, PathBuf},
     sync::Mutex,
 };
@@ -36,10 +37,144 @@ pub struct Root {
     path: PathBuf,
 }
 
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase", default, deny_unknown_fields)]
+pub struct Settings {
+    remember_last_ui: bool,
+    startup_ui: String,
+    scan_install_directory: bool,
+    scan_data_directory: bool,
+    additional_directories: Vec<PathBuf>,
+    show_manager_on_start: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            remember_last_ui: true,
+            startup_ui: "builtin".into(),
+            scan_install_directory: true,
+            scan_data_directory: true,
+            additional_directories: Vec::new(),
+            show_manager_on_start: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+struct Preference {
+    selected: String,
+    settings: Settings,
+}
+
+impl Default for Preference {
+    fn default() -> Self {
+        Self {
+            selected: "builtin".into(),
+            settings: Settings::default(),
+        }
+    }
+}
+
+fn directory_key(path: &Path) -> String {
+    let key = path.to_string_lossy().replace('\\', "/");
+    let key = key.trim_end_matches('/');
+    if cfg!(windows) {
+        key.to_lowercase()
+    } else {
+        key.into()
+    }
+}
+
+fn roots_for(base: &[Root], settings: &Settings) -> Vec<Root> {
+    let mut roots: Vec<_> = base
+        .iter()
+        .filter(|root| match root.source.as_str() {
+            "install" => settings.scan_install_directory,
+            "data" => settings.scan_data_directory,
+            _ => false,
+        })
+        .cloned()
+        .collect();
+    for path in &settings.additional_directories {
+        if roots
+            .iter()
+            .any(|root| directory_key(&root.path) == directory_key(path))
+        {
+            continue;
+        }
+        roots.push(Root {
+            // The path-derived ID is stable when directories are reordered.
+            source: format!(
+                "custom:{}",
+                percent_encoding::utf8_percent_encode(
+                    &directory_key(path),
+                    percent_encoding::NON_ALPHANUMERIC
+                )
+            ),
+            path: path.clone(),
+        });
+    }
+    roots
+}
+
+fn validate_settings(settings: &Settings) -> Result<(), String> {
+    if settings.startup_ui.is_empty() || settings.startup_ui.len() > 16384 {
+        return Err("默认界面 ID 无效".into());
+    }
+    if settings.additional_directories.len() > 16 {
+        return Err("最多添加 16 个额外扫描目录".into());
+    }
+    for path in &settings.additional_directories {
+        if !path.is_absolute() || path.components().any(|c| matches!(c, Component::ParentDir)) {
+            return Err("扫描目录必须是绝对路径，且不能包含 ..".into());
+        }
+        if path.to_string_lossy().len() > 4096 || path.to_string_lossy().contains('\0') {
+            return Err("扫描目录路径无效".into());
+        }
+        if path.exists() && !path.is_dir() {
+            return Err(format!("扫描路径不是目录：{}", path.display()));
+        }
+    }
+    Ok(())
+}
+
+fn merge_settings(current: &Settings, patch: serde_json::Value) -> Result<Settings, String> {
+    let patch = patch.as_object().ok_or("加载设置必须是对象")?;
+    let mut value = serde_json::to_value(current).map_err(|e| e.to_string())?;
+    value.as_object_mut().unwrap().extend(patch.clone());
+    let settings: Settings =
+        serde_json::from_value(value).map_err(|e| format!("加载设置无效：{e}"))?;
+    validate_settings(&settings)?;
+    Ok(settings)
+}
+
+fn save_preference(path: &Path, settings: &Settings, selected: &str) -> Result<(), String> {
+    let parent = path.parent().ok_or("加载设置路径不可用")?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let mut file = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    serde_json::to_writer_pretty(
+        &mut file,
+        &Preference {
+            selected: selected.into(),
+            settings: settings.clone(),
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    file.flush().map_err(|e| e.to_string())?;
+    file.as_file().sync_all().map_err(|e| e.to_string())?;
+    file.persist(path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct Registry {
+    base_roots: Vec<Root>,
     roots: Vec<Root>,
     preference: PathBuf,
+    settings: Settings,
+    selected: String,
     pub active: Option<Entry>,
     pub requests: usize,
     pub switching: bool,
@@ -207,6 +342,10 @@ pub struct Catalog {
     roots: Vec<Root>,
     active: String,
     warning: Option<String>,
+    #[serde(rename = "settingsPath")]
+    settings_path: PathBuf,
+    #[serde(rename = "startupOverride")]
+    startup_override: Option<String>,
 }
 
 #[tauri::command]
@@ -221,7 +360,37 @@ pub fn webui_list(state: State<'_, WebUiState>) -> Result<Catalog, String> {
             .map(|e| e.id.clone())
             .unwrap_or_else(|| "builtin".into()),
         warning: s.warning.clone(),
+        settings_path: s.preference.clone(),
+        startup_override: std::env::var("LUNA_WEB_UI").ok().filter(|v| !v.is_empty()),
     })
+}
+
+#[tauri::command]
+pub fn webui_settings_get(state: State<'_, WebUiState>) -> Result<Settings, String> {
+    Ok(state.0.lock().map_err(|e| e.to_string())?.settings.clone())
+}
+
+#[tauri::command]
+pub fn webui_settings_update(
+    state: State<'_, WebUiState>,
+    patch: serde_json::Value,
+) -> Result<Settings, String> {
+    let mut s = state.0.lock().map_err(|e| e.to_string())?;
+    let settings = merge_settings(&s.settings, patch)?;
+    let roots = roots_for(&s.base_roots, &settings);
+    if !scan(&roots)
+        .iter()
+        .any(|entry| entry.id == settings.startup_ui && entry.error.is_none())
+    {
+        return Err("默认界面不在启用的扫描目录中；请先选择内置界面或启用对应目录。".into());
+    }
+    // Commit only after a successful atomic write. Changing discovery does not
+    // navigate or invalidate the active bundle's resource root.
+    save_preference(&s.preference, &settings, &s.selected)?;
+    s.settings = settings.clone();
+    s.roots = roots;
+    s.warning = None;
+    Ok(settings)
 }
 
 pub fn app_url(path: &str) -> tauri::Url {
@@ -273,16 +442,9 @@ pub fn webui_select(
         s.switching = false;
         return Err(error.to_string());
     }
-    if let Some(parent) = s.preference.parent() {
-        let saved = fs::create_dir_all(parent).and_then(|_| {
-            fs::write(
-                &s.preference,
-                serde_json::to_vec(&serde_json::json!({"selected": id})).unwrap(),
-            )
-        });
-        if let Err(error) = saved {
-            s.warning = Some(format!("界面已切换，但无法保存选择：{error}"));
-        }
+    s.selected = id;
+    if let Err(error) = save_preference(&s.preference, &s.settings, &s.selected) {
+        s.warning = Some(format!("界面已切换，但无法保存选择：{error}"));
     }
     Ok(())
 }
@@ -309,8 +471,8 @@ pub async fn webui_initialize(app: tauri::AppHandle) -> Result<(), String> {
         let mut s = state.0.lock().map_err(|e| e.to_string())?;
         if let Some(root) = data_root {
             let path = root.join("webui");
-            if !s.roots.iter().any(|r| r.path == path) {
-                s.roots.push(Root {
+            if !s.base_roots.iter().any(|r| r.source == "data") {
+                s.base_roots.push(Root {
                     source: "data".into(),
                     path: path.clone(),
                 });
@@ -319,14 +481,33 @@ pub async fn webui_initialize(app: tauri::AppHandle) -> Result<(), String> {
         } else {
             s.warning = Some("未能读取启动器数据目录；目前只扫描安装目录。".into());
         }
-        let saved = fs::read(&s.preference)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-            .and_then(|v| v["selected"].as_str().map(str::to_owned));
+        let saved = match fs::read(&s.preference) {
+            Ok(bytes) => match serde_json::from_slice::<Preference>(&bytes) {
+                Ok(saved) if validate_settings(&saved.settings).is_ok() => saved,
+                _ => {
+                    s.warning = Some("加载设置无效，已使用默认加载设置。".into());
+                    Preference::default()
+                }
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Preference::default(),
+            Err(error) => {
+                s.warning = Some(format!("无法读取加载设置：{error}"));
+                Preference::default()
+            }
+        };
+        s.settings = saved.settings;
+        s.selected = saved.selected;
+        s.roots = roots_for(&s.base_roots, &s.settings);
         let selected = std::env::var("LUNA_WEB_UI")
             .ok()
-            .or(saved)
-            .unwrap_or_else(|| "builtin".into());
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| {
+                if s.settings.remember_last_ui {
+                    s.selected.clone()
+                } else {
+                    s.settings.startup_ui.clone()
+                }
+            });
         if scan(&s.roots)
             .iter()
             .any(|e| e.id == selected && e.error.is_none())
@@ -337,7 +518,18 @@ pub async fn webui_initialize(app: tauri::AppHandle) -> Result<(), String> {
             "builtin".into()
         }
     };
-    webui_select(app.clone(), app.state(), selected)
+    webui_select(app.clone(), app.state(), selected)?;
+    let show_manager = app
+        .state::<WebUiState>()
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .settings
+        .show_manager_on_start;
+    if show_manager {
+        webui_manager(app).await?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -379,11 +571,14 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .parent()
         .ok_or("Missing executable directory")?
         .join("webui");
+    let roots = vec![Root {
+        source: "install".into(),
+        path: install,
+    }];
     *app.state::<WebUiState>().0.lock().unwrap() = Registry {
-        roots: vec![Root {
-            source: "install".into(),
-            path: install,
-        }],
+        roots: roots.clone(),
+        base_roots: roots,
+        selected: "builtin".into(),
         preference: app.path().app_config_dir()?.join("webui-selection.json"),
         ..Registry::default()
     };
@@ -436,6 +631,52 @@ impl Drop for RequestLease {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn settings_roundtrip_and_legacy_selection() {
+        let legacy: Preference = serde_json::from_str(r#"{"selected":"data/old"}"#).unwrap();
+        assert_eq!(legacy.selected, "data/old");
+        assert!(legacy.settings.remember_last_ui);
+        let dir = tempfile::tempdir().unwrap();
+        let settings = merge_settings(&Settings::default(), serde_json::json!({
+            "rememberLastUi": false, "startupUi": "data/example", "additionalDirectories": [dir.path()]
+        })).unwrap();
+        let preference = dir.path().join("config/selection.json");
+        save_preference(&preference, &settings, "builtin").unwrap();
+        save_preference(&preference, &settings, "data/other").unwrap();
+        let saved: Preference = serde_json::from_slice(&fs::read(&preference).unwrap()).unwrap();
+        assert_eq!(saved.selected, "data/other");
+        assert_eq!(saved.settings, settings);
+        for patch in [
+            serde_json::json!({"typo":true}),
+            serde_json::json!({"rememberLastUi":"false"}),
+            serde_json::json!({"additionalDirectories":["relative/path"]}),
+            serde_json::json!({"startupUi":""}),
+        ] {
+            assert!(merge_settings(&settings, patch).is_err());
+        }
+    }
+    #[test]
+    fn configured_roots_keep_stable_ids_when_reordered() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("A");
+        let b = dir.path().join("B");
+        let base = vec![Root {
+            source: "install".into(),
+            path: a.clone(),
+        }];
+        let mut settings = Settings {
+            scan_install_directory: false,
+            additional_directories: vec![a, b],
+            ..Settings::default()
+        };
+        let first = roots_for(&base, &settings);
+        settings.additional_directories.reverse();
+        let second = roots_for(&base, &settings);
+        assert_eq!(first[0].source, second[1].source);
+        assert_eq!(first[1].source, second[0].source);
+        settings.scan_install_directory = true;
+        assert_eq!(roots_for(&base, &settings).len(), 2);
+    }
     #[test]
     fn discovers_both_locations_and_reports_broken_bundles() {
         let dir = tempfile::tempdir().unwrap();

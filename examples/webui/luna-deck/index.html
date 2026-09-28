@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Luna Deck</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">L</span><div>LUNA<span>DECK / 01</span></div></div>
+    <div class="nav-label">工作空间</div>
+    <nav><button class="nav-button active" data-page="library"><span>▦</span> 实例库 <b id="nav-count">—</b></button><button class="nav-button" data-page="settings"><span>☷</span> 界面加载设置</button></nav>
+    <div class="sidebar-bottom"><div class="connection"><i id="connection-dot"></i><span id="connection-label">正在连接后端</span></div><p>一个独立的 Web UI。<br>你的实例，还是原来的实例。</p><button class="secondary inverse" id="full-ui">打开完整 Neo UI ↗</button><button class="plain inverse" id="manager">Web UI 管理器</button></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>WORKSPACE <b>/</b> <span id="breadcrumb">实例库</span></span><span class="edition">EXTERNAL WEB UI <i></i> 浅色测试版</span></header>
+    <section id="library-page" class="page">
+      <div class="hero"><div><div class="eyebrow">YOUR NEXT ADVENTURE</div><h1>所有世界，<br>一个起点<span>。</span></h1><p>浏览实例与图标，或者为启动器换一个界面。</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="block b1"></div><div class="block b2"></div><div class="block b3"></div><div class="block b4"></div><span>LUNA<br>DECK.</span></div></div>
+      <div class="stats"><div><small>全部实例</small><strong id="total-count">—</strong></div><div><small>正在运行</small><strong id="running-count">—</strong></div><div><small>实例分组</small><strong id="group-count">—</strong></div><button class="plain" id="refresh">刷新实例 ↻</button></div>
+      <div class="section-heading"><h2>我的实例 <span>LIBRARY</span></h2><div class="filters"><input id="search" type="search" placeholder="搜索实例…" aria-label="搜索实例"><select id="group" aria-label="实例分组"><option value="">所有分组</option></select></div></div>
+      <div id="instances" class="instance-grid"><div class="empty">正在读取实例…</div></div>
+      <p class="footnote">这是用于验证目录加载的独立测试前端。实例编辑、账户和下载管理请使用完整 Neo UI。</p>
+    </section>
+    <section id="settings-page" class="page" hidden>
+      <div class="eyebrow">MAKE IT YOURS</div><h1 class="page-title">界面，由你选择<span>。</span></h1><p class="intro">这些设置保存在宿主中，换一套前端也会沿用。</p>
+      <div class="settings-layout"><form id="loading-settings" class="panel">
+        <div class="panel-heading"><span class="number">01</span><div><h2>启动与发现</h2><p>保存后不会跳转当前页面。</p></div></div>
+        <label class="check-row"><span><strong>恢复上次使用的界面</strong><small>关闭后，每次使用下方的固定启动界面。</small></span><input id="remember" type="checkbox"></label>
+        <label class="field">固定启动界面<select id="startup"></select></label>
+        <label class="check-row"><span>扫描启动器目录中的 webui</span><input id="scan-install" type="checkbox"></label>
+        <label class="check-row"><span>扫描数据目录中的 webui</span><input id="scan-data" type="checkbox"></label>
+        <label class="field">额外扫描目录<textarea id="additional" rows="3" spellcheck="false" placeholder="每行一个绝对路径，例如 D:\MyWebUIs"></textarea><small>将各套 UI 放在这些目录的子文件夹中。</small></label>
+        <label class="check-row"><span>启动时显示 Web UI 管理器</span><input id="show-manager" type="checkbox"></label>
+        <div class="form-actions"><button type="submit" class="primary">保存加载设置</button><button type="button" class="plain" id="reset-settings">恢复默认</button></div>
+        <p id="settings-feedback" role="status"></p>
+      </form><div class="settings-side"><div class="panel">
+        <div class="panel-heading"><span class="number">02</span><div><h2>现在切换</h2><p id="active-ui">正在读取当前界面…</p></div></div>
+        <label class="field">已发现的 Web UI<select id="switch-target"></select></label><button id="switch-ui" class="secondary">使用所选界面 ↗</button><button id="refresh-uis" class="plain">重新扫描</button>
+        <p id="startup-override" class="notice"></p>
+      </div><div class="panel paths"><h3>扫描位置</h3><div id="roots"></div><h3>设置保存位置</h3><p id="settings-path"></p><small>Ctrl / ⌘ + Shift + U 可随时打开独立管理器。</small></div></div></div>
+    </section>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </main>
+  <dialog id="details"><button class="dialog-close plain" id="close-details" aria-label="关闭">✕</button><div id="detail-content"></div><div class="form-actions"><button id="detail-folder" class="primary">打开实例目录 ↗</button><button id="detail-full" class="secondary">完整 Neo UI</button></div></dialog>
+</body>
+</html>

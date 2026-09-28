@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -45,12 +46,30 @@ async function run() {
   check((await fetch('/..%2foutside.txt')).status === 404, 'Path traversal was accepted');
   check(getComputedStyle(document.body).color === 'rgb(12, 34, 56)', 'Stylesheet not loaded');
   if (config.mode === 'persist') {
+    const settings = await luna.webUiSettings();
+    check(!settings.rememberLastUi && settings.startupUi === 'data/probe-a', 'Fixed startup settings did not persist');
+    check(settings.additionalDirectories.includes(config.extra), 'Custom directory did not persist');
     await luna.openWebUiManager();
     await report({stage: 'persisted'});
     await window.__TAURI__.window.getCurrentWindow().close();
     return;
   }
   if (config.bundle === 'probe-a') {
+    const defaults = await luna.webUiSettings();
+    check(defaults.rememberLastUi && defaults.startupUi === 'builtin', 'Incorrect settings defaults');
+    const settings = await luna.updateWebUiSettings({rememberLastUi: false, startupUi: 'data/probe-a', additionalDirectories: [config.extra], showManagerOnStart: true});
+    check(!settings.rememberLastUi && settings.scanInstallDirectory, 'Settings patch lost defaults');
+    const discovered = await luna.webUis();
+    check(discovered.entries.some(e => e.source.startsWith('custom:') && e.name === 'Extra bundle'), 'Extra folder not scanned');
+    for (const patch of [{additionalDirectories: ['relative/path']}, {rememberLastUi: 'true'}, {typo: true}, {startupUi: 'data/broken'}]) {
+      let invalid = false;
+      try { await luna.updateWebUiSettings(patch); } catch { invalid = true; }
+      check(invalid, 'Invalid settings accepted: ' + JSON.stringify(patch));
+    }
+    check(JSON.stringify(await luna.webUiSettings()) === JSON.stringify(settings), 'Rejected patch changed settings');
+    await luna.updateWebUiSettings({scanInstallDirectory: false});
+    check(!(await luna.webUis()).roots.some(r => r.source === 'install'), 'Disabled root is still scanned');
+    await luna.updateWebUiSettings({scanInstallDirectory: true});
     await luna.catalog();
     await Promise.all([ok('runtime.info'), ok('instance.list')]);
     let resolveInput;
@@ -72,6 +91,7 @@ async function run() {
     await report({stage: 'switching'});
     await luna.switchWebUi('data/probe-b');
   } else {
+    check(!(await luna.webUiSettings()).rememberLastUi, 'Switching discarded loading settings');
     const subscriptionId = sessionStorage.getItem('smoke.subscription');
     check(!!subscriptionId, 'Navigation lost session state');
     // Subscription belongs to the original sidecar; a restarted backend rejects it.
@@ -82,6 +102,57 @@ async function run() {
   }
 }
 run().catch(error => report({stage: 'error', error: error.message || String(error)}));
+"""
+
+
+DECK_PROBE = r"""
+window.addEventListener('load', async () => {
+  const report = value => fetch(__REPORT__, {method: 'POST', body: JSON.stringify(value)});
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  const wait = async predicate => {
+    const deadline = Date.now() + 15000;
+    while (!predicate()) {
+      if (Date.now() > deadline) throw new Error('Deck DOM did not reach expected state');
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  };
+  const $ = id => document.getElementById(id);
+  try {
+    await wait(() => !$('refresh').disabled && document.querySelector('.instance-card'));
+    check(document.querySelector('.instance-card h3').textContent === 'Web UI fixture', 'Deck did not render real instance');
+    check(getComputedStyle(document.querySelector('.sidebar')).backgroundColor === 'rgb(35, 46, 43)', 'Deck stylesheet missing');
+    check(document.documentElement.scrollWidth <= innerWidth, 'Deck has horizontal overflow');
+    const icon = document.querySelector('.instance-icon');
+    check(icon.src.startsWith('data:image/'), 'Deck did not load instance icon');
+    document.querySelector('.card-footer button').click();
+    await wait(() => $('details').open);
+    check($('detail-content').textContent.includes('neo-client'), 'Deck detail did not render real directory');
+    check(!$('detail-folder').disabled, 'Deck folder action missing');
+    $('close-details').click();
+    $('search').value = 'does-not-match';
+    $('search').dispatchEvent(new Event('input'));
+    check(!document.querySelector('.instance-card'), 'Deck search did not filter instances');
+    document.querySelector('[data-page="settings"]').click();
+    await wait(() => $('startup').options.length > 0);
+    check(!$('settings-page').hidden && $('library-page').hidden, 'Deck settings navigation failed');
+    check(document.documentElement.scrollWidth <= innerWidth, 'Deck settings have horizontal overflow');
+    $('remember').checked = false;
+    $('remember').dispatchEvent(new Event('change'));
+    check(!$('startup').disabled, 'Deck fixed startup selection is disabled');
+    $('startup').value = 'builtin';
+    $('scan-data').checked = false;
+    $('loading-settings').requestSubmit();
+    await wait(() => $('settings-feedback').textContent.startsWith('已保存'));
+    const settings = await luna.webUiSettings();
+    check(!settings.rememberLastUi && !settings.scanDataDirectory, 'Deck form did not save settings');
+    check((await fetch('./styles.css')).ok, 'Settings change invalidated the active page');
+    $('reset-settings').click();
+    await wait(() => $('settings-feedback').textContent.startsWith('已保存') && $('remember').checked);
+    check((await luna.webUiSettings()).scanDataDirectory, 'Deck reset did not restore discovery');
+    await report({stage: 'deck-verified'});
+    $('full-ui').click();
+  } catch (error) { await report({stage: 'error', error: error.message || String(error)}); }
+});
 """
 
 
@@ -148,6 +219,10 @@ def main():
             (webui / 'broken').mkdir(parents=True)
             (webui / 'outside.txt').write_text('Must not be served', encoding='utf-8')
             preference = webui / 'selection.json'
+            extra = profile / 'extra-uis'
+            (extra / 'example').mkdir(parents=True)
+            (extra / 'example/index.html').write_text('<h1>Custom root</h1>', encoding='utf-8')
+            (extra / 'example/webui.json').write_text('{"name":"Extra bundle"}', encoding='utf-8')
 
             def bundle(name, mode):
                 directory = webui / name
@@ -159,7 +234,7 @@ def main():
                 for name in ('marker.txt', '图标.txt'):
                     (directory / 'assets' / name).write_text('fixture', encoding='utf-8')
                 config = {'report': f'http://127.0.0.1:{server.server_port}/', 'profile': profile.as_posix(),
-                          'bundle': directory.name, 'mode': mode}
+                          'bundle': directory.name, 'mode': mode, 'extra': str(extra)}
                 (directory / 'assets/probe.js').write_text(PROBE.replace('__CONFIG__', json.dumps(config)), encoding='utf-8')
 
             def start(selection=None):
@@ -210,7 +285,10 @@ def main():
                 stop(process)
 
             bundle('probe-a', 'persist')
-            preference.write_text('{"selected":"data/probe-a"}', encoding='utf-8')
+            # Last UI is builtin, but fixed startup is probe-a: only the saved
+            # loading policy should decide the next document (no env override).
+            saved = json.loads(preference.read_text(encoding='utf-8'))
+            assert saved['selected'] == 'builtin' and not saved['settings']['rememberLastUi']
             process = start()
             try:
                 await_stage(process, 'persisted')
@@ -229,6 +307,21 @@ def main():
                     print(f'PASS: recovery from {requested} (override={override})', flush=True)
                 finally:
                     stop(process)
+
+            deck = webui / 'luna-deck'
+            shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/webui/luna-deck', deck)
+            index = deck / 'index.html'
+            index.write_text(index.read_text(encoding='utf-8').replace('</body>',
+                '<script src="./smoke-probe.js"></script></body>'), encoding='utf-8')
+            (deck / 'smoke-probe.js').write_text(DECK_PROBE.replace('__REPORT__',
+                json.dumps(f'http://127.0.0.1:{server.server_port}/')), encoding='utf-8')
+            process = start('data/luna-deck')
+            try:
+                await_stage(process, 'deck-verified')
+                wait_until(lambda: selected() == 'builtin', process, 'Deck return to embedded UI')
+                print('PASS: Luna Deck real instance cards, details, filtering, settings form, reset and switching', flush=True)
+            finally:
+                stop(process)
     finally:
         server.shutdown()
         server.server_close()

@@ -67,6 +67,15 @@ Use the title bar's **Web UI** button, **Settings → Neo UI appearance**, or
 Refresh the list after adding/replacing files. No launcher rebuild is needed.
 Folders from both locations are listed separately, even with identical names.
 
+The manager also edits loading settings: restore the last UI or use a fixed
+startup UI, enable/disable the built-in scan locations, add up to 16 absolute
+scan directories, and optionally open the manager at startup. Third-party UIs
+can read these with `luna.webUiSettings()` and save a partial update with
+`luna.updateWebUiSettings({ rememberLastUi: false, startupUi: 'builtin' })`.
+Settings are saved atomically alongside `selected` in `selection.json`, and
+survive UI switching. Saving does not navigate away from the current document.
+`LUNA_WEB_UI` still overrides the startup selection; the manager shows that override.
+
 An optional `webui.json` in the same directory may contain:
 
 ```json
@@ -120,6 +129,8 @@ distinct storage key prefix for each external UI; they share a local origin.
 `examples/webui/instance-list` is a dependency-free working example. Copy that
 whole folder into a `webui` directory to try discovery and switching. It is an
 API integration example, not a replacement for the embedded management screens.
+`examples/webui/luna-deck` provides a distinct light interface with real instance
+icons/details and its own loading-settings page using the public host API.
 External bundles remain separate files and do not increase the embedded UI size.
 The entire Neo UI host still stays optional via `-Dneo_ui=disabled`.
 

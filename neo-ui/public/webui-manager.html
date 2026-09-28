@@ -6,7 +6,22 @@
 <header><h1>Web UI 管理</h1><button id="refresh">刷新列表</button></header>
 <p>将编译后的静态文件放在 webui 下的独立文件夹，入口为 index.html。可选 webui.json 用于描述名称和版本。</p>
 <p>切换会重新加载页面，未保存的界面输入会丢失。运行中的客户端继续运行；请先完成当前下载或登录。</p>
-<p id="status" role="status" class="error"></p><div id="entries"></div><section class="roots"><strong>扫描目录</strong><div id="roots"></div></section>
+<p id="status" role="status" class="error"></p>
+<form id="settings" class="entry">
+  <strong>界面加载设置</strong>
+  <p>保存设置不会切换当前页面。启动选项在下次打开启动器时生效。</p>
+  <label><input id="remember" type="checkbox"> 启动时恢复上次使用的界面</label>
+  <label>固定启动界面 <select id="startup"></select></label>
+  <label><input id="scan-install" type="checkbox"> 扫描启动器目录中的 webui</label>
+  <label><input id="scan-data" type="checkbox"> 扫描数据目录中的 webui</label>
+  <label>额外扫描目录（每行一个绝对路径，各 UI 放在其子目录）<textarea id="additional" rows="3" spellcheck="false" placeholder="D:\MyWebUIs"></textarea></label>
+  <label><input id="show-manager" type="checkbox"> 启动时打开 Web UI 管理窗口</label>
+  <p id="override" class="error"></p>
+  <button type="submit">保存加载设置</button> <button type="button" id="reset">恢复默认设置</button>
+  <p id="settings-path" class="path"></p>
+</form>
+<div id="entries"></div><section class="roots"><strong>扫描目录</strong><div id="roots"></div></section>
+<style>form label{display:block;margin:12px 0}select,textarea{display:block;width:100%;margin-top:6px;border:1px solid #43516b;border-radius:6px;padding:8px;background:#101722;color:#e2e8f0}input[type=checkbox]{accent-color:#818cf8}select:disabled{opacity:.5}</style>
 <p><small>Ctrl / ⌘ + Shift + U 可随时打开此窗口。仅使用你信任的 Web UI，它可以调用启动器 API。</small></p>
 <script>
 const invoke = (name, parameters) => window.__TAURI__.core.invoke(name, parameters);
@@ -14,22 +29,42 @@ const status = document.getElementById('status');
 function element(tag, text, className) { const e=document.createElement(tag); e.textContent=text; if(className)e.className=className; return e; }
 async function refresh(){
   try {
-    const result=await invoke('webui_list'); status.textContent=result.warning || '';
+    const [result,settings]=await Promise.all([invoke('webui_list'),invoke('webui_settings_get')]); status.textContent=result.warning || '';
+    document.getElementById('remember').checked=settings.rememberLastUi;
+    document.getElementById('scan-install').checked=settings.scanInstallDirectory;
+    document.getElementById('scan-data').checked=settings.scanDataDirectory;
+    document.getElementById('additional').value=settings.additionalDirectories.join('\n');
+    document.getElementById('show-manager').checked=settings.showManagerOnStart;
+    const startup=document.getElementById('startup');startup.replaceChildren();
+    for(const entry of result.entries.filter(e=>!e.error)){const option=element('option',entry.name);option.value=entry.id;startup.append(option);}
+    if(!result.entries.some(e=>e.id===settings.startupUi&&!e.error)){const option=element('option',settings.startupUi+'（不可用）');option.value=settings.startupUi;startup.append(option);}
+    startup.value=settings.startupUi;startup.disabled=settings.rememberLastUi;
+    document.getElementById('override').textContent=result.startupOverride?'环境变量 LUNA_WEB_UI='+result.startupOverride+' 优先于启动设置；清除该变量后会按这里的设置启动。':'';
+    document.getElementById('settings-path').textContent='保存位置：'+result.settingsPath;
     const list=document.getElementById('entries'); list.replaceChildren();
     for(const entry of result.entries){
       const card=element('article','','entry'+(entry.id===result.active?' active':''));
       const header=element('header',''); header.append(element('strong',entry.name));
       const button=element('button',entry.id===result.active?'重新加载':'使用此界面'); button.disabled=!!entry.error;
       button.onclick=async()=>{button.disabled=true;try{await invoke('webui_select',{id:entry.id});status.textContent='已切换到 '+entry.name;setTimeout(refresh,500);}catch(e){status.textContent=e.message||String(e);button.disabled=false;}};
-      header.append(button);card.append(header,element('small',`${entry.source} ${entry.version}`));
+      header.append(button);card.append(header,element('small',`${entry.source==='builtin'?'内置':entry.source==='install'?'安装目录':entry.source==='data'?'数据目录':'额外目录'} ${entry.version}`));
       if(entry.description)card.append(element('p',entry.description));
       if(entry.path)card.append(element('p',entry.path,'path'));
       if(entry.error)card.append(element('p',entry.error,'error'));
       list.append(card);
     }
     const roots=document.getElementById('roots');roots.replaceChildren();
-    for(const root of result.roots){const row=element('div','','root');const button=element('button',root.source==='data'?'打开数据目录下的 webui':'打开安装目录下的 webui');button.onclick=()=>invoke('webui_open_folder',{source:root.source}).catch(e=>status.textContent=e.message||String(e));row.append(element('p',root.path,'path'),button);roots.append(row);}
+    for(const root of result.roots){const row=element('div','','root');const button=element('button',root.source==='data'?'打开数据目录下的 webui':root.source==='install'?'打开安装目录下的 webui':'打开额外扫描目录');button.onclick=()=>invoke('webui_open_folder',{source:root.source}).catch(e=>status.textContent=e.message||String(e));row.append(element('p',root.path,'path'),button);roots.append(row);}
   }catch(e){status.textContent=e.message||String(e);}
 }
+document.getElementById('remember').onchange=event=>document.getElementById('startup').disabled=event.target.checked;
+async function save(patch){
+  const buttons=document.querySelectorAll('#settings button');buttons.forEach(b=>b.disabled=true);
+  try{await invoke('webui_settings_update',{patch});await refresh();status.textContent='加载设置已保存。当前页面继续使用原界面。';}
+  catch(e){status.textContent=e.message||String(e);}
+  finally{buttons.forEach(b=>b.disabled=false);}
+}
+document.getElementById('settings').onsubmit=event=>{event.preventDefault();void save({rememberLastUi:document.getElementById('remember').checked,startupUi:document.getElementById('startup').value,scanInstallDirectory:document.getElementById('scan-install').checked,scanDataDirectory:document.getElementById('scan-data').checked,additionalDirectories:document.getElementById('additional').value.split('\n').map(v=>v.trim()).filter(Boolean),showManagerOnStart:document.getElementById('show-manager').checked});};
+document.getElementById('reset').onclick=()=>save({rememberLastUi:true,startupUi:'builtin',scanInstallDirectory:true,scanDataDirectory:true,additionalDirectories:[],showManagerOnStart:false});
 document.getElementById('refresh').onclick=refresh;refresh();
 </script></body></html>

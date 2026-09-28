@@ -139,7 +139,7 @@ Remove-Item Env:LUNA_LAUNCHER_DATA, Env:LUNA_LAUNCHER_CLI -ErrorAction SilentlyC
 
 ## 3. 独立界面的文件约定
 
-扫描范围是以下两个根目录的直接子目录：
+默认扫描以下两个根目录的直接子目录，加载设置可以关闭其中任意一项或增加额外目录：
 
 ```text
 <luna-neo-ui 所在目录>/webui/<目录名>/index.html
@@ -173,8 +173,10 @@ Remove-Item Env:LUNA_LAUNCHER_DATA, Env:LUNA_LAUNCHER_CLI -ErrorAction SilentlyC
 路径穿越以及逃出根目录的符号链接/junction 不可读取。UI 具有启动器 API 权限，
 应视为本地可执行代码；外部网站不具有这些 IPC 权限。
 
-`install/<目录名>` 与 `data/<目录名>` 是不同 ID；`builtin` 是内置界面。选择保存在
-`<数据目录>/webui/selection.json`。目录被移除或 manifest 失效后，下次启动回退内置。
+`install/<目录名>` 与 `data/<目录名>` 是不同 ID；`builtin` 是内置界面。额外目录下的
+UI 使用宿主返回的 `custom:…/<目录名>` ID（根据路径生成，重排目录不会改变它）。
+不要自行构造 ID。选择与加载设置保存在 `<数据目录>/webui/selection.json`。
+目录被移除或 manifest 失效后，下次启动回退内置。
 若界面自身 JS 损坏，可使用独立管理窗口，或强制恢复：
 
 ```powershell
@@ -187,12 +189,44 @@ Remove-Item Env:LUNA_WEB_UI
 各自的命名空间；内置 UI 使用另一 origin。宿主通过 `no-store` 响应提供最新资源，
 外部 UI 不应注册缓存宿主根路径的 service worker。
 
+### 从 UI 修改加载设置
+
+管理窗口和 Luna Deck 的“界面加载设置”页面都能编辑；其他 UI 可以通过桥接实现
+自己的设置页面。这些是宿主设置，不属于 C++ 的 `settings.set` 或页面 localStorage。
+
+| 字段 | 默认值 / 含义 |
+| --- | --- |
+| `rememberLastUi` | true，启动时恢复上次切换到的界面 |
+| `startupUi` | `builtin`，关闭 rememberLastUi 后使用的固定启动 ID |
+| `scanInstallDirectory` | true，扫描可执行文件旁的 webui |
+| `scanDataDirectory` | true，扫描当前数据目录的 webui |
+| `additionalDirectories` | 空数组；最多 16 个绝对路径，各 UI 放在这些路径的直接子目录 |
+| `showManagerOnStart` | false，是否在启动时打开独立管理窗口 |
+
+```js
+const current = await luna.webUiSettings();
+await luna.updateWebUiSettings({ rememberLastUi: false, startupUi: 'builtin' });
+// 支持部分更新，未提供的字段保持原值。跨平台路径由你的设置界面输入。
+const discovered = await luna.webUis();
+```
+
+更新时校验字段类型、路径和固定启动 UI，失败则拒绝 Promise，保留之前的配置；
+成功后原子替换文件，再更新宿主状态。扫描结果立即生效；当前已加载页面继续使用
+原来的资源目录，启动策略在下次启动生效。保存设置不必取消当前下载。
+若要移除固定启动 UI 所在目录，请同时把 `startupUi` 改为 `builtin` 或另一个可用 ID。
+添加目录后先保存并重新读取 `webUis()`，再选该目录中发现的界面作为固定启动项。
+
+启动优先级为 `LUNA_WEB_UI` → 上次选择（rememberLastUi=true）或固定启动项 → 内置回退。
+`webUis().startupOverride` 显示当前环境覆盖；持久设置不会修改进程环境变量。
+旧版仅有 `selected` 的 selection.json 自动使用默认加载策略，仍然兼容。
+
 ## 4. 宿主桥接 API
 
 宿主在页面脚本执行前注入 `window.luna`。任意前端框架或原生 JS 都能使用，不需要
 再启动后端，不需要为基本业务调用安装 Tauri SDK。参考可运行的
 [实例列表示例](../examples/webui/instance-list/index.html) 和
 [TypeScript 声明](../examples/webui/luna.d.ts)。声明文件可以复制进项目的 `src/types`。
+需要可交互的加载设置示例时，参考 [Luna Deck](../examples/webui/luna-deck/README.md)。
 
 | 方法 | 返回 / 用途 |
 | --- | --- |
@@ -203,7 +237,9 @@ Remove-Item Env:LUNA_WEB_UI
 | `onStream(handler)` | 监听控制台和日志批次，同样返回取消监听函数 |
 | `onExit(handler)` | 监听后端断开 |
 | `openPath(path)` | 系统文件管理器打开/定位绝对路径，使用宿主 opener |
-| `webUis()` | `{entries, roots, active, warning}`，界面列表和扫描路径 |
+| `webUis()` | `{entries, roots, active, warning, settingsPath, startupOverride}`，界面列表、扫描路径与当前加载信息 |
+| `webUiSettings()` | 读取宿主的加载策略 |
+| `updateWebUiSettings(patch)` | 校验并保存部分更新，返回完整的新设置 |
 | `switchWebUi(id)` | 导航到所选 UI；有未完成请求时拒绝 |
 | `openWebUiManager()` | 打开独立管理窗口 |
 

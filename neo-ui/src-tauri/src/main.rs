@@ -239,6 +239,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             launcher_request,
             webui::webui_list,
+            webui::webui_settings_get,
+            webui::webui_settings_update,
             webui::webui_select,
             webui::webui_initialize,
             webui::webui_manager,

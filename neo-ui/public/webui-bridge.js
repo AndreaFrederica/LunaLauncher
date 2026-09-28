@@ -21,6 +21,8 @@
     onExit: handler => window.__TAURI__.event.listen('launcher-exit', handler),
     openPath: path => invoke('plugin:opener|reveal_item_in_dir', { paths: [path] }),
     webUis: () => invoke('webui_list'),
+    webUiSettings: () => invoke('webui_settings_get'),
+    updateWebUiSettings: patch => invoke('webui_settings_update', { patch }),
     switchWebUi: id => invoke('webui_select', { id }),
     openWebUiManager: () => invoke('webui_manager'),
   });

@@ -1,8 +1,8 @@
 <template>
   <div class="neo-appearance-panel">
     <div class="preference-card">
-      <div class="preference-heading"><q-icon name="web"/><div><strong>Web UI</strong><p>从启动器目录或数据目录的 webui 文件夹加载独立界面。</p></div></div>
-      <q-btn class="q-mt-md" color="primary" icon="web" label="管理与切换 Web UI" @click="openWebUiManager" />
+      <div class="preference-heading"><q-icon name="web"/><div><strong>Web UI 加载</strong><p>设置启动界面、扫描目录和是否记住上次选择，也可切换独立界面。</p></div></div>
+      <q-btn class="q-mt-md" color="primary" icon="web" label="加载设置与界面管理" @click="openWebUiManager" />
     </div>
     <div class="preference-card">
       <div class="preference-heading"><q-icon name="palette"/><div><strong>Neo UI 外观</strong><p>这些选项只影响当前 Web/Tauri 界面，不会修改 Qt 旧界面的主题。</p></div></div>

@@ -50,6 +50,7 @@
 
 #include "DataMigrationTask.h"
 #include "java/JavaInstallList.h"
+#include "launch/LaunchTask.h"
 #include "meta/MetadataProvider.h"
 #include "minecraft/MirrorDownload.h"
 #include "minecraft/update/AssetUpdateTask.h"
@@ -1876,7 +1877,10 @@ bool Application::kill(BaseInstance* instance)
     if (controller) {
         return controller->abort();
     }
-    return true;
+    // Headless API launches detach their controller once the game starts. The
+    // instance still owns the launch task and its running game process.
+    auto task = instance->getLaunchTask();
+    return task && task->canAbort() && task->abort();
 }
 
 void Application::closeCurrentWindow()

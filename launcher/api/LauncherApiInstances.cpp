@@ -205,9 +205,8 @@ QJsonObject stopInstance(const QJsonObject& parameters, bool force)
         server->stopServer();
         stopped = !server->isRunning();
     } else {
-        // Application::kill is the existing launcher-wide lifecycle hook. It
-        // also releases the controller held by Application, which direct task
-        // abortion would bypass.
+        // Use the controller when present, or the instance's launch task for
+        // detached API launches.
         stopped = APPLICATION->kill(instance);
     }
     if (!stopped)

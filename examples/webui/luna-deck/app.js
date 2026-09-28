@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 (() => {
   const $ = id => document.getElementById(id);
-  let instances = [], detailPath = '', notificationTimer;
+  let instances = [], detailPath = '', detailInstance = '', notificationTimer;
   const icons = new Map();
   const running = instance => Boolean(instance.lifecycle?.running ?? instance.running);
   function notify(message, error = false) {
@@ -23,6 +23,20 @@
     if (className) node.className = className;
     return node;
   }
+  function navigate(page) {
+    for (const name of ['library', 'console', 'settings']) $(name + '-page').hidden = page !== name;
+    $('breadcrumb').textContent = { library: '实例库', console: '运行与日志', settings: '界面加载设置' }[page];
+    document.querySelectorAll('[data-page]').forEach(item => item.classList.toggle('active', item.dataset.page === page));
+    if (page === 'settings') loadSettings().catch(fail);
+  }
+  const launcher = window.createDeckLauncher({ call, notify, element, navigate, changed(id, value) {
+    const instance = instances.find(i => i.id === id);
+    if (instance) { instance.running = value; if (instance.lifecycle) instance.lifecycle.running = value; }
+    $('running-count').textContent = String(instances.filter(running).length);
+    renderInstances();
+    $('detail-launch').disabled = launcher.busy() && !launcher.isRunning(detailInstance);
+    $('detail-launch').textContent = launcher.isRunning(detailInstance) ? '查看实时日志' : '启动 Minecraft';
+  } });
   function placeholder() {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="9" fill="#d6dfc8"/><path d="M12 42h13V29h13V16h14v37H12z" fill="#667f5b"/></svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
@@ -31,10 +45,13 @@
     try {
       const info = await call('instance.get', { instance: instance.id });
       detailPath = info.paths?.root || '';
+      detailInstance = instance.id;
       $('detail-content').replaceChildren(element('h2', info.name), element('p', `分组：${info.group || '未分组'}`),
         element('p', `状态：${running(info) ? '正在运行' : '未运行'}`), element('p', `目录：${detailPath || '不可用'}`));
       if (info.notes) $('detail-content').append(element('p', info.notes));
       $('detail-folder').disabled = !detailPath;
+      $('detail-launch').disabled = launcher.busy() && !launcher.isRunning(instance.id);
+      $('detail-launch').textContent = launcher.isRunning(instance.id) ? '查看实时日志' : '启动 Minecraft';
       $('details').showModal();
     } catch (error) { fail(error); }
   }
@@ -45,14 +62,18 @@
     $('instances').replaceChildren();
     for (const [index, instance] of visible.entries()) {
       const card = element('article', '', 'instance-card');
+      card.dataset.instance = instance.id;
       const top = element('div', '', 'instance-card-top');
       const image = document.createElement('img'); image.className = 'instance-icon'; image.alt = instance.name;
       image.src = icons.get(instance.id) || placeholder(); image.dataset.instance = instance.id;
       top.append(image, element('span', running(instance) ? '● 正在运行' : '未运行', 'instance-state' + (running(instance) ? ' running' : '')));
       const footer = element('div', '', 'card-footer');
-      const button = element('button', '查看实例 ↗'); button.onclick = () => showDetails(instance);
+      const button = element('button', '查看实例 ↗', 'instance-details'); button.onclick = () => showDetails(instance);
       footer.append(element('small', `INSTANCE / ${String(index + 1).padStart(2, '0')}`), button);
-      card.append(top, element('h3', instance.name), element('p', instance.group || '未分组'), footer);
+      const launch = element('button', running(instance) ? '查看实时日志 ↗' : '▷ 启动 Minecraft', 'primary instance-launch');
+      launch.disabled = launcher.busy() && !running(instance);
+      launch.onclick = () => launcher.launch(instance.id);
+      card.append(top, element('h3', instance.name), element('p', instance.group || '未分组'), launch, footer);
       $('instances').append(card);
     }
     if (!visible.length) $('instances').append(element('div', instances.length ? '没有匹配的实例。' : '这个数据目录还没有实例。', 'empty'));
@@ -71,6 +92,7 @@
       if (groups.includes(selected)) $('group').value = selected;
       $('connection-label').textContent = '已连接真实后端'; $('connection-dot').classList.add('online');
       renderInstances();
+      await launcher.setInstances(instances);
       for (const instance of instances) {
         if (!icons.has(instance.id)) {
           try { const icon = await call('instance.icon', { instance: instance.id }); icons.set(instance.id, icon.dataUrl); }
@@ -112,14 +134,11 @@
     } catch (error) { $('settings-feedback').textContent = error.message || String(error); fail(error); }
     finally { buttons.forEach(button => button.disabled = false); }
   }
-  async function switchTo(id) { try { await host().switchWebUi(id); } catch (error) { fail(error); } }
-  for (const button of document.querySelectorAll('[data-page]')) button.onclick = () => {
-    const settings = button.dataset.page === 'settings';
-    $('library-page').hidden = settings; $('settings-page').hidden = !settings;
-    $('breadcrumb').textContent = settings ? '界面加载设置' : '实例库';
-    document.querySelectorAll('[data-page]').forEach(item => item.classList.toggle('active', item === button));
-    if (settings) loadSettings().catch(fail);
-  };
+  async function switchTo(id) {
+    try { await launcher.release(); await host().switchWebUi(id); }
+    catch (error) { fail(error); await launcher.setInstances(instances).catch(fail); }
+  }
+  for (const button of document.querySelectorAll('[data-page]')) button.onclick = () => navigate(button.dataset.page);
   $('search').oninput = renderInstances; $('group').onchange = renderInstances;
   $('refresh').onclick = loadInstances;
   $('remember').onchange = () => $('startup').disabled = $('remember').checked;
@@ -136,5 +155,6 @@
   $('manager').onclick = () => { try { host().openWebUiManager().catch(fail); } catch (error) { fail(error); } };
   $('close-details').onclick = () => $('details').close();
   $('detail-folder').onclick = () => host().openPath(detailPath).catch(fail);
+  $('detail-launch').onclick = () => { $('details').close(); void launcher.launch(detailInstance); };
   void loadInstances();
 })();

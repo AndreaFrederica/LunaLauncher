@@ -1,7 +1,7 @@
 {
   "name": "Luna Deck · 浅色测试界面",
-  "version": "0.2.0",
-  "description": "独立的浅色实例库与界面加载设置，使用真实 Luna API。完整实例编辑可切回 Neo UI。",
+  "version": "0.3.0",
+  "description": "独立的浅色实例库：真实账户启动、多个实例实时日志、停止客户端及界面加载设置。",
   "apiVersion": 1,
   "nativeFrame": true
 }

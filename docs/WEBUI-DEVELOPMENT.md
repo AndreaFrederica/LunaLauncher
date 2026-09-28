@@ -226,7 +226,10 @@ const discovered = await luna.webUis();
 再启动后端，不需要为基本业务调用安装 Tauri SDK。参考可运行的
 [实例列表示例](../examples/webui/instance-list/index.html) 和
 [TypeScript 声明](../examples/webui/luna.d.ts)。声明文件可以复制进项目的 `src/types`。
-需要可交互的加载设置示例时，参考 [Luna Deck](../examples/webui/luna-deck/README.md)。
+[Luna Deck](../examples/webui/luna-deck/README.md) 是可直接运行的静态前端，演示账户选择、
+真实 Minecraft 启动、认证交互、任务取消、多个实例的实时控制台、停止客户端和加载设置。
+它在启动前订阅日志，使用 `wait:false` 在进程启动后释放请求，通过实例状态事件跟踪退出；
+`console.reset` 的 `available:false` 仅表示暂时没有日志任务，不能当作启动失败。
 
 | 方法 | 返回 / 用途 |
 | --- | --- |

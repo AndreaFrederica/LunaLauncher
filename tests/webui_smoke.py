@@ -124,11 +124,24 @@ window.addEventListener('load', async () => {
     check(document.documentElement.scrollWidth <= innerWidth, 'Deck has horizontal overflow');
     const icon = document.querySelector('.instance-icon');
     check(icon.src.startsWith('data:image/'), 'Deck did not load instance icon');
-    document.querySelector('.card-footer button').click();
+    document.querySelector('.instance-details').click();
     await wait(() => $('details').open);
     check($('detail-content').textContent.includes('neo-client'), 'Deck detail did not render real directory');
     check(!$('detail-folder').disabled, 'Deck folder action missing');
     $('close-details').click();
+    await wait(() => !document.querySelector('.instance-launch').disabled);
+    document.querySelector('.instance-launch').click();
+    await wait(() => !$('session-error').hidden && $('console-cancel').hidden);
+    check(!$('console-page').hidden, 'Deck launch did not open console');
+    check($('session-error').textContent.includes('No account'), 'Deck did not retain backend launch error');
+    check(!$('console-launch').disabled, 'Deck launch stayed pending after failure');
+    check($('console-log').textContent.includes('No account'), 'Deck console omitted launch failure');
+    check(document.documentElement.scrollWidth <= innerWidth, 'Deck console has horizontal overflow');
+    // A retry must reuse the console subscription and finish cleanly too.
+    $('console-launch').click();
+    await wait(() => !$('session-error').hidden && !$('console-launch').disabled);
+    check((await luna.execute('event.subscriptions')).data.length === 1, 'Deck retry leaked subscriptions');
+    document.querySelector('[data-page="library"]').click();
     $('search').value = 'does-not-match';
     $('search').dispatchEvent(new Event('input'));
     check(!document.querySelector('.instance-card'), 'Deck search did not filter instances');
@@ -319,7 +332,7 @@ def main():
             try:
                 await_stage(process, 'deck-verified')
                 wait_until(lambda: selected() == 'builtin', process, 'Deck return to embedded UI')
-                print('PASS: Luna Deck real instance cards, details, filtering, settings form, reset and switching', flush=True)
+                print('PASS: Luna Deck cards, launch failure/retry, console subscription, filtering, settings and switching', flush=True)
             finally:
                 stop(process)
     finally:

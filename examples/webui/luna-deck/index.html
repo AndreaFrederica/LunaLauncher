@@ -6,23 +6,32 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Luna Deck</title>
   <link rel="stylesheet" href="./styles.css">
+  <script defer src="./launch.js"></script>
   <script defer src="./app.js"></script>
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">L</span><div>LUNA<span>DECK / 01</span></div></div>
     <div class="nav-label">工作空间</div>
-    <nav><button class="nav-button active" data-page="library"><span>▦</span> 实例库 <b id="nav-count">—</b></button><button class="nav-button" data-page="settings"><span>☷</span> 界面加载设置</button></nav>
+    <nav><button class="nav-button active" data-page="library"><span>▦</span> 实例库 <b id="nav-count">—</b></button><button class="nav-button" data-page="console"><span>▷</span> 运行与日志 <b id="session-count">0</b></button><button class="nav-button" data-page="settings"><span>☷</span> 界面加载设置</button></nav>
     <div class="sidebar-bottom"><div class="connection"><i id="connection-dot"></i><span id="connection-label">正在连接后端</span></div><p>一个独立的 Web UI。<br>你的实例，还是原来的实例。</p><button class="secondary inverse" id="full-ui">打开完整 Neo UI ↗</button><button class="plain inverse" id="manager">Web UI 管理器</button></div>
   </aside>
   <main>
     <header class="topbar"><span>WORKSPACE <b>/</b> <span id="breadcrumb">实例库</span></span><span class="edition">EXTERNAL WEB UI <i></i> 浅色测试版</span></header>
     <section id="library-page" class="page">
-      <div class="hero"><div><div class="eyebrow">YOUR NEXT ADVENTURE</div><h1>所有世界，<br>一个起点<span>。</span></h1><p>浏览实例与图标，或者为启动器换一个界面。</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="block b1"></div><div class="block b2"></div><div class="block b3"></div><div class="block b4"></div><span>LUNA<br>DECK.</span></div></div>
+      <div class="hero"><div><div class="eyebrow">YOUR NEXT ADVENTURE</div><h1>所有世界，<br>一个起点<span>。</span></h1><p>选择账户，启动 Minecraft。每一个世界，都有自己的控制台。</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="block b1"></div><div class="block b2"></div><div class="block b3"></div><div class="block b4"></div><span>LUNA<br>DECK.</span></div></div>
       <div class="stats"><div><small>全部实例</small><strong id="total-count">—</strong></div><div><small>正在运行</small><strong id="running-count">—</strong></div><div><small>实例分组</small><strong id="group-count">—</strong></div><button class="plain" id="refresh">刷新实例 ↻</button></div>
+      <div class="panel launch-options"><label class="field">启动账户<select id="launch-account" disabled><option value="">自动选择实例 / 默认账户</option></select></label><label class="field">启动模式<select id="launch-mode"><option value="normal">正常启动</option><option value="offline">离线启动（使用已下载文件）</option><option value="demo">试玩模式</option></select></label><label class="field" id="offline-name-field" hidden>临时离线玩家名（可选）<input id="offline-name" maxlength="16" placeholder="留空使用所选账户" pattern="[A-Za-z0-9_]{1,16}" autocomplete="off"></label><button class="plain" id="refresh-accounts">刷新账户 ↻</button><p id="account-hint">正在读取账户…</p></div>
       <div class="section-heading"><h2>我的实例 <span>LIBRARY</span></h2><div class="filters"><input id="search" type="search" placeholder="搜索实例…" aria-label="搜索实例"><select id="group" aria-label="实例分组"><option value="">所有分组</option></select></div></div>
       <div id="instances" class="instance-grid"><div class="empty">正在读取实例…</div></div>
-      <p class="footnote">这是用于验证目录加载的独立测试前端。实例编辑、账户和下载管理请使用完整 Neo UI。</p>
+      <p class="footnote">此独立前端可直接启动和停止客户端、查看实时日志。实例编辑、新增账户和下载管理请使用完整 Neo UI。</p>
+    </section>
+    <section id="console-page" class="page" hidden>
+      <div class="eyebrow">LIVE FROM YOUR WORLD</div><h1 class="page-title">运行与日志<span>。</span></h1>
+      <div class="console-toolbar"><label class="field">实例控制台<select id="console-instance"><option value="">选择实例</option></select></label><button class="primary" id="console-launch" disabled>启动 Minecraft</button><button class="secondary" id="console-stop" disabled>停止客户端</button><button class="secondary" id="console-cancel" hidden disabled>取消启动</button></div>
+      <div class="panel session-info"><div><strong id="session-state" role="status">尚未选择实例</strong><span id="session-pid"></span></div><p id="session-status">从实例库启动，或选择已运行的实例查看输出。</p><progress id="launch-progress" hidden></progress><p id="session-error" role="alert" hidden></p><p id="stream-warning" hidden></p></div>
+      <div class="log-heading"><h2>实时控制台</h2><label><input id="log-follow" type="checkbox" checked> 跟随输出</label><button class="plain" id="clear-log">清空显示</button></div>
+      <pre id="console-log" tabindex="0" aria-label="Minecraft 实时日志">尚无日志。</pre><p class="footnote">每个实例独立保留最近 2,000 条输出。切换控制台不会停止客户端；停止前请先在游戏中保存世界。</p>
     </section>
     <section id="settings-page" class="page" hidden>
       <div class="eyebrow">MAKE IT YOURS</div><h1 class="page-title">界面，由你选择<span>。</span></h1><p class="intro">这些设置保存在宿主中，换一套前端也会沿用。</p>
@@ -44,6 +53,9 @@
     </section>
     <div id="toast" class="toast" role="status" hidden></div>
   </main>
-  <dialog id="details"><button class="dialog-close plain" id="close-details" aria-label="关闭">✕</button><div id="detail-content"></div><div class="form-actions"><button id="detail-folder" class="primary">打开实例目录 ↗</button><button id="detail-full" class="secondary">完整 Neo UI</button></div></dialog>
+  <dialog id="details"><button class="dialog-close plain" id="close-details" aria-label="关闭">✕</button><div id="detail-content"></div><div class="form-actions"><button id="detail-launch" class="primary">启动 Minecraft</button><button id="detail-folder" class="secondary">打开实例目录 ↗</button><button id="detail-full" class="secondary">完整 Neo UI</button></div></dialog>
+  <dialog id="launch-input"><form id="launch-input-form"><h2>启动需要你的确认</h2><p id="input-prompt"></p><label class="field" id="input-text-field">输入内容<input id="input-text" autocomplete="off"></label><label class="field" id="input-choice-field" hidden>选择项目<select id="input-choice"></select></label><p id="input-error" role="alert"></p><div class="form-actions"><button class="primary" type="submit">继续</button><button class="secondary" id="input-cancel" type="button">取消启动</button></div></form></dialog>
+  <dialog id="launch-device"><h2>在浏览器中完成登录</h2><p>完成授权后，启动会自动继续。</p><p id="device-url"></p><code id="device-code"></code><p id="device-error" role="alert"></p><div class="form-actions"><button class="primary" id="device-open">打开授权页面 ↗</button><button class="secondary" id="device-cancel">取消启动</button></div></dialog>
+  <dialog id="stop-confirm"><h2>停止客户端？</h2><p>这会结束 <strong id="stop-name"></strong> 的游戏进程。请先在游戏中保存世界。</p><div class="form-actions"><button class="primary" id="stop-yes">结束客户端</button><button class="secondary" id="stop-no">返回游戏</button></div></dialog>
 </body>
 </html>

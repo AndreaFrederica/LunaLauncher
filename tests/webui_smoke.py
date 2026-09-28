@@ -119,7 +119,7 @@ def main():
     parser.add_argument('--cli', type=Path)
     args = parser.parse_args()
     executable = args.exe.resolve(strict=True)
-    cli = (args.cli or executable.with_name('lunalauncher-cli.exe' if os.name == 'nt' else 'lunalauncher-cli')).resolve(strict=True)
+    cli = (args.cli or executable.with_name('lunalauncher-cli.exe' if os.name == 'nt' else 'lunalauncher')).resolve(strict=True)
     events = queue.Queue()
 
     class Receiver(BaseHTTPRequestHandler):

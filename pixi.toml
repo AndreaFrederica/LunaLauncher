@@ -76,6 +76,59 @@ args = [
 ]
 cmd = "python scripts/pixi_meson.py deploy {{ profile }}"
 
+# Optional complete Web UI build. Keep its output separate from the Qt-only build.
+[tasks.configure-webui]
+description = "Configure native launcher + Tauri Web UI (Pixi pnpm/Rust, Meson)"
+args = [{ arg = "profile", default = "release", choices = ["debug", "release"] }]
+cmd = "python scripts/pixi_meson.py configure {{ profile }}"
+env = { LUNA_NEO_UI = "enabled" }
+
+[tasks.build-webui]
+description = "Configure and compile the launcher, backend and Web UI"
+args = [{ arg = "profile", default = "release", choices = ["debug", "release"] }]
+depends-on = [{ task = "configure-webui", args = ["{{ profile }}"] }]
+cmd = "python scripts/pixi_meson.py build {{ profile }}"
+env = { LUNA_NEO_UI = "enabled" }
+
+[tasks.install-webui]
+description = "One command: configure, build, install and deploy launcher + Web UI"
+args = [{ arg = "profile", default = "release", choices = ["debug", "release"] }]
+depends-on = [{ task = "build-webui", args = ["{{ profile }}"] }]
+cmd = "python scripts/pixi_meson.py install {{ profile }}"
+env = { LUNA_NEO_UI = "enabled" }
+
+[tasks.run-webui]
+description = "Run the installed Neo UI (run install-webui first)"
+args = [{ arg = "profile", default = "release", choices = ["debug", "release"] }]
+cmd = "python scripts/pixi_webui.py run {{ profile }}"
+env = { LUNA_NEO_UI = "enabled" }
+
+[tasks.webui-deps]
+description = "Install frozen frontend dependencies using Pixi pnpm"
+cmd = "python scripts/pixi_webui.py deps"
+env = { LUNA_NEO_UI = "enabled" }
+
+[tasks.webui-dev]
+description = "Run Quasar browser preview (no native launcher bridge)"
+depends-on = ["webui-deps"]
+cmd = "pnpm --dir neo-ui dev"
+
+[tasks.webui-check]
+description = "Type-check the Vue frontend"
+depends-on = ["webui-deps"]
+cmd = "pnpm --dir neo-ui typecheck"
+
+[tasks.webui-assets]
+description = "Type-check and export a standalone frontend to neo-ui/dist/spa"
+depends-on = ["webui-check"]
+cmd = "python scripts/pixi_webui.py assets"
+
+[tasks.test-webui]
+description = "Test the installed Tauri host with disposable data (requires desktop)"
+args = [{ arg = "profile", default = "release", choices = ["debug", "release"] }]
+cmd = "python scripts/pixi_webui.py test {{ profile }}"
+env = { LUNA_NEO_UI = "enabled" }
+
 [tasks.test]
 description = "Run built executable to verify it launches"
 args = [

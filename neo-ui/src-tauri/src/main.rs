@@ -35,7 +35,7 @@ fn sidecar_path() -> Result<PathBuf, String> {
     let name = if cfg!(windows) {
         "lunalauncher-cli.exe"
     } else {
-        "lunalauncher-cli"
+        "lunalauncher"
     };
     Ok(current
         .parent()

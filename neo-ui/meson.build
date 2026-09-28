@@ -19,6 +19,7 @@ neo_ui_sources = files(
   'public/webui-bootstrap.html',
   'public/webui-manager.html',
   'public/webui-bridge.js',
+  'public/webui.json',
   'src/router/index.ts',
   'src/pages/IndexPage.vue',
   'src/components/AccountPanel.vue',

@@ -76,20 +76,37 @@ def qt_webp_plugin(root: Path, profile: str) -> Path:
     return qt_target_root(root, profile) / "plugins" / "imageformats" / plugin_name
 
 
+def webui_enabled() -> bool:
+    option = os.environ.get("LUNA_NEO_UI", "disabled").lower()
+    if option not in {"enabled", "disabled"}:
+        raise SystemExit("LUNA_NEO_UI must be enabled or disabled")
+    return option == "enabled"
+
+
 def build_dir(root: Path, profile: str) -> Path:
     env_override = os.environ.get("LUNA_BUILD_DIR")
     if env_override:
         p = Path(env_override)
-        return p if p.is_absolute() else root / p
-    return root / f"build-meson-{profile}"
+        return (p if p.is_absolute() else root / p).resolve()
+    variant = "webui-" if webui_enabled() else ""
+    return (root / f"build-meson-{variant}{profile}").resolve()
 
 
 def install_dir(root: Path, profile: str) -> Path:
     env_override = os.environ.get("LUNA_INSTALL_DIR")
     if env_override:
         p = Path(env_override)
-        return p if p.is_absolute() else root / p
-    return root / f"install-{profile}"
+        return (p if p.is_absolute() else root / p).resolve()
+    variant = "webui-" if webui_enabled() else ""
+    return (root / f"install-{variant}{profile}").resolve()
+
+
+def installed_binary_dir(root: Path, profile: str) -> Path:
+    directory = install_dir(root, profile)
+    system = profile_system(profile)
+    if system == "macos":
+        return directory / "LunaLauncher.app" / "Contents" / "MacOS"
+    return directory / "bin" if system == "linux" else directory
 
 
 def task_env(root: Path, profile: str) -> dict[str, str]:
@@ -143,7 +160,7 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
 
 
 def run(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
-    print("+", " ".join(cmd))
+    print("+", " ".join(cmd), flush=True)
     subprocess.check_call(cmd, cwd=cwd, env=env)
 
 
@@ -268,6 +285,8 @@ def patch_macos_qt_cmake_configs(root: Path, profile: str) -> None:
 
 def configure(root: Path, profile: str) -> None:
     validate_profile(profile)
+    if webui_enabled() and is_cross_profile(profile):
+        raise SystemExit("Neo UI currently requires a native debug/release build; cross-compilation is not configured")
     install_qt_target(root, profile)
     patch_macos_qt_cmake_configs(root, profile)
     (root / ".meson-empty-pkgconfig").mkdir(exist_ok=True)
@@ -294,6 +313,7 @@ def configure(root: Path, profile: str) -> None:
         f"-Dbuild_testing={'true' if build_testing else 'false'}",
         f"-Ddisable_ownership_check={'true' if disable_ownership else 'false'}",
         f"-Dbuild_updater={'true' if build_updater else 'false'}",
+        f"-Dneo_ui={'enabled' if webui_enabled() else 'disabled'}",
         "-Dbuild_filelinker=true" if system == "windows" else "-Dbuild_filelinker=false",
         "-Dlibarchive:tests=disabled",
         "-Dlibarchive:zlib=enabled",
@@ -420,6 +440,10 @@ def deploy(root: Path, profile: str) -> None:
             continue
         run(
             [
+                # Reuse Meson's configured VS environment, just as compilation
+                # does. A plain Pixi shell otherwise lacks VCINSTALLDIR and
+                # windeployqt can omit the compiler runtime on fresh installs.
+                "meson", "devenv", "-C", str(build_dir(root, profile)),
                 str(windeployqt),
                 f"--{mode}",
                 "--no-opengl-sw",

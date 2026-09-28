@@ -1,0 +1,7 @@
+{
+  "name": "Luna Neo UI",
+  "version": "0.1.0",
+  "description": "完整 Neo UI 的独立静态构建",
+  "apiVersion": 1,
+  "nativeFrame": false
+}

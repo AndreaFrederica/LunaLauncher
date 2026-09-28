@@ -46,6 +46,7 @@ neo_ui_sources = files(
   'src-tauri/build.rs',
   'src-tauri/tauri.conf.json',
   'src-tauri/src/main.rs',
+  'src-tauri/src/startup.rs',
   'src-tauri/src/webui.rs',
   '../program_info/lunalauncher.ico',
   '../scripts/build_neo_ui.py',

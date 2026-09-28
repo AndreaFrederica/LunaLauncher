@@ -32,6 +32,25 @@ override. It does not create a separate empty `data` profile. To open a profile
 created by an older Neo UI build, explicitly point `LUNA_LAUNCHER_DATA` to that
 installation's `data` directory; no profiles are moved or deleted automatically.
 
+Opening Neo UI again for the same data directory and native launcher version
+restores and focuses its existing window, then exits the second process. The
+existing backend, running tasks and selected Web UI stay alive. Separate data
+directories can run independently. The official Tauri single-instance plugin
+uses the ID returned by `lunalauncher-cli --cli --print-startup-context`; this
+small native query works even while the directory is in use and shares Qt's
+portable, `--dir` and environment-variable resolution. Install the Neo UI host
+and CLI together when upgrading.
+
+A running Qt GUI or standalone MCP process still owns its data directory;
+Neo UI reports that conflict explicitly. Close that process before connecting
+Neo UI, then use **重新连接**. Native stderr is drained and its bounded final
+messages are returned when the backend exits, instead of a generic connection
+failure. The repeat-launch regression test is:
+
+```sh
+pixi run python tests/neo_ui_startup_smoke.py --exe install-webui-release/luna-neo-ui.exe
+```
+
 The top navigation exposes the instance library, creation/import, accounts,
 and settings at all window sizes. Instance management includes resource
 installation, enable/disable, and removal. Minecraft and loader version lists

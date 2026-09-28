@@ -459,11 +459,10 @@ pub async fn webui_initialize(app: tauri::AppHandle) -> Result<(), String> {
         "launcher/execute".into(),
         serde_json::json!({"operation":"runtime.info","parameters":{}}),
     )
-    .await;
+    .await
+    .map_err(|error| error.message)?;
     let data_root = runtime
-        .as_ref()
-        .ok()
-        .and_then(|r| r.pointer("/data/dataRoot"))
+        .pointer("/data/dataRoot")
         .and_then(|v| v.as_str())
         .map(PathBuf::from);
     let selected = {
@@ -538,16 +537,18 @@ pub async fn webui_manager(app: tauri::AppHandle) -> Result<(), String> {
         window.show().map_err(|e| e.to_string())?;
         return window.set_focus().map_err(|e| e.to_string());
     }
-    tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         "webui-manager",
         tauri::WebviewUrl::App("webui-manager.html".into()),
     )
     .title("Web UI 管理")
     .inner_size(680.0, 640.0)
-    .min_inner_size(440.0, 360.0)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .min_inner_size(440.0, 360.0);
+    if let Some(path) = &app.state::<crate::startup::Startup>().webview_data_dir {
+        builder = builder.data_directory(path.clone());
+    }
+    builder.build().map_err(|e| e.to_string())?;
     Ok(())
 }
 

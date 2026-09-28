@@ -3,20 +3,26 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     io::{BufRead, BufReader, Write},
-    path::PathBuf,
-    process::{Child, ChildStdin, Command, Stdio},
+    process::{Child, ChildStdin, Stdio},
     sync::{mpsc, Arc, Mutex},
     thread,
 };
 use tauri::{Emitter, Manager, State};
+mod startup;
 mod webui;
+
+#[derive(Default)]
+struct Connection {
+    pending: HashMap<u64, mpsc::Sender<Result<Value, String>>>,
+    closed: Option<String>,
+}
 
 struct Sidecar {
     child: Child,
     input: Mutex<ChildStdin>,
-    pending: Arc<Mutex<HashMap<u64, mpsc::Sender<Value>>>>,
+    connection: Arc<Mutex<Connection>>,
     next_id: Mutex<u64>,
 }
 
@@ -27,40 +33,16 @@ struct ApiError {
     message: String,
 }
 
-fn sidecar_path() -> Result<PathBuf, String> {
-    if let Ok(path) = std::env::var("LUNA_LAUNCHER_CLI") {
-        return Ok(PathBuf::from(path));
-    }
-    let current = std::env::current_exe().map_err(|e| e.to_string())?;
-    let name = if cfg!(windows) {
-        "lunalauncher-cli.exe"
-    } else {
-        "lunalauncher"
-    };
-    Ok(current
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .join(name))
-}
-
 fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
-    let executable = sidecar_path()?;
-    let mut command = Command::new(executable);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-    // Share the launcher's native portable/environment/default directory rules.
-    // Only isolate data when the caller explicitly requests it.
-    if let Some(data_dir) = std::env::var_os("LUNA_LAUNCHER_DATA").filter(|p| !p.is_empty()) {
-        command.arg("--dir").arg(data_dir);
-    }
+    let startup = app.state::<startup::Startup>();
+    let context = startup.launcher.as_ref().map_err(Clone::clone)?;
+    let mut command = startup::command()?;
+    command.arg("--dir").arg(&context.data_root);
     command
         .arg("--mcp")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     let mut child = command
         .spawn()
         .map_err(|e| format!("Could not start launcher sidecar: {e}"))?;
@@ -72,18 +54,40 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
         .stdout
         .take()
         .ok_or_else(|| "Launcher sidecar stdout is unavailable".to_string())?;
-    let pending: Arc<Mutex<HashMap<u64, mpsc::Sender<Value>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-    let reader_pending = Arc::clone(&pending);
+    let errors = child
+        .stderr
+        .take()
+        .ok_or("Launcher sidecar stderr is unavailable")?;
+    let diagnostics = Arc::new(Mutex::new(VecDeque::new()));
+    let error_tail = Arc::clone(&diagnostics);
+    let (stderr_done, stderr_closed) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(errors).lines().map_while(Result::ok) {
+            if let Ok(mut tail) = error_tail.lock() {
+                tail.push_back(line.chars().take(1024).collect::<String>());
+                if tail.len() > 8 {
+                    tail.pop_front();
+                }
+            }
+        }
+        let _ = stderr_done.send(());
+    });
+    let connection = Arc::new(Mutex::new(Connection::default()));
+    let reader_connection = Arc::clone(&connection);
     let reader_app = app.clone();
+    let pid = child.id();
     thread::spawn(move || {
         for line in BufReader::new(output).lines().map_while(Result::ok) {
             let Ok(message) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
             if let Some(id) = message.get("id").and_then(Value::as_u64) {
-                if let Some(sender) = reader_pending.lock().ok().and_then(|mut p| p.remove(&id)) {
-                    let _ = sender.send(message);
+                if let Some(sender) = reader_connection
+                    .lock()
+                    .ok()
+                    .and_then(|mut c| c.pending.remove(&id))
+                {
+                    let _ = sender.send(Ok(message));
                 }
             } else if message.get("method").and_then(Value::as_str) == Some("launcher/event") {
                 let _ = reader_app.emit(
@@ -97,15 +101,39 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
                 );
             }
         }
-        if let Ok(mut pending) = reader_pending.lock() {
-            pending.clear(); // Disconnect receivers when stdout closes.
+        // Usually both pipes close together. Never leave requests waiting for
+        // stderr EOF if a descendant inherited that handle from the backend.
+        let _ = stderr_closed.recv_timeout(std::time::Duration::from_millis(200));
+        let details = diagnostics
+            .lock()
+            .map(|tail| tail.iter().cloned().collect::<Vec<_>>().join("\n"))
+            .unwrap_or_default();
+        let error = if details.contains("data directory is already in use") {
+            "启动器数据目录已被另一个进程占用。请使用已打开的 Neo UI；如果运行的是传统 Qt 界面，请先关闭它再打开 Neo UI。".to_string()
+        } else if details.is_empty() {
+            "启动器后端已退出，未返回响应。".to_string()
+        } else {
+            format!("启动器后端已退出：\n{details}")
+        };
+        if let Ok(mut connection) = reader_connection.lock() {
+            connection.closed = Some(error.clone());
+            for (_, sender) in connection.pending.drain() {
+                let _ = sender.send(Err(error.clone()));
+            }
         }
-        let _ = reader_app.emit("launcher-exit", json!({}));
+        if let Ok(state) = reader_app.state::<AppState>().0.lock() {
+            if state
+                .as_ref()
+                .is_some_and(|sidecar| sidecar.child.id() == pid)
+            {
+                let _ = reader_app.emit("launcher-exit", json!({ "message": error }));
+            }
+        }
     });
     Ok(Sidecar {
         child,
         input: Mutex::new(input),
-        pending,
+        connection,
         next_id: Mutex::new(1),
     })
 }
@@ -158,21 +186,24 @@ async fn launcher_request(
         let request_id = *id;
         *id += 1;
         let (sender, receiver) = mpsc::channel();
-        sidecar
-            .pending
-            .lock()
-            .map_err(|_| ApiError {
-                message: "Launcher response map is unavailable".into(),
-            })?
-            .insert(request_id, sender);
+        let mut connection = sidecar.connection.lock().map_err(|_| ApiError {
+            message: "Launcher response map is unavailable".into(),
+        })?;
+        if let Some(message) = &connection.closed {
+            return Err(ApiError {
+                message: message.clone(),
+            });
+        }
+        connection.pending.insert(request_id, sender);
+        drop(connection);
         let request =
             json!({ "jsonrpc": "2.0", "id": request_id, "method": method, "params": parameters });
         let mut input = sidecar.input.lock().map_err(|_| ApiError {
             message: "Launcher stdin is unavailable".into(),
         })?;
         if let Err(error) = writeln!(input, "{}", request).and_then(|_| input.flush()) {
-            if let Ok(mut pending) = sidecar.pending.lock() {
-                pending.remove(&request_id);
+            if let Ok(mut connection) = sidecar.connection.lock() {
+                connection.pending.remove(&request_id);
             }
             return Err(ApiError {
                 message: format!("Could not write launcher request: {error}"),
@@ -188,7 +219,8 @@ async fn launcher_request(
         })?
         .map_err(|_| ApiError {
             message: "Launcher sidecar exited before returning a response".into(),
-        })?;
+        })?
+        .map_err(|message| ApiError { message })?;
     if let Some(error) = message.get("error") {
         return Err(ApiError {
             message: error
@@ -204,7 +236,13 @@ async fn launcher_request(
 }
 
 fn main() {
+    let mut context = tauri::generate_context!();
+    let startup = startup::prepare(&mut context);
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            startup::activate(app)
+        }))
+        .manage(startup)
         .manage(AppState(Mutex::new(None)))
         .manage(webui::WebUiState(Mutex::new(webui::Registry::default())))
         .plugin(tauri_plugin_opener::init())
@@ -246,7 +284,7 @@ fn main() {
             webui::webui_manager,
             webui::webui_open_folder
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Neo UI")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
@@ -254,6 +292,7 @@ fn main() {
                     if let Ok(mut guard) = state.0.lock() {
                         if let Some(mut sidecar) = guard.take() {
                             let _ = sidecar.child.kill();
+                            let _ = sidecar.child.wait();
                         }
                     }
                 }

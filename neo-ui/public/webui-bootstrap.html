@@ -1,13 +1,19 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Luna Launcher</title>
 <style>body{background:#0b0f17;color:#e2e8f0;font:16px system-ui;display:grid;place-content:center;height:100vh;margin:0}button{padding:12px;margin:8px;border-radius:8px;cursor:pointer}p{max-width:620px;overflow-wrap:anywhere;color:#94a3b8}</style></head>
-<body><h2>Luna Launcher</h2><p id="status">正在读取 Web UI…</p><div id="recovery" hidden><button id="builtin">打开内置 Neo UI</button><button id="manager">Web UI 管理</button></div>
+<body><h2>Luna Launcher</h2><p id="status">正在读取 Web UI…</p><div id="recovery" hidden><button id="retry">重新连接</button><button id="builtin">打开内置 Neo UI</button><button id="manager">Web UI 管理</button></div>
 <script>
 const invoke = (command, parameters) => window.__TAURI__.core.invoke(command, parameters);
+function connect() {
+document.getElementById('recovery').hidden = true;
+document.getElementById('status').textContent = '正在连接启动器后端…';
 invoke('webui_initialize').catch(error => {
   document.getElementById('status').textContent = String(error.message || error);
   document.getElementById('recovery').hidden = false;
 });
+}
+document.getElementById('retry').onclick = connect;
+connect();
 document.getElementById('builtin').onclick = () => invoke('webui_select', {id:'builtin'});
 document.getElementById('manager').onclick = () => invoke('webui_manager');
 </script></body></html>

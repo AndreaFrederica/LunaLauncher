@@ -115,9 +115,9 @@ export class LauncherApiClient {
     this.requireDesktop();
     return listen('launcher-stream', event => handler(event.payload));
   }
-  onExit(handler: () => void): Promise<UnlistenFn> {
+  onExit(handler: (reason: { message?: string }) => void): Promise<UnlistenFn> {
     this.requireDesktop();
-    return listen('launcher-exit', handler);
+    return listen<{ message?: string }>('launcher-exit', event => handler(event.payload));
   }
 }
 export const launcher = new LauncherApiClient();

@@ -114,6 +114,8 @@
 #include <QFileInfo>
 #include <QFileOpenEvent>
 #include <QIcon>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLibraryInfo>
 #include <QList>
 #include <QNetworkAccessManager>
@@ -363,6 +365,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" },
           { "cli", "Run one command without displaying the GUI" },
+          { "print-startup-context", "Print resolved data directory and single-instance ID without starting a backend (requires --cli)" },
           { "mcp", "Run an MCP server over standard input/output" },
           { "tui", "Run the interactive terminal interface" },
           { "json", "Print CLI results as JSON" },
@@ -419,6 +422,11 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     const int headlessModes = static_cast<int>(m_cliOptions.cli) + static_cast<int>(m_cliOptions.mcp) + static_cast<int>(m_cliOptions.tui);
     if (headlessModes > 1) {
         std::cerr << "--cli, --mcp and --tui are mutually exclusive\n";
+        m_status = Application::Failed;
+        return;
+    }
+    if (parser.isSet("print-startup-context") && !m_cliOptions.cli) {
+        std::cerr << "--print-startup-context requires --cli\n";
         m_status = Application::Failed;
         return;
     }
@@ -574,6 +582,15 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
      * We want to initialize this before logging to avoid messing with the log of a potential already running copy.
      */
     auto appID = ApplicationId::fromPathAndVersion(QDir::currentPath(), BuildConfig.printableVersionString());
+    if (parser.isSet("print-startup-context")) {
+        // Native and Web UIs must agree on portable/environment/--dir resolution.
+        // This query is safe while another backend owns the directory: it returns
+        // before acquiring LocalPeer or opening logs, settings and accounts.
+        const QJsonObject context{ { "dataRoot", QDir::currentPath() }, { "instanceId", appID.toString() } };
+        std::cout << QJsonDocument(context).toJson(QJsonDocument::Compact).constData() << std::endl;
+        m_status = Application::Succeeded;
+        return;
+    }
     {
         // FIXME: you can run the same binaries with multiple data dirs and they won't clash. This could cause issues for updates.
         m_peerInstance = new LocalPeer(this, appID);

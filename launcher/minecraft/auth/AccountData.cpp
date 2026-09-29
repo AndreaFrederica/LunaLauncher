@@ -34,6 +34,7 @@
  */
 
 #include "AccountData.h"
+#include "MinecraftUuid.h"
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -366,6 +367,9 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
     }
 
     if (type == AccountType::MSA) {
+        const auto verified = data.value("officialVerifiedAt").toInteger();
+        if (verified > 0)
+            officialVerifiedAt = QDateTime::fromSecsSinceEpoch(verified, Qt::UTC);
         auto clientIDV = data.value("msa-client-id");
         if (clientIDV.isString()) {
             msaClientID = clientIDV.toString();
@@ -379,6 +383,7 @@ bool AccountData::resumeStateFromV3(QJsonObject data)
         if (configV.isObject()) {
             auto configObj = configV.toObject();
             yggdrasilConfig.authServerUrl = configObj.value("authServerUrl").toString();
+            yggdrasilConfig.managedLocal = configObj.value("managedLocal").toBool(false);
             yggdrasilConfig.sessionServerUrl = configObj.value("sessionServerUrl").toString();
             yggdrasilConfig.sourceName = configObj.value("sourceName").toString();
             yggdrasilConfig.authenticateEndpoint = configObj.value("authenticateEndpoint").toString();
@@ -434,6 +439,8 @@ QJsonObject AccountData::saveState() const
     QJsonObject output;
     if (type == AccountType::MSA) {
         output["type"] = "MSA";
+        if (officialVerifiedAt.isValid())
+            output["officialVerifiedAt"] = officialVerifiedAt.toSecsSinceEpoch();
         output["msa-client-id"] = msaClientID;
         tokenToJSONV3(output, msaToken, "msa");
         tokenToJSONV3(output, userToken, "utoken");
@@ -445,6 +452,7 @@ QJsonObject AccountData::saveState() const
         output["type"] = "Yggdrasil";
         QJsonObject configObj;
         configObj["authServerUrl"] = yggdrasilConfig.authServerUrl;
+        configObj["managedLocal"] = yggdrasilConfig.managedLocal;
         configObj["sessionServerUrl"] = yggdrasilConfig.sessionServerUrl;
         if (!yggdrasilConfig.sourceName.isEmpty()) {
             configObj["sourceName"] = yggdrasilConfig.sourceName;
@@ -507,6 +515,52 @@ QString AccountData::accessToken() const
         return unifiedPassToken.token;
     }
     return yggdrasilToken.token;
+}
+
+QJsonObject AccountData::officialSnapshot() const
+{
+    if (type != AccountType::MSA)
+        return {};
+    return cachedSnapshot();
+}
+
+QJsonObject AccountData::cachedSnapshot() const
+{
+    if ((type != AccountType::MSA && type != AccountType::Yggdrasil) || minecraftProfile.id.isEmpty() ||
+        minecraftProfile.validity != Validity::Certain ||
+        (type == AccountType::MSA && (!officialVerifiedAt.isValid() || minecraftEntitlement.validity != Validity::Certain)))
+        return {};
+    QJsonObject snapshot;
+    // Deliberately serialize only profile and entitlement observations, never tokens.
+    profileToJSONV3(snapshot, minecraftProfile, "profile");
+    entitlementToJSONV3(snapshot, minecraftEntitlement);
+    snapshot["verified_at"] = type == AccountType::MSA ? officialVerifiedAt.toSecsSinceEpoch() : QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
+    snapshot["local_auth"] = type == AccountType::Yggdrasil;
+    return snapshot;
+}
+
+void AccountData::restoreOfficialSnapshot(const QJsonObject& snapshot)
+{
+    restoreCachedSnapshot(snapshot);
+}
+
+void AccountData::restoreCachedSnapshot(const QJsonObject& snapshot)
+{
+    auto profile = profileFromJSONV3(snapshot, "profile");
+    const auto verified = snapshot.value("verified_at").toInteger();
+    if ((type != AccountType::MSA && type != AccountType::Yggdrasil) || parseMinecraftUuid(minecraftProfile.id).isNull() ||
+        parseMinecraftUuid(profile.id) != parseMinecraftUuid(minecraftProfile.id) || verified <= 0)
+        return;
+    // Only fill missing texture bytes for the same content. Do not replace current
+    // identity, ownership or authentication state with an older observation.
+    if (minecraftProfile.skin.data.isEmpty() && minecraftProfile.skin.url == profile.skin.url)
+        minecraftProfile.skin.data = profile.skin.data;
+    for (auto it = minecraftProfile.capes.begin(); it != minecraftProfile.capes.end(); ++it) {
+        auto cached = profile.capes.constFind(it.key());
+        if (cached != profile.capes.cend() && it->url == cached->url && it->data.isEmpty())
+            it->data = cached->data;
+    }
+    cacheState = CacheState::Cached;
 }
 
 QString AccountData::profileId() const

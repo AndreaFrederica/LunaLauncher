@@ -1,0 +1,15 @@
+[package]
+name = "yggdrasil-federation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+http.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+url.workspace = true
+yggdrasil-core.workspace = true
+yggdrasil-service.workspace = true
+yggdrasil-upstream.workspace = true

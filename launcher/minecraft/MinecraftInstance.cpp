@@ -601,7 +601,8 @@ QStringList MinecraftInstance::javaArguments(AuthSessionPtr session)
             args << QString("-javaagent:%1=%2").arg(authlibInjectorPath, session->yggdrasilApiUrl);
 
             if (!session->yggdrasilApiUrl.isEmpty()) {
-                session->yggdrasilPrefetched = AuthlibInjector::instance().getYggdrasilMeta(session->yggdrasilApiUrl);
+                if (session->yggdrasilPrefetched.isEmpty())
+                    session->yggdrasilPrefetched = AuthlibInjector::instance().getYggdrasilMeta(session->yggdrasilApiUrl);
                 if (!session->yggdrasilPrefetched.isEmpty()) {
                     args << QString("-Dauthlibinjector.yggdrasil.prefetched=%1").arg(session->yggdrasilPrefetched);
                 }
@@ -1219,7 +1220,7 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
 
     // load meta
     {
-        auto mode = session->launchMode != LaunchMode::Offline ? Net::Mode::Online : Net::Mode::Offline;
+        auto mode = session->launchMode != LaunchMode::Offline && !session->localYggdrasilFallback ? Net::Mode::Online : Net::Mode::Offline;
         process->appendStep(makeShared<TaskStepWrapper>(pptr, makeShared<MinecraftLoadAndCheck>(this, mode)));
     }
 
@@ -1255,6 +1256,8 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
     // if we aren't in offline mode
     if (session->launchMode != LaunchMode::Offline) {
         process->appendStep(makeShared<ClaimAccount>(pptr, session));
+    }
+    if (session->launchMode != LaunchMode::Offline && !session->localYggdrasilFallback) {
         for (auto t : createUpdateTask()) {
             process->appendStep(makeShared<TaskStepWrapper>(pptr, t));
         }

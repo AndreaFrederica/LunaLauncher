@@ -1,0 +1,159 @@
+{
+  "POST /api/v1/upstreams": [
+    {
+      "id": "primary",
+      "name": "Primary Yggdrasil",
+      "kind": "yggdrasil",
+      "base_url": "https://auth.example.net/api/yggdrasil",
+      "priority": 10,
+      "capabilities": [
+        "auth",
+        "session",
+        "profiles",
+        "textures",
+        "minecraft_services"
+      ],
+      "transport": {
+        "kind": "direct"
+      },
+      "texture_domains": [
+        "textures.minecraft.net"
+      ]
+    },
+    {
+      "id": "secondary",
+      "name": "Secondary Yggdrasil",
+      "kind": "yggdrasil",
+      "base_url": "https://auth.other.example/api/yggdrasil",
+      "priority": 20,
+      "capabilities": [
+        "auth",
+        "session",
+        "profiles",
+        "textures",
+        "minecraft_services"
+      ],
+      "transport": {
+        "kind": "http_proxy",
+        "proxy_url": "http://127.0.0.1:7890"
+      },
+      "texture_domains": [
+        "textures.minecraft.net"
+      ]
+    },
+    {
+      "id": "assets",
+      "name": "Minecraft assets",
+      "kind": "http",
+      "base_url": "https://resources.download.minecraft.net",
+      "capabilities": [
+        "http"
+      ],
+      "transport": {
+        "kind": "socks5h",
+        "proxy_url": "socks5h://127.0.0.1:1080"
+      }
+    }
+  ],
+  "POST /api/v1/federation/rules": [
+    {
+      "id": "remote-login",
+      "operation": "authenticate",
+      "match_priority": 0,
+      "strategy": "pinned",
+      "targets": [
+        {
+          "source": "primary",
+          "priority": 10
+        }
+      ],
+      "enabled": true,
+      "reject_conflicts": false
+    },
+    {
+      "id": "profiles",
+      "operation": "profile_batch",
+      "match_priority": 0,
+      "strategy": "merge_priority",
+      "targets": [
+        {
+          "source": "local",
+          "priority": 0
+        },
+        {
+          "source": "*",
+          "priority": null
+        }
+      ],
+      "enabled": true,
+      "reject_conflicts": true
+    },
+    {
+      "id": "profile_lookup",
+      "operation": "profile_lookup",
+      "match_priority": 0,
+      "strategy": "priority_failover",
+      "targets": [
+        {
+          "source": "local",
+          "priority": 0
+        },
+        {
+          "source": "*",
+          "priority": null
+        }
+      ],
+      "enabled": true,
+      "reject_conflicts": false
+    },
+    {
+      "id": "profile_by_name",
+      "operation": "profile_by_name",
+      "match_priority": 0,
+      "strategy": "priority_failover",
+      "targets": [
+        {
+          "source": "local",
+          "priority": 0
+        },
+        {
+          "source": "*",
+          "priority": null
+        }
+      ],
+      "enabled": true,
+      "reject_conflicts": false
+    },
+    {
+      "id": "name_history",
+      "operation": "name_history",
+      "match_priority": 0,
+      "strategy": "priority_failover",
+      "targets": [
+        {
+          "source": "local",
+          "priority": 0
+        },
+        {
+          "source": "*",
+          "priority": null
+        }
+      ],
+      "enabled": true,
+      "reject_conflicts": false
+    }
+  ],
+  "POST /api/v1/cache/routes": [
+    {
+      "id": "assets",
+      "name": "Minecraft assets",
+      "listen_prefix": "/cache/assets",
+      "upstream_id": "assets",
+      "upstream_path_prefix": "/",
+      "ttl_seconds": 2592000,
+      "stale_if_error_seconds": 604800,
+      "negative_ttl_seconds": 30,
+      "max_object_bytes": 67108864
+    }
+  ]
+}

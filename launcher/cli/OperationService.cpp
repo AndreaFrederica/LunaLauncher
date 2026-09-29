@@ -243,7 +243,7 @@ QString settingCategory(const QString& id)
         "Aria2FollowLauncherDownloadLimits", "Aria2MaxConcurrentDownloads", "Aria2MaxConnectionPerServer",
         "Aria2Split", "Aria2MinSplitSize", "Aria2FileAllocation", "Aria2Continue", "Aria2RpcPort",
         "Aria2PollInterval", "Aria2ExtraArgs", "Aria2UseLauncherProxy", "CurseForgeDownloadBrowser",
-        "ShowModIncompat", "FallbackMRBlockedMods", "MetaURLOverride", "ResourceURLOverride", "DownloadMirrorType",
+        "ShowModIncompat", "FallbackMRBlockedMods", "MetaURLOverride", "LocalServiceCache", "ResourceURLOverride", "DownloadMirrorType",
         "ModrinthMirror", "CurseForgeMirror", "LibrariesURL", "LegacyFMLLibsURLOverride", "MojangDownloadsMirrorURL",
         "CFKeyOverride", "FlameKeyOverride", "ModrinthToken"
     };

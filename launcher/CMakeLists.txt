@@ -235,6 +235,11 @@ set(MINECRAFT_SOURCES
     minecraft/auth/AuthSession.h
     minecraft/auth/AuthStep.h
     minecraft/auth/MinecraftAccount.cpp
+    minecraft/auth/LocalYggdrasil.cpp
+    minecraft/auth/LocalYggdrasil.h
+    minecraft/auth/MinecraftUuid.h
+    ui/dialogs/EnhancedOfflineDialog.cpp
+    ui/dialogs/EnhancedOfflineDialog.h
     minecraft/auth/MinecraftAccount.h
     minecraft/auth/Parsers.cpp
     minecraft/auth/Parsers.h
@@ -1156,6 +1161,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/ProxyPage.h
     ui/pages/global/APIPage.cpp
     ui/pages/global/APIPage.h
+    ui/pages/global/YggdrasilPage.cpp
+    ui/pages/global/YggdrasilPage.h
     ui/pages/global/Aria2Page.cpp
     ui/pages/global/Aria2Page.h
     ui/pages/global/PclDownloadPage.cpp

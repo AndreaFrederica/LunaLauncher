@@ -1,0 +1,13 @@
+[package]
+name = "yggdrasil-cache"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+http.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+url.workspace = true
+yggdrasil-core.workspace = true
+yggdrasil-upstream.workspace = true

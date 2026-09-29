@@ -405,6 +405,8 @@ bool parseMinecraftEntitlements(QByteArray& data, MinecraftEntitlement& output)
     }
 
     auto obj = doc.object();
+    if (!obj.value("items").isArray())
+        return false;
     output.canPlayMinecraft = false;
     output.ownsMinecraft = false;
 

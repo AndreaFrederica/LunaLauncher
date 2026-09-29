@@ -294,6 +294,10 @@ bool MinecraftAccount::shouldRefresh() const
             return true;
         }
     }
+    // Resolve the launcher-owned service endpoint before reusing a local
+    // session, while preserving the in-use and broken-account guards above.
+    if (data.type == AccountType::Yggdrasil && data.yggdrasilConfig.managedLocal)
+        return true;
     auto now = QDateTime::currentDateTimeUtc();
     QDateTime issuedTimestamp;
     QDateTime expiresTimestamp;

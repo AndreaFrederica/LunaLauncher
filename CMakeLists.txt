@@ -547,6 +547,10 @@ add_subdirectory(libraries/qtermwidget)
 ############################### Built Artifacts ###############################
 
 add_subdirectory(buildconfig)
+option(LAUNCHER_BUILD_YGGDRASIL "Build the Rust enhanced offline authentication service" OFF)
+if(LAUNCHER_BUILD_YGGDRASIL)
+    add_subdirectory(yggdrasil)
+endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

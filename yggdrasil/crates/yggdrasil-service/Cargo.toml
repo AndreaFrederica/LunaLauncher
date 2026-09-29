@@ -1,0 +1,18 @@
+[package]
+name = "yggdrasil-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+argon2.workspace = true
+base64.workspace = true
+image.workspace = true
+rand.workspace = true
+rsa.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+tokio.workspace = true
+url.workspace = true
+yggdrasil-core.workspace = true

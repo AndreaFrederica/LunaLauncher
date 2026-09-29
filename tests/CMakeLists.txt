@@ -1,4 +1,7 @@
 project(tests)
+ecm_add_test(AccountSnapshot_test.cpp ../launcher/minecraft/auth/AccountData.cpp ../launcher/minecraft/auth/AuthSession.cpp
+    LINK_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test TEST_NAME AccountSnapshot)
+target_include_directories(AccountSnapshot PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
 
 ecm_add_test(FileSystem_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME FileSystem)

@@ -58,6 +58,7 @@ class AccountList : public QAbstractListModel {
         TypeColumn,
         SourceColumn,
         StatusColumn,
+        CacheColumn,
 
         NUM_COLUMNS
     };
@@ -107,6 +108,7 @@ class AccountList : public QAbstractListModel {
     bool anyMSAAccountOwnsMinecraft();
 
     bool isActive() const;
+    void refreshCacheStatuses();
 
    protected:
     void beginActivity();

@@ -184,6 +184,8 @@ void YggdrasilAuthStep::perform()
                 if (!clientToken.isEmpty()) {
                     reqObj["clientToken"] = clientToken;
                 }
+                const auto selected = m_data->yggdrasilToken.extra.value("pendingSelectedProfile").toJsonObject();
+                if (!selected.isEmpty()) reqObj["selectedProfile"] = selected;
                 // Note: requestUser is NOT part of the standard Yggdrasil refresh endpoint
                 // It's only used in authenticate endpoint
 
@@ -247,6 +249,15 @@ void YggdrasilAuthStep::perform()
 
 void YggdrasilAuthStep::onRequestDone()
 {
+    // A reachable provider rejecting credentials is an authentication failure.
+    // Treating HTTP 401/403 as an offline outage would incorrectly offer a stale
+    // cached session for a mistyped or revoked third-party account.
+    const auto status = m_request->replyStatusCode();
+    if ((status == 401 || status == 403) && m_requestType != RequestType::Validate) {
+        emit finished(AccountTaskState::STATE_FAILED_HARD,
+                      tr("Yggdrasil authentication was rejected by the provider (HTTP %1).").arg(status));
+        return;
+    }
     if (m_request->error() != QNetworkReply::NoError) {
         if (m_request->error() == QNetworkReply::ContentNotFoundError) {
             // Validate request returns 204 No Content on success
@@ -256,8 +267,8 @@ void YggdrasilAuthStep::onRequestDone()
             }
         }
         qWarning() << "Yggdrasil API request failed:" << m_request->errorString();
-        emit finished(AccountTaskState::STATE_FAILED_SOFT,
-                     tr("Yggdrasil authentication failed: %1").arg(m_request->errorString()));
+        emit finished(AccountTaskState::STATE_OFFLINE,
+                     tr("Yggdrasil authentication server is unavailable: %1").arg(m_request->errorString()));
         return;
     }
 
@@ -358,6 +369,8 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
 
         emit finished(AccountTaskState::STATE_WORKING, tr("Authentication succeeded"));
     } else if (availableProfiles.size() > 0) {
+        m_data->minecraftProfile.id.clear();
+        m_data->minecraftProfile.name.clear();
         // Multiple profiles available, need to select one
         // Store available profiles for selection step
         QJsonArray profilesArray;

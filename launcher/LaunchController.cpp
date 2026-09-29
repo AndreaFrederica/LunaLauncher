@@ -42,6 +42,7 @@
 #include "launch/steps/PrintServers.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "server/ServerLaunchTask.h"
 
 #include "ui/InstanceWindow.h"
@@ -169,6 +170,9 @@ LaunchDecision LaunchController::decideLaunchMode()
 #else
     MinecraftAccountPtr accountToCheck;
     if (m_accountToUse->ownsMinecraft()) {
+        accountToCheck = m_accountToUse;
+    } else if (m_accountToUse->accountType() == AccountType::Yggdrasil &&
+               LocalYggdrasil::instance().hasAccountSnapshot(*m_accountToUse->accountData())) {
         accountToCheck = m_accountToUse;
     } else if (const auto defaultAccount = accounts->defaultAccount(); defaultAccount && defaultAccount->ownsMinecraft()) {
         accountToCheck = defaultAccount;
@@ -401,6 +405,46 @@ void LaunchController::login()
         }
 
         if (m_actualLaunchMode == LaunchMode::Offline && m_accountToUse->accountType() != AccountType::Offline) {
+            auto& local = LocalYggdrasil::instance();
+            if (m_wantedLaunchMode == LaunchMode::Normal && local.hasAccountSnapshot(*m_accountToUse->accountData())) {
+                bool useLocal = false;
+                const auto message = tr("The official authentication service could not be reached.\n\n"
+                    "Local authentication keeps your Minecraft UUID, name and cached skin/cape. "
+                    "You can play locally or on servers configured to trust this service. "
+                    "Other online servers still require official authentication.\n\nLast verified: %1")
+                    .arg(m_accountToUse->accountData()->officialVerifiedAt.toLocalTime().toString(Qt::ISODate));
+                if (m_headless) {
+                    const auto choice = activeUserInteraction ? activeUserInteraction->select(message,
+                        QJsonArray{ tr("Use Local Authentication"), tr("Traditional Offline Mode"), tr("Cancel") }) : std::nullopt;
+                    if (!choice || *choice == 2) {
+                        emitAborted();
+                        return;
+                    }
+                    useLocal = *choice == 0;
+                } else {
+                    QMessageBox box(QMessageBox::Question, tr("Authentication service unavailable"), message, QMessageBox::NoButton, m_parentWidget);
+                    auto* localButton = box.addButton(tr("Use Local Authentication"), QMessageBox::AcceptRole);
+                    auto* offlineButton = box.addButton(tr("Traditional Offline Mode"), QMessageBox::ActionRole);
+                    box.addButton(QMessageBox::Cancel);
+                    box.setDefaultButton(localButton);
+                    box.exec();
+                    useLocal = box.clickedButton() == localButton;
+                    if (!useLocal && box.clickedButton() != offlineButton) {
+                        emitAborted();
+                        return;
+                    }
+                }
+                if (useLocal) {
+                    QString error;
+                    if (!local.createAccountSession(*m_accountToUse->accountData(), m_session, error)) {
+                        emitFailed(error);
+                        return;
+                    }
+                    m_actualLaunchMode = LaunchMode::Normal;
+                    launchInstance();
+                    return;
+                }
+            }
             bool ok = false;
             QString name = m_offlineName;
             if (name.isEmpty()) {

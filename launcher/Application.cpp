@@ -70,6 +70,7 @@
 
 #include "ui/pages/BasePageProvider.h"
 #include "ui/pages/global/APIPage.h"
+#include "ui/pages/global/YggdrasilPage.h"
 #include "ui/pages/global/AssetsPage.h"
 #include "ui/pages/global/AccountListPage.h"
 #include "ui/pages/global/AppearancePage.h"
@@ -1054,7 +1055,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         }
         {
             // Meta URL
-            m_settings->registerSetting("MetaURLOverride", "");
+        m_settings->registerSetting("MetaURLOverride", "");
+        m_settings->registerSetting("LocalServiceCache", true);
+        m_settings->registerSetting("YggdrasilAccountCache", true);
 
             QUrl metaUrl(m_settings->get("MetaURLOverride").toString());
 
@@ -1156,6 +1159,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<MinecraftPage>();
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
+            m_globalSettingsProvider->addPage<YggdrasilPage>();
             m_globalSettingsProvider->addPage<APIPage>();
             m_globalSettingsProvider->addPage<AssetsPage>();
             m_globalSettingsProvider->addPage<Aria2Page>();

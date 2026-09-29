@@ -57,4 +57,5 @@ class AuthlibInjectorDownloadTask : public LaunchStep {
     QJsonObject m_metadataObj;
     qint64 m_totalSize = 0;
     qint64 m_downloadedSize = 0;
+    bool m_triedOfficial = false;
 };

@@ -259,6 +259,9 @@ subdir('buildconfig')
 subdir('libraries/cmark')
 subdir('libraries')
 subdir('launcher')
+if not get_option('yggdrasil').disabled()
+  subdir('yggdrasil')
+endif
 
 if launcher_enable_curseforge_webview
   subdir('tools/curseforge-webview')

@@ -314,6 +314,10 @@ def configure(root: Path, profile: str) -> None:
         f"-Ddisable_ownership_check={'true' if disable_ownership else 'false'}",
         f"-Dbuild_updater={'true' if build_updater else 'false'}",
         f"-Dneo_ui={'enabled' if webui_enabled() else 'disabled'}",
+        # Ship the launcher-managed Rust authentication/cache service in every
+        # native Pixi build. The Linux cross profile builds a foreign target
+        # with the host toolchain, so the native sidecar is disabled there.
+        f"-Dyggdrasil={'disabled' if is_cross_profile(profile) else 'enabled'}",
         "-Dbuild_filelinker=true" if system == "windows" else "-Dbuild_filelinker=false",
         "-Dlibarchive:tests=disabled",
         "-Dlibarchive:zlib=enabled",

@@ -49,6 +49,7 @@
 #if defined(LAUNCHER_APPLICATION)
 #include "net/Aria2Download.h"
 #include "net/PclDownloadTask.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #endif
 
 namespace Net {
@@ -56,10 +57,11 @@ namespace Net {
 #if defined(LAUNCHER_APPLICATION)
 auto Download::makeCached(QUrl url, MetaEntryPtr entry, Options options) -> Download::Ptr
 {
-    if (PclDownloadTask::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+    const bool localCache = LocalYggdrasil::instance().isCacheUrl(url);
+    if (!localCache && PclDownloadTask::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
         return PclDownloadTask::makeCached(std::move(url), entry, options);
     }
-    if (Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+    if (!localCache && Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
         return Aria2Download::makeCached(std::move(url), entry, options);
     }
     auto dl = makeShared<Download>();
@@ -107,6 +109,16 @@ auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Pt
 
 QNetworkReply* Download::getReply(QNetworkRequest& request)
 {
+#if defined(LAUNCHER_APPLICATION)
+    auto& cache = LocalYggdrasil::instance();
+    if (cache.isCacheUrl(request.url())) {
+        // The gateway owns conditional revalidation. Forwarding Qt's validators
+        // would bypass its disk cache and prevent stale-on-error responses.
+        request.setRawHeader("If-None-Match", {});
+        request.setRawHeader("If-Modified-Since", {});
+        return cache.cacheNetwork()->get(request);
+    }
+#endif
     return m_network->get(request);
 }
 }  // namespace Net

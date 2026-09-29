@@ -103,6 +103,23 @@ void YggdrasilProfileSelectStep::perform()
 
 void YggdrasilProfileSelectStep::setSelectedProfile(const QString& profileId, const QString& profileName)
 {
+    // Selection must bind the server token too; only updating launcher fields
+    // leaves multi-profile tokens unusable for joinServer.
+    if (m_data->type == AccountType::Yggdrasil && m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::Standard &&
+        m_data->minecraftProfile.id.isEmpty()) {
+        m_data->yggdrasilToken.extra["pendingSelectedProfile"] = QJsonObject{{"id", profileId}, {"name", profileName}};
+        m_bindTask = makeShared<YggdrasilAuthStep>(m_data, YggdrasilAuthStep::RequestType::Refresh);
+        connect(m_bindTask.get(), &AuthStep::finished, this, [this, profileId, profileName](AccountTaskState state, const QString& message) {
+            m_data->yggdrasilToken.extra.remove("pendingSelectedProfile");
+            if (state != AccountTaskState::STATE_WORKING || m_data->minecraftProfile.id != profileId) {
+                emit finished(AccountTaskState::STATE_FAILED_SOFT, message);
+                return;
+            }
+            setSelectedProfile(profileId, profileName);
+        });
+        m_bindTask->perform();
+        return;
+    }
     m_data->minecraftProfile.id = profileId;
     m_data->minecraftProfile.name = profileName;
     m_data->minecraftProfile.validity = Validity::Certain;

@@ -72,6 +72,7 @@ class AccountListPage : public QMainWindow, public BasePage {
     void on_actionAddMicrosoft_triggered();
     void on_actionAddOffline_triggered();
     void on_actionAddYggdrasil_triggered();
+    void on_actionAddEnhancedOffline_triggered();
     void on_actionAddUnifiedPass_triggered();
     void on_actionAddOfflineForced_triggered();  // Developer mode: Force add offline account
     void on_actionRemove_triggered();

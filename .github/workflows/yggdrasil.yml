@@ -1,0 +1,62 @@
+name: Yggdrasil Rust
+on:
+  push:
+    paths: ['yggdrasil/**', '.github/workflows/yggdrasil.yml']
+  pull_request:
+    paths: ['yggdrasil/**', '.github/workflows/yggdrasil.yml']
+permissions:
+  contents: read
+jobs:
+  rust:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: yggdrasil
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: yggdrasil
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked -- --test-threads=2
+  databases:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: yggdrasil_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test-password
+          MYSQL_DATABASE: yggdrasil_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -ptest-password" --health-interval 10s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: yggdrasil
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: yggdrasil
+      - run: cargo test --locked -p yggdrasil-server external_database -- --ignored
+        env:
+          YGGDRASIL_TEST_DATABASE_URL: postgres://postgres:test-password@localhost:5432/yggdrasil_test
+      - run: cargo test --locked -p yggdrasil-server external_database -- --ignored
+        env:
+          YGGDRASIL_TEST_DATABASE_URL: mysql://root:test-password@localhost:3306/yggdrasil_test

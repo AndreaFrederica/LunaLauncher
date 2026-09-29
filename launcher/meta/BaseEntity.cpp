@@ -30,6 +30,7 @@
 #include "settings/SettingsObject.h"
 #include "BuildConfig.h"
 #include "tasks/Task.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 
 namespace Meta {
 
@@ -79,9 +80,9 @@ QUrl BaseEntity::url() const
     QString metaOverride = s->get("MetaURLOverride").toString();
 
     if (metaOverride.isEmpty()) {
-        return QUrl(BuildConfig.META_URL).resolved(localFilename());
+        metaOverride = BuildConfig.META_URL;
     }
-    return QUrl(metaOverride).resolved(localFilename());
+    return LocalYggdrasil::instance().metadataUrl(QUrl(metaOverride).resolved(localFilename()));
 }
 
 Task::Ptr BaseEntity::loadTask(Net::Mode mode)

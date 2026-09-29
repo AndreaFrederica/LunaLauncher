@@ -3,6 +3,7 @@
 #include <QNetworkRequest>
 
 #include "minecraft/auth/AccountData.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "minecraft/auth/steps/EntitlementsStep.h"
 #include "minecraft/auth/steps/GetSkinStep.h"
 #include "minecraft/auth/steps/LauncherLoginStep.h"
@@ -78,12 +79,29 @@ AuthFlow::AuthFlow(AccountData* data, Action action, ProfileSelector selector) :
 
 void AuthFlow::succeed()
 {
+    if ((m_data->type == AccountType::MSA || m_data->type == AccountType::Yggdrasil) &&
+        m_data->minecraftProfile.validity == Validity::Certain &&
+        (m_data->type == AccountType::Yggdrasil || m_data->minecraftEntitlement.validity == Validity::Certain)) {
+        if (m_data->type == AccountType::MSA)
+            m_data->officialVerifiedAt = QDateTime::currentDateTimeUtc();
+        LocalYggdrasil::instance().saveAccountSnapshot(*m_data);
+    }
     m_data->validity_ = Validity::Certain;
     changeState(AccountTaskState::STATE_SUCCEEDED, tr("Finished all authentication steps"));
 }
 
 void AuthFlow::executeTask()
 {
+    if (m_data->type == AccountType::Yggdrasil && m_data->yggdrasilConfig.managedLocal) {
+        QString error;
+        auto& service = LocalYggdrasil::instance();
+        if (!service.ensureRunning(error)) {
+            changeState(AccountTaskState::STATE_FAILED_SOFT, error);
+            return;
+        }
+        m_data->yggdrasilConfig.authServerUrl = service.apiUrl();
+        m_data->yggdrasilConfig.sessionServerUrl = service.apiUrl();
+    }
     changeState(AccountTaskState::STATE_WORKING, tr("Initializing"));
     nextStep();
 }
@@ -138,6 +156,7 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return false;
         }
         case AccountTaskState::STATE_OFFLINE: {
+            LocalYggdrasil::instance().restoreAccountSnapshot(*m_data);
             setStatus(tr("Failed to contact the authentication server."));
             m_data->errorString = reason;
             m_data->accountState = AccountState::Offline;
@@ -159,6 +178,8 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return false;
         }
         case AccountTaskState::STATE_FAILED_HARD: {
+            if (m_data->type == AccountType::MSA)
+                LocalYggdrasil::instance().removeAccountSnapshot(m_data->profileId());
             setStatus(tr("Failed to authenticate. The session has expired."));
             m_data->errorString = reason;
             m_data->accountState = AccountState::Expired;
@@ -166,6 +187,8 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return false;
         }
         case AccountTaskState::STATE_FAILED_GONE: {
+            if (m_data->type == AccountType::MSA)
+                LocalYggdrasil::instance().removeAccountSnapshot(m_data->profileId());
             setStatus(tr("Failed to authenticate. The account no longer exists."));
             m_data->errorString = reason;
             m_data->accountState = AccountState::Gone;

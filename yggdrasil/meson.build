@@ -4,7 +4,7 @@ if yggdrasil_cargo.found()
     error('The Yggdrasil sidecar currently requires a native build; use -Dyggdrasil=disabled when cross-compiling.')
   endif
   yggdrasil_sources = files(
-    'Cargo.toml', 'Cargo.lock', 'build_sidecar.py',
+    'Cargo.toml', 'Cargo.lock', 'LICENSE', 'build_sidecar.py',
     'crates/yggdrasil-core/Cargo.toml', 'crates/yggdrasil-core/src/lib.rs',
     'crates/yggdrasil-storage/Cargo.toml', 'crates/yggdrasil-storage/src/lib.rs',
     'crates/yggdrasil-service/Cargo.toml', 'crates/yggdrasil-service/src/lib.rs',
@@ -25,4 +25,5 @@ if yggdrasil_cargo.found()
       get_option('buildtype') == 'debug' ? 'debug' : 'release', '@OUTPUT@'],
     build_by_default: true, install: true, install_dir: binary_dest_dir, console: true,
   )
+  install_data('LICENSE', install_dir: get_option('datadir') / 'licenses' / 'yggdrasil')
 endif

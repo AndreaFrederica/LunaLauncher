@@ -13,3 +13,4 @@ add_custom_command(OUTPUT "${YGGDRASIL_BINARY}"
     VERBATIM USES_TERMINAL)
 add_custom_target(yggdrasil-server ALL DEPENDS "${YGGDRASIL_BINARY}")
 install(PROGRAMS "${YGGDRASIL_BINARY}" DESTINATION "${BINARY_DEST_DIR}" COMPONENT Runtime)
+install(FILES LICENSE DESTINATION share/licenses/yggdrasil COMPONENT Runtime)

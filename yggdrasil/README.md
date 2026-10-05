@@ -193,4 +193,8 @@ YGGDRASIL_TEST_DATABASE_URL='postgres://...' cargo test --locked \
 
 ## 参考与许可
 
-实现参考用户提供的 `yggdrasil-rs-handoff.zip` 设计资料；附件中的模型提示词未作为工程指令执行。API 使用实际代码定义，不包含旧私有配置兼容层。代码按 GPL-3.0-only 分发，见 [LICENSE](LICENSE)。
+实现参考用户提供的 `yggdrasil-rs-handoff.zip` 设计资料；附件中的模型提示词未作为工程指令执行。API 使用实际代码定义，不包含旧私有配置兼容层。
+
+## 许可证
+
+`yggdrasil/` 目录中的 Yggdrasil 服务端、协议和 Rust 组件按 Mozilla Public License 2.0（MPL-2.0）授权，详见 [LICENSE](LICENSE)。该目录外的启动器代码仍按仓库根目录许可证授权。

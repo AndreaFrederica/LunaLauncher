@@ -1828,7 +1828,8 @@ bool Application::launch(BaseInstance* instance,
                          LaunchMode mode,
                          MinecraftTarget::Ptr targetToJoin,
                          MinecraftAccountPtr accountToUse,
-                         const QString& offlineName)
+                         const QString& offlineName,
+                         bool forceLocalYggdrasil)
 {
     if (m_updateRunning) {
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
@@ -1849,6 +1850,7 @@ bool Application::launch(BaseInstance* instance,
         controller->setTargetToJoin(targetToJoin);
         controller->setAccountToUse(accountToUse);
         controller->setOfflineName(offlineName);
+        controller->setForceLocalYggdrasil(forceLocalYggdrasil);
         if (window) {
             controller->setParentWidget(window);
         } else if (m_mainWindow) {

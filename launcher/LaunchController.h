@@ -62,6 +62,8 @@ class LaunchController : public Task {
 
     void setOfflineName(const QString& offlineName) { m_offlineName = offlineName; }
 
+    void setForceLocalYggdrasil(bool force) { m_forceLocalYggdrasil = force; }
+
     void setProfiler(BaseProfilerFactory* profiler) { m_profiler = profiler; }
 
     void setParentWidget(QWidget* widget) { m_parentWidget = widget; }
@@ -114,6 +116,7 @@ class LaunchController : public Task {
     LaunchTask* m_launcher = nullptr;
     MinecraftTarget::Ptr m_targetToJoin = nullptr;
     bool m_headless = false;
+    bool m_forceLocalYggdrasil = false;
     Task* m_authTask = nullptr; // Owned by the account and the local refresh task handle.
     bool m_authCancelled = false;
     std::function<MinecraftAccountPtr(const MinecraftAccountPtr&, const QString&)> m_reauthenticateHandler;

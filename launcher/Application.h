@@ -223,7 +223,8 @@ class Application : public QApplication {
                 LaunchMode mode = LaunchMode::Normal,
                 std::shared_ptr<MinecraftTarget> targetToJoin = nullptr,
                 shared_qobject_ptr<MinecraftAccount> accountToUse = nullptr,
-                const QString& offlineName = QString());
+                const QString& offlineName = QString(),
+                bool forceLocalYggdrasil = false);
     bool kill(BaseInstance* instance);
     void closeCurrentWindow();
 

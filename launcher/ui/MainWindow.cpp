@@ -624,6 +624,19 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         actionVoid->setEnabled(false);
         actions.prepend(actionVoid);
 
+        auto* instance = m_selectedInstance;
+        QAction* actionEnhancedOffline = new QAction(tr("Launch Enhanced Offline"), this);
+        actionEnhancedOffline->setToolTip(
+            tr("Launch with the cached UUID, profile and textures through the local Yggdrasil service."));
+        actionEnhancedOffline->setEnabled(instance && instance->canLaunch() && !instance->traits().contains("server"));
+        connect(actionEnhancedOffline, &QAction::triggered, this, [instance] {
+            if (instance)
+                APPLICATION->launch(instance, LaunchMode::Normal, nullptr, nullptr, QString(), true);
+        });
+        const auto launchIndex = actions.indexOf(ui->actionLaunchInstance);
+        if (launchIndex >= 0)
+            actions.insert(launchIndex + 1, actionEnhancedOffline);
+
         QAction* actionSep2 = new QAction("", this);
         actionSep2->setSeparator(true);
         QAction* actionVerifyAssets = new QAction(tr("Verify asset integrity..."), this);

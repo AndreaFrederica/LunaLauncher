@@ -104,7 +104,7 @@ void LaunchController::decideAccount()
         m_accountToUse = accounts->at(instanceAccountIndex);
     }
 
-    if (!accounts->anyAccountIsValid()) {
+    if (!m_forceLocalYggdrasil && !accounts->anyAccountIsValid()) {
         if (m_headless)
             return;
         // Tell the user they need to log in at least one account in order to play.
@@ -357,18 +357,28 @@ void LaunchController::login()
 {
     decideAccount();
 
-    if (m_headless && !m_accountToUse && m_wantedLaunchMode != LaunchMode::Offline && m_wantedLaunchMode != LaunchMode::Demo) {
+    if (m_forceLocalYggdrasil) {
+        if (!m_accountToUse) {
+            emitFailed(tr("Select an account with a cached profile before using Enhanced Offline Mode."));
+            return;
+        }
+        m_actualLaunchMode = LaunchMode::Normal;
+    }
+
+    if (!m_forceLocalYggdrasil && m_headless && !m_accountToUse && m_wantedLaunchMode != LaunchMode::Offline && m_wantedLaunchMode != LaunchMode::Demo) {
         emitFailed(tr("No account selected for launch"));
         return;
     }
 
-    LaunchDecision decision = decideLaunchMode();
-    while (decision == LaunchDecision::Undecided) {
-        decision = decideLaunchMode();
-    }
-    if (decision == LaunchDecision::Abort) {
-        emitAborted();
-        return;
+    if (!m_forceLocalYggdrasil) {
+        LaunchDecision decision = decideLaunchMode();
+        while (decision == LaunchDecision::Undecided) {
+            decision = decideLaunchMode();
+        }
+        if (decision == LaunchDecision::Abort) {
+            emitAborted();
+            return;
+        }
     }
 
     if (m_actualLaunchMode == LaunchMode::Demo) {
@@ -390,6 +400,20 @@ void LaunchController::login()
     m_session = std::make_shared<AuthSession>();
     m_session->launchMode = m_actualLaunchMode;
     m_accountToUse->fillSession(m_session);
+
+    if (m_forceLocalYggdrasil) {
+        if (m_accountToUse->accountType() == AccountType::Offline) {
+            emitFailed(tr("Enhanced Offline Mode requires a cached Microsoft or Yggdrasil account."));
+            return;
+        }
+        QString error;
+        if (!LocalYggdrasil::instance().createAccountSession(*m_accountToUse->accountData(), m_session, error)) {
+            emitFailed(error);
+            return;
+        }
+        launchInstance();
+        return;
+    }
 
     if (m_accountToUse->accountType() != AccountType::Offline) {
         if (m_actualLaunchMode == LaunchMode::Normal && !m_accountToUse->hasProfile()) {

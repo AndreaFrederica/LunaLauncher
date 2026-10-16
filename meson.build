@@ -120,7 +120,7 @@ if is_windows
   pixi_crypto_dll = run_command(
     python_prog,
     '-c',
-    'import shutil; print(shutil.which("libcrypto-3-x64.dll") or "")',
+    'from pathlib import Path; import os, shutil, sys; name = "libcrypto-3-x64.dll"; env = Path(sys.executable).parent; candidates = [Path(shutil.which(name))] if shutil.which(name) else []; candidates += [env / "Library" / "bin" / name, env / "bin" / name, Path(os.environ.get("CONDA_PREFIX", "")) / "Library" / "bin" / name]; print(next((str(path) for path in candidates if path.is_file()), ""))',
     check: true,
   ).stdout().strip()
   if pixi_crypto_dll != ''

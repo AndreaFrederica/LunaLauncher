@@ -113,12 +113,21 @@ if is_windows
   # Qt's Windows OpenSSL builds provide this runtime DLL next to the Qt
   # binaries. Install it with the launcher so QtNetwork can initialize TLS
   # on machines without OpenSSL already installed.
-  qt_crypto_dll = ''
-  foreach qt_bin_dir : [
-    qt_plugin_dir / '..' / 'bin',
-    qt_plugin_dir / '..' / '..' / '..' / 'bin',
+  qt_crypto_candidates = [
+    qt_plugin_dir / '..' / 'bin' / 'libcrypto-3-x64.dll',
+    qt_plugin_dir / '..' / '..' / '..' / 'bin' / 'libcrypto-3-x64.dll',
   ]
-    candidate = qt_bin_dir / 'libcrypto-3-x64.dll'
+  pixi_crypto_dll = run_command(
+    python_prog,
+    '-c',
+    'import shutil; print(shutil.which("libcrypto-3-x64.dll") or "")',
+    check: true,
+  ).stdout().strip()
+  if pixi_crypto_dll != ''
+    qt_crypto_candidates += pixi_crypto_dll
+  endif
+  qt_crypto_dll = ''
+  foreach candidate : qt_crypto_candidates
     if fs.exists(candidate)
       qt_crypto_dll = candidate
       break

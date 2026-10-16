@@ -158,7 +158,7 @@ struct IndexedVersion {
                 gameVersion = QObject::tr(" for %1").arg(v);
             }
         }
-        return QString("%1%2 鈥?%3%4").arg(version, gameVersion, versionStr, release_type);
+        return QStringLiteral("%1%2 \u2014 %3%4").arg(version, gameVersion, versionStr, release_type);
     }
 };
 

@@ -108,6 +108,26 @@ qt_webp_plugin = join_paths(qt_plugin_dir, 'imageformats', qt_webp_plugin_name)
 if not fs.exists(qt_webp_plugin)
   error('Qt WebP image plugin was not found: ' + qt_webp_plugin)
 endif
+
+if is_windows
+  # Qt's Windows OpenSSL builds provide this runtime DLL next to the Qt
+  # binaries. Install it with the launcher so QtNetwork can initialize TLS
+  # on machines without OpenSSL already installed.
+  qt_crypto_dll = ''
+  foreach qt_bin_dir : [
+    qt_plugin_dir / '..' / 'bin',
+    qt_plugin_dir / '..' / '..' / '..' / 'bin',
+  ]
+    candidate = qt_bin_dir / 'libcrypto-3-x64.dll'
+    if fs.exists(candidate)
+      qt_crypto_dll = candidate
+      break
+    endif
+  endforeach
+  if qt_crypto_dll == ''
+    error('Qt OpenSSL runtime was not found near: ' + qt_plugin_dir)
+  endif
+endif
 if is_windows
   qt_entrypoint_dep = cpp.find_library(
     'Qt6EntryPoint',

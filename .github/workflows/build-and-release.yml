@@ -21,6 +21,11 @@ on:
           - windows-x64
           - linux-x64
           - macos-arm64
+      include_neo_ui:
+        description: Include the Neo UI in the packaged build
+        type: boolean
+        required: true
+        default: true
       publish_release:
         description: Publish the artifacts to a GitHub Release
         type: boolean
@@ -126,6 +131,7 @@ jobs:
       LUNA_BUILD_DIR: build-meson-release
       LUNA_INSTALL_DIR: install-release
       LUNA_MACOS_DEPLOYMENT_TARGET: "13.0"
+      LUNA_NEO_UI: ${{ (github.event_name == 'push' || inputs.include_neo_ui) && 'enabled' || 'disabled' }}
     steps:
       - name: Check out sources
         uses: actions/checkout@v6

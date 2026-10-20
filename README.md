@@ -49,6 +49,7 @@
 - **Custom Models**: Support custom player models including the Yes Steve model
 - **Schematic Files**: Resource management support for Minecraft schematic files
 - **Cross-platform**: Available for Windows, Linux, and macOS
+- **NeoUI Formwork**: Use any web tool to build your UI
 
 ---
 

@@ -42,7 +42,7 @@
 
 - **Server Management (In Development)**: Manage Minecraft server instances directly from the launcher, including downloading, configuring, and managing server JARs
 - **P2P Multiplayer**: Built-in support for [Terracotta](https://github.com/burningtnt/Terracotta) and [YukariConnect](https://github.com/ElicaseTech/YukariConnect) - play with friends without port forwarding or complex network setup (YukariConnect is intended as an alternative to the AGPL-licensed Terracotta and can be provided as a standalone component)
-- **Mirror API Support**: Built-in support for BMCLAPI and other community mirrors for faster downloads in China
+- **Mirror API Support**
 - **Fluent Themes**: Built-in Fluent Dark/Light themes and icon resources
 - **New UI Layout**: Optional experimental 3-column layout (requires restart)
 - **Server Preview**: Quick server preview access from the toolbar

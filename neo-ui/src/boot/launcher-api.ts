@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';

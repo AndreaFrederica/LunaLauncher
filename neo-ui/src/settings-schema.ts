@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 // Labels and numeric constraints mirrored from the Qt settings widgets.
 export const settingMetadata: Record<string, {label:string;group:string;minimum?:number;maximum?:number}> = {
   "LaunchMaximized": {

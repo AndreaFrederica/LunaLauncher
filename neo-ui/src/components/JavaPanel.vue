@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
  <q-expansion-item label="Java 检测、诊断与下载" icon="code" class="q-mb-lg">
   <div class="q-pa-md">

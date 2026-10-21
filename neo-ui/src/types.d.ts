@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 declare module '*.vue';
 declare module '*.webp' { const source: string; export default source; }
 declare module '*.png' { const source: string; export default source; }

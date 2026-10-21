@@ -1,5 +1,10 @@
 # Neo UI
 
+Luna-authored Neo UI source is licensed under MPL-2.0. The upstream XMCL UI
+snapshot and adapted port retain their MIT license. See
+[`MPL-2.0-NOTICE.md`](../MPL-2.0-NOTICE.md) for the component scope and
+third-party license exceptions.
+
 完整中文开发文档：[Web UI 开发与构建](../docs/WEBUI-DEVELOPMENT.md)。
 
 ```sh

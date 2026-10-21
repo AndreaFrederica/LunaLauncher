@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
   <div class="neo-appearance-panel">
     <div class="preference-card">

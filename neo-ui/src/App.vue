@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
 <div class="xmcl-app text-white">
  <XmclSystemBar :connected="connected" :busy="busy" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" />

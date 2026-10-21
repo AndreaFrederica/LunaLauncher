@@ -2,6 +2,7 @@
   "name": "luna-neo-ui",
   "private": true,
   "version": "0.1.0",
+  "license": "MPL-2.0",
   "packageManager": "pnpm@10.15.0",
   "scripts": {
     "build": "quasar build",

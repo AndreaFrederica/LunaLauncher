@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 export const settingCategoryLabels: Record<string, string> = {
   all: '全部设置',
   launch: '启动与窗口',

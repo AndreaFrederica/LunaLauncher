@@ -4,6 +4,7 @@ export type NeoTheme = 'dark' | 'light' | 'system';
 export type NeoDensity = 'comfortable' | 'compact';
 export type NeoBackground = 'solid' | 'gradient';
 
+// SPDX-License-Identifier: MPL-2.0
 export interface NeoUiPreferences {
   theme: NeoTheme;
   accent: string;

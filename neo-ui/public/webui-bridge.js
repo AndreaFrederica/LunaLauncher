@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: MPL-2.0
 // Injected by the native host into every local Web UI. No frontend dependency.
 (() => {
   let tail = Promise.resolve();

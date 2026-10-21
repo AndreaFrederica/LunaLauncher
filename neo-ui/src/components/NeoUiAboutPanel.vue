@@ -1,9 +1,10 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
   <div class="neo-about-panel">
     <div class="about-hero"><div class="about-logo">L</div><div><div class="eyebrow">LUNA LAUNCHER</div><h4>Neo UI</h4><p>基于 Launcher API 的现代 Minecraft 启动器界面。</p></div></div>
     <div class="about-grid"><div class="about-card"><q-icon name="info"/><span>Neo UI 构建</span><strong>{{ buildLabel }}</strong></div><div class="about-card"><q-icon name="api"/><span>Launcher API</span><strong>{{ apiVersion }}</strong></div><div class="about-card"><q-icon name="devices"/><span>运行平台</span><strong>{{ platform }}</strong></div><div class="about-card"><q-icon name="code"/><span>前端</span><strong>Vue 3 · Quasar · Tauri</strong></div></div>
     <q-card flat class="runtime-card"><q-card-section><div class="text-subtitle1">运行时信息</div><div v-if="loading" class="text-grey-5 q-mt-sm">正在读取运行时信息…</div><dl v-else><div v-for="item in runtimeRows" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div></dl></q-card-section></q-card>
-    <q-card flat class="license-card"><q-card-section><div class="text-subtitle1">许可证与兼容性</div><p>Neo UI 与 Luna Launcher 遵循项目 GPL-3.0 许可证。底层 Launcher API 继续兼容 Qt 界面，Qt 专属外观、图标、背景和维护功能位于“Qt 兼容界面”分类。</p><q-btn flat icon="open_in_new" label="查看项目许可证" @click="openLicense"/></q-card-section></q-card>
+    <q-card flat class="license-card"><q-card-section><div class="text-subtitle1">许可证与兼容性</div><p>Neo UI 自有代码采用 MPL-2.0。XMCL 移植部分保留其 MIT 许可；启动器其余部分仍按项目 GPL-3.0 许可。</p><q-btn flat icon="open_in_new" label="查看 MPL-2.0" @click="openLicense"/></q-card-section></q-card>
   </div>
 </template>
 <script setup lang="ts">
@@ -15,7 +16,7 @@ const platform = computed(() => runtime.value.platform || runtime.value.os || 'T
 const apiVersion = computed(() => runtime.value.apiVersion || runtime.value.api || 'Launcher API');
 const runtimeRows = computed(() => Object.entries(runtime.value || {}).filter(([key]) => !['apiVersion','api','platform','os'].includes(key)).slice(0, 8).map(([label,value]) => ({ label, value: typeof value === 'object' ? JSON.stringify(value) : String(value) })));
 async function load(){ try { runtime.value = await props.execute('runtime.info'); } catch { runtime.value = {}; } finally { loading.value = false; } }
-function openLicense(){ void props.execute('desktop.open-url',{url:'https://github.com/PrismLauncher/PrismLauncher/blob/master/LICENSE'}); }
+function openLicense(){ void props.execute('desktop.open-url',{url:'https://mozilla.org/MPL/2.0/'}); }
 onMounted(load);
 </script>
 <style scoped>

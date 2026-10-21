@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router';
 import IndexPage from '../pages/IndexPage.vue';
 

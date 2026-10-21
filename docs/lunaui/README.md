@@ -19,6 +19,20 @@ This document describes the `lunaui` custom panel system used by Luna Launcher i
 - `launcher.fs` is restricted to the current instance root (cannot access arbitrary system paths).
 - JS in `lunaui` is executable content. Treat imported packs/scripts as trusted code.
 
+## Plugin Licensing
+
+LunaLauncher provides the QuickJS runtime and the documented `launcher` interface
+to load custom panels. A plugin that is an independent work and only uses this
+interface is not automatically under GPL merely because LunaLauncher executes it.
+Plugin authors may choose a license for their own work.
+
+Keep plugins independent: use the documented API, do not copy or bundle
+LunaLauncher implementation code, and retain notices for any third-party code or
+assets you include. Whether a particular plugin is independent can depend on its
+implementation and how it is distributed; this guidance is not a legal
+determination for every case. The launcher itself and modifications to its GPL
+source remain subject to their applicable licenses.
+
 ## TypeScript/JSDoc IntelliSense
 
 Use the provided type definitions:

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
   <q-card class="extras-card bg-grey-9 q-mt-lg">
     <q-card-section>

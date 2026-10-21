@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
   <div class="instance-settings-panel">
     <q-tabs v-model="tab" align="left" outside-arrows mobile-arrows>

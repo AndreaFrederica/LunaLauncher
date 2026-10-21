@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
  <section class="catalog">
   <div class="row q-col-gutter-sm q-my-sm"><q-select class="col-12 col-sm-4" dark outlined v-model="provider" :options="providers" label="下载来源" :disable="busy" @update:model-value="reset"/><q-input class="col" dark outlined v-model="query" label="搜索名称" @keyup.enter="search(0)"/><q-btn class="q-ml-sm" color="primary" label="搜索" :disable="busy" @click="search(0)"/></div>

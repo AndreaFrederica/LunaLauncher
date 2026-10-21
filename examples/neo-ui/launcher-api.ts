@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: MPL-2.0
 // Framework-independent client for an installed `lunalauncher-cli --mcp` sidecar.
 // Connect write() to the child process stdin; pass each stdout line to acceptLine().
 

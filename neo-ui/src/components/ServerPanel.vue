@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
   <q-card class="server-panel q-mt-lg"><q-card-section><div class="text-h6">服务端管理</div><q-tabs v-model="tab" align="left" outside-arrows mobile-arrows><q-tab name="console" label="控制台" icon="terminal"/><q-tab name="properties" label="server.properties" icon="settings"/><q-tab name="eula" label="EULA" icon="gavel"/><q-tab name="lists" label="玩家列表" icon="group"/><q-tab name="yaml" label="YAML" icon="description"/></q-tabs>
     <div v-if="tab==='console'" class="q-mt-md"><div class="row q-gutter-sm"><q-btn color="primary" label="启动服务端" :disable="busy" @click="act('server.start')"/><q-input class="col" dark outlined v-model="command" label="控制台命令" @keyup.enter="sendCommand"/><q-btn label="发送" :disable="busy || !command" @click="sendCommand"/></div><pre class="console q-mt-md">{{ consoleLines.join('\n') || '等待服务端输出。' }}</pre></div>

@@ -18,6 +18,10 @@
 #include "cli/ScopedUserInteraction.h"
 #include "api/LauncherApiResources.h"
 #include "api/LauncherApiServer.h"
+#include "api/LauncherApiMultiplayer.h"
+#include "api/LauncherApiServers.h"
+#include "api/LauncherApiCustomUi.h"
+#include "api/LauncherApiNeo.h"
 #include "api/LauncherApiExports.h"
 #include "api/LauncherApiComponents.h"
 #include "api/LauncherApiCatalog.h"
@@ -132,6 +136,9 @@ QList<ApiOperation> legacyOperations()
         if (operation.name == "account.login") {
             for (const auto key : { "sourceName", "serverId", "baseUrl", "minecraftProfileName", "refreshEndpoint", "validateEndpoint", "authenticateEndpoint", "profileEndpoint", "oauthTokenEndpoint", "tokenType" })
                 properties.insert(key, stringProperty(QString::fromLatin1(key)));
+            properties.insert("managedLocal", boolProperty("Use the launcher-managed local verification service."));
+            properties.insert("offlineUuidMode", stringProperty("Offline UUID mode: default, random, or custom."));
+            properties.insert("offlineUuid", stringProperty("Custom offline UUID when offlineUuidMode=custom."));
         }
         if (operation.name == "instance.launch") {
             properties.insert("profiler", stringProperty("Optional profiler ID, such as jprofiler or jvisualvm."));
@@ -184,6 +191,10 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerLauncherApiFiles(*this);
     registerLauncherApiResourceOperations(*this);
     registerLauncherApiServerOperations(*this);
+    registerLauncherApiMultiplayerOperations(*this);
+    registerLauncherApiServerListOperations(*this);
+    registerLauncherApiCustomUiOperations(*this);
+    registerLauncherApiNeoOperations(*this);
     registerLauncherApiExportOperations(*this);
     registerLauncherApiComponentOperations(*this);
     registerLauncherApiCatalogOperations(*this);

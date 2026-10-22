@@ -4,6 +4,7 @@
 
 #include "Application.h"
 #include "DesktopServices.h"
+#include "HardwareInfo.h"
 #include "api/LauncherApi.h"
 #include "api/LauncherApiObjects.h"
 #include "minecraft/MinecraftInstance.h"
@@ -35,6 +36,7 @@
 #include <BuildConfig.h>
 
 #include <QDir>
+#include <QDateTime>
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
@@ -833,7 +835,7 @@ void registerLauncherApiDomains(LauncherApi& api)
                     const auto all = YggdrasilPresets::getAllPresets();
                     for (int row = 0; row < all.size(); ++row) {
                         const auto& v = all[row];
-                        result.append(QJsonObject{ { "name", v.name }, { "authUrl", v.authUrl }, { "sessionUrl", v.sessionUrl },
+                            result.append(QJsonObject{ { "name", v.name }, { "authUrl", v.authUrl }, { "sessionUrl", v.sessionUrl }, { "sourceName", v.sourceName }, { "managedLocal", v.managedLocal },
                             { "authenticateEndpoint", v.authenticateEndpoint }, { "refreshEndpoint", v.refreshEndpoint },
                             { "validateEndpoint", v.validateEndpoint }, { "profileEndpoint", v.profileEndpoint }, { "oauthTokenEndpoint", v.oauthTokenEndpoint },
                             { "tokenType", v.tokenType == YggdrasilTokenType::OAuth ? "OAuth" : "Standard" }, { "builtin", row < defaults.size() } });
@@ -866,6 +868,19 @@ void registerLauncherApiDomains(LauncherApi& api)
     api.registerOperation({ "runtime.info", "Read launcher paths, platform, and optional integration capabilities.", objectSchema({}) },
                            [](const QJsonObject&, UserInteraction&) {
                                return OperationService::success(LauncherApiModel::LauncherObject().snapshot());
+                           });
+    api.registerOperation({ "runtime.memory", "Read current physical memory usage in MiB.", objectSchema({}) },
+                           [](const QJsonObject&, UserInteraction&) {
+                               const auto total = HardwareInfo::totalRamMiB();
+                               const auto available = HardwareInfo::availableRamMiB();
+                               const auto used = total > available ? total - available : 0;
+                               return OperationService::success(QJsonObject{
+                                   { "totalMiB", static_cast<double>(total) },
+                                   { "availableMiB", static_cast<double>(available) },
+                                   { "usedMiB", static_cast<double>(used) },
+                                   { "usedPercent", total ? (static_cast<double>(used) * 100.0 / static_cast<double>(total)) : 0.0 },
+                                   { "timestamp", QDateTime::currentMSecsSinceEpoch() },
+                               });
                            });
     api.registerOperation({ "launcher.get", "Read the stable launcher object used by alternate frontends.", objectSchema({}), "launcher" },
                            [&api](const QJsonObject&, UserInteraction& interaction) {

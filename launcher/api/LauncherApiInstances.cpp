@@ -215,12 +215,9 @@ QJsonObject stopInstance(const QJsonObject& parameters, bool force)
     return OperationService::success(QJsonObject{ { "id", instance->id() }, { "running", instance->isRunning() }, { "stopped", true } });
 }
 
-QJsonObject openInstanceFolder(const QJsonObject& parameters)
+QString instanceFolderPath(BaseInstance* instance, QString kind, QString& error)
 {
-    auto instance = findInstance(parameters.value("instance").toString());
-    if (!instance)
-        return OperationService::failure(QObject::tr("Instance not found: %1").arg(parameters.value("instance").toString()), 2);
-    auto kind = parameters.value("kind").toString("root").trimmed().toLower();
+    kind = kind.trimmed().toLower();
     QString path = instance->instanceRoot();
     if (kind == "game")
         path = instance->gameRoot();
@@ -228,13 +225,37 @@ QJsonObject openInstanceFolder(const QJsonObject& parameters)
         path = instance->modsRoot();
     else if (kind == "screenshots")
         path = QDir(instance->gameRoot()).filePath("screenshots");
-    else if (kind == "logs") {
+    else if (kind == "saves")
+        path = QDir(instance->gameRoot()).filePath("saves");
+    else if (kind == "resourcepacks" || kind == "texturepacks" || kind == "shaderpacks" || kind == "datapacks")
+        path = QDir(instance->gameRoot()).filePath(kind);
+    else if (kind == "coremods" || kind == "nilmods" || kind == "schematics" || kind == "customplayermodels") {
+        const auto folder = kind == "coremods" ? "coremods" : kind == "nilmods" ? "nilmods" : kind == "schematics" ? "schematics" : "custom-models";
+        path = QDir(instance->gameRoot()).filePath(folder);
+    } else if (kind == "yesstevemodels") {
+        if (auto* minecraft = dynamic_cast<MinecraftInstance*>(instance))
+            path = QDir(minecraft->instanceConfigFolder()).filePath("yes_steve_model/custom");
+    } else if (kind == "logs") {
         const auto paths = instance->getLogFileSearchPaths();
         if (!paths.isEmpty())
             path = paths.first();
     } else if (kind != "root") {
-        return OperationService::failure(QObject::tr("Unknown instance folder kind: %1").arg(kind), 2);
+        error = QObject::tr("Unknown instance folder kind: %1").arg(kind);
+        return {};
     }
+    QDir().mkpath(path);
+    return path;
+}
+
+QJsonObject openInstanceFolder(const QJsonObject& parameters)
+{
+    auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Instance not found: %1").arg(parameters.value("instance").toString()), 2);
+    QString error;
+    const auto path = instanceFolderPath(instance, parameters.value("kind").toString("root"), error);
+    if (!error.isEmpty())
+        return OperationService::failure(error, 2);
     const bool opened = DesktopServices::openPath(path, true);
     return opened ? OperationService::success(QJsonObject{ { "path", path } })
                   : OperationService::failure(QObject::tr("Could not open instance folder: %1").arg(path));
@@ -336,6 +357,26 @@ QJsonObject createInstanceShortcut(const QJsonObject& parameters)
                    : OperationService::failure(QObject::tr("Could not create instance shortcut."));
 }
 
+QJsonObject iconPayload(BaseInstance* inst)
+{
+    auto icon = APPLICATION->icons()->getIcon(inst->iconKey());
+    if (icon.isNull()) {
+        // The CLI does not initialize a desktop icon theme.
+        const auto key = inst->iconKey() == "default" ? QStringLiteral("grass") : inst->iconKey();
+        if (!key.contains('/') && !key.contains('\\'))
+            icon = QIcon(":/icons/multimc/scalable/instances/" + key + ".svg");
+        if (icon.isNull()) icon = QIcon(":/icons/multimc/scalable/instances/grass.svg");
+    }
+    const auto pixmap = icon.pixmap(96, 96);
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    if (pixmap.isNull() || !pixmap.save(&buffer, "PNG"))
+        return OperationService::failure("Instance icon could not be rendered.");
+    return OperationService::success(QJsonObject{ { "id", inst->id() }, { "icon", inst->iconKey() },
+        { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) } });
+}
+
 }  // namespace
 
 void registerInstanceApiOperations(LauncherApi& api)
@@ -435,36 +476,43 @@ void registerInstanceApiOperations(LauncherApi& api)
                             {}, true },
                            [](const QJsonObject& parameters, UserInteraction&) { return stopInstance(parameters, true); });
     api.registerOperation({ "instance.open-folder", "Open an instance directory.",
-                            objectSchema({ { "instance", instance }, { "kind", stringProperty("root, game, mods, logs, or screenshots.") } },
+                            objectSchema({ { "instance", instance }, { "kind", stringProperty("root, game, mods, coremods, nilmods, resourcepacks, texturepacks, shaderpacks, datapacks, saves, screenshots, schematics, customplayermodels, yesstevemodels, or logs.") } },
                                           { "instance" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return openInstanceFolder(parameters); });
+    api.registerOperation({ "instance.folder-path", "Resolve an instance subdirectory path and create it when missing.",
+                            objectSchema({ { "instance", instance }, { "kind", stringProperty("root, game, mods, coremods, nilmods, resourcepacks, texturepacks, shaderpacks, datapacks, saves, screenshots, schematics, customplayermodels, yesstevemodels, or logs.") } },
+                                          { "instance" }) },
+                           [](const QJsonObject& parameters, UserInteraction&) {
+                               auto instance = findInstance(parameters.value("instance").toString());
+                               if (!instance) return OperationService::failure(QObject::tr("Instance not found: %1").arg(parameters.value("instance").toString()), 2);
+                               QString error;
+                               const auto path = instanceFolderPath(instance, parameters.value("kind").toString("root"), error);
+                               if (!error.isEmpty()) return OperationService::failure(error, 2);
+                               return OperationService::success(QJsonObject{ { "path", path } });
+                           });
     api.registerOperation({ "instance.icon", "Read the instance icon as a bounded PNG data URL for non-Qt frontends.",
                             objectSchema({ { "instance", instance } }, { "instance" }) },
                            [](const QJsonObject& p, UserInteraction&) {
                                auto inst = findInstance(p.value("instance").toString());
                                if (!inst) return OperationService::failure("Instance not found.", 2);
-                                // Qt refreshes IconList through its file watcher after an
-                                // imported pack copies a custom icon. API clients can ask
-                                // immediately after the task completes, before that watcher
-                                // event is delivered, so perform the same directory scan
-                                // synchronously before reading the icon.
-                                APPLICATION->icons()->directoryChanged(APPLICATION->icons()->getDirectory());
-                                auto icon = APPLICATION->icons()->getIcon(inst->iconKey());
-                               if (icon.isNull()) {
-                                   // The CLI does not initialize a desktop icon theme.
-                                   const auto key = inst->iconKey() == "default" ? QStringLiteral("grass") : inst->iconKey();
-                                   if (!key.contains('/') && !key.contains('\\'))
-                                       icon = QIcon(":/icons/multimc/scalable/instances/" + key + ".svg");
-                                   if (icon.isNull()) icon = QIcon(":/icons/multimc/scalable/instances/grass.svg");
+                               // Qt refreshes IconList through its file watcher after an
+                               // imported pack copies a custom icon. API clients can ask
+                               // immediately after the task completes, before that watcher
+                               // event is delivered, so perform the same directory scan
+                               // synchronously before reading the icon.
+                               APPLICATION->icons()->directoryChanged(APPLICATION->icons()->getDirectory());
+                               return iconPayload(inst);
+                           });
+    api.registerOperation({ "instance.icons", "Read every instance icon in one bounded batch for fast dashboard startup.",
+                            objectSchema({}) },
+                           [](const QJsonObject&, UserInteraction&) {
+                               APPLICATION->icons()->directoryChanged(APPLICATION->icons()->getDirectory());
+                               QJsonArray icons;
+                               for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                                   auto payload = iconPayload(APPLICATION->instances()->at(i));
+                                   if (payload.value("ok").toBool()) icons.append(payload.value("data"));
                                }
-                               const auto pixmap = icon.pixmap(96, 96);
-                               QByteArray bytes;
-                               QBuffer buffer(&bytes);
-                               buffer.open(QIODevice::WriteOnly);
-                               if (pixmap.isNull() || !pixmap.save(&buffer, "PNG"))
-                                   return OperationService::failure("Instance icon could not be rendered.");
-                               return OperationService::success(QJsonObject{ { "icon", inst->iconKey() },
-                                   { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) } });
+                               return OperationService::success(QJsonObject{ { "icons", icons } });
                            });
     api.registerOperation({ "instance.set-icon", "Assign a built-in or imported icon to an instance.",
                             objectSchema({ { "instance", instance }, { "icon", stringProperty("Icon key.") },

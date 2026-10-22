@@ -101,6 +101,12 @@ class AccountObject {
             case AccountState::Expired: stateName = "expired"; break;
             case AccountState::Gone: stateName = "gone"; break;
         }
+        QString cacheStateName;
+        switch (data->cacheState) {
+            case CacheState::Unknown: cacheStateName = "unknown"; break;
+            case CacheState::Cached: cacheStateName = "cached"; break;
+            case CacheState::NotCached: cacheStateName = "not-cached"; break;
+        }
         QJsonObject result{ { "id", account->profileId() },
                             { "internalId", account->internalId() },
                             { "profileName", account->profileName() },
@@ -108,6 +114,8 @@ class AccountObject {
                             { "type", account->typeString() },
                             { "state", static_cast<int>(data->accountState) },
                             { "stateName", stateName },
+                            { "cacheState", cacheStateName },
+                            { "cacheAvailable", data->cacheState == CacheState::Cached },
                             { "active", account->isActive() },
                             { "default", isDefault },
                             { "ownsMinecraft", account->ownsMinecraft() },
@@ -131,6 +139,7 @@ class AccountObject {
             result.insert("yggdrasil", QJsonObject{ { "authUrl", data->yggdrasilConfig.authServerUrl },
                                                        { "sessionUrl", data->yggdrasilConfig.sessionServerUrl },
                                                        { "sourceName", data->yggdrasilConfig.sourceName },
+                                                       { "managedLocal", data->yggdrasilConfig.managedLocal },
                                                        { "authenticateEndpoint", data->yggdrasilConfig.authenticateEndpoint },
                                                        { "refreshEndpoint", data->yggdrasilConfig.refreshEndpoint },
                                                        { "validateEndpoint", data->yggdrasilConfig.validateEndpoint },

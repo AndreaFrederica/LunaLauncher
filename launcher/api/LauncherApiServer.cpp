@@ -12,6 +12,7 @@
 #include "server/ServerLaunchTask.h"
 #include "net/ApiDownload.h"
 #include "net/NetJob.h"
+#include "minecraft/MirrorDownload.h"
 
 #include <QDateTime>
 #include <QCryptographicHash>
@@ -101,6 +102,14 @@ QJsonObject fetchJson(const QUrl& url, QString* error)
     return doc.object();
 }
 
+/// Route a Mojang/mod-loader URL through the configured download mirror.
+QString mirrorUrl(const QString& url)
+{
+    if (!APPLICATION)
+        return url;
+    return MirrorDownload::rewriteUrl(url, APPLICATION->settings());
+}
+
 QJsonObject installDistribution(LauncherApi& api, const QJsonObject& p, UserInteraction& interaction)
 {
     auto instance = findServer(p.value("instance").toString());
@@ -119,7 +128,11 @@ QJsonObject installDistribution(LauncherApi& api, const QJsonObject& p, UserInte
     if (!staging.isValid()) return OperationService::failure("Could not create a staging directory.");
     const auto staged = QDir(staging.path()).filePath(fileName);
     auto job = makeShared<NetJob>("Server distribution download", APPLICATION->network());
-    job->addNetAction(Net::ApiDownload::makeFile(url, staged));
+    const auto downloadUrl = mirrorUrl(url.toString());
+    auto download = Net::ApiDownload::makeFile(QUrl(downloadUrl), staged);
+    if (downloadUrl != url.toString())
+        download->setFallbackUrl(url);
+    job->addNetAction(download);
     if (!ApiSupport::wait(api, job, interaction, error)) return OperationService::failure(error);
     if (!QFileInfo(staged).isFile() || QFileInfo(staged).size() == 0) return OperationService::failure("The downloaded server file is empty.");
     if (QFileInfo::exists(destination) && !QFile::remove(destination)) return OperationService::failure("The existing server file could not be replaced.");
@@ -526,10 +539,11 @@ void registerLauncherApiServerOperations(LauncherApi& api)
                 if (!requested.isEmpty() && requested != id) return;
                 providers.append(QJsonObject{ { "id", id }, { "name", name }, { "manifest", manifest }, { "downloadTemplate", download } });
             };
-            add("vanilla", "Minecraft Vanilla", "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", "version.server.url");
+            add("vanilla", "Minecraft Vanilla", mirrorUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"), "version.server.url");
             add("paper", "Paper", "https://api.papermc.io/v2/projects/paper", "https://api.papermc.io/v2/projects/paper/versions/{version}/builds/{build}/downloads/{name}");
             add("purpur", "Purpur", "https://api.purpurmc.org/v2/purpur", "https://api.purpurmc.org/v2/purpur/{version}/{build}/download");
-            add("fabric", "Fabric Loader", "https://meta.fabricmc.net/v2/versions/loader", "https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/1.0.0/server/jar");
+            add("fabric", "Fabric Loader", mirrorUrl("https://meta.fabricmc.net/v2/versions/loader"),
+                mirrorUrl("https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/1.0.0/server/jar"));
             add("forge", "Forge", "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json", "installer-url-from-manifest");
             if (providers.isEmpty()) return OperationService::failure("Unknown server distribution provider.", 2);
             return OperationService::success(QJsonObject{ { "providers", providers }, { "stable", true } });
@@ -545,12 +559,12 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             QString url; QString fileName; QString executable = "java";
             if (provider == "vanilla") {
                 QString error;
-                const auto manifest = fetchJson(QUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"), &error);
+                const auto manifest = fetchJson(QUrl(mirrorUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")), &error);
                 for (const auto& item : manifest.value("versions").toArray()) {
                     const auto entry = item.toObject();
                     if (entry.value("id").toString() == version) {
-                        const auto detail = fetchJson(QUrl(entry.value("url").toString()), &error);
-                        url = detail.value("downloads").toObject().value("server").toObject().value("url").toString();
+                        const auto detail = fetchJson(QUrl(mirrorUrl(entry.value("url").toString())), &error);
+                        url = mirrorUrl(detail.value("downloads").toObject().value("server").toObject().value("url").toString());
                         break;
                     }
                 }
@@ -570,7 +584,7 @@ void registerLauncherApiServerOperations(LauncherApi& api)
                 const auto loader = p.value("loader").toString().trimmed();
                 if (loader.isEmpty()) return OperationService::failure("Fabric requires a loader version.", 2);
                 fileName = "fabric-server-launch.jar";
-                url = QString("https://meta.fabricmc.net/v2/versions/loader/%1/%2/1.0.0/server/jar").arg(version, loader);
+                url = mirrorUrl(QString("https://meta.fabricmc.net/v2/versions/loader/%1/%2/1.0.0/server/jar").arg(version, loader));
             } else return OperationService::failure("Unknown distribution provider.", 2);
             return OperationService::success(QJsonObject{ { "provider", provider }, { "version", version }, { "url", url }, { "fileName", fileName }, { "executable", executable } });
         });
@@ -581,7 +595,7 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             const auto version = p.value("version").toString().trimmed();
             QString error; QJsonArray versions; QJsonArray builds;
             if (provider == "vanilla") {
-                const auto manifest = fetchJson(QUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"), &error);
+                const auto manifest = fetchJson(QUrl(mirrorUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")), &error);
                 for (const auto& item : manifest.value("versions").toArray()) {
                     const auto object = item.toObject();
                     versions.append(QJsonObject{ { "id", object.value("id") }, { "type", object.value("type") }, { "releaseTime", object.value("releaseTime") }, { "url", object.value("url") } });
@@ -601,7 +615,7 @@ void registerLauncherApiServerOperations(LauncherApi& api)
                     for (const auto& item : data.value("builds").toArray()) builds.append(item);
                 }
             } else if (provider == "fabric") {
-                const auto data = fetchJson(QUrl("https://meta.fabricmc.net/v2/versions/game"), &error);
+                const auto data = fetchJson(QUrl(mirrorUrl("https://meta.fabricmc.net/v2/versions/game")), &error);
                 for (const auto& item : data.value("versions").toArray()) versions.append(item);
             } else return OperationService::failure("Unknown distribution provider.", 2);
             if (versions.isEmpty() && builds.isEmpty() && !error.isEmpty()) return OperationService::failure(error, 2);

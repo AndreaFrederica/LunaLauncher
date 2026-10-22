@@ -11,8 +11,12 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QUuid>
+#include <QThreadPool>
+#include <QRunnable>
+#include <QSet>
 
 #include <functional>
+#include <memory>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -83,9 +87,48 @@ QString toolNameForOperation(const QString& operation)
     return QStringLiteral("lunalauncher_") + tool;
 }
 
+/** Detached read lanes are disabled: Qt models and their QObjects are not
+ *  thread-affine with the sidecar's main event loop. The queue still applies
+ *  priority and serializes mutations safely. */
+bool isParallelRead(const QString&)
+{
+    return false;
+}
+
+bool isHighPriorityRead(const QString& operation)
+{
+    static const QSet<QString> operations{
+        "runtime.info", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list",
+    };
+    return operations.contains(operation);
+}
+
+QString conflictKeyFor(const QString& operation, const QJsonObject& arguments)
+{
+    const auto instance = arguments.value("instance").toString().trimmed();
+    if (!instance.isEmpty()) return "instance:" + instance;
+    if (operation.startsWith("account.")) return "account:" + arguments.value("account").toString();
+    if (operation.startsWith("settings.") || operation.startsWith("language.")) return "launcher-settings";
+    if (operation.startsWith("multiplayer.")) return "multiplayer:" + arguments.value("backend").toString();
+    return "global";
+}
+
+bool isControlOperation(const QString& operation)
+{
+    if (operation.startsWith("neo.task.")) return true;
+    static const QSet<QString> operations{
+        "task.list", "task.status", "task.cancel", "api.describe", "event.poll", "event.subscriptions",
+        "event.unsubscribe", "server.console.command", "server.console.write", "server.console.resize",
+    };
+    return operations.contains(operation);
+}
+
 }  // namespace
 
-McpServer::McpServer(QObject* parent) : QObject(parent), m_service() {}
+McpServer::McpServer(QObject* parent) : QObject(parent), m_service()
+{
+    m_readPool.setMaxThreadCount(3);
+}
 
 void McpServer::start()
 {
@@ -248,6 +291,10 @@ void McpServer::handleMessage(const QJsonObject& request)
             writeError(id, -32602, QStringLiteral("Expected operation and parameters object."));
             return;
         }
+        if (parameters.value("operation").toString() == "scheduler.status") {
+            writeResult(id, QJsonObject{ { "ok", true }, { "data", schedulerStatus() } });
+            return;
+        }
         executeOperation(id, parameters.value("operation").toString(), parameters.value("parameters").toObject(),
                          parameters.value("_meta").toObject(), true);
         return;
@@ -299,9 +346,23 @@ void McpServer::handleMessage(const QJsonObject& request)
 void McpServer::executeOperation(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
                                  const QJsonObject& metadata, bool native)
 {
-    const bool control = operation == "task.list" || operation == "task.status" || operation == "task.cancel" || operation == "api.describe" ||
-                         operation == "event.poll" || operation == "event.subscriptions" || operation == "event.unsubscribe" ||
-                         operation == "server.console.command" || operation == "server.console.write" || operation == "server.console.resize";
+    if (isControlOperation(operation)) {
+        runWrite(id, operation, arguments, metadata, native, true);
+        return;
+    }
+    enqueueOperation(id, operation, arguments, metadata, native);
+}
+
+void McpServer::enqueueOperation(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
+                                 const QJsonObject& metadata, bool native)
+{
+    m_pending.enqueue({ id, operation, arguments, metadata, native, isHighPriorityRead(operation), conflictKeyFor(operation, arguments) });
+    startNext();
+}
+
+void McpServer::runWrite(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
+                         const QJsonObject& metadata, bool native, bool control)
+{
     if (m_activeService && (!control || id == m_activeRequestId)) {
         writeError(id, -32000, QStringLiteral("Another launcher operation is already running. Task controls remain available."));
         return;
@@ -365,6 +426,101 @@ void McpServer::executeOperation(const QJsonValue& id, const QString& operation,
     }
     if (m_disconnected && ownsRequest)
         QCoreApplication::quit();
+    if (!control) {
+        m_writeActive = false;
+        m_activeWriteKey.clear();
+        ++m_completedWrites;
+        startNext();
+    }
+}
+
+void McpServer::startNext()
+{
+    if (m_disconnected || m_writeActive) return;
+    int writeIndex = -1;
+    for (int i = 0; i < m_pending.size(); ++i) {
+        if (m_pending.at(i).highPriority) { writeIndex = i; break; }
+    }
+    if (writeIndex < 0) {
+        for (int i = 0; i < m_pending.size(); ++i) {
+            if (!isParallelRead(m_pending.at(i).operation)) { writeIndex = i; break; }
+        }
+    }
+    if (writeIndex < 0) {
+        while (m_activeReads < m_readPool.maxThreadCount()) {
+            int readIndex = -1;
+            for (int i = 0; i < m_pending.size(); ++i) {
+                if (isParallelRead(m_pending.at(i).operation) && m_pending.at(i).highPriority) { readIndex = i; break; }
+            }
+            if (readIndex < 0) {
+                for (int i = 0; i < m_pending.size(); ++i) {
+                    if (isParallelRead(m_pending.at(i).operation)) { readIndex = i; break; }
+                }
+            }
+            if (readIndex < 0) break;
+            const auto request = m_pending.takeAt(readIndex);
+            runRead(request.operation, request.arguments, request.id, request.metadata, request.native);
+        }
+        return;
+    }
+    // A writer is waiting: stop admitting new readers, drain the active read
+    // lanes, then give the writer the exclusive lane.
+    if (m_activeReads > 0) return;
+    const auto request = m_pending.takeAt(writeIndex);
+    m_writeActive = true;
+    m_activeWriteKey = request.conflictKey;
+    runWrite(request.id, request.operation, request.arguments, request.metadata, request.native, false);
+}
+
+void McpServer::runRead(const QString& operation, const QJsonObject& arguments, const QJsonValue& id,
+                        const QJsonObject& metadata, bool native)
+{
+    Q_UNUSED(metadata);
+    ++m_activeReads;
+    m_readPool.start(QRunnable::create([this, operation, arguments, id, native]() {
+        auto api = std::make_unique<LauncherApi>();
+        McpInteraction interaction(arguments, [](const QJsonObject&) {});
+        const auto result = api->execute(operation, arguments, interaction);
+        QMetaObject::invokeMethod(this, [this, id, result, native]() {
+            if (m_disconnected) return;
+            if (native) {
+                writeResult(id, result);
+            } else {
+                const auto text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+                writeResult(id, QJsonObject{ { "content", QJsonArray{ QJsonObject{ { "type", "text" }, { "text", text } } } },
+                                             { "structuredContent", result }, { "isError", !result.value("ok").toBool() } });
+            }
+            --m_activeReads;
+            ++m_completedReads;
+            startNext();
+        }, Qt::QueuedConnection);
+    }));
+}
+
+QJsonObject McpServer::schedulerStatus() const
+{
+    QJsonArray high;
+    for (const auto& operation : { "runtime.info", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list" })
+        high.append(operation);
+    int pendingReads = 0, pendingWrites = 0;
+    for (const auto& request : m_pending) {
+        if (isParallelRead(request.operation)) ++pendingReads;
+        else ++pendingWrites;
+    }
+    return QJsonObject{
+        { "mode", "priority-serial" },
+        { "readLanes", 0 },
+        { "activeReads", m_activeReads },
+        { "writeActive", m_writeActive },
+        { "queued", m_pending.size() },
+        { "completedReads", m_completedReads },
+        { "completedWrites", m_completedWrites },
+        { "pendingReads", pendingReads },
+        { "pendingWrites", pendingWrites },
+        { "activeWriteKey", m_activeWriteKey },
+        { "highPriority", high },
+        { "conflictPolicy", "Single safe execution lane with priority ordering; read-thread lanes are disabled because Qt models are not thread-affine." },
+    };
 }
 
 QJsonValue McpServer::requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices)

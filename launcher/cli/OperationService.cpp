@@ -36,6 +36,7 @@
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/AuthFlow.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/launch/MinecraftTarget.h"
 #include "minecraft/mod/Resource.h"
@@ -244,7 +245,7 @@ QString settingCategory(const QString& id)
         "Aria2Split", "Aria2MinSplitSize", "Aria2FileAllocation", "Aria2Continue", "Aria2RpcPort",
         "Aria2PollInterval", "Aria2ExtraArgs", "Aria2UseLauncherProxy", "CurseForgeDownloadBrowser",
         "ShowModIncompat", "FallbackMRBlockedMods", "MetaURLOverride", "LocalServiceCache", "ResourceURLOverride", "DownloadMirrorType",
-        "ModrinthMirror", "CurseForgeMirror", "LibrariesURL", "LegacyFMLLibsURLOverride", "MojangDownloadsMirrorURL",
+        "ModrinthMirror", "CurseForgeMirror", "ModrinthMirrorURL", "CurseForgeMirrorURL", "LibrariesURL", "LegacyFMLLibsURLOverride", "MojangDownloadsMirrorURL",
         "CFKeyOverride", "FlameKeyOverride", "ModrinthToken"
     };
     static const QSet<QString> java{
@@ -534,6 +535,7 @@ QJsonObject OperationService::listAccounts()
 {
     QJsonArray accounts;
     const auto list = APPLICATION->accounts();
+    list->refreshCacheStatuses();
     const auto defaultAccount = list->defaultAccount();
     for (int i = 0; i < list->count(); ++i) {
         const auto account = list->at(i);
@@ -1165,6 +1167,16 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
     MinecraftAccountPtr account;
     if (type == "offline") {
         account = MinecraftAccount::createOffline(username);
+        const auto uuidMode = parameters.value("offlineUuidMode").toString("default").trimmed().toLower();
+        if (uuidMode == "random") {
+            account->accountData()->minecraftProfile.id = QUuid::createUuid().toString(QUuid::Id128);
+        } else if (uuidMode == "custom") {
+            const auto custom = QUuid::fromString(parameters.value("offlineUuid").toString());
+            if (custom.isNull()) return failure(tr("A valid custom offline UUID is required."), 2);
+            account->accountData()->minecraftProfile.id = custom.toString(QUuid::Id128);
+        } else if (uuidMode != "default" && !uuidMode.isEmpty()) {
+            return failure(tr("Unsupported offline UUID mode: %1").arg(uuidMode), 2);
+        }
     } else if (type == "microsoft") {
         account = MinecraftAccount::createBlankMSA();
     } else if (type == "yggdrasil" || type == "unified-pass") {
@@ -1174,19 +1186,27 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
         if (type == "yggdrasil") {
             const auto authUrl = parameters.value("authUrl").toString();
             const auto sessionUrl = parameters.value("sessionUrl").toString();
-            if (authUrl.isEmpty() || sessionUrl.isEmpty())
+            const auto managedLocal = parameters.value("managedLocal").toBool(false);
+            if (!managedLocal && (authUrl.isEmpty() || sessionUrl.isEmpty()))
                 return failure(tr("Yggdrasil login requires authUrl and sessionUrl."), 2);
             const auto isHttpUrl = [](const QString& value) {
                 const QUrl url(value, QUrl::TolerantMode);
                 return url.isValid() && !url.host().isEmpty() && (url.scheme() == "http" || url.scheme() == "https");
             };
-            if (!isHttpUrl(authUrl) || !isHttpUrl(sessionUrl))
+            if (!managedLocal && (!isHttpUrl(authUrl) || !isHttpUrl(sessionUrl)))
                 return failure(tr("Yggdrasil authUrl and sessionUrl must be HTTP(S) URLs."), 2);
             account =
                 MinecraftAccount::createYggdrasil(username, *password, authUrl, sessionUrl, parameters.value("sourceName").toString(),
                     parameters.value("refreshEndpoint").toString(), parameters.value("validateEndpoint").toString(),
                     parameters.value("authenticateEndpoint").toString(), parameters.value("profileEndpoint").toString(),
                     parameters.value("oauthTokenEndpoint").toString(), parameters.value("tokenType").toString().compare("OAuth", Qt::CaseInsensitive) == 0 ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard);
+            account->accountData()->yggdrasilConfig.managedLocal = managedLocal;
+            if (managedLocal) {
+                QJsonObject profile;
+                QString localError;
+                if (!LocalYggdrasil::instance().ensureProfile(username, *password, profile, localError))
+                    return failure(localError.isEmpty() ? tr("Could not provision the local verification account.") : localError, 2);
+            }
         } else {
             const auto serverId = parameters.value("serverId").toString();
             if (serverId.isEmpty())

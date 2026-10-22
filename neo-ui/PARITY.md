@@ -1,5 +1,9 @@
 # Neo UI coverage
 
+> 2026-10-22: PCL-CE 视觉复刻的逐项差异、真实窗口截图和当前状态见
+> [`docs/pcl-neoui-theme-diff.md`](../docs/pcl-neoui-theme-diff.md)。本文件继续记录
+> API 工作流覆盖，不用于判断 PCL 视觉是否通过。
+
 This is an implementation checklist, not a claim of Qt GUI parity. Both
 `instance.icon` and the UI changes are additive; the Qt pages remain intact.
 

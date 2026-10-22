@@ -1,5 +1,8 @@
 # Qt / Neo UI 功能对照
 
+> PCL-CE 视觉复刻的逐项差异、真实窗口截图和当前状态见
+> [`docs/pcl-neoui-theme-diff.md`](../docs/pcl-neoui-theme-diff.md)。
+
 这份清单以 `launcher/ui/pages/global`、`MinecraftSettingsWidget`、`JavaSettingsWidget` 和实例设置对象为基准。每一项都必须通过 Launcher API 读写；Qt 专属选项单独放在 Qt 兼容页。
 
 | Qt 功能 | API 对应 | Neo UI 入口 | 状态 |

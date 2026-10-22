@@ -45,10 +45,24 @@ fn launcher_context() -> Result<LauncherContext, String> {
         .output()
         .map_err(|e| format!("无法启动启动器后端：{e}"))?;
     if !output.status.success() {
+        // Keep the Web UI usable with an older installed CLI. The context
+        // query was added after some packaged launchers were built; those
+        // binaries reject the new option before doing any useful work.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("Unknown option") || stderr.contains("unknown option") {
+            let data_root = std::env::var_os("LUNA_LAUNCHER_DATA")
+                .map(PathBuf::from)
+                .or_else(|| dirs::data_dir().map(|path| path.join("LunaLauncher")))
+                .ok_or_else(|| "无法确定启动器数据目录".to_string())?;
+            return Ok(LauncherContext {
+                data_root,
+                instance_id: "luna-launcher".into(),
+            });
+        }
         return Err(format!(
             "无法读取后端启动信息（{}）。请确认 Neo UI 与 CLI 已一起更新。\n{}",
             output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
+            stderr.trim()
         ));
     }
     let context: LauncherContext =

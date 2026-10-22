@@ -99,3 +99,24 @@ aqtinstall.log
 PrismLauncher-portable-noverify/*
 flatpak/
 dist/
+
+# Local Neo UI/PCL reference and test artifacts
+/.acl-recovery/
+/.pcl-reference/
+/.pixi-cache-neo/
+/neo-ui-test-data*/
+/test-launcher-runtime/
+/test-offline/
+/tools/Msys2Manager/
+/*.png
+/*.err
+/job-*.log
+/offline-build.log
+/settings-launcher.json
+/targets.json
+
+# Verification screenshots are local artifacts
+/docs/*.png
+
+# Local PCL comparison notes
+/docs/pcl-neoui-*.md

@@ -1,12 +1,12 @@
 <template>
   <!-- Port of XMCL Setting.vue's navigation-sidebar/content split. -->
   <div class="xmcl-setting-page">
-    <nav class="xmcl-setting-sidebar" aria-label="设置导航"><div class="xmcl-setting-card"><div class="xmcl-setting-label">{{ isInstance ? '客户端设置' : '启动器设置' }}</div><button v-for="item in sections" :key="item.id" :class="{active:section===item.id}" @click="section=item.id"><q-icon :name="item.icon" size="18px"/><span>{{ item.label }}</span><small v-if="item.count !== undefined">{{ item.count }}</small></button></div></nav>
+    <nav v-if="!hideNavigation" class="xmcl-setting-sidebar" aria-label="设置导航"><div class="xmcl-setting-card"><div class="xmcl-setting-label">{{ isInstance ? '客户端设置' : '启动器设置' }}</div><button v-for="item in sections" :key="item.id" :class="{active:section===item.id}" @click="section=item.id"><q-icon :name="item.icon" size="18px"/><span>{{ item.label }}</span><small v-if="item.count !== undefined">{{ item.count }}</small></button></div></nav>
     <main class="xmcl-setting-content">
       <section v-if="section==='all'" class="xmcl-setting-section"><header><q-icon name="tune"/><div><h5>{{ isInstance ? '客户端设置' : '启动器设置' }}</h5><p>设置项由 Launcher API 返回，按功能和 UI 作用范围分类。</p></div></header><InstanceSettingsPanel v-if="isInstance" :settings="settings" :busy="busy" :scope="scope" :execute="execute" @changed="emit('changed')"/><LauncherSettingsPanel v-else :settings="settings" :busy="busy" :scope="scope" :execute="execute" @changed="emit('changed')"/></section>
       <section v-else-if="isCategorySection" class="xmcl-setting-section"><header><q-icon :name="categoryIcon"/><div><h5>{{ categoryLabel }}</h5><p>{{ categoryDescription }}</p></div></header><SettingsPanel v-model:category="category" :settings="settings" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
       <section v-else-if="section==='runtime'" class="xmcl-setting-section"><header><q-icon name="code"/><div><h5>Java 与运行环境</h5><p>检测 Java、诊断兼容性并选择运行时。</p></div></header><JavaPanel :scope="scope" :settings="settings" :busy="busy" :execute="execute" @changed="emit('changed')"/></section>
-      <section v-else-if="section==='tools'" class="xmcl-setting-section"><header><q-icon name="palette"/><div><h5>Neo UI 外观</h5><p>管理 Neo UI 自己的主题、强调色、密度和界面动效。</p></div></header><NeoUiAppearancePanel /></section>
+      <section v-else-if="section==='tools'" class="xmcl-setting-section"><header><q-icon name="palette"/><div><h5>界面外观</h5><p>管理 Neo UI 原生外观、PCL Style、强调色、密度和界面动效。</p></div></header><NeoUiAppearancePanel /></section>
       <section v-else-if="section==='qt'" class="xmcl-setting-section"><header><q-icon name="desktop_windows"/><div><h5>Qt 兼容界面</h5><p>这里的设置只影响传统 C++ Qt 界面和其维护功能。</p></div></header><LauncherControlPanel :busy="busy" :execute="execute"/><SettingsPanel class="q-mt-xl" :settings="settings" category="qt-ui" :scope="isInstance ? 'instance' : 'launcher'" :busy="busy" @save="(key,value)=>execute('settings.set',{...scope,key,value})" @reset="key=>execute('settings.reset',{...scope,key})"/></section>
       <section v-else-if="section==='about'" class="xmcl-setting-section"><header><q-icon name="info"/><div><h5>关于 Neo UI</h5><p>查看 Neo UI、Launcher API 和运行时信息。</p></div></header><NeoUiAboutPanel :execute="execute"/></section>
     </main>
@@ -23,9 +23,9 @@ import NeoUiAppearancePanel from '../components/NeoUiAppearancePanel.vue';
 import NeoUiAboutPanel from '../components/NeoUiAboutPanel.vue';
 import { settingCategoryIcons, settingCategoryLabels, settingCategoryOrder } from '../settings-categories';
 import { settingMetadata } from '../settings-schema';
-const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
+const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>;hideNavigation?:boolean;initialSection?:string}>();
 const emit=defineEmits<{changed:[]}>();
-const section=ref('all');
+const section=ref(props.initialSection || 'all');
 const category=ref('all');
 const isInstance=computed(()=>props.scope.scope==='instance');
 const legacyGroups: Record<string, string> = { '窗口与启动': 'launch', '游戏与启动': 'launch', 'Java 与内存': 'java', '命令与环境': 'launch', '目录与文件': 'paths', '网络': 'network', Proxy: 'network', '下载与资源': 'downloads', '性能与兼容': 'compatibility', 控制台: 'console', '游戏时间': 'playtime', Launcher: 'qt-ui', ExternalTools: 'advanced', API: 'advanced' };
@@ -42,13 +42,14 @@ const sections=computed(()=>[
   {id:'all',label:isInstance.value ? '全部客户端设置' : '全部启动器设置',icon:'tune',count:props.settings.length},
   ...categorySections.value,
   {id:'runtime',label:'Java 与运行环境',icon:'code',count:0},
-  ...(!isInstance.value ? [{id:'tools',label:'Neo UI 外观',icon:'palette',count:0},{id:'qt',label:'Qt 兼容界面',icon:'desktop_windows',count:0},{id:'about',label:'关于 Neo UI',icon:'info',count:0}] : []),
+  ...(!isInstance.value ? [{id:'tools',label:'界面外观',icon:'palette',count:0},{id:'qt',label:'Qt 兼容界面',icon:'desktop_windows',count:0},{id:'about',label:'关于 Neo UI',icon:'info',count:0}] : []),
 ]);
 const isCategorySection=computed(()=>section.value !== 'all' && section.value !== 'runtime' && section.value !== 'tools' && section.value !== 'qt' && section.value !== 'about');
 const categoryLabel=computed(()=>settingCategoryLabels[section.value] || section.value);
 const categoryIcon=computed(()=>settingCategoryIcons[section.value] || 'tune');
 const categoryDescription=computed(()=>section.value === 'qt-ui' ? '这些选项只影响 Qt 旧界面的布局、工具栏或外部集成。' : '按 API 分类显示设置项，修改后立即写回当前配置对象。');
 watch(isInstance, () => { section.value = 'all'; category.value = 'all'; });
+watch(() => props.initialSection, value => { if (value) section.value = value; });
 watch(presentCategories, () => { if (isCategorySection.value && !presentCategories.value.has(section.value)) section.value = 'all'; });
 watch(section, value => { if (isCategorySection.value) category.value = value; else if (value === 'all') category.value = 'all'; });
 watch(category, value => { if (value !== 'all' && presentCategories.value.has(value)) section.value = value; else if (value === 'all' && isCategorySection.value) section.value = 'all'; });

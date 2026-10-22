@@ -23,8 +23,8 @@
       <section class="settings-card">
         <h6>下载核心</h6>
         <q-select dark outlined emit-value map-options :model-value="value('DownloadBackend')" :options="backends" label="下载实现" @update:model-value="saveKey('DownloadBackend',$event)" />
-        <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" label="PCL 下载失败时回退 Qt" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" label="PCL 并发线程" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" label="PCL 限速（KB/s，0 为不限）" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
+        <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" label="专用下载失败时回退 Qt" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" label="专用下载并发线程" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" label="专用下载限速（KB/s，0 为不限）" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
       </section>
       <section class="settings-card q-mt-md">
         <h6>Aria2</h6>
@@ -55,9 +55,9 @@ import LauncherControlPanel from './LauncherControlPanel.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref('authlib-injector'),externalTool=ref('jprofiler'),externalPath=ref('');
-const backends=[{label:'Qt 原生下载',value:0},{label:'Aria2',value:1},{label:'PCL 多线程下载',value:2}];
+const backends=[{label:'Qt 原生下载',value:0},{label:'Aria2',value:1},{label:'专用多线程下载',value:2}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);
-const mirrorKeys=new Set(['ModMetadataDisabled','ModDependenciesDisabled','SkipModpackUpdatePrompt','ModDownloadLoaders','OverrideModDownloadLoaders','CurseForgeDownloadBrowser','ShowModIncompat','FallbackMRBlockedMods','MetaURLOverride','ResourceURLOverride','DownloadMirrorType','ModrinthMirror','CurseForgeMirror','LibrariesURL','LegacyFMLLibsURLOverride','MojangDownloadsMirrorURL','CFKeyOverride','FlameKeyOverride','ModrinthToken']);
+const mirrorKeys=new Set(['ModMetadataDisabled','ModDependenciesDisabled','SkipModpackUpdatePrompt','ModDownloadLoaders','OverrideModDownloadLoaders','CurseForgeDownloadBrowser','ShowModIncompat','FallbackMRBlockedMods','MetaURLOverride','ResourceURLOverride','DownloadMirrorType','ModrinthMirror','CurseForgeMirror','ModrinthMirrorURL','CurseForgeMirrorURL','LibrariesURL','LegacyFMLLibsURLOverride','MojangDownloadsMirrorURL','CFKeyOverride','FlameKeyOverride','ModrinthToken']);
 const downloadSettings=computed(()=>props.settings.filter(x=>x.category==='downloads'));
 const mirrorSettings=computed(()=>downloadSettings.value.filter(x=>mirrorKeys.has(x.key)));
 async function save(key:string,value:any){await props.execute('settings.set',{...props.scope,key,value});emit('changed');}

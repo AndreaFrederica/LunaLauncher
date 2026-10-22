@@ -20,7 +20,7 @@
           </div>
           <q-banner v-if="worldError" class="bg-red-9 q-mb-md">{{ worldError }}</q-banner>
           <q-list v-if="worlds.length" bordered separator>
-            <q-item v-for="world in worlds" :key="world.folder || world.name">
+              <q-item v-for="world in worlds" :key="world.folder || world.name">
               <q-item-section avatar><q-icon name="public" color="primary" /></q-item-section>
               <q-item-section>
                 <q-item-label>{{ world.name || world.folder }}</q-item-label>
@@ -31,6 +31,7 @@
                   <q-btn flat dense icon="drive_file_rename_outline" aria-label="重命名" :disable="busy" @click="renameWorld(world)" />
                   <q-btn flat dense icon="content_copy" aria-label="复制" :disable="busy" @click="copyWorld(world)" />
                   <q-btn flat dense icon="archive" aria-label="导出" :disable="busy" @click="exportWorld(world)" />
+                  <q-btn flat dense icon="image" aria-label="重置图标" :disable="busy" @click="resetWorldIcon(world)" />
                   <q-btn flat dense icon="delete" color="red-4" aria-label="删除" :disable="busy" @click="deleteWorld(world)" />
                 </div>
               </q-item-section>
@@ -55,9 +56,9 @@
           <div v-if="screenshots.length" class="row q-col-gutter-md">
             <div v-for="shot in screenshots" :key="shot.name" class="col-12 col-sm-6 col-md-4">
               <q-card class="screenshot-card">
-                <q-img :src="shot.thumbnail" ratio="16/9" placeholder-src="" @click="readScreenshot(shot)" />
+              <q-img :src="shot.thumbnail" ratio="16/9" placeholder-src="" @click="readScreenshot(shot)" />
                 <q-card-section class="q-pa-sm"><div class="ellipsis">{{ shot.name }}</div><div class="text-caption text-grey-5">{{ formatSize(shot.size) }} · {{ formatWorldDate(shot.modified) }}</div></q-card-section>
-                <q-card-actions align="right" class="q-pa-xs"><q-btn flat dense label="查看" :disable="busy" @click="readScreenshot(shot)" /><q-btn flat dense label="上传" :disable="busy" @click="uploadScreenshot(shot)" /><q-btn flat dense color="red-4" label="删除" :disable="busy" @click="deleteScreenshot(shot)" /></q-card-actions>
+                <q-card-actions align="right" class="q-pa-xs"><q-btn flat dense label="查看" :disable="busy" @click="readScreenshot(shot)" /><q-btn flat dense icon="drive_file_rename_outline" aria-label="重命名" :disable="busy" @click="renameScreenshot(shot)" /><q-btn flat dense label="上传" :disable="busy" @click="uploadScreenshot(shot)" /><q-btn flat dense color="red-4" label="删除" :disable="busy" @click="deleteScreenshot(shot)" /></q-card-actions>
               </q-card>
             </div>
           </div>
@@ -115,6 +116,12 @@ async function loadScreenshots() {
     const result = await props.execute('instance.screenshot.list', { instance: props.instance });
     const list = Array.isArray(result) ? result : [];
     screenshots.value = list.map((shot: any) => ({ ...shot, thumbnail: '' }));
+    // PCL shows a real thumbnail in every card. Read the bounded image payload
+    // through the screenshot API so the native frontend and web preview share
+    // exactly the same path and size checks.
+    await Promise.all(screenshots.value.map(async (shot: any) => {
+      try { const image = await props.execute('instance.screenshot.read', { instance: props.instance, file: shot.name }); shot.thumbnail = `data:image/${image.format || 'png'};base64,${image.content}`; } catch { /* an unreadable image remains a placeholder */ }
+    }));
   } catch (error) { screenshotError.value = error instanceof Error ? error.message : String(error); }
   finally { loading.value = false; }
 }
@@ -147,6 +154,12 @@ async function exportWorld(world: any) {
   await props.execute('instance.world.export', { instance: props.instance, world: world.folder, output, overwrite: true });
 }
 
+async function resetWorldIcon(world: any) {
+  if (!window.confirm(`移除世界“${world.name || world.folder}”的图标吗？`)) return;
+  await props.execute('instance.world.reset-icon', { instance: props.instance, world: world.folder });
+  emit('changed'); await loadWorlds();
+}
+
 async function importScreenshot() {
   const source = screenshotSource.value.trim(); if (!source) return;
   const name = screenshotName.value.trim() || source.split(/[\\/]/).pop() || 'screenshot.png';
@@ -162,6 +175,12 @@ async function readScreenshot(shot: any) {
 }
 
 async function uploadScreenshot(shot: any) { await props.execute('instance.screenshot.upload', { instance: props.instance, file: shot.name }); }
+async function renameScreenshot(shot: any) {
+  const name = window.prompt('新的截图文件名（png/jpg/jpeg）', shot.name);
+  if (!name || name === shot.name) return;
+  await props.execute('instance.screenshot.rename', { instance: props.instance, file: shot.name, name });
+  emit('changed'); await loadScreenshots();
+}
 async function deleteScreenshot(shot: any) {
   if (!window.confirm(`确定删除截图“${shot.name}”吗？`)) return;
   await props.execute('instance.screenshot.delete', { instance: props.instance, file: shot.name, confirm: true });

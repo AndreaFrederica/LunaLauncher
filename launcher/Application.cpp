@@ -43,6 +43,15 @@
  */
 
 #include "Application.h"
+
+// Qt's bundled rcc emits this probe when resources are compressed with zstd.
+// Some MSVC Qt distributions omit the private export, while the generated
+// resources still reference it. Keep the probe available in the launcher so
+// CLI and GUI link consistently with that Qt build.
+unsigned char qResourceFeatureZstd()
+{
+    return 1;
+}
 #include "BuildConfig.h"
 
 #include <QDirIterator>
@@ -1079,6 +1088,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_settings->registerSetting("DownloadMirrorType", MirrorDownload::MirrorType::Official);
             m_settings->registerSetting("ModrinthMirror", ModApiMirror::Official);
             m_settings->registerSetting("CurseForgeMirror", ModApiMirror::Official);
+            m_settings->registerSetting("ModrinthMirrorURL", "");
+            m_settings->registerSetting("CurseForgeMirrorURL", "");
             m_settings->registerSetting("LibrariesURL", "");
             m_settings->registerSetting({ "LegacyFMLLibsURLOverride", "FMLLibsURL" }, "");
             m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON
@@ -1102,6 +1113,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 (!mojangDownloadsMirrorUrl.isValid() ||
                  (mojangDownloadsMirrorUrl.scheme() != "http" && mojangDownloadsMirrorUrl.scheme() != "https"))) {
                 m_settings->reset("MojangDownloadsMirrorURL");
+            }
+
+            for (const auto& key : { QStringLiteral("ModrinthMirrorURL"), QStringLiteral("CurseForgeMirrorURL") }) {
+                const QUrl customApiUrl(m_settings->get(key).toString());
+                if (!customApiUrl.isEmpty() && (!customApiUrl.isValid() || (customApiUrl.scheme() != "http" && customApiUrl.scheme() != "https")))
+                    m_settings->reset(key);
             }
         }
 

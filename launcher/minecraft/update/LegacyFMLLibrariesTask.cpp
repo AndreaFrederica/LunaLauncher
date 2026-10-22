@@ -2,6 +2,7 @@
 
 #include "FileSystem.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/MirrorDownload.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/VersionFilterData.h"
 
@@ -63,16 +64,24 @@ void LegacyFMLLibrariesTask::executeTask()
     auto metacache = APPLICATION->metacache();
     Net::Download::Options options = Net::Download::Option::MakeEternal;
 
-    // Check for legacy FML libraries URL override setting
+    // Check for legacy FML libraries URL override setting, then fall back to
+    // the mirror's Maven root and finally to the built-in official location.
     auto fmlLibsUrl = APPLICATION->settings()->get("LegacyFMLLibsURLOverride").toString();
+    if (fmlLibsUrl.isEmpty()) {
+        fmlLibsUrl = MirrorDownload::resolve(APPLICATION->settings()).fmlLibsBase;
+    }
     if (fmlLibsUrl.isEmpty()) {
         fmlLibsUrl = BuildConfig.LEGACY_FMLLIBS_BASE_URL;
     }
 
     for (auto& lib : fmlLibsToProcess) {
         auto entry = metacache->resolveEntry("fmllibs", lib.filename);
+        const QUrl officialUrl(BuildConfig.LEGACY_FMLLIBS_BASE_URL + lib.filename);
         QString urlString = fmlLibsUrl + lib.filename;
-        dljob->addNetAction(Net::ApiDownload::makeCached(QUrl(urlString), entry, options));
+        auto dl = Net::ApiDownload::makeCached(QUrl(urlString), entry, options);
+        if (QUrl(urlString) != officialUrl)
+            dl->setFallbackUrl(officialUrl);
+        dljob->addNetAction(dl);
     }
 
     connect(dljob.get(), &NetJob::succeeded, this, &LegacyFMLLibrariesTask::fmllibsFinished);

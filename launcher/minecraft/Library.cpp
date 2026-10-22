@@ -130,62 +130,25 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
         return true;
     };
 
-    // Lambda function to rewrite Mojang URLs to mirror URLs
-    auto rewrite_url = [settings](QString url) -> QString {
+    // Resolve the mirror once per library batch and rewrite all download URLs
+    // through the shared implementation so Custom mirrors get the same coverage
+    // as the built-in BMCLAPI preset.
+    MirrorDownload::ResolvedMirror mirror;
+    {
         auto app = APPLICATION_DYN;
         auto s = settings ? settings.get() : (app ? app->settings() : nullptr);
-        if (!s) {
-            return url;
-        }
-        int mirrorType = s->get("DownloadMirrorType").toInt();
-        QString replacementUrl;
-
-        if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
-            replacementUrl = "https://bmclapi2.bangbang93.com";
-
-            // Fabric
-            url.replace("https://meta.fabricmc.net", "https://bmclapi2.bangbang93.com/fabric-meta");
-            url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
-
-            // Forge
-            url.replace("https://files.minecraftforge.net/maven", "https://bmclapi2.bangbang93.com/maven");
-
-            // NeoForge
-            url.replace("https://maven.neoforged.net/releases", "https://bmclapi2.bangbang93.com/maven");
-
-            // Libraries
-            url.replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven");
-        } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
-            // For custom mirrors, use the user-provided URL
-            replacementUrl = s->get("MojangDownloadsMirrorURL").toString();
-        }
-
-        if (!replacementUrl.isEmpty()) {
-            // Replace Mojang URLs with mirror URL using QString::replace
-            // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
-            if (!replacementUrl.endsWith('/')) {
-                replacementUrl += '/';
-            }
-            url.replace("https://launcher.mojang.com/", replacementUrl);
-            url.replace("https://piston-data.mojang.com/", replacementUrl);
-            url.replace("https://piston-meta.mojang.com/", replacementUrl);
-            url.replace("https://launchermeta.mojang.com/", replacementUrl);
-            url.replace("https://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
-            url.replace("http://launcher.mojang.com/", replacementUrl);
-            url.replace("http://piston-data.mojang.com/", replacementUrl);
-            url.replace("http://piston-meta.mojang.com/", replacementUrl);
-            url.replace("http://launchermeta.mojang.com/", replacementUrl);
-            url.replace("http://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
-        }
-        return url;
-    };
+        if (s)
+            mirror = MirrorDownload::resolve(s);
+    }
+    auto rewrite_url = [mirror](const QString& url) -> QString { return MirrorDownload::rewriteUrl(url, mirror); };
 
     // Lambda function to add a download request
     auto add_download = [this, local, check_local_file, cache, stale, &out, &rewrite_url](QString storage, QString url, QString sha1) {
         if (local) {
             return check_local_file(storage);
         }
-        // Rewrite URL for mirror support
+        // Rewrite URL for mirror support, keeping the official URL for 429 fallback.
+        const QString officialUrl = url;
         url = rewrite_url(url);
 
         auto entry = cache->resolveEntry("libraries", storage);
@@ -205,10 +168,15 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
         if (sha1.size()) {
             auto dl = Net::ApiDownload::makeCached(url, entry, options);
             dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, sha1));
+            if (officialUrl != url)
+                dl->setFallbackUrl(QUrl(officialUrl));
             qDebug() << "Checksummed Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
             out.append(dl);
         } else {
-            out.append(Net::ApiDownload::makeCached(url, entry, options));
+            auto dl = Net::ApiDownload::makeCached(url, entry, options);
+            if (officialUrl != url)
+                dl->setFallbackUrl(QUrl(officialUrl));
+            out.append(dl);
             qDebug() << "Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
         }
         return true;

@@ -76,6 +76,15 @@ class NetRequest : public Task {
 
     QUrl url() const;
     void setUrl(QUrl url) { m_url = url; }
+    /// Set the official URL to fall back to when a mirror request keeps failing.
+    /// Setting this also marks the request as a mirror request so 429 responses
+    /// are retried and then switched to this URL.
+    void setFallbackUrl(const QUrl& url)
+    {
+        m_fallbackUrl = url;
+        m_isMirrorRequest = true;
+    }
+    QUrl fallbackUrl() const { return m_fallbackUrl; }
     virtual int replyStatusCode() const;
     virtual QNetworkReply::NetworkError error() const;
     virtual QString errorString() const;
@@ -112,9 +121,10 @@ class NetRequest : public Task {
     QUrl m_url;
     std::vector<std::shared_ptr<Net::HeaderProxy>> m_headerProxies;
 
-    /// BMCLAPI retry state
+    /// Mirror retry state
     int m_retry_count = 0;
-    QUrl m_original_url;  // Store original URL for fallback
+    bool m_isMirrorRequest = false;
+    QUrl m_fallbackUrl;  // official URL to use when the mirror keeps failing
     static const int MAX_RETRIES = 3;
 };
 }  // namespace Net

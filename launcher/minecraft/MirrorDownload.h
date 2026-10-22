@@ -21,6 +21,8 @@
 #include <QString>
 #include <array>
 
+class SettingsObject;
+
 class MirrorDownload {
 public:
     enum MirrorType : int {
@@ -39,5 +41,45 @@ public:
         const QString defaultFMLLibsUrl;
     };
 
+    /// Effective mirror endpoints for the current settings.
+    struct ResolvedMirror {
+        MirrorType type = Official;
+
+        /// Base for launcher.mojang.com, piston-*.mojang.com, launchermeta.mojang.com
+        /// and s3.amazonaws.com/Minecraft.Download (all keep their original path).
+        QString mojangBase;
+
+        /// Maven root for libraries.minecraft.net and the mod loader Maven repositories.
+        QString librariesBase;
+
+        /// Base for resources.download.minecraft.net.
+        QString assetsBase;
+
+        /// Base for meta.fabricmc.net.
+        QString fabricMetaBase;
+
+        /// Base for meta.quiltmc.org.
+        QString quiltMetaBase;
+
+        /// Base for the legacy FML libraries.
+        QString fmlLibsBase;
+
+        /// Base for authlib-injector.yushi.moe.
+        QString authlibInjectorBase;
+
+        bool isOfficial() const { return type == Official; }
+        bool isEmpty() const { return mojangBase.isEmpty() && librariesBase.isEmpty() && assetsBase.isEmpty(); }
+    };
+
     static const std::array<MirrorTypeInfo, 3> MirrorTypes;
+
+    /// Build the effective mirror configuration from settings. A null settings object
+    /// resolves to the official servers.
+    static ResolvedMirror resolve(SettingsObject* settings);
+
+    /// Rewrite a download URL according to the given mirror configuration.
+    static QString rewriteUrl(const QString& url, const ResolvedMirror& mirror);
+
+    /// Convenience overload that resolves the mirror from the given settings first.
+    static QString rewriteUrl(const QString& url, SettingsObject* settings);
 };

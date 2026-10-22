@@ -39,33 +39,10 @@ void AssetUpdateTask::executeTask()
     }
     QUrl indexUrl = assets->url;
 
-    // Rewrite URL for mirror support
-    int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
-    QString replacementUrl;
-
-    if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
-        replacementUrl = "https://bmclapi2.bangbang93.com";
-    } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
-        replacementUrl = APPLICATION->settings()->get("MojangDownloadsMirrorURL").toString();
-    }
-
-    if (!replacementUrl.isEmpty()) {
-        QString urlString = indexUrl.toString();
-        // Replace Mojang URLs with mirror URL using QString::replace
-        // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
-        if (!replacementUrl.endsWith('/')) {
-            replacementUrl += '/';
-        }
-        urlString.replace("https://launchermeta.mojang.com/", replacementUrl);
-        urlString.replace("https://launcher.mojang.com/", replacementUrl);
-        urlString.replace("https://piston-meta.mojang.com/", replacementUrl);
-        urlString.replace("http://launchermeta.mojang.com/", replacementUrl);
-        urlString.replace("http://launcher.mojang.com/", replacementUrl);
-        urlString.replace("http://piston-meta.mojang.com/", replacementUrl);
-        urlString.replace("https://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
-        urlString.replace("http://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
-        indexUrl = QUrl(urlString);
-    }
+    // Rewrite the asset index URL through the shared mirror implementation so
+    // both the BMCLAPI preset and custom mirrors use the same host mapping.
+    const QUrl officialIndexUrl = indexUrl;
+    indexUrl = QUrl(MirrorDownload::rewriteUrl(indexUrl.toString(), APPLICATION->settings()));
 
     QString localPath = assets->id + ".json";
     auto job = makeShared<NetJob>(tr("Asset index for %1").arg(m_inst->name()), APPLICATION->network());
@@ -99,6 +76,8 @@ void AssetUpdateTask::executeTask()
     qDebug() << "Asset index SHA1:" << hexSha1;
     auto dl = Net::ApiDownload::makeCached(indexUrl, entry);
     dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, assets->sha1));
+    if (officialIndexUrl != indexUrl)
+        dl->setFallbackUrl(officialIndexUrl);
     job->addNetAction(dl);
 
     downloadJob.reset(job);
@@ -190,9 +169,17 @@ bool AssetUpdateTask::abort()
 
 QString AssetUpdateTask::resourceUrl()
 {
-    if (const QString urlOverride = APPLICATION->settings()->get("ResourceURLOverride").toString(); !urlOverride.isEmpty()) {
+    auto settings = APPLICATION->settings();
+
+    // A manually configured assets base always wins.
+    if (const QString urlOverride = settings->get("ResourceURLOverride").toString(); !urlOverride.isEmpty()) {
         return urlOverride;
     }
+
+    // Otherwise let the mirror resolve it (BMCLAPI preset or a custom base).
+    const auto mirror = MirrorDownload::resolve(settings);
+    if (!mirror.assetsBase.isEmpty())
+        return mirror.assetsBase;
 
     return BuildConfig.DEFAULT_RESOURCE_BASE;
 }

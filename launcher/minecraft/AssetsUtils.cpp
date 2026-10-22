@@ -296,6 +296,9 @@ Net::NetRequest::Ptr AssetObject::getDownloadAction(bool verifyIntegrity)
     }
     if (needsDownload) {
         auto objectDL = Net::ApiDownload::makeFile(getUrl(), objectFile.filePath());
+        const QUrl officialUrl(BuildConfig.DEFAULT_RESOURCE_BASE + getRelPath());
+        if (getUrl() != officialUrl)
+            objectDL->setFallbackUrl(officialUrl);
         if (hash.size()) {
             objectDL->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, hash));
         }

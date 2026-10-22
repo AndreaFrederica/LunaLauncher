@@ -4,11 +4,13 @@
 
 #include <QString>
 
+class SettingsObject;
+
 namespace ModApiMirror {
 
-enum Type { Official = 0, MCIM = 1 };
+enum Type { Official = 0, MCIM = 1, Custom = 2 };
 
-QString modrinthBaseUrl();
-QString curseForgeBaseUrl();
+QString modrinthBaseUrl(SettingsObject* settings = nullptr);
+QString curseForgeBaseUrl(SettingsObject* settings = nullptr);
 
 }  // namespace ModApiMirror

@@ -43,31 +43,15 @@ void ManifestDownloadTask::executeTask()
     auto download = makeShared<NetJob>(QString("JRE::DownloadJava"), APPLICATION->network());
     QByteArray* files = nullptr;
 
-    // Rewrite URL for mirror support
+    // Rewrite the manifest URL through the shared mirror implementation.
     QUrl manifestUrl = m_url;
-    int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
-    QString replacementUrl;
-
-    if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
-        replacementUrl = "https://bmclapi2.bangbang93.com";
-    } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
-        replacementUrl = APPLICATION->settings()->get("MojangDownloadsMirrorURL").toString();
-    }
-
-    if (!replacementUrl.isEmpty()) {
-        QString urlString = manifestUrl.toString();
-        // Replace Mojang URLs with mirror URL using QString::replace
-        // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
-        if (!replacementUrl.endsWith('/')) {
-            replacementUrl += '/';
-        }
-        urlString.replace("https://launchermeta.mojang.com/", replacementUrl);
-        urlString.replace("http://launchermeta.mojang.com/", replacementUrl);
-        manifestUrl = QUrl(urlString);
-    }
+    const QUrl officialManifestUrl = manifestUrl;
+    manifestUrl = QUrl(MirrorDownload::rewriteUrl(manifestUrl.toString(), APPLICATION->settings()));
 
     auto [action, response] = Net::Download::makeByteArray(manifestUrl);
     files = response;
+    if (officialManifestUrl != manifestUrl)
+        action->setFallbackUrl(officialManifestUrl);
     if (!m_checksum_hash.isEmpty() && !m_checksum_type.isEmpty()) {
         auto hashType = QCryptographicHash::Algorithm::Sha1;
         if (m_checksum_type == "sha256") {
@@ -130,32 +114,15 @@ void ManifestDownloadTask::downloadJava(const QJsonDocument& doc)
     }
     auto elementDownload = makeShared<NetJob>("JRE::FileDownload", APPLICATION->network());
 
-    // Get mirror URL for rewriting
-    // BMCLAPI mirrors all Mojang download URLs including Java Runtime files
-    // See BMCLAPI documentation: replace launchermeta.mojang.com/ and launcher.mojang.com/ with bmclapi2.bangbang93.com
-    int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
-    QString replacementUrl;
-    if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
-        replacementUrl = "https://bmclapi2.bangbang93.com";
-    } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
-        replacementUrl = APPLICATION->settings()->get("MojangDownloadsMirrorURL").toString();
-    }
+    // Resolve the mirror once and reuse it for every runtime file.
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
 
     for (const auto& file : toDownload) {
-        QString downloadUrl = file.url;
-        // Rewrite URL for BMCLAPI and Custom mirrors
-        if (!replacementUrl.isEmpty()) {
-            // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
-            if (!replacementUrl.endsWith('/')) {
-                replacementUrl += '/';
-            }
-            // Replace Mojang URLs with mirror URL using QString::replace
-            downloadUrl.replace("https://launcher.mojang.com/", replacementUrl);
-            downloadUrl.replace("https://piston-data.mojang.com/", replacementUrl);
-            downloadUrl.replace("http://launcher.mojang.com/", replacementUrl);
-            downloadUrl.replace("http://piston-data.mojang.com/", replacementUrl);
-        }
+        const QUrl officialDownloadUrl(file.url);
+        const QString downloadUrl = MirrorDownload::rewriteUrl(file.url, mirror);
         auto dl = Net::Download::makeFile(downloadUrl, file.path);
+        if (officialDownloadUrl.toString() != downloadUrl)
+            dl->setFallbackUrl(officialDownloadUrl);
         if (!file.hash.isEmpty()) {
             dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, file.hash));
         }

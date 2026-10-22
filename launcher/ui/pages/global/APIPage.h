@@ -66,6 +66,7 @@ class APIPage : public QWidget, public BasePage {
     void updateBaseURLNote(int index);
     void updateBaseURLPlaceholder(int index);
     void updateMirrorSelection();
+    void updateModApiMirrorSelection();
     void loadSettings();
     void applySettings();
 

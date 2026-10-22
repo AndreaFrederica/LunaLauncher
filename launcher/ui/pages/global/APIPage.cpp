@@ -85,6 +85,7 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     for (auto* comboBox : { ui->modrinthMirrorComboBox, ui->curseForgeMirrorComboBox }) {
         comboBox->addItem(tr("Official"), ModApiMirror::Official);
         comboBox->addItem(tr("MCIM"), ModApiMirror::MCIM);
+        comboBox->addItem(tr("Custom"), ModApiMirror::Custom);
     }
 
     ui->curseForgeDownloadBrowserComboBox->addItem(tr("Embedded browser"), "Embedded");
@@ -134,6 +135,8 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     ui->libraryURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->libraryURL));
     ui->fmlLibsURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->fmlLibsURL));
     ui->mojangDownloadsMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->mojangDownloadsMirrorURL));
+    ui->modrinthMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->modrinthMirrorURL));
+    ui->curseForgeMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->curseForgeMirrorURL));
     ui->baseURLEntry->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->baseURLEntry));
     ui->msaClientID->setValidator(new QRegularExpressionValidator(s_validMSAClientID, ui->msaClientID));
     ui->flameKey->setValidator(new QRegularExpressionValidator(s_validFlameKey, ui->flameKey));
@@ -146,9 +149,12 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 
     // Connect mirror selection change
     connect(ui->mirrorTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateMirrorSelection);
+    connect(ui->modrinthMirrorComboBox, currentIndexChangedSignal, this, &APIPage::updateModApiMirrorSelection);
+    connect(ui->curseForgeMirrorComboBox, currentIndexChangedSignal, this, &APIPage::updateModApiMirrorSelection);
 
     loadSettings();
     updateMirrorSelection();  // Initialize UI state
+    updateModApiMirrorSelection();
 
     resetBaseURLNote();
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLNote);
@@ -204,7 +210,23 @@ void APIPage::updateMirrorSelection()
     ui->fmlLibsURL->setEnabled(isCustom);
     ui->mojangDownloadsMirrorURL->setEnabled(isCustom);
 
-    if (!isCustom) {
+    if (isCustom) {
+        // Show the user's saved custom endpoints. Without this, switching from
+        // BMCLAPI to Custom would silently keep the BMCLAPI preset URLs and
+        // applying the page would save them as if they were custom values.
+        auto s = APPLICATION->settings();
+        ui->metaURL->setText(s->get("MetaURLOverride").toString());
+        ui->resourceURL->setText(s->get("ResourceURLOverride").toString());
+        ui->libraryURL->setText(s->get("LibrariesURL").toString());
+        ui->fmlLibsURL->setText(s->get("LegacyFMLLibsURLOverride").toString());
+        ui->mojangDownloadsMirrorURL->setText(s->get("MojangDownloadsMirrorURL").toString());
+
+        ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+        ui->resourceURL->setPlaceholderText(BuildConfig.DEFAULT_RESOURCE_BASE);
+        ui->libraryURL->setPlaceholderText(BuildConfig.LIBRARY_BASE);
+        ui->fmlLibsURL->setPlaceholderText(BuildConfig.LEGACY_FMLLIBS_BASE_URL);
+        ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("Use Default"));
+    } else {
         // Populate fields with preset values (for display only)
         const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(mirrorType);
 
@@ -232,6 +254,12 @@ void APIPage::updateMirrorSelection()
             ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("BMCLAPI (auto)"));
         }
     }
+}
+
+void APIPage::updateModApiMirrorSelection()
+{
+    ui->modrinthMirrorURL->setEnabled(ui->modrinthMirrorComboBox->currentData().toInt() == ModApiMirror::Custom);
+    ui->curseForgeMirrorURL->setEnabled(ui->curseForgeMirrorComboBox->currentData().toInt() == ModApiMirror::Custom);
 }
 
 void APIPage::loadSettings()
@@ -267,6 +295,8 @@ void APIPage::loadSettings()
     };
     loadModApiMirror(ui->modrinthMirrorComboBox, s->get("ModrinthMirror").toInt());
     loadModApiMirror(ui->curseForgeMirrorComboBox, s->get("CurseForgeMirror").toInt());
+    ui->modrinthMirrorURL->setText(s->get("ModrinthMirrorURL").toString());
+    ui->curseForgeMirrorURL->setText(s->get("CurseForgeMirrorURL").toString());
 
     const auto curseForgeDownloadBrowser = s->get("CurseForgeDownloadBrowser").toString();
     auto curseForgeDownloadBrowserIndex = ui->curseForgeDownloadBrowserComboBox->findData(curseForgeDownloadBrowser);
@@ -316,6 +346,8 @@ void APIPage::applySettings()
     s->set("DownloadMirrorType", mirrorType);
     s->set("ModrinthMirror", ui->modrinthMirrorComboBox->currentData().toInt());
     s->set("CurseForgeMirror", ui->curseForgeMirrorComboBox->currentData().toInt());
+    s->set("ModrinthMirrorURL", ui->modrinthMirrorURL->text().trimmed());
+    s->set("CurseForgeMirrorURL", ui->curseForgeMirrorURL->text().trimmed());
     s->set("CurseForgeDownloadBrowser", ui->curseForgeDownloadBrowserComboBox->currentData().toString());
 
     // Save download backend

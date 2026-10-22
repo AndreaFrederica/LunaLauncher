@@ -62,8 +62,8 @@ public:
      * @brief Download the latest version of authlib-injector.jar
      * @return Path to the downloaded jar file, or empty string on failure
      *
-     * Will first try BMCLAPI mirror (recommended for Chinese users),
-     * then fall back to the official source.
+     * Will first try the configured download mirror (BMCLAPI or a custom
+     * mirror), then fall back to the official source.
      */
     QString downloadLatest();
 

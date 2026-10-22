@@ -164,6 +164,44 @@ bool LocalYggdrasil::createProfile(const QString& name, const QString& password,
     return false;
 }
 
+bool LocalYggdrasil::ensureProfile(const QString& name, const QString& password, QJsonObject& profile, QString& error)
+{
+    QJsonObject users;
+    if (!request("GET", "users?limit=200", {}, users, error))
+        return false;
+    QString userId;
+    for (const auto& value : users.value("items").toArray()) {
+        const auto user = value.toObject();
+        if (user.value("username").toString().compare(name, Qt::CaseInsensitive) == 0) {
+            userId = user.value("id").toString();
+            break;
+        }
+    }
+    if (userId.isEmpty())
+        return createProfile(name, password, {}, profile, error);
+
+    QJsonObject profiles;
+    if (!request("GET", "profiles?limit=200", {}, profiles, error))
+        return false;
+    for (const auto& value : profiles.value("items").toArray()) {
+        const auto candidate = value.toObject();
+        if (candidate.value("user_id").toString() == userId) {
+            profile = candidate;
+            return true;
+        }
+    }
+
+    QJsonObject created;
+    const auto body = QJsonDocument(QJsonObject{ { "user_id", userId },
+                                                  { "name", name },
+                                                  { "uuid_scheme", QJsonObject{ { "kind", "offline_player" } } } })
+                          .toJson();
+    if (!request("POST", "profiles", body, created, error))
+        return false;
+    profile = created;
+    return true;
+}
+
 namespace {
 QJsonObject cacheTransport(const QUrl& destination)
 {
@@ -343,6 +381,39 @@ void LocalYggdrasil::refreshAccountSnapshotStatus(AccountData& data)
         hasAccountSnapshot(data);
 }
 
+bool LocalYggdrasil::repairProfileConflict(const QString& profileId, const QString& profileName)
+{
+    QJsonObject profiles;
+    QString error;
+    if (!request("GET", "profiles?limit=200", {}, profiles, error))
+        return false;
+    const auto expectedUser = "snapshot-" + profileId;
+    for (const auto& value : profiles.value("items").toArray()) {
+        const auto profile = value.toObject();
+        const auto id = profile.value("id").toString();
+        if (id.isEmpty()) continue;
+        QJsonObject snapshot;
+        QString snapshotError;
+        if (!request("GET", "account-snapshots/" + id, {}, snapshot, snapshotError) || !snapshot.value("local_auth").toBool())
+            continue;
+        if (id == profileId) {
+            if (profile.value("user_id").toString() == expectedUser) continue;
+            QJsonObject ignored;
+            QString deleteError;
+            return request("DELETE", "profiles/" + id, {}, ignored, deleteError);
+        }
+        if (profile.value("name").toString().compare(profileName, Qt::CaseInsensitive) != 0)
+            continue;
+        QJsonObject ignored;
+        QString deleteError;
+        if (!request("DELETE", "profiles/" + id, {}, ignored, deleteError))
+            return false;
+        request("DELETE", "account-snapshots/" + id, {}, ignored, deleteError);
+        return true;
+    }
+    return false;
+}
+
 bool LocalYggdrasil::createAccountSession(AccountData& data, AuthSessionPtr session, QString& error)
 {
     if (!hasAccountSnapshot(data)) {
@@ -354,7 +425,13 @@ bool LocalYggdrasil::createAccountSession(AccountData& data, AuthSessionPtr sess
         return false;
     }
     QJsonObject result;
-    if (!request("POST", "account-snapshots/" + data.profileId() + "/session", "{}", result, error))
+    if (!request("POST", "account-snapshots/" + data.profileId() + "/session", "{}", result, error) &&
+        error.contains("Identity or configuration conflict", Qt::CaseInsensitive) &&
+        repairProfileConflict(data.profileId(), data.profileName())) {
+        error.clear();
+        request("POST", "account-snapshots/" + data.profileId() + "/session", "{}", result, error);
+    }
+    if (!error.isEmpty())
         return false;
     if (!session->useLocalYggdrasil(result, data.profileId(), apiUrl())) {
         error = tr("The local authentication service returned an invalid session.");

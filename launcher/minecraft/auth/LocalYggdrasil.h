@@ -26,6 +26,9 @@ class LocalYggdrasil : public QObject {
                  QJsonObject& result,
                  QString& error,
                  const QByteArray& contentType = "application/json");
+    // Provision the launcher-managed account used by the local Yggdrasil
+    // preset. Existing users are reused so logging in again is idempotent.
+    bool ensureProfile(const QString& name, const QString& password, QJsonObject& profile, QString& error);
     bool createProfile(const QString& name, const QString& password, const QString& uuid, QJsonObject& profile, QString& error);
     QUrl metadataUrl(const QUrl& source);
     QUrl textureUrl(const QUrl& source);
@@ -44,6 +47,7 @@ class LocalYggdrasil : public QObject {
     bool configureCache();
     bool ensureCacheService();
     bool ensureAccountCacheService();
+    bool repairProfileConflict(const QString& profileId, const QString& profileName);
     QProcess m_process;
     QString m_url;
     QByteArray m_managementToken;

@@ -24,6 +24,7 @@ class AuthFlow : public Task {
     virtual ~AuthFlow() = default;
 
     void executeTask() override;
+    bool canAbort() const override { return true; }
 
     AccountTaskState taskState() { return m_taskState; }
 

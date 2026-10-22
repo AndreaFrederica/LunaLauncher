@@ -35,6 +35,9 @@ struct YggdrasilPreset {
     QString oauthTokenEndpoint;    // default: "/oauth2/token"
     // The token type to use
     YggdrasilTokenType tokenType = YggdrasilTokenType::Standard;
+    // Use Luna's launcher-managed local verification service.
+    bool managedLocal = false;
+    QString sourceName;
 };
 
 class YggdrasilPresets {

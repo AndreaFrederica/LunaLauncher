@@ -49,6 +49,14 @@ void YggdrasilPresets::initDefaults()
     littleSkin.profileEndpoint = "/sessionserver/session/minecraft/profile/{uuid}";
     s_defaults.append(littleSkin);
 
+    // Luna's bundled verification service. The service chooses an ephemeral
+    // loopback port at login time, so the account does not need a fixed URL.
+    YggdrasilPreset local;
+    local.name = QCoreApplication::translate("YggdrasilPresets", "Luna 本地验证服务器");
+    local.sourceName = QCoreApplication::translate("YggdrasilPresets", "Luna 本地验证服务器");
+    local.managedLocal = true;
+    s_defaults.append(local);
+
     // authlib-injector 官方示例服务器
     s_defaults.append({ QCoreApplication::translate("YggdrasilPresets", "authlib-injector Official Example"),
                         "https://authserver.localhost:23345/authserver",
@@ -144,12 +152,16 @@ bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset, const QStr
     if (!preset.oauthTokenEndpoint.isEmpty()) {
         obj["oauthTokenEndpoint"] = preset.oauthTokenEndpoint;
     }
+    if (!preset.sourceName.isEmpty()) {
+        obj["sourceName"] = preset.sourceName;
+    }
     // Store token type as string for JSON serialization
     if (preset.tokenType == YggdrasilTokenType::OAuth) {
         obj["tokenType"] = "OAuth";
     } else {
         obj["tokenType"] = "Standard";
     }
+    obj["managedLocal"] = preset.managedLocal;
     if (replaceIndex >= 0) array[replaceIndex] = obj;
     else array.append(obj);
 
@@ -191,6 +203,7 @@ QVector<YggdrasilPreset> YggdrasilPresets::getCustomPresets()
         preset.validateEndpoint = obj.value("validateEndpoint").toString();
         preset.profileEndpoint = obj.value("profileEndpoint").toString();
         preset.oauthTokenEndpoint = obj.value("oauthTokenEndpoint").toString();
+        preset.sourceName = obj.value("sourceName").toString();
         // Parse token type from string
         QString tokenTypeStr = obj.value("tokenType").toString();
         if (tokenTypeStr == "OAuth") {
@@ -198,6 +211,7 @@ QVector<YggdrasilPreset> YggdrasilPresets::getCustomPresets()
         } else {
             preset.tokenType = YggdrasilTokenType::Standard;
         }
+        preset.managedLocal = obj.value("managedLocal").toBool(false);
         presets.append(preset);
     }
 

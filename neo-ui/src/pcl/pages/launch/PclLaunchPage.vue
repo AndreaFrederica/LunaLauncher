@@ -112,6 +112,8 @@
           :instance="selected"
           :icon="selected ? icons[selected.id] : undefined"
           :account="activeAccount"
+          :accounts="accounts"
+          :account-id="accountId"
           :servers="servers"
           :servers-loading="serversLoading"
           :busy="busy"
@@ -122,6 +124,7 @@
           @folder="emit('open-folder')"
           @action="(operation) => selected && emit('instance-action', selected, operation)"
           @connect="connectServer({ ip: $event })"
+          @account-change="emit('account-change', $event)"
         />
 
         <div class="pcl-launch-right">

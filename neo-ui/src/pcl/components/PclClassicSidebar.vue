@@ -1,11 +1,25 @@
 <template>
   <aside class="pcl-classic-nav">
-    <div v-if="account" class="pcl-classic-nav__account">
-      <span class="pcl-classic-nav__avatar">
-        <PclAccountAvatar v-if="account.profile?.skin?.url" :src="account.profile.skin.url" :name="account.profileName || account.displayName" />
-        <PclIcon v-else name="user" :size="18" />
-      </span>
-      <span><strong>{{ account.profileName || account.displayName || '账户' }}</strong><small>{{ account.type || '已登录' }}</small></span>
+    <div class="pcl-classic-nav__account-wrap">
+      <button type="button" class="pcl-classic-nav__account" :disabled="!accounts.length" @click="accountMenu = !accountMenu">
+        <span class="pcl-classic-nav__avatar">
+          <PclAccountAvatar v-if="account?.profile?.skin?.url" :src="account.profile.skin.url" :name="account.profileName || account.displayName" />
+          <PclIcon v-else name="user" :size="18" />
+        </span>
+        <span><strong>{{ account?.profileName || account?.displayName || '未选择账户' }}</strong><small>{{ account?.type || '点击选择账户' }}</small></span>
+        <PclIcon name="chevron-left" :size="12" class="pcl-classic-nav__account-chevron" :class="{ open: accountMenu }" />
+      </button>
+      <div v-if="accountMenu" class="pcl-classic-nav__account-menu">
+        <button v-for="item in accounts" :key="accountKey(item)" type="button" :class="{ active: accountKey(item) === accountId }" @click="chooseAccount(item)">
+          <span class="pcl-classic-nav__avatar pcl-classic-nav__avatar--small">
+            <PclAccountAvatar v-if="item.profile?.skin?.url" :src="item.profile.skin.url" :name="item.profileName || item.displayName" />
+            <PclIcon v-else name="user" :size="14" />
+          </span>
+          <span><strong>{{ item.profileName || item.displayName || '未命名账户' }}</strong><small>{{ item.type || '账户' }}</small></span>
+          <PclIcon v-if="accountKey(item) === accountId" name="circle-check" :size="14" />
+        </button>
+        <div v-if="!accounts.length" class="pcl-classic-nav__empty">没有可用账户</div>
+      </div>
     </div>
 
     <div class="pcl-classic-nav__instance">
@@ -60,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import PclIcon from './PclIcon.vue';
 import PclAccountAvatar from './PclAccountAvatar.vue';
 
@@ -68,6 +82,8 @@ const props = defineProps<{
   instance?: any;
   icon?: string;
   account?: any;
+  accounts?: any[];
+  accountId?: string;
   servers?: any[];
   serversLoading?: boolean;
   busy?: boolean;
@@ -81,9 +97,19 @@ const emit = defineEmits<{
   folder: [];
   action: [operation: string];
   connect: [address: string];
+  'account-change': [id: string];
 }>();
 
 const iconSize = computed(() => Number(props.iconSize) || 96);
+const accountMenu = ref(false);
+function accountKey(value: any) {
+  return String(value?.internalId || value?.id || value?.profileName || '');
+}
+function chooseAccount(value: any) {
+  accountMenu.value = false;
+  emit('account-change', accountKey(value));
+}
+
 const version = computed(() => props.instance?.runtime?.minecraftVersion || props.instance?.runtime?.minecraft || props.instance?.minecraftVersion || 'Minecraft');
 </script>
 
@@ -136,13 +162,64 @@ const version = computed(() => props.instance?.runtime?.minecraftVersion || prop
   font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
+.pcl-classic-nav__account-wrap {
+  position: relative;
+  border-bottom: 1px solid var(--pcl-border);
+}
+
 .pcl-classic-nav__account {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 8px;
-  border-bottom: 1px solid var(--pcl-border);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+
+.pcl-classic-nav__account:hover:not(:disabled) { background: var(--pcl-c8); }
+.pcl-classic-nav__account:disabled { cursor: default; }
+.pcl-classic-nav__account-chevron { margin-left: auto; color: var(--pcl-muted); transform: rotate(-90deg); transition: transform .15s ease; }
+.pcl-classic-nav__account-chevron.open { transform: rotate(90deg); }
+
+.pcl-classic-nav__account-menu {
+  position: absolute;
+  top: calc(100% + 3px);
+  right: 0;
+  left: 0;
+  z-index: 20;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 4px;
+  background: var(--pcl-card);
+  box-shadow: var(--pcl-shadow);
+}
+
+.pcl-classic-nav__account-menu button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--pcl-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcl-classic-nav__account-menu button:hover,
+.pcl-classic-nav__account-menu button.active { background: var(--pcl-c8); }
+.pcl-classic-nav__account-menu button > span:nth-child(2) { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pcl-classic-nav__account-menu button strong { overflow: hidden; font-size: calc(10px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-classic-nav__account-menu button small { color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-classic-nav__avatar--small { width: 22px; height: 22px; }
 
 .pcl-classic-nav__avatar {
   display: flex;

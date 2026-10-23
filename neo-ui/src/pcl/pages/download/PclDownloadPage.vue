@@ -188,7 +188,7 @@ const componentItems: ComponentItem[] = [
   { id: 'optifine', label: 'OptiFine', icon: 'gauge' },
   { id: 'forge', label: 'Forge', icon: 'anvil', uid: 'net.minecraftforge', alias: 'forge' },
   { id: 'neoforge', label: 'NeoForge', icon: 'cat', uid: 'net.neoforged', alias: 'neoforge' },
-  { id: 'cleanroom', label: 'Cleanroom', icon: 'flask-conical', uid: 'com.cleanroommc:cleanroom', alias: 'cleanroom' },
+  { id: 'cleanroom', label: 'Cleanroom', icon: 'flask-conical', uid: 'com.cleanroommc.cleanroom', alias: 'cleanroom' },
   { id: 'fabric', label: 'Fabric', icon: 'scroll', uid: 'net.fabricmc.fabric-loader', alias: 'fabric' },
   { id: 'legacy-fabric', label: 'Legacy Fabric', icon: 'scroll' },
   { id: 'labymod', label: 'LabyMod', icon: 'box' },

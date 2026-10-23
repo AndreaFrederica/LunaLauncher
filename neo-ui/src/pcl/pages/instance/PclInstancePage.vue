@@ -295,7 +295,7 @@ function readLog(file: any) {
   max-width: 145px;
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -305,7 +305,7 @@ function readLog(file: any) {
   display: block;
   margin-top: 3px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-instance-nav__groups {
@@ -322,7 +322,7 @@ function readLog(file: any) {
 .pcl-instance-nav__label {
   padding: 6px 13px 4px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-weight: 700;
   letter-spacing: .08em;
   opacity: .8;
@@ -348,14 +348,14 @@ function readLog(file: any) {
 .pcl-instance-toolbar h1 {
   margin: 0;
   color: var(--pcl-text);
-  font-size: 19px;
+  font-size: calc(19px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-instance-toolbar p {
   margin: 3px 0 0;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-instance-logs {
@@ -381,7 +381,7 @@ function readLog(file: any) {
   border-bottom: 1px solid var(--pcl-border);
   background: transparent;
   color: var(--pcl-text);
-  font: 400 12px/1 var(--pcl-font);
+  font: 400 calc(12px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -405,6 +405,6 @@ function readLog(file: any) {
   background: var(--pcl-c8);
   color: var(--pcl-text);
   white-space: pre-wrap;
-  font: 11px/1.6 ui-monospace, Consolas, monospace;
+  font: calc(11px * var(--pcl-font-scale, 1))/1.6 ui-monospace, Consolas, monospace;
 }
 </style>

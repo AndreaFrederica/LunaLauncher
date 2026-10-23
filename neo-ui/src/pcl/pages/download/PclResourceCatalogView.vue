@@ -18,5 +18,5 @@ const description = computed(() => ({ mods: '搜索、查看详情并安装模�
 const icon = computed(() => ({ mods: 'extension', datapacks: 'data_object', resourcepacks: 'texture', shaderpacks: 'auto_awesome', worlds: 'public' } as Record<string, string>)[props.kind] || 'inventory_2');
 </script>
 <style scoped>
-.pcl-resource-catalog-view{color:#49677e}.resource-module-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #dce6ec}.resource-module-head h2{margin:4px 0;color:#315a79;font-size:20px}.resource-module-head p{margin:0;color:#82929f;font-size:12px}.resource-module-icon{font-size:30px;color:#6ba0c3}
+.pcl-resource-catalog-view{color:#49677e}.resource-module-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #dce6ec}.resource-module-head h2{margin:4px 0;color:#315a79;font-size: calc(20px * var(--pcl-font-scale, 1))}.resource-module-head p{margin:0;color:#82929f;font-size: calc(12px * var(--pcl-font-scale, 1))}.resource-module-icon{font-size: calc(30px * var(--pcl-font-scale, 1));color:#6ba0c3}
 </style>

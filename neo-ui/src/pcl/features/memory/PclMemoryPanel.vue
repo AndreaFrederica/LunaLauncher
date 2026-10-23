@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-memory-live__dot {
@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
 .pcl-memory-mode__hint {
   margin-left: auto;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-memory-usage {
@@ -207,12 +207,12 @@ onBeforeUnmount(() => {
 
 .pcl-memory-usage__head {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-memory-usage__head strong {
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
@@ -262,7 +262,7 @@ onBeforeUnmount(() => {
 
 .pcl-memory-usage__foot {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-memory-usage__foot strong {
@@ -282,7 +282,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 5px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 @media (max-width: 700px) {

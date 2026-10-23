@@ -208,7 +208,7 @@ function formatSize(value: unknown) {
 .pcl-install-progress__head h3 {
   margin: 3px 0;
   color: var(--pcl-text);
-  font-size: 16px;
+  font-size: calc(16px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
@@ -216,14 +216,14 @@ function formatSize(value: unknown) {
   margin: 0;
   overflow: hidden;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pcl-install-progress__percent {
   color: var(--pcl-c2);
-  font-size: 20px;
+  font-size: calc(20px * var(--pcl-font-scale, 1));
   font-weight: 600;
 }
 
@@ -266,7 +266,7 @@ function formatSize(value: unknown) {
 .pcl-install-progress__current-head span {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -274,7 +274,7 @@ function formatSize(value: unknown) {
 .pcl-install-progress__current-head small {
   flex: 0 0 auto;
   color: var(--pcl-c3);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__current-track {
@@ -284,7 +284,7 @@ function formatSize(value: unknown) {
 
 .pcl-install-progress__current-meta {
   color: var(--pcl-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__current-meta span:last-child {
@@ -308,7 +308,7 @@ function formatSize(value: unknown) {
   gap: 4px;
   min-width: 0;
   color: var(--pcl-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
   white-space: nowrap;
 }
 
@@ -337,7 +337,7 @@ function formatSize(value: unknown) {
   gap: 5px;
   margin-top: 8px;
   color: var(--pcl-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-progress-track.is-indeterminate > span {
@@ -375,13 +375,13 @@ function formatSize(value: unknown) {
 
 .pcl-install-progress__children-head {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-weight: 600;
 }
 
 .pcl-install-progress__children-head small {
   color: var(--pcl-c5);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__child {
@@ -394,7 +394,7 @@ function formatSize(value: unknown) {
 .pcl-install-progress__child-head span {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -402,7 +402,7 @@ function formatSize(value: unknown) {
 .pcl-install-progress__child-head small,
 .pcl-install-progress__child-meta {
   color: var(--pcl-c5);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__child-meta span:last-child {
@@ -423,7 +423,7 @@ function formatSize(value: unknown) {
   gap: 7px;
   min-height: 24px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__steps {
@@ -443,7 +443,7 @@ function formatSize(value: unknown) {
   gap: 7px;
   min-width: 0;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__step > span:nth-child(2) {
@@ -455,7 +455,7 @@ function formatSize(value: unknown) {
 .pcl-install-progress__step small {
   margin-left: auto;
   color: var(--pcl-c5);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__dot {
@@ -482,7 +482,7 @@ function formatSize(value: unknown) {
   min-height: 16px;
   margin-top: 7px;
   color: var(--pcl-c5);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-progress__actions {

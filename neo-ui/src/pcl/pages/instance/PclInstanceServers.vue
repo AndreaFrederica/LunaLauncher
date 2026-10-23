@@ -177,7 +177,7 @@ onMounted(() => { void load(); });
   min-width: 0;
   overflow: hidden;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
 }

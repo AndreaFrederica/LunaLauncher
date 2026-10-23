@@ -208,7 +208,7 @@ function faceStyle(part: typeof parts[number], face: Face) {
   border: 0;
   background: transparent;
   color: var(--pcl-muted);
-  font: 400 11px/1 var(--pcl-font);
+  font: 400 calc(11px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   cursor: pointer;
 }
 

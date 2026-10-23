@@ -118,6 +118,6 @@ const emit = defineEmits<{ click: [event: MouseEvent] }>();
   border-radius: 7px;
   background: var(--pcl-red, #ce2111);
   color: #fff;
-  font: 700 9px/1 var(--pcl-font);
+  font: 700 calc(9px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
 }
 </style>

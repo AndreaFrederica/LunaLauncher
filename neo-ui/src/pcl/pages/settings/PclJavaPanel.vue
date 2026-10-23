@@ -351,7 +351,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin: 14px 0 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 .pcl-java-summary strong {
@@ -378,13 +378,13 @@ onMounted(() => {
   grid-template-columns: 44px minmax(0, 1fr);
   gap: 5px 10px;
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-java-meta code {
   overflow: hidden;
   color: var(--pcl-text);
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  font: calc(12px * var(--pcl-font-scale, 1))/1.5 ui-monospace, Consolas, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -397,14 +397,14 @@ onMounted(() => {
   border-radius: 3px;
   background: var(--pcl-c8);
   color: var(--pcl-muted);
-  font: 11px/1.5 ui-monospace, Consolas, monospace;
+  font: calc(11px * var(--pcl-font-scale, 1))/1.5 ui-monospace, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .pcl-java-placeholder {
   margin: 12px 0 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 .pcl-java-packages {
@@ -429,7 +429,7 @@ onMounted(() => {
 .pcl-java-package strong {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -438,6 +438,6 @@ onMounted(() => {
 .pcl-java-package small {
   margin-top: 2px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 </style>

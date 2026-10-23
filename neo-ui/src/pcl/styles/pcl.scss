@@ -230,7 +230,7 @@
 :root[data-neo-shell="pcl"] .system-bar-title-pcl {
   display: inline;
   color: #fff;
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   font-weight: 700;
   letter-spacing: .01em;
 }
@@ -239,7 +239,7 @@
   display: inline;
   margin-left: 7px;
   color: rgba(255, 255, 255, .72);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-weight: 700;
   letter-spacing: .14em;
 }
@@ -278,7 +278,7 @@
   border-radius: 13.5px;
   background: transparent;
   color: #fff;
-  font: 400 13px/1 var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
 }
@@ -288,7 +288,7 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  font-size: 16px;
+  font-size: calc(16px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .system-bar-pcl-tabs button:hover {
@@ -324,7 +324,7 @@
 }
 
 :root[data-neo-shell="pcl"] .system-bar-window .material-icons {
-  font-size: 18px;
+  font-size: calc(18px * var(--pcl-font-scale, 1));
 }
 
 /* ---------- page shell ---------- */
@@ -373,7 +373,7 @@
   margin: 0;
   padding: 10px 13px 4px;
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -401,7 +401,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--pcl-text);
-  font: 400 14px/1 var(--pcl-font);
+  font: 400 calc(14px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   text-align: left;
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
@@ -468,7 +468,7 @@
   flex: 0 0 18px;
   width: 18px;
   margin: 0 16px 0 12px;
-  font-size: 18px;
+  font-size: calc(18px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .pcl-page-nav__refresh {
@@ -483,7 +483,7 @@
   margin: 0 !important;
   border-radius: 50%;
   color: var(--pcl-text);
-  font-size: 16px !important;
+  font-size: calc(16px * var(--pcl-font-scale, 1)) !important;
   opacity: 0;
   transition: opacity .084s ease .036s, background .12s, color .12s;
 }
@@ -574,7 +574,7 @@
   height: 40px;
   padding: 12px 15px 0;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 700;
   line-height: 16px;
 }
@@ -659,7 +659,7 @@
   background: var(--pcl-half-white) !important;
   color: var(--pcl-text) !important;
   box-shadow: none !important;
-  font: 400 13px/1 var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   text-transform: none;
 }
 
@@ -726,7 +726,7 @@
   border-radius: 3px;
   background: var(--pcl-half-white);
   color: var(--pcl-text);
-  font: 400 13px/1 var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   white-space: nowrap;
   cursor: pointer;
   transition: background .1s ease, border-color .1s ease, color .1s ease, transform .08s ease;
@@ -794,7 +794,7 @@
 :root[data-neo-shell="pcl"] .pcl-btn--sm {
   height: 28px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .pcl-btn--lg {
@@ -804,7 +804,7 @@
 :root[data-neo-shell="pcl"] .pcl-btn--xl {
   height: 54px;
   padding: 0 30px;
-  font-size: 15px;
+  font-size: calc(15px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .pcl-btn--block {
@@ -865,7 +865,7 @@
   border-radius: 3px;
   background: var(--pcl-half-white);
   color: var(--pcl-text);
-  font: 400 13px/26px var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/26px var(--pcl-font);
   outline: none;
   transition: border-color .1s ease, background .1s ease;
 }
@@ -954,7 +954,7 @@
   border: 0;
   background: transparent;
   color: var(--pcl-text);
-  font: 400 13px/18px var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/18px var(--pcl-font);
   text-align: left;
   cursor: pointer;
 }
@@ -982,7 +982,7 @@
 :root[data-neo-shell="pcl"] .pcl-form-row > label,
 :root[data-neo-shell="pcl"] .pcl-form-row__label {
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   white-space: nowrap;
 }
 
@@ -1012,7 +1012,7 @@
 
 :root[data-neo-shell="pcl"] .pcl-form-row__hint {
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   opacity: .75;
 }
 
@@ -1025,7 +1025,7 @@
   gap: 8px;
   min-height: 20px;
   color: var(--pcl-text);
-  font: 400 13px/20px var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/20px var(--pcl-font);
   cursor: pointer;
   user-select: none;
 }
@@ -1182,7 +1182,7 @@
   flex: 0 0 auto;
   min-width: 38px;
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   text-align: right;
 }
 
@@ -1197,7 +1197,7 @@
   border-radius: 2px;
   background: var(--pcl-hint-bg, var(--pcl-hint-red-bg));
   color: var(--pcl-hint-text, var(--pcl-hint-red-text));
-  font: 400 13px/16px var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/16px var(--pcl-font);
   padding: 9px 12px;
 }
 
@@ -1233,13 +1233,13 @@
   gap: 6px;
   min-height: 150px;
   color: var(--pcl-muted);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   text-align: center;
 }
 
 :root[data-neo-shell="pcl"] .pcl-empty strong {
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
@@ -1250,7 +1250,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .pcl-loading__pickaxe {
@@ -1336,7 +1336,7 @@
 
 :root[data-neo-shell="pcl"] .pcl-list-item__title {
   color: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   line-height: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1346,7 +1346,7 @@
 :root[data-neo-shell="pcl"] .pcl-list-item__info {
   margin-top: 2px;
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   line-height: 16px;
   opacity: .6;
   overflow: hidden;
@@ -1368,7 +1368,7 @@
   border-radius: 3px;
   background: rgba(0, 0, 0, .07);
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   line-height: 14px;
   white-space: nowrap;
 }
@@ -1401,7 +1401,7 @@
 :root[data-neo-shell="pcl"] .pcl-page .q-expansion-item .q-item__label,
 :root[data-neo-shell="pcl"] .pcl-page .q-expansion-item .q-item__label--header {
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .pcl-page .q-expansion-item .q-icon {
@@ -1438,7 +1438,7 @@
 :root[data-neo-shell="pcl"] .pcl-page .q-field__label,
 :root[data-neo-shell="pcl"] .pcl-page .q-field__marginal {
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .pcl-page .q-field__label {
@@ -1479,7 +1479,7 @@
   border-radius: 3px;
   background: var(--pcl-half-white);
   color: var(--pcl-text);
-  font: 400 13px/26px var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/26px var(--pcl-font);
   outline: none;
 }
 
@@ -1500,7 +1500,7 @@
   border-radius: 3px;
   background: var(--pcl-half-white);
   color: var(--pcl-text);
-  font: 400 13px/1 var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
 }
 
 :root[data-neo-shell="pcl"] .pcl-catalog .pcl-button:hover:not(:disabled) {
@@ -1606,7 +1606,7 @@
   min-height: 28px;
   padding: 0 12px;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 :root[data-neo-shell="pcl"] .q-menu .q-item:hover,
@@ -1692,7 +1692,7 @@
 :root[data-neo-shell="pcl"] .pcl-dialog h3 {
   margin: 4px 0 0;
   color: var(--pcl-c2);
-  font-size: 23px;
+  font-size: calc(23px * var(--pcl-font-scale, 1));
   font-weight: 700;
   line-height: 1.2;
 }
@@ -1740,7 +1740,7 @@
 
 :root[data-neo-shell="pcl"] .pcl-context-menu .q-item__label--header {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 /* ---------- transitions ---------- */

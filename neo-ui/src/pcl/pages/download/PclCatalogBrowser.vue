@@ -409,7 +409,7 @@ async function install(){
   border-radius: 4px;
   background: color-mix(in srgb, var(--pcl-danger) 14%, transparent);
   color: var(--pcl-danger);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-catalog-error span {
@@ -435,7 +435,7 @@ async function install(){
   background: none;
   color: var(--pcl-c2);
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   cursor: pointer;
 }
 
@@ -473,20 +473,20 @@ async function install(){
 
 .pcl-project-copy small {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-project-copy h2 {
   margin: 3px 0 4px;
   color: var(--pcl-text);
-  font-size: 21px;
+  font-size: calc(21px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
 .pcl-project-copy p {
   margin: 0;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-favorite--active {
@@ -507,7 +507,7 @@ async function install(){
   background: transparent;
   color: var(--pcl-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   cursor: pointer;
 }
 
@@ -525,7 +525,7 @@ async function install(){
   border-radius: 4px;
   background: var(--pcl-c8);
   color: var(--pcl-text);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -547,9 +547,9 @@ async function install(){
   font-weight: 600;
 }
 
-.pcl-project-body :deep(h1) { font-size: 17px; }
-.pcl-project-body :deep(h2) { font-size: 15px; }
-.pcl-project-body :deep(h3) { font-size: 13px; }
+.pcl-project-body :deep(h1) { font-size: calc(17px * var(--pcl-font-scale, 1)); }
+.pcl-project-body :deep(h2) { font-size: calc(15px * var(--pcl-font-scale, 1)); }
+.pcl-project-body :deep(h3) { font-size: calc(13px * var(--pcl-font-scale, 1)); }
 
 .pcl-project-body :deep(a) {
   color: var(--pcl-c2);
@@ -572,7 +572,7 @@ async function install(){
   border-radius: 3px;
   background: var(--pcl-c7);
   color: var(--pcl-c1);
-  font: 11px/1.5 Consolas, monospace;
+  font: calc(11px * var(--pcl-font-scale, 1))/1.5 Consolas, monospace;
 }
 
 .pcl-project-body :deep(pre) {
@@ -665,14 +665,14 @@ async function install(){
 
 .pcl-version-option strong {
   color: var(--pcl-text);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
 .pcl-version-option small {
   margin-top: 2px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-project-field {
@@ -685,7 +685,7 @@ async function install(){
 
 .pcl-project-field label {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-optional {
@@ -750,7 +750,7 @@ async function install(){
 
 .pcl-result-copy strong {
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
@@ -758,7 +758,7 @@ async function install(){
 .pcl-result-copy em {
   overflow: hidden;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -771,7 +771,7 @@ async function install(){
 .pcl-result-copy em {
   margin-top: 3px;
   color: var(--pcl-c5);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-pagination {
@@ -781,7 +781,7 @@ async function install(){
   gap: 13px;
   margin-top: 12px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-catalog-empty {
@@ -791,7 +791,7 @@ async function install(){
   gap: 7px;
   padding: 45px 20px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-catalog-empty :deep(svg) {

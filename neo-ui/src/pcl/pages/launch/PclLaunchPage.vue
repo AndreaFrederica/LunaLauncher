@@ -132,13 +132,13 @@
             </div>
           </PclCard>
 
-          <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances">
+          <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances" :style="homeInstanceStyle">
             <template #actions>
               <PclIconButton icon="grid-2x2" label="网格排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'grid' }" @click="setInstanceLayout('grid')" />
               <PclIconButton icon="list" label="单列排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'list' }" @click="setInstanceLayout('list')" />
               <PclIconButton icon="refresh-cw" label="刷新实例" :size="24" :disabled="busy" @click="emit('refresh')" />
             </template>
-            <div v-if="instances.length" class="pcl-home-instance-groups">
+            <div v-if="instances.length" class="pcl-home-instance-groups" :style="{ maxHeight: homeInstanceMaxHeight }">
               <div v-for="group in homeInstanceGroups" :key="group.id" class="pcl-home-instance-group">
                 <div
                   v-if="preferences.pclHomeInstanceGrouping === 'grouped'"
@@ -285,6 +285,23 @@ const launchError = computed(() => props.launchError || props.error || '');
 const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));
 const preferences = neoUiPreferences;
+const homeInstanceStyle = computed(() => {
+  const font = Number(preferences.pclHomeInstanceFontSize) || 13;
+  const rows = Number(preferences.pclHomeInstanceRows) || 4;
+  const rowHeight = Math.round(font * 2.75);
+  return {
+    '--pcl-home-font-size': `${font}px`,
+    '--pcl-home-small-size': `${Math.max(9, Math.round(font * 0.8))}px`,
+    '--pcl-home-hint-size': `${Math.max(8, Math.round(font * 0.72))}px`,
+    '--pcl-home-row-height': `${rowHeight}px`,
+  };
+});
+const homeInstanceMaxHeight = computed(() => {
+  const font = Number(preferences.pclHomeInstanceFontSize) || 13;
+  const rows = Number(preferences.pclHomeInstanceRows) || 4;
+  const rowHeight = Math.round(font * 2.75);
+  return `${rowHeight * rows + 6 * Math.max(0, rows - 1) + 8}px`;
+});
 const orderedInstances = computed(() => {
   const list = [...props.instances];
   if (preferences.pclHomeInstanceSort === 'name') return list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
@@ -474,7 +491,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-launching-title {
   margin-top: 4px;
   color: var(--pcl-c3);
-  font-size: 20px;
+  font-size: calc(20px * var(--pcl-font-scale, 1));
   font-weight: 700;
   text-align: center;
   transform: skewX(-3deg);
@@ -482,7 +499,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 
 .pcl-launching-name {
   color: var(--pcl-c3);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--pcl-font-scale, 1));
   text-align: center;
 }
 
@@ -506,7 +523,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--pcl-font-scale, 1));
 }
 
 .pcl-launch-info > span {
@@ -574,7 +591,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-login-slot__copy strong {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -583,7 +600,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-login-slot__copy small {
   margin-top: 2px;
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-account-toggle {
@@ -639,7 +656,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-account-menu__empty {
   padding: 15px;
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-account-menu__actions {
@@ -666,12 +683,12 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: calc(16px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-launch-button small {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--pcl-font-scale, 1));
   font-weight: 400;
   opacity: .8;
 }
@@ -728,7 +745,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 
 .pcl-instance-button__text strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -748,13 +765,13 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-launch-links .pcl-btn {
   height: 26px;
   padding: 0 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-launch-card-copy {
   margin: 0 0 7px;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   line-height: 1.8;
 }
 
@@ -765,7 +782,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-home-card__content {
   margin: 0;
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   line-height: 1.75;
   white-space: pre-wrap;
 }
@@ -788,7 +805,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
   border-radius: 3px;
   background: var(--pcl-c8);
   color: var(--pcl-text);
-  font: 12px/1.55 ui-monospace, Consolas, monospace;
+  font: calc(12px * var(--pcl-font-scale, 1))/1.55 ui-monospace, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -846,12 +863,18 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
   margin-top: 14px;
 }
 
+.pcl-home-instance-groups {
+  max-height: none;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
 .pcl-home-instance-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
-  max-height: 230px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .pcl-home-instance {
@@ -874,30 +897,25 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-home-instance__fallback { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 3px; object-fit: cover; }
 .pcl-home-instance__fallback { display: flex; align-items: center; justify-content: center; color: var(--pcl-muted); background: var(--pcl-c7); }
 .pcl-home-instance__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.pcl-home-instance__copy strong { overflow: hidden; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.pcl-home-instance__copy small { overflow: hidden; color: var(--pcl-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.pcl-home-instance__hint { flex: 0 0 auto; color: var(--pcl-muted); font-size: 8px; opacity: 0; }
+.pcl-home-instance__copy strong { overflow: hidden; font-size: var(--pcl-home-font-size, 13px); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-instance__copy small { overflow: hidden; color: var(--pcl-muted); font-size: var(--pcl-home-small-size, 10px); text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-instance__hint { flex: 0 0 auto; color: var(--pcl-muted); font-size: var(--pcl-home-hint-size, 9px); opacity: 0; }
 .pcl-home-instance:hover .pcl-home-instance__hint { opacity: 1; }
-.pcl-home-instance__running { flex: 0 0 auto; color: var(--pcl-c3); font-size: 8px; }
+.pcl-home-instance__running { flex: 0 0 auto; color: var(--pcl-c3); font-size: var(--pcl-home-hint-size, 9px); }
 
 .pcl-home-server-list { display: flex; flex-direction: column; gap: 3px; max-height: 170px; overflow-y: auto; }
 .pcl-home-server { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--pcl-text); text-align: left; cursor: pointer; }
 .pcl-home-server:hover { border-color: var(--pcl-border); background: var(--pcl-c8); }
 .pcl-home-server__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.pcl-home-server__copy strong { overflow: hidden; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.pcl-home-server__copy small { overflow: hidden; color: var(--pcl-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-server__copy strong { overflow: hidden; font-size: calc(10px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-server__copy small { overflow: hidden; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); text-overflow: ellipsis; white-space: nowrap; }
 .pcl-home-server__play { color: var(--pcl-muted); }
-.pcl-home-servers__hint { margin: 6px 0 0; color: var(--pcl-muted); font-size: 9px; }
-.pcl-home-server-loading { display: flex; align-items: center; gap: 6px; color: var(--pcl-muted); font-size: 10px; }
-.pcl-home-server-error { color: #fb7185; font-size: 10px; }
+.pcl-home-servers__hint { margin: 6px 0 0; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-home-server-loading { display: flex; align-items: center; gap: 6px; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
+.pcl-home-server-error { color: #fb7185; font-size: calc(10px * var(--pcl-font-scale, 1)); }
 
 .pcl-home-instance-list.is-list {
   grid-template-columns: minmax(0, 1fr) !important;
-  max-height: 330px;
-}
-
-.pcl-home-instance-list.is-grid {
-  max-height: 230px;
 }
 
 .pcl-icon-btn.active {
@@ -906,7 +924,7 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 }
 
 .pcl-home-instance-groups { display: flex; flex-direction: column; gap: 7px; }
-.pcl-home-instance-group__head { display: flex; align-items: center; gap: 5px; min-height: 18px; color: var(--pcl-muted); font-size: 9px; }
+.pcl-home-instance-group__head { display: flex; align-items: center; gap: 5px; min-height: 18px; color: var(--pcl-muted); font-size: var(--pcl-home-small-size, 10px); }
 .pcl-home-instance-group__head strong { color: var(--pcl-text); font-weight: 500; }
 .pcl-home-instance-group__head small { margin-left: auto; }
 .pcl-home-instance-group__head:hover { color: var(--pcl-c3); }

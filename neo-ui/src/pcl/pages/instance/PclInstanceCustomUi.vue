@@ -190,7 +190,7 @@ onMounted(() => { void load(); });
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--pcl-muted);
-  font: 400 12px/1 var(--pcl-font);
+  font: 400 calc(12px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   cursor: pointer;
 }
 
@@ -224,13 +224,13 @@ onMounted(() => { void load(); });
 
 .pcl-custom-control__copy strong {
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
 .pcl-custom-control__copy span {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-custom-control__value {
@@ -240,7 +240,7 @@ onMounted(() => { void load(); });
 
 .pcl-custom-control__plain {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-empty {
@@ -257,11 +257,11 @@ onMounted(() => { void load(); });
 
 .pcl-empty strong {
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 .pcl-empty span {
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   line-height: 1.7;
 }
 </style>

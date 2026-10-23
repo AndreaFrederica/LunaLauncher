@@ -22,6 +22,8 @@ export interface NeoUiPreferences {
   animations: boolean;
   /** Font stack used by the PCL-inspired shell only. */
   pclFont: PclFont;
+  /** Base font size in px for the PCL shell. */
+  pclBaseFontSize: number;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -42,7 +44,9 @@ export interface NeoUiPreferences {
   pclHomeShowServers: boolean;
   pclHomeSwitchOnQuickLaunch: boolean;
   pclHomeInstanceLayout: 'grid' | 'list';
-  pclHomeInstanceColumns: 1 | 2 | 3;
+  pclHomeInstanceColumns: number;
+  pclHomeInstanceRows: number;
+  pclHomeInstanceFontSize: number;
   pclHomeInstanceGrouping: 'flat' | 'grouped';
   pclHomeInstanceSort: 'manual' | 'name' | 'version';
   pclHomeInstanceOrder: string[];
@@ -61,6 +65,7 @@ const defaults: NeoUiPreferences = {
   background: 'gradient',
   animations: true,
   pclFont: 'system',
+  pclBaseFontSize: 14,
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclAccentColor: '#2a80e3',
@@ -78,6 +83,8 @@ const defaults: NeoUiPreferences = {
   pclHomeSwitchOnQuickLaunch: false,
   pclHomeInstanceLayout: 'grid',
   pclHomeInstanceColumns: 2,
+  pclHomeInstanceRows: 4,
+  pclHomeInstanceFontSize: 14,
   pclHomeInstanceGrouping: 'flat',
   pclHomeInstanceSort: 'manual',
   pclHomeInstanceOrder: [],
@@ -173,6 +180,7 @@ export function applyNeoUiPreferences() {
   root.style.setProperty('--pcl-c4', mixHex(pclAccent, '#ffffff', 0.2));
   root.style.setProperty('--pcl-c5', mixHex(pclAccent, '#000000', 0.32));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
+  root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
   root.dataset.pclBackground = neoUiPreferences.pclBackgroundImage ? 'on' : 'off';
   root.style.setProperty('--pcl-bg-image', neoUiPreferences.pclBackgroundImage ? `url("${neoUiPreferences.pclBackgroundImage}")` : 'none');
   root.style.setProperty('--pcl-bg-overlay', String(Math.max(0, Math.min(1, 1 - neoUiPreferences.pclBackgroundOpacity))));

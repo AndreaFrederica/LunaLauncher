@@ -587,14 +587,14 @@ onUnmounted(() => {
   padding: 0 13px 12px;
   border-bottom: 1px solid var(--pcl-border);
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-tools-group {
   padding: 9px 13px 5px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-weight: 700;
   letter-spacing: .08em;
 }
@@ -607,7 +607,7 @@ onUnmounted(() => {
   border: 1px solid var(--pcl-card-border);
   border-radius: 4px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   line-height: 1.6;
 }
 
@@ -623,14 +623,14 @@ onUnmounted(() => {
 .pcl-tools-toolbar h1 {
   margin: 0;
   color: var(--pcl-text);
-  font-size: 19px;
+  font-size: calc(19px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-tools-toolbar p {
   margin: 3px 0 0;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-tools-stack {
@@ -668,7 +668,7 @@ onUnmounted(() => {
 .pcl-tools-muted {
   margin: 0;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   line-height: 1.7;
 }
 
@@ -682,7 +682,7 @@ onUnmounted(() => {
   background: var(--pcl-c8);
   color: var(--pcl-text);
   white-space: pre-wrap;
-  font: 11px/1.55 ui-monospace, Consolas, monospace;
+  font: calc(11px * var(--pcl-font-scale, 1))/1.55 ui-monospace, Consolas, monospace;
 }
 
 .pcl-tools-hash {
@@ -737,7 +737,7 @@ onUnmounted(() => {
 
 .pcl-tools-achievement span {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-tabs {
@@ -767,12 +767,12 @@ onUnmounted(() => {
 }
 
 .pcl-backend-tabs strong {
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-tabs span {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-head {
@@ -786,14 +786,14 @@ onUnmounted(() => {
 .pcl-backend-head strong {
   display: block;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-head span {
   display: block;
   margin-top: 2px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-state {
@@ -803,7 +803,7 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 9px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-state b {
@@ -816,7 +816,7 @@ onUnmounted(() => {
   border: 1px solid var(--pcl-card-border);
   border-radius: 10px;
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-backend-pill--host-ok,
@@ -853,7 +853,7 @@ onUnmounted(() => {
   border-radius: 3px;
   background: transparent;
   color: var(--pcl-muted);
-  font: 400 11px/1 var(--pcl-font);
+  font: 400 calc(11px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   cursor: pointer;
 }
 
@@ -872,7 +872,7 @@ onUnmounted(() => {
   border-radius: 4px;
   background: var(--pcl-half-white);
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-scheduler-summary b {
@@ -893,7 +893,7 @@ onUnmounted(() => {
   padding: 7px 9px;
   border-bottom: 1px solid var(--pcl-border);
   color: var(--pcl-text);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-stats-row:last-child {
@@ -903,7 +903,7 @@ onUnmounted(() => {
 .pcl-stats-row--head {
   background: var(--pcl-half-white);
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 

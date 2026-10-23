@@ -243,13 +243,13 @@ onMounted(() => { if (props.section === 'worlds') void loadWorlds(); else void l
 
 .pcl-extras-head strong {
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
 .pcl-extras-head small {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-extras-form {
@@ -307,7 +307,7 @@ onMounted(() => { if (props.section === 'worlds') void loadWorlds(); else void l
 .pcl-world-row__copy strong {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -317,7 +317,7 @@ onMounted(() => { if (props.section === 'worlds') void loadWorlds(); else void l
   margin-top: 2px;
   overflow: hidden;
   color: var(--pcl-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -370,7 +370,7 @@ onMounted(() => { if (props.section === 'worlds') void loadWorlds(); else void l
 .pcl-shot-card__copy strong {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -379,7 +379,7 @@ onMounted(() => { if (props.section === 'worlds') void loadWorlds(); else void l
 .pcl-shot-card__copy small {
   margin-top: 2px;
   color: var(--pcl-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-shot-card__actions {

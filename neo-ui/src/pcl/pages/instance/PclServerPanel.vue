@@ -234,7 +234,7 @@ onMounted(() => {
 
 .pcl-server-state {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-server-head {
@@ -248,14 +248,14 @@ onMounted(() => {
 .pcl-server-head strong {
   display: block;
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
 }
 
 .pcl-server-head span {
   display: block;
   margin-top: 3px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-server-tabs {
@@ -272,7 +272,7 @@ onMounted(() => {
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--pcl-muted);
-  font: 400 12px/1 var(--pcl-font);
+  font: 400 calc(12px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   cursor: pointer;
 }
 
@@ -292,7 +292,7 @@ onMounted(() => {
   background: var(--pcl-c8);
   color: var(--pcl-text);
   white-space: pre-wrap;
-  font: 11px/1.55 ui-monospace, Consolas, monospace;
+  font: calc(11px * var(--pcl-font-scale, 1))/1.55 ui-monospace, Consolas, monospace;
 }
 
 .pcl-server-command,

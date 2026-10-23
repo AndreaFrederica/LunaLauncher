@@ -69,7 +69,7 @@ const emit = defineEmits<{
 .pcl-msg p {
   margin: 7px 0 0;
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   line-height: 1.7;
 }
 

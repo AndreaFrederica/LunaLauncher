@@ -128,18 +128,18 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
 .pcl-task-center { width: 700px; max-width: 94vw; }
 .pcl-task-center__head { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 8px; }
 .pcl-task-center__head > div { flex: 1; min-width: 0; }
-.pcl-task-center__head h3 { margin: 3px 0; font-size: 18px; }
-.pcl-task-center__head p { margin: 0; color: var(--pcl-muted); font-size: 11px; }
+.pcl-task-center__head h3 { margin: 3px 0; font-size: calc(18px * var(--pcl-font-scale, 1)); }
+.pcl-task-center__head p { margin: 0; color: var(--pcl-muted); font-size: calc(11px * var(--pcl-font-scale, 1)); }
 .pcl-task-center__body { max-height: 62vh; overflow-y: auto; padding-top: 0; }
 .pcl-task-list { display: flex; flex-direction: column; gap: 8px; }
 .pcl-task-row { padding: 10px; border: 1px solid var(--pcl-border); border-radius: 4px; background: var(--pcl-c8); }
 .pcl-task-row__head, .pcl-task-row__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pcl-task-row__head strong { color: var(--pcl-text); font-size: 12px; }
-.pcl-task-row__state { color: var(--pcl-muted); font-size: 10px; }
+.pcl-task-row__head strong { color: var(--pcl-text); font-size: calc(12px * var(--pcl-font-scale, 1)); }
+.pcl-task-row__state { color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
 .pcl-task-row__state.running { color: var(--pcl-c3); }
 .pcl-task-row__state.succeeded { color: #34d399; }
 .pcl-task-row__state.failed { color: #fb7185; }
-.pcl-task-row__meta { margin-top: 5px; color: var(--pcl-muted); font-size: 10px; }
+.pcl-task-row__meta { margin-top: 5px; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
 .pcl-task-row__meta span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcl-task-row .pcl-progress-track { margin: 7px 0 0; }
 </style>

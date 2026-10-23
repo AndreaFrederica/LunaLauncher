@@ -85,14 +85,14 @@ import { dismissPclToast, pclToasts } from '../composables/usePclToast';
 
 .pcl-toast__body strong {
   color: var(--pcl-text, #e9f3ff);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-toast__body span {
   overflow-wrap: anywhere;
   color: var(--pcl-muted, #8a99a7);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   line-height: 1.55;
 }
 

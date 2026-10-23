@@ -102,14 +102,14 @@ watch(() => props.notes, value => { localNotes.value = value; });
   margin: 3px 0;
   overflow-wrap: anywhere;
   color: var(--pcl-text);
-  font-size: 22px;
+  font-size: calc(22px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-overview-copy p {
   margin: 0;
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-overview-actions {
@@ -132,7 +132,7 @@ watch(() => props.notes, value => { localNotes.value = value; });
   display: block;
   margin-bottom: 3px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-info-grid code,
@@ -140,7 +140,7 @@ watch(() => props.notes, value => { localNotes.value = value; });
   display: block;
   overflow: hidden;
   color: var(--pcl-text);
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  font: calc(12px * var(--pcl-font-scale, 1))/1.5 ui-monospace, Consolas, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

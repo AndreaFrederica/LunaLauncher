@@ -424,7 +424,7 @@ readFavorites();
 
 .pcl-component-use {
   color: var(--pcl-c3);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   white-space: nowrap;
 }
 
@@ -458,11 +458,11 @@ readFavorites();
 
 .pcl-import-drop strong {
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
 .pcl-import-drop span {
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 </style>

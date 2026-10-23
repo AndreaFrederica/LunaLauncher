@@ -1009,12 +1009,12 @@ async function openUpdateLog() {
   gap: 6px;
   margin-top: 4px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-memory-live-head strong {
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
@@ -1034,7 +1034,7 @@ async function openUpdateLog() {
 }
 
 .pcl-memory-live-label {
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 @keyframes pcl-memory-pulse {
@@ -1097,7 +1097,7 @@ async function openUpdateLog() {
 
 .pcl-memory-values strong {
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
@@ -1120,7 +1120,7 @@ async function openUpdateLog() {
   gap: 12px;
   margin-bottom: 10px;
   color: var(--pcl-text);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   opacity: .72;
 }
 
@@ -1148,7 +1148,7 @@ async function openUpdateLog() {
   border-radius: 3px;
   background: var(--pcl-c7);
   color: var(--pcl-muted);
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  font: calc(12px * var(--pcl-font-scale, 1))/1.5 ui-monospace, Consolas, monospace;
   white-space: pre-wrap;
 }
 
@@ -1181,14 +1181,14 @@ async function openUpdateLog() {
 
 .pcl-language-banner__title {
   margin-bottom: 10px;
-  font-size: 22px;
+  font-size: calc(22px * var(--pcl-font-scale, 1));
   font-weight: 700;
   line-height: 1.3;
 }
 
 .pcl-language-banner__title b {
   font-family: Bahnschrift, "Segoe UI", var(--pcl-font);
-  font-size: 42px;
+  font-size: calc(42px * var(--pcl-font-scale, 1));
   font-weight: 700;
   letter-spacing: -.02em;
 }
@@ -1196,7 +1196,7 @@ async function openUpdateLog() {
 .pcl-language-banner__copy p {
   margin: 5px 0;
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   line-height: 23px;
   opacity: .82;
 }
@@ -1217,19 +1217,19 @@ async function openUpdateLog() {
   border-radius: 12px;
   background: var(--pcl-c3);
   color: #fff;
-  font-size: 28px;
+  font-size: calc(28px * var(--pcl-font-scale, 1));
   font-weight: 800;
 }
 
 .pcl-about-name {
-  font-size: 20px;
+  font-size: calc(20px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-about-name span {
   margin-left: 5px;
   color: var(--pcl-c3);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 500;
   letter-spacing: .08em;
 }
@@ -1237,7 +1237,7 @@ async function openUpdateLog() {
 .pcl-about-version {
   margin-top: 3px;
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-about-grid {
@@ -1245,7 +1245,7 @@ async function openUpdateLog() {
   grid-template-columns: 90px minmax(0, 1fr);
   gap: 7px 12px;
   padding: 8px 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 .pcl-about-grid span {
@@ -1255,7 +1255,7 @@ async function openUpdateLog() {
 .pcl-about-grid code {
   overflow: hidden;
   color: var(--pcl-text);
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  font: calc(12px * var(--pcl-font-scale, 1))/1.5 ui-monospace, Consolas, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1273,12 +1273,12 @@ async function openUpdateLog() {
   border-radius: 4px;
   background: var(--pcl-c7);
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-credit-note {
   margin: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   line-height: 1.7;
 }
 
@@ -1297,19 +1297,19 @@ async function openUpdateLog() {
   border-radius: 8px;
   background: var(--pcl-c3);
   color: #fff;
-  font-size: 24px;
+  font-size: calc(24px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-update-name {
-  font-size: 20px;
+  font-size: calc(20px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-update-name span {
   margin-left: 6px;
   color: var(--pcl-c3);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
@@ -1326,14 +1326,14 @@ async function openUpdateLog() {
   border-radius: 3px;
   background: var(--pcl-c8);
   color: var(--pcl-muted);
-  font: 12px/1.55 ui-monospace, Consolas, monospace;
+  font: calc(12px * var(--pcl-font-scale, 1))/1.55 ui-monospace, Consolas, monospace;
   white-space: pre-wrap;
 }
 
 .pcl-feedback-copy {
   max-width: 620px;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   line-height: 1.8;
   opacity: .82;
 }
@@ -1351,7 +1351,7 @@ async function openUpdateLog() {
 
 .pcl-appearance-panel :deep(.preference-card h2),
 .pcl-appearance-panel :deep(.preference-card h3) {
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 

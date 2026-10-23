@@ -128,6 +128,6 @@ function onNativeColor(event: Event) {
   gap: 3px 11px;
   margin-top: 5px;
   color: var(--pcl-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 </style>

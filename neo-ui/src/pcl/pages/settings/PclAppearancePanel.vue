@@ -82,6 +82,13 @@
         <span class="pcl-form-row__hint">只作用于 PCL 外观</span>
       </div>
       <PclHint theme="blue">字体会应用到 PCL 外观的导航、卡片、按钮、输入框和对话框；切回 Neo 原生外观不受影响。</PclHint>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">基准字体大小</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclBaseFontSize" :options="baseFontOptions" />
+        </div>
+        <span class="pcl-form-row__hint">影响 PCL 界面的整体文字大小</span>
+      </div>
       <div class="pcl-font-sample" :class="{ serif: preferences.pclFont === 'simsun' }">
         <strong>Minecraft 1.21.11</strong>
         <span>启动游戏 · 下载 · 设置 · 工具</span>
@@ -144,6 +151,20 @@
           <PclSelect v-model="preferences.pclHomeInstanceLayout" :options="instanceLayoutOptions" />
         </div>
         <span class="pcl-form-row__hint">网格或单列列表</span>
+      </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例面板行数</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceRows" :options="instanceRowOptions" />
+        </div>
+        <span class="pcl-form-row__hint">超出后滚动</span>
+      </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例面板字号</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceFontSize" :options="instanceFontOptions" />
+        </div>
+        <span class="pcl-form-row__hint">实例名称和副标题字号</span>
       </div>
       <div class="pcl-form-row">
         <span class="pcl-form-row__label">实例分类方式</span>
@@ -349,6 +370,34 @@ const instanceColumnOptions = [
   { label: '1 列', value: 1 },
   { label: '2 列', value: 2 },
   { label: '3 列', value: 3 },
+  { label: '4 列', value: 4 },
+];
+const instanceRowOptions = [
+  { label: '2 行', value: 2 },
+  { label: '3 行', value: 3 },
+  { label: '4 行', value: 4 },
+  { label: '5 行', value: 5 },
+  { label: '6 行', value: 6 },
+  { label: '8 行', value: 8 },
+];
+const instanceFontOptions = [
+  { label: '10 px', value: 10 },
+  { label: '11 px', value: 11 },
+  { label: '12 px', value: 12 },
+  { label: '13 px', value: 13 },
+  { label: '14 px（默认）', value: 14 },
+  { label: '15 px', value: 15 },
+  { label: '16 px', value: 16 },
+  { label: '18 px', value: 18 },
+];
+const baseFontOptions = [
+  { label: '11 px', value: 11 },
+  { label: '12 px', value: 12 },
+  { label: '13 px', value: 13 },
+  { label: '14 px（默认）', value: 14 },
+  { label: '15 px', value: 15 },
+  { label: '16 px', value: 16 },
+  { label: '18 px', value: 18 },
 ];
 const fontOptions = [
   { label: '系统默认（Segoe UI / 微软雅黑）', value: 'system' },
@@ -373,6 +422,7 @@ function reset() {
     background: 'gradient',
     animations: true,
     pclFont: 'system',
+    pclBaseFontSize: 14,
     pclTitleLogo: true,
     pclTitleBadge: true,
     pclAccentColor: '#2a80e3',
@@ -388,6 +438,8 @@ function reset() {
     pclHomeSwitchOnQuickLaunch: false,
     pclHomeInstanceLayout: 'grid',
     pclHomeInstanceColumns: 2,
+    pclHomeInstanceRows: 4,
+    pclHomeInstanceFontSize: 14,
     pclHomeInstanceGrouping: 'flat',
     pclHomeInstanceSort: 'manual',
     pclHomeInstanceOrder: [],
@@ -421,7 +473,7 @@ function reset() {
   align-items: center;
   justify-content: space-between;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-background-actions {
@@ -448,7 +500,7 @@ function reset() {
 .pcl-appearance-copy {
   margin: 0 0 8px;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   line-height: 1.8;
 }
 
@@ -478,7 +530,7 @@ function reset() {
   height: 22px;
   border: 2px solid #fff;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 800;
 }
 
@@ -489,7 +541,7 @@ function reset() {
   height: 22px;
   padding: 0 10px;
   border-radius: 11px;
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   opacity: .9;
 }
 
@@ -570,7 +622,7 @@ function reset() {
 .pcl-hide-group h4 {
   margin: 0 0 7px;
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 700;
   opacity: .72;
 }
@@ -594,17 +646,17 @@ function reset() {
 }
 
 .pcl-font-sample strong {
-  font-size: 15px;
+  font-size: calc(15px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
 .pcl-font-sample span {
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
 }
 
 .pcl-font-sample small {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-font-sample.serif {
@@ -633,13 +685,13 @@ function reset() {
 
 .pcl-accent-row strong {
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 500;
 }
 
 .pcl-accent-row small {
   color: var(--pcl-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 
 .pcl-accent-preview {
@@ -665,7 +717,7 @@ function reset() {
   border-radius: 4px;
   background: var(--pcl-c3);
   color: #fff;
-  font-size: 9px;
+  font-size: calc(9px * var(--pcl-font-scale, 1));
 }
 
 .pcl-accent-preview__dot {

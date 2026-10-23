@@ -65,7 +65,7 @@ function clear() {
   border: 0;
   background: transparent;
   color: var(--pcl-text);
-  font: 400 13.5px/1 var(--pcl-font);
+  font: 400 calc(13.5px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   outline: none;
 }
 

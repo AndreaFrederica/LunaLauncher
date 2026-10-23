@@ -254,7 +254,7 @@ async function saveConfig() {
   border-radius: 4px;
   background: var(--pcl-c6);
   color: var(--pcl-c2);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
 }
 
 
@@ -268,7 +268,7 @@ async function saveConfig() {
 .pcl-account-copy strong {
   overflow: hidden;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -280,7 +280,7 @@ async function saveConfig() {
   border-radius: 3px;
   background: var(--pcl-c5);
   color: var(--pcl-c2);
-  font-size: 10px;
+  font-size: calc(10px * var(--pcl-font-scale, 1));
   font-style: normal;
 }
 
@@ -293,7 +293,7 @@ async function saveConfig() {
   margin-top: 2px;
   overflow: hidden;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -316,7 +316,7 @@ async function saveConfig() {
 
 .pcl-profile-state {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-profile-grid {
@@ -340,7 +340,7 @@ async function saveConfig() {
   border-radius: 5px;
   background: var(--pcl-c8);
   color: var(--pcl-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-field {
@@ -349,7 +349,7 @@ async function saveConfig() {
   gap: 4px;
   min-width: 0;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-field-row {
@@ -369,7 +369,7 @@ async function saveConfig() {
 .pcl-profile-capes h3 {
   margin: 2px 0 7px;
   color: var(--pcl-text);
-  font-size: 13px;
+  font-size: calc(13px * var(--pcl-font-scale, 1));
   font-weight: 700;
 }
 
@@ -390,7 +390,7 @@ async function saveConfig() {
 
 .pcl-empty--compact {
   min-height: 44px;
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 @media (max-width: 900px) {

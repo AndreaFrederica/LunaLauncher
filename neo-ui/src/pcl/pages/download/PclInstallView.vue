@@ -416,7 +416,7 @@ onMounted(loadMinecraft);
 .pcl-install-header__eyebrow {
   margin-bottom: 3px;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-install-name {
@@ -424,7 +424,7 @@ onMounted(loadMinecraft);
   border-color: transparent !important;
   background: transparent !important;
   padding-left: 0 !important;
-  font-size: 15px !important;
+  font-size: calc(15px * var(--pcl-font-scale, 1)) !important;
   font-weight: 700;
 }
 
@@ -438,7 +438,7 @@ onMounted(loadMinecraft);
 .pcl-install-header__hint {
   flex: 0 0 auto;
   color: var(--pcl-c3);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-loader-title {

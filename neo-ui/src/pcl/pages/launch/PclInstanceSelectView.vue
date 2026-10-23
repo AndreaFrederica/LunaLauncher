@@ -153,7 +153,7 @@ function instanceInfo(item: any) {
 .pcl-instance-select__head h1 {
   margin: 0;
   color: var(--pcl-text);
-  font-size: 15px;
+  font-size: calc(15px * var(--pcl-font-scale, 1));
   font-weight: 700;
   line-height: 1.2;
 }
@@ -161,7 +161,7 @@ function instanceInfo(item: any) {
 .pcl-instance-select__head p {
   margin: 2px 0 0;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-instance-select__body {
@@ -182,7 +182,7 @@ function instanceInfo(item: any) {
 .pcl-instance-select__label {
   padding: 4px 13px 8px;
   color: var(--pcl-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
   opacity: .6;
 }
 
@@ -197,7 +197,7 @@ function instanceInfo(item: any) {
   border: 0;
   background: transparent;
   color: var(--pcl-text);
-  font: 400 13px/1 var(--pcl-font);
+  font: 400 calc(13px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   text-align: left;
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
@@ -226,7 +226,7 @@ function instanceInfo(item: any) {
 .pcl-folder small {
   margin-left: auto;
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
 .pcl-folder-actions {
@@ -248,7 +248,7 @@ function instanceInfo(item: any) {
   border-radius: 3px;
   background: transparent;
   color: var(--pcl-muted);
-  font: 400 12px/1 var(--pcl-font);
+  font: 400 calc(12px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
   text-align: left;
   cursor: pointer;
 }
@@ -284,7 +284,7 @@ function instanceInfo(item: any) {
 .pcl-instance-group-title small,
 .pcl-instance-group-hint {
   color: var(--pcl-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
@@ -328,12 +328,12 @@ function instanceInfo(item: any) {
 
 .pcl-instance-select__empty strong {
   color: var(--pcl-text);
-  font-size: 14px;
+  font-size: calc(14px * var(--pcl-font-scale, 1));
   font-weight: 400;
 }
 
 .pcl-instance-select__empty span {
-  font-size: 12px;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
 }
 
 .pcl-instance-danger {

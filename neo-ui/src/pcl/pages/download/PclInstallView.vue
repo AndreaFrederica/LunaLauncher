@@ -159,7 +159,7 @@ const props = defineProps<{
   instances?: any[];
   preset?: { label: string; version: string; alias: string } | null;
 }>();
-const emit = defineEmits<{ installed: [result: any]; 'preset-consumed': [] }>();
+const emit = defineEmits<{ installed: [result: any]; 'preset-consumed': []; 'install-start': [info: any]; 'install-done': [info: any] }>();
 
 const step = ref<'versions' | 'select'>('versions');
 const loading = ref(false), loadError = ref(''), installing = ref(false), error = ref('');
@@ -338,6 +338,8 @@ async function install() {
   if (!selectedVersion.value || !canInstall.value) return;
   installing.value = true;
   error.value = '';
+  const installInfo = { title: selectedLoader.value ? '正在安装 Minecraft 与加载器' : '正在安装 Minecraft', name: instanceName.value.trim() || selectedVersion.value.version };
+  emit('install-start', installInfo);
   try {
     const parameters: Record<string, unknown> = {
       name: instanceName.value.trim(),
@@ -353,6 +355,7 @@ async function install() {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     installing.value = false;
+    emit('install-done', installInfo);
   }
 }
 

@@ -14,6 +14,8 @@
             :preset="preset"
             @installed="onInstalled"
             @preset-consumed="preset = null"
+            @install-start="emit('install-start', $event)"
+            @install-done="emit('install-done', $event)"
           />
 
           <template v-else-if="componentItem">

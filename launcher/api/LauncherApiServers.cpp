@@ -111,7 +111,11 @@ QString readServers(const QJsonObject& parameters, UserInteraction&, QJsonObject
     if (!file.open(QIODevice::ReadOnly)) return file.errorString();
     const auto compressed = file.readAll();
     QByteArray data;
-    if (!GZip::unzip(compressed, data)) return "servers.dat is not valid gzip data.";
+    const bool gzipped = GZip::unzip(compressed, data);
+    // Some launchers and mods write servers.dat as plain NBT instead of the
+    // vanilla gzip container. Accept both forms so the quick-connect panel can
+    // still read the list.
+    if (!gzipped) data = compressed;
     try {
         std::istringstream stream(std::string(data.constData(), data.size()));
         auto pair = nbt::io::read_compound(stream);
@@ -120,6 +124,7 @@ QString readServers(const QJsonObject& parameters, UserInteraction&, QJsonObject
         result["servers"] = readServerArray(*pair.second);
         result["revision"] = QString::fromLatin1(QCryptographicHash::hash(compressed, QCryptographicHash::Sha256).toHex());
     } catch (const std::exception& exception) {
+        if (!gzipped) return "servers.dat is neither valid gzip nor NBT data.";
         return QString("Could not parse servers.dat: %1").arg(exception.what());
     }
     return {};

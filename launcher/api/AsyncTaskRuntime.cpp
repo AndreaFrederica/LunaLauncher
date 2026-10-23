@@ -24,6 +24,9 @@
 #include "minecraft/VanillaInstanceCreationTask.h"
 #include "minecraft/PackProfile.h"
 #include "net/Mode.h"
+#include "java/download/ManifestDownloadTask.h"
+#include "java/download/ArchiveDownloadTask.h"
+#include "tasks/SequentialTask.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
@@ -110,8 +113,10 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
     QStringList keys;
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         keys << "instances";
-    else if (operation == "resource.install" || operation == "instance.component.set-version")
+    else if (operation == "resource.install" || operation == "instance.component.set-version" || operation == "instance.update")
         keys << "instance:" + parameters.value("instance").toString();
+    else if (operation == "java.install")
+        keys << "java";
     else
         keys << "global";
     return keys;
@@ -134,13 +139,15 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "instance.create" || operation == "instance.import") return 30 * 60 * 1000;
     if (operation == "resource.install") return 15 * 60 * 1000;
     if (operation == "instance.component.set-version") return 10 * 60 * 1000;
+    if (operation == "java.install") return 15 * 60 * 1000;
+    if (operation == "instance.update") return 20 * 60 * 1000;
     return 15 * 60 * 1000;
 }
 
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "modpack.install", "resource.install" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "modpack.install", "resource.install", "java.install" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -337,6 +344,9 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
         record.deadline->deleteLater();
         record.deadline = nullptr;
     }
+    for (int i = m_pending.size() - 1; i >= 0; --i) {
+        if (m_pending.at(i).id == taskId) m_pending.removeAt(i);
+    }
     if (wasRunning) {
         release(record);
         m_active = qMax(0, m_active - 1);
@@ -351,6 +361,78 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
 void AsyncTaskRuntime::startRecord(const Record& record)
 {
     const auto id = record.id;
+    if (record.operation == "instance.update") {
+        const auto instance = findInstance(record.parameters.value("instance").toString());
+        if (!instance) { finish(id, false, "Instance not found."); return; }
+        if (instance->isRunning()) { finish(id, false, "A running instance cannot be updated."); return; }
+        const auto updateTasks = instance->createUpdateTask();
+        if (updateTasks.isEmpty()) { finish(id, true, {}, instance->id()); return; }
+        auto task = makeShared<SequentialTask>(QObject::tr("Update instance %1").arg(instance->name()));
+        for (const auto& updateTask : updateTasks) task->addTask(updateTask);
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = "正在更新实例";
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task, instanceId = instance->id()]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason(), instanceId);
+        });
+        task->start();
+        return;
+    }
+
+    if (record.operation == "java.install") {
+        const auto parameters = record.parameters;
+        const auto metadata = parameters.value("metadata").toObject();
+        const auto url = QUrl(parameters.value("url").toString(metadata.value("url").toString()));
+        const auto name = parameters.value("name").toString(metadata.value("name").toString());
+        const auto type = parameters.value("downloadType").toString(metadata.value("downloadType").toString());
+        const auto checksumType = parameters.value("checksumType").toString(metadata.value("checksumType").toString());
+        const auto checksumHash = parameters.value("checksumHash").toString(metadata.value("checksumHash").toString());
+        if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) { finish(id, false, "Java installation requires an HTTP(S) URL."); return; }
+        if (name.isEmpty() || name == "." || name == ".." || QDir::isAbsolutePath(name) || name.contains('/') || name.contains('\\') || name.contains("..")) { finish(id, false, "Java installation name is invalid."); return; }
+        const auto root = APPLICATION->javaPath().trimmed();
+        if (root.isEmpty()) { finish(id, false, "The managed Java directory is not configured."); return; }
+        const auto finalPath = QDir(root).filePath(name);
+        if (QFileInfo::exists(finalPath)) {
+            if (!parameters.value("replace").toBool()) { finish(id, false, "Java installation already exists: " + name); return; }
+            if (!FS::deletePath(finalPath)) { finish(id, false, "Could not replace existing Java installation: " + name); return; }
+        }
+        Task::Ptr task;
+        if (type.compare("manifest", Qt::CaseInsensitive) == 0)
+            task = makeShared<Java::ManifestDownloadTask>(url, finalPath, checksumType, checksumHash);
+        else if (type.compare("archive", Qt::CaseInsensitive) == 0)
+            task = makeShared<Java::ArchiveDownloadTask>(url, finalPath, checksumType, checksumHash);
+        else { finish(id, false, "Unsupported Java download type: " + type); return; }
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = "正在下载 Java 运行时";
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task, finalPath]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            if (!task->wasSuccessful()) {
+                FS::deletePath(finalPath);
+                finish(id, false, task->failReason());
+            } else {
+                finish(id, true);
+            }
+        });
+        task->start();
+        return;
+    }
+
     if (record.operation == "instance.component.set-version") {
         const auto parameters = record.parameters;
         const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));

@@ -37,6 +37,7 @@ export interface NeoUiPreferences {
   pclFloatTasks: boolean;
   pclFloatLog: boolean;
   pclFloatRefresh: boolean;
+  pclFloatMusic: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -87,9 +88,10 @@ const defaults: NeoUiPreferences = {
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
   pclLaunchAnimation: false,
-  pclFloatTasks: true,
-  pclFloatLog: true,
-  pclFloatRefresh: true,
+  pclFloatTasks: false,
+  pclFloatLog: false,
+  pclFloatRefresh: false,
+  pclFloatMusic: false,
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclAccentColor: '#d65c9a',
@@ -131,9 +133,10 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
-    pclFloatTasks: true,
-    pclFloatLog: true,
-    pclFloatRefresh: true,
+    pclFloatTasks: false,
+    pclFloatLog: false,
+    pclFloatRefresh: false,
+    pclFloatMusic: false,
     pclTitleLogo: true,
     pclTitleBadge: true,
     pclAccentColor: '#d65c9a',
@@ -160,6 +163,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFloatTasks: true,
     pclFloatLog: true,
     pclFloatRefresh: true,
+    pclFloatMusic: true,
     pclTitleLogo: true,
     pclTitleBadge: true,
     pclAccentColor: '#2a80e3',

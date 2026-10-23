@@ -270,6 +270,7 @@
         <PclCheckbox v-model="preferences.pclFloatTasks" label="任务中心" />
         <PclCheckbox v-model="preferences.pclFloatLog" label="启动日志" />
         <PclCheckbox v-model="preferences.pclFloatRefresh" label="刷新按钮" />
+        <PclCheckbox v-model="preferences.pclFloatMusic" label="背景音乐" />
       </div>
       <PclHint theme="blue">关闭后不会在 PCL 启动页右侧显示对应浮动按钮，功能仍可从页面内进入。</PclHint>
     </PclCard>
@@ -552,9 +553,10 @@ function reset() {
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
-    pclFloatTasks: true,
-    pclFloatLog: true,
-    pclFloatRefresh: true,
+    pclFloatTasks: false,
+    pclFloatLog: false,
+    pclFloatRefresh: false,
+    pclFloatMusic: false,
     pclTitleLogo: true,
     pclTitleBadge: true,
     pclAccentColor: '#d65c9a',

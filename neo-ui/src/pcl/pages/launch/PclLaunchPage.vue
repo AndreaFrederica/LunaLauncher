@@ -266,7 +266,7 @@
         @click="emit('tasks')"
       />
       <PclExtraButton
-        v-if="pclMusic.loaded"
+        v-if="pclMusic.loaded && preferences.pclFloatMusic"
         icon="music"
         :label="pclMusic.playing ? '暂停背景音乐' : '播放背景音乐'"
         @click="togglePclMusic"

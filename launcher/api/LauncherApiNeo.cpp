@@ -35,7 +35,12 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
                        { "priority", stringProperty("normal or high.") } }, { "operation", "parameters" }),
         "neo", true },
         [](const QJsonObject& p, UserInteraction& interaction) {
-            return AsyncTaskRuntime::instance().start(p.value("operation").toString(), p.value("parameters").toObject(), interaction);
+            auto parameters = p.value("parameters").toObject();
+            if (p.contains("idempotencyKey") && !parameters.contains("idempotencyKey"))
+                parameters.insert("idempotencyKey", p.value("idempotencyKey"));
+            if (p.contains("priority") && !parameters.contains("priority"))
+                parameters.insert("priority", p.value("priority"));
+            return AsyncTaskRuntime::instance().start(p.value("operation").toString(), parameters, interaction);
         });
 
     api.registerOperation({ "neo.task.status", "Read one asynchronous Neo task snapshot.", objectSchema({ { "taskId", stringProperty("Neo task id.") } }, { "taskId" }), "neo" },

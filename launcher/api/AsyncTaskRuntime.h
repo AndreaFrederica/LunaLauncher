@@ -93,6 +93,7 @@ class AsyncTaskRuntime final : public QObject {
     int deadlineFor(const QString& operation) const;
     void loadJournal();
     void saveJournal() const;
+    void pruneRecords();
 
     QHash<QString, Record> m_records;
     QStringList m_order;

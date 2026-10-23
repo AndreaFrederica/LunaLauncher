@@ -200,6 +200,7 @@ QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject&
         }
     }
 
+    pruneRecords();
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     Record record;
     record.id = id;
@@ -1077,6 +1078,22 @@ void AsyncTaskRuntime::startRecord(const Record& record)
     }
 
     finish(id, false, "Unsupported neo task operation.");
+}
+
+void AsyncTaskRuntime::pruneRecords()
+{
+    while (m_order.size() > 200) {
+        bool removed = false;
+        for (int i = 0; i < m_order.size(); ++i) {
+            const auto id = m_order.at(i);
+            if (!m_records.contains(id) || !m_records.value(id).finished) continue;
+            m_records.remove(id);
+            m_order.removeAt(i);
+            removed = true;
+            break;
+        }
+        if (!removed) break;
+    }
 }
 
 QString journalPath()

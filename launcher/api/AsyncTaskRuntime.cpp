@@ -117,6 +117,16 @@ AsyncTaskRuntime& AsyncTaskRuntime::instance()
 AsyncTaskRuntime::AsyncTaskRuntime(QObject* parent) : QObject(parent), m_temp()
 {
     loadJournal();
+    m_tick = new QTimer(this);
+    m_tick->setInterval(250);
+    connect(m_tick, &QTimer::timeout, this, [this] {
+        for (const auto& id : m_order) {
+            if (!m_records.contains(id)) continue;
+            const auto& record = m_records.value(id);
+            if (!record.finished && (record.state == "running" || record.state == "queued")) emitChanged(record);
+        }
+    });
+    m_tick->start();
 }
 
 QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const

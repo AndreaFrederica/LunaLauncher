@@ -101,4 +101,5 @@ class AsyncTaskRuntime final : public QObject {
     QSet<QString> m_writers;
     int m_active = 0;
     QTemporaryDir m_temp;
+    QTimer* m_tick = nullptr;
 };

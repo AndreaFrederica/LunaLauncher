@@ -773,6 +773,10 @@ void AsyncTaskRuntime::loadJournal()
         record.error = object.value("error").toString();
         record.instanceId = object.value("instanceId").toString();
         record.createdInstanceId = object.value("createdInstanceId").toString();
+        record.conflictKey = object.value("conflictKey").toString();
+        record.startedAt = static_cast<qint64>(object.value("startedAt").toDouble());
+        for (const auto& key : object.value("reads").toArray()) record.reads.insert(key.toString());
+        for (const auto& key : object.value("writes").toArray()) record.writes.insert(key.toString());
         record.idempotencyKey = object.value("idempotencyKey").toString();
         record.progress = static_cast<qint64>(object.value("progress").toDouble());
         record.total = static_cast<qint64>(object.value("total").toDouble());
@@ -806,6 +810,10 @@ void AsyncTaskRuntime::saveJournal() const
             { "total", static_cast<double>(record.total) },
             { "instanceId", record.instanceId },
             { "createdInstanceId", record.createdInstanceId },
+            { "conflictKey", record.conflictKey },
+            { "reads", QJsonArray::fromStringList(QStringList(record.reads.begin(), record.reads.end())) },
+            { "writes", QJsonArray::fromStringList(QStringList(record.writes.begin(), record.writes.end())) },
+            { "startedAt", static_cast<double>(record.startedAt) },
             { "idempotencyKey", record.idempotencyKey },
             { "createdAt", static_cast<double>(record.queuedAt) },
             { "finishedAt", static_cast<double>(record.finishedAt) },

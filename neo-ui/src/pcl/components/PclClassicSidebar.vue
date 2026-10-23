@@ -1,5 +1,13 @@
 <template>
   <aside class="pcl-classic-nav">
+    <div v-if="account" class="pcl-classic-nav__account">
+      <span class="pcl-classic-nav__avatar">
+        <PclAccountAvatar v-if="account.profile?.skin?.url" :src="account.profile.skin.url" :name="account.profileName || account.displayName" />
+        <PclIcon v-else name="user" :size="18" />
+      </span>
+      <span><strong>{{ account.profileName || account.displayName || '账户' }}</strong><small>{{ account.type || '已登录' }}</small></span>
+    </div>
+
     <div class="pcl-classic-nav__instance">
       <img v-if="icon" :src="icon" :style="{ width: `${iconSize}px`, height: `${iconSize}px` }" :alt="instance?.name || 'Minecraft'" />
       <span v-else class="pcl-classic-nav__icon-fallback" :style="{ width: `${iconSize}px`, height: `${iconSize}px` }">
@@ -7,11 +15,6 @@
       </span>
       <strong>{{ instance?.name || '未选择实例' }}</strong>
       <small>{{ version || 'Minecraft' }}</small>
-    </div>
-
-    <div v-if="account" class="pcl-classic-nav__account">
-      <span class="pcl-classic-nav__avatar"><PclIcon name="user" :size="18" /></span>
-      <span><strong>{{ account.profileName || account.displayName || '账户' }}</strong><small>{{ account.type || '已登录' }}</small></span>
     </div>
 
     <div class="pcl-classic-nav__actions">
@@ -59,6 +62,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import PclIcon from './PclIcon.vue';
+import PclAccountAvatar from './PclAccountAvatar.vue';
 
 const props = defineProps<{
   instance?: any;
@@ -106,13 +110,18 @@ const version = computed(() => props.instance?.runtime?.minecraftVersion || prop
   text-align: center;
 }
 
-.pcl-classic-nav__instance img,
+.pcl-classic-nav__instance img {
+  display: block;
+  border-radius: 4px;
+  object-fit: contain;
+  background: transparent;
+}
+
 .pcl-classic-nav__icon-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  object-fit: cover;
   color: var(--pcl-muted);
   background: var(--pcl-c7);
 }
@@ -139,8 +148,9 @@ const version = computed(() => props.instance?.runtime?.minecraftVersion || prop
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
   border-radius: 4px;
   background: var(--pcl-c7);
   color: var(--pcl-muted);

@@ -109,6 +109,7 @@
         <PclLoading v-if="localBusy && packagesLoading" text="正在读取安装包" inline />
       </div>
     </PclCard>
+    <PclInstallProgressDialog v-model="installOpen" :title="installTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstall" />
   </div>
 </template>
 
@@ -118,6 +119,7 @@ import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclIcon from '../../components/PclIcon.vue';
+import PclInstallProgressDialog from '../download/PclInstallProgressDialog.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclListItem from '../../components/PclListItem.vue';
@@ -132,6 +134,7 @@ const installed = ref<any[]>([]);
 const diagnostic = ref<any>(null);
 const error = ref('');
 const localBusy = ref(false);
+const installOpen = ref(false), installTask = ref<any>(null), installCancelling = ref(false), installTitle = ref('正在安装 Java');
 const packagesLoading = ref(false);
 const provider = ref('net.minecraft.java');
 const version = ref('');
@@ -263,11 +266,34 @@ function loadPackages() {
     }
   });
 }
+async function cancelInstall() {
+  installCancelling.value = true;
+  try { if (installTask.value?.taskId) await props.execute('neo.task.cancel', { taskId: installTask.value.taskId }); }
+  catch { /* already terminal */ }
+}
+
 function install(metadata: any) {
   return perform(async () => {
-    await props.execute('java.install', { metadata });
-    await fetchInstalled();
-    emit('changed');
+    installTitle.value = `正在安装 Java：${metadata?.name || metadata?.version || ''}`;
+    installTask.value = null;
+    installCancelling.value = false;
+    installOpen.value = true;
+    try {
+      let task: any = await props.execute('neo.task.start', { operation: 'java.install', priority: 'high', parameters: { metadata } });
+      while (task && !task.finished) {
+        installTask.value = task;
+        await new Promise(resolve => setTimeout(resolve, 300));
+        task = await props.execute('neo.task.status', { taskId: task.taskId });
+      }
+      installTask.value = task;
+      if (!task || task.state !== 'succeeded') throw new Error(task?.error || 'Java 安装失败');
+      await fetchInstalled();
+      emit('changed');
+    } finally {
+      installOpen.value = false;
+      installCancelling.value = false;
+      installTask.value = null;
+    }
   });
 }
 async function loadManagedRoot() {

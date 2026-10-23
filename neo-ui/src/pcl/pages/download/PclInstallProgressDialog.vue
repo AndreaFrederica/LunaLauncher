@@ -19,24 +19,35 @@
           <PclLoading v-if="!finished" inline />
           <span>{{ task?.details || task?.status || '正在准备安装…' }}</span>
         </div>
-        <div v-if="children.length" class="pcl-install-progress__children">
-          <div class="pcl-install-progress__children-head">
-            <span>文件进度</span>
-            <small>{{ childDone }} / {{ children.length }}</small>
-          </div>
-          <div v-for="child in children" :key="child.id || child.label" class="pcl-install-progress__child">
-            <div class="pcl-install-progress__child-head">
-              <span>{{ child.label || child.status || '下载文件' }}</span>
-              <small v-if="child.transferRate">{{ formatRate(child.transferRate) }}</small>
+        <div v-if="activeFiles.length" class="pcl-install-progress__files">
+          <div v-for="file in activeFiles" :key="file.id || file.label" class="pcl-install-progress__current">
+            <div class="pcl-install-progress__current-head">
+              <span>{{ file.label || file.status || '正在下载' }}</span>
+              <small>{{ rateText(file) }}</small>
             </div>
-            <div class="pcl-progress-track pcl-install-progress__child-track" :class="{ 'is-indeterminate': childPercent(child) === null }">
-              <span :style="childPercent(child) === null ? undefined : { width: `${childPercent(child)}%` }" />
+            <div class="pcl-progress-track pcl-install-progress__current-track" :class="{ 'is-indeterminate': childPercent(file) === null }">
+              <span :style="childPercent(file) === null ? undefined : { width: `${childPercent(file)}%` }" />
             </div>
-            <div class="pcl-install-progress__child-meta">
-              <span>{{ childProgressText(child) }}</span>
-              <span v-if="child.status || child.details">{{ child.status || child.details }}</span>
+            <div class="pcl-install-progress__current-meta">
+              <span>{{ childProgressText(file) }}</span>
+              <span v-if="file.status">{{ file.status }}</span>
             </div>
           </div>
+        </div>
+        <div v-else-if="!finished" class="pcl-install-progress__current">
+          <div class="pcl-install-progress__current-head"><span>{{ task?.status || '正在准备下一步…' }}</span></div>
+          <div class="pcl-progress-track pcl-install-progress__current-track is-indeterminate"><span /></div>
+        </div>
+        <div class="pcl-install-progress__stages">
+          <div v-for="stage in stages" :key="stage.label" class="pcl-install-progress__stage" :class="stage.state">
+            <span class="pcl-install-progress__stage-dot" />
+            <span>{{ stage.label }}</span>
+          </div>
+        </div>
+        <div class="pcl-install-progress__summary">
+          <span>已完成 {{ childDone }} / {{ children.length }}</span>
+          <span v-if="pendingCount"> · 等待 {{ pendingCount }}</span>
+          <span v-if="activeCount > 1"> · {{ activeCount }} 个并行下载</span>
         </div>
         <div class="pcl-install-progress__meta">
           <span v-if="rateText(task)">{{ rateText(task) }}</span>
@@ -54,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclLoading from '../../components/PclLoading.vue';
@@ -76,13 +87,30 @@ const emit = defineEmits<{
 }>();
 
 const finished = computed(() => Boolean(props.task?.finished) || ['succeeded', 'failed', 'cancelled', 'aborted', 'finished', 'completed'].includes(String(props.task?.state || '').toLowerCase()));
-const percent = computed<number | null>(() => {
+const targetPercent = computed<number | null>(() => {
   const total = Number(props.task?.totalProgress || props.task?.total || 0);
   const progress = Number(props.task?.progress || 0);
   if (total > 0) return Math.max(0, Math.min(100, Math.round(progress / total * 100)));
   if (props.task?.finished) return 100;
   return null;
 });
+const percent = ref<number | null>(null);
+let percentFrame = 0;
+watch(targetPercent, value => {
+  cancelAnimationFrame(percentFrame);
+  if (value === null) { percent.value = null; return; }
+  const start = percent.value ?? 0;
+  const started = performance.now();
+  const duration = 240;
+  const tick = (now: number) => {
+    const ratio = Math.min(1, (now - started) / duration);
+    const eased = 1 - Math.pow(1 - ratio, 3);
+    percent.value = Math.round(start + (value - start) * eased);
+    if (ratio < 1) percentFrame = requestAnimationFrame(tick);
+  };
+  percentFrame = requestAnimationFrame(tick);
+}, { immediate: true });
+onUnmounted(() => cancelAnimationFrame(percentFrame));
 const children = computed<any[]>(() => {
   const source = Array.isArray(props.task?.children) ? props.task.children : Array.isArray(props.task?.steps) ? props.task.steps : [];
   const seen = new Set<string>();
@@ -94,6 +122,22 @@ const children = computed<any[]>(() => {
   }).slice(0, 64);
 });
 const childDone = computed(() => children.value.filter(child => ['succeeded', 'failed', 'cancelled'].includes(String(child.state || '').toLowerCase())).length);
+const activeFiles = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'running').slice(0, 8));
+const activeCount = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'running').length);
+const pendingCount = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'waiting').length);
+const stages = computed(() => {
+  const labels = props.task?.operation === 'modpack.install'
+    ? ['准备', '下载整合包', '解压安装', '下载模组', '完成']
+    : ['准备', '下载', '安装', '完成'];
+  const status = String(props.task?.status || '').toLowerCase();
+  const finishedTask = Boolean(props.task?.finished);
+  let active = 0;
+  if (finishedTask) active = labels.length - 1;
+  else if (children.value.some(child => /\.(jar|zip|litemod)$/i.test(String(child.label || '')))) active = Math.min(labels.length - 2, 3);
+  else if (status.includes('unpack') || status.includes('解压') || status.includes('install') || status.includes('安装')) active = Math.min(labels.length - 2, 2);
+  else if (children.value.length || status.includes('下载') || status.includes('download')) active = 1;
+  return labels.map((label, index) => ({ label, state: index < active ? 'done' : index === active ? 'active' : 'waiting' }));
+});
 function childPercent(child: any): number | null {
   const total = Number(child?.total || 0);
   const current = Number(child?.current || 0);
@@ -189,6 +233,111 @@ function formatSize(value: unknown) {
 
 .pcl-install-progress__track {
   margin: 4px 0 10px;
+}
+
+.pcl-install-progress__files {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.pcl-install-progress__current {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 4px;
+  background: var(--pcl-c8);
+}
+
+.pcl-install-progress__current-head,
+.pcl-install-progress__current-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pcl-install-progress__current-head span {
+  overflow: hidden;
+  color: var(--pcl-text);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcl-install-progress__current-head small {
+  flex: 0 0 auto;
+  color: var(--pcl-c3);
+  font-size: 9px;
+}
+
+.pcl-install-progress__current-track {
+  height: 5px !important;
+  margin: 0 !important;
+}
+
+.pcl-install-progress__current-meta {
+  color: var(--pcl-muted);
+  font-size: 9px;
+}
+
+.pcl-install-progress__current-meta span:last-child {
+  overflow: hidden;
+  margin-left: auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcl-install-progress__stages {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.pcl-install-progress__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--pcl-muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.pcl-install-progress__stage:not(:last-child)::after {
+  content: '';
+  width: 10px;
+  height: 1px;
+  margin-left: 2px;
+  background: var(--pcl-border);
+}
+
+.pcl-install-progress__stage-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pcl-c6);
+}
+
+.pcl-install-progress__stage.done { color: #34d399; }
+.pcl-install-progress__stage.done .pcl-install-progress__stage-dot { background: #34d399; }
+.pcl-install-progress__stage.active { color: var(--pcl-c3); }
+.pcl-install-progress__stage.active .pcl-install-progress__stage-dot { background: var(--pcl-c3); box-shadow: 0 0 6px var(--pcl-c3); }
+
+.pcl-install-progress__summary {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--pcl-muted);
+  font-size: 9px;
 }
 
 .pcl-progress-track.is-indeterminate > span {

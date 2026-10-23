@@ -376,7 +376,15 @@ async function installComponentVersion(component:any,version:string){
  finally { endInstallProgress(); }
 }
 function beginInstallProgress(info:any){installProgressTitle.value=info?.title || '正在安装整合包';installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
-function endInstallProgress(){installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;}
+function endInstallProgress(){
+ const task=installTask.value,title=installProgressTitle.value;
+ const state=String(task?.state||'').toLowerCase();
+ if(state==='succeeded' && isPclShell.value){
+  const completed=title.replace(/^正在/,'').replace(/：.*$/,'');
+  showPclToast({type:'success',title:'操作完成',message:`${completed}完成`,timeout:3500});
+ }
+ installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;
+}
 
 async function exportInstance(payload:any){
   if(!selected.value)return;

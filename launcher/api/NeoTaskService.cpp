@@ -15,6 +15,7 @@
 #include "BaseInstance.h"
 #include "FileSystem.h"
 #include "InstanceImportTask.h"
+#include "api/LauncherApi.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
 #include "api/ResourceModelSupport.h"
@@ -65,6 +66,14 @@ std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, Q
     return index < lists.size() ? lists.at(index) : nullptr;
 }
 
+class NoopInteraction final : public UserInteraction {
+   public:
+    void status(const QString&) override {}
+    void deviceCode(const QString&, const QString&, int) override {}
+    std::optional<QString> input(const QString&, bool) override { return std::nullopt; }
+    std::optional<int> select(const QString&, const QJsonArray&) override { return std::nullopt; }
+};
+
 }  // namespace
 
 NeoTaskService& NeoTaskService::instance()
@@ -77,7 +86,7 @@ NeoTaskService::NeoTaskService(QObject* parent) : QObject(parent), m_temp() {}
 
 QString NeoTaskService::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const
 {
-    if (operation == "instance.import" || operation == "instance.create") return "instances";
+    if (operation == "instance.import" || operation == "modpack.install") return "instances";
     if (operation == "resource.install") {
         return "instance:" + parameters.value("instance").toString();
     }
@@ -87,7 +96,7 @@ QString NeoTaskService::conflictKeyFor(const QString& operation, const QJsonObje
 QJsonObject NeoTaskService::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "resource.install" }.contains(operation)) {
+    if (!QStringList{ "instance.import", "modpack.install", "resource.install" }.contains(operation)) {
         return { { "ok", false }, { "error", QStringLiteral("Unsupported neo task operation: %1").arg(operation) } };
     }
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -97,7 +106,7 @@ QJsonObject NeoTaskService::start(const QString& operation, const QJsonObject& p
     record.parameters = parameters;
     record.conflictKey = conflictKeyFor(operation, parameters);
     record.highPriority = parameters.value("priority").toString() == "high";
-    if (operation == "instance.import") {
+    if (operation == "instance.import" || operation == "modpack.install") {
         for (int i = 0; i < APPLICATION->instances()->count(); ++i)
             record.instancesBefore.insert(APPLICATION->instances()->at(i)->id());
     }
@@ -140,6 +149,79 @@ void NeoTaskService::pump()
 void NeoTaskService::startRecord(const Record& record)
 {
     const auto id = record.id;
+    if (record.operation == "modpack.install") {
+        const auto parameters = record.parameters;
+        const auto provider = parameters.value("provider").toString().toLower();
+        const auto projectId = parameters.value("projectId").toString();
+        const auto versionId = parameters.value("versionId").toString();
+        if (provider != "modrinth" && provider != "curseforge") {
+            finish(id, false, "Async modpack install currently supports Modrinth and CurseForge.");
+            return;
+        }
+        if (projectId.isEmpty() || versionId.isEmpty()) {
+            finish(id, false, "A pack project and version are required.");
+            return;
+        }
+        NoopInteraction interaction;
+        LauncherApi api;
+        const QJsonObject request{ { "provider", provider }, { "kind", "modpacks" }, { "projectId", projectId } };
+        const auto versions = api.execute("resource.versions", request, interaction);
+        if (!versions.value("ok").toBool()) {
+            finish(id, false, versions.value("error").toString("Could not read pack versions."));
+            return;
+        }
+        QString download;
+        for (const auto& value : versions.value("data").toArray()) {
+            const auto entry = value.toObject();
+            if (entry.value("versionId").toString() == versionId) {
+                download = entry.value("downloadUrl").toString();
+                break;
+            }
+        }
+        if (download.isEmpty()) {
+            finish(id, false, "The provider did not supply a downloadable pack archive.");
+            return;
+        }
+        const QUrl url(download);
+        if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) {
+            finish(id, false, "The provider returned an invalid pack URL.");
+            return;
+        }
+        auto* importTask = new InstanceImportTask(url, nullptr, { { "pack_id", projectId }, { "pack_version_id", versionId } });
+        const auto name = parameters.value("name").toString();
+        if (!name.isEmpty()) importTask->setName(name);
+        auto* task = APPLICATION->instances()->wrapInstanceTask(importTask);
+        if (!task) {
+            finish(id, false, "The modpack import task could not be created.");
+            return;
+        }
+        auto& stored = m_records[id];
+        stored.task = task;
+        connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task, &Task::finished, this, [this, id, task]() {
+            if (!m_records.contains(id)) return;
+            const bool success = task->wasSuccessful();
+            QString created;
+            if (success) {
+                APPLICATION->instances()->saveNow();
+                const auto& before = m_records[id].instancesBefore;
+                for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                    const auto candidate = APPLICATION->instances()->at(i);
+                    if (!before.contains(candidate->id())) { created = candidate->id(); break; }
+                }
+            }
+            if (!created.isEmpty()) m_records[id].createdInstanceId = created;
+            finish(id, success, success ? QString() : task->failReason());
+        });
+        task->start();
+        return;
+    }
+
     if (record.operation == "instance.import") {
         const auto parameters = record.parameters;
         const auto source = parameters.value("source").toString().trimmed();

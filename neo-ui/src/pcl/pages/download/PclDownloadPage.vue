@@ -123,6 +123,7 @@
               default-provider="modrinth"
               @installed="emit('refresh')"
               @install-start="emit('install-start', $event)"
+              @install-progress="emit('install-progress', $event)"
               @install-done="emit('install-done', $event)"
             />
           </PclCard>
@@ -172,7 +173,7 @@ type Execute = (operation: string, parameters?: Record<string, unknown>) => Prom
 type ComponentItem = { id: string; label: string; icon: string; uid?: string; alias?: string };
 
 const props = defineProps<{ busy: boolean; execute: Execute; selected?: any; instances?: any[] }>();
-const emit = defineEmits<{ refresh: []; launch: []; installed: [result: any]; 'install-start': [info: any]; 'install-done': [info: any] }>();
+const emit = defineEmits<{ refresh: []; launch: []; installed: [result: any]; 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
 
 const section = ref('install');
 const refreshKey = ref(0);

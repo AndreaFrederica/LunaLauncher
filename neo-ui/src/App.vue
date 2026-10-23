@@ -10,7 +10,7 @@
  <PclToolsPage v-if="isPclShell && page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
  <PclSetupPage v-if="isPclShell && page==='pcl-settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <PclAccountPage v-if="page==='accounts' && isPclShell" :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" @cancel-login="cancelDeviceLogin" />
- <PclInstancePage v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='pcl-settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="installComponentVersion" @browse="page='pcl-download';refresh()" @export="(payload)=>run('instance.export',{instance:selected.id,output:payload.output,format:'zip',name:payload.name,version:payload.version,overwrite:true})" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @action="workspaceAction" />
+ <PclInstancePage v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='pcl-settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="installComponentVersion" @browse="page='pcl-download';refresh()" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @action="workspaceAction" />
  </div></Transition>
  <XmclDashboard v-if="!isPclShell && page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
@@ -377,6 +377,19 @@ async function installComponentVersion(component:any,version:string){
 }
 function beginInstallProgress(info:any){installProgressTitle.value=info?.title || '正在安装整合包';installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
 function endInstallProgress(){installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;}
+
+async function exportInstance(payload:any){
+  if(!selected.value)return;
+  beginInstallProgress({title:'正在导出实例',name:selected.value.name});
+  try{
+    let task:any=await call('neo.task.start',{operation:'instance.export',priority:'high',parameters:{instance:selected.value.id,output:payload.output,format:'zip',name:payload.name,version:payload.version,overwrite:true}});
+    while(task && !task.finished){installTask.value=task;await new Promise(resolve=>setTimeout(resolve,400));task=await call('neo.task.status',{taskId:task.taskId});}
+    installTask.value=task;
+    if(!task || task.state!=='succeeded')throw new Error(task?.error||'导出失败');
+    notice.value='实例已导出到 '+(payload.output||'');
+  }catch(e){error.value=message(e);}
+  finally{endInstallProgress();}
+}
 async function cancelInstallProgress(){installCancelling.value=true;try{if(installTask.value?.taskId)await launcher.execute('neo.task.cancel',{taskId:installTask.value.taskId});else await launcher.execute('task.cancel',{});}catch{/* the task may already be terminal */}}
 async function cancel(){try{if(launchTaskId.value)await call('neo.task.cancel',{taskId:launchTaskId.value});else await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value='启动已取消';resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
 async function openFolder(){

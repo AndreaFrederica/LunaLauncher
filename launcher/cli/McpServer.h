@@ -6,7 +6,6 @@
 #include <QObject>
 #include <QByteArray>
 #include <QQueue>
-#include <QThreadPool>
 
 class QEventLoop;
 
@@ -36,8 +35,6 @@ class McpServer final : public QObject {
                           const QJsonObject& metadata, bool native);
     void runWrite(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
                   const QJsonObject& metadata, bool native, bool control);
-    void runRead(const QString& operation, const QJsonObject& arguments, const QJsonValue& id,
-                 const QJsonObject& metadata, bool native);
     void startNext();
     QJsonObject schedulerStatus() const;
     QJsonValue requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices);
@@ -59,11 +56,8 @@ class McpServer final : public QObject {
 
     LauncherApi m_service;
     QQueue<PendingOperation> m_pending;
-    QThreadPool m_readPool;
     bool m_writeActive = false;
     QString m_activeWriteKey;
-    int m_activeReads = 0;
-    qint64 m_completedReads = 0;
     qint64 m_completedWrites = 0;
     LauncherApi* m_activeService = nullptr;
     QJsonValue m_activeRequestId;

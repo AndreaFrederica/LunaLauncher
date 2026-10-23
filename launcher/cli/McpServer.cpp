@@ -88,14 +88,6 @@ QString toolNameForOperation(const QString& operation)
     return QStringLiteral("lunalauncher_") + tool;
 }
 
-/** Detached read lanes are disabled: Qt models and their QObjects are not
- *  thread-affine with the sidecar's main event loop. The queue still applies
- *  priority and serializes mutations safely. */
-bool isParallelRead(const QString&)
-{
-    return false;
-}
-
 bool isHighPriorityRead(const QString& operation)
 {
     static const QSet<QString> operations{
@@ -128,7 +120,6 @@ bool isControlOperation(const QString& operation)
 
 McpServer::McpServer(QObject* parent) : QObject(parent), m_service()
 {
-    m_readPool.setMaxThreadCount(3);
     connect(&AsyncTaskRuntime::instance(), &AsyncTaskRuntime::taskChanged, this, [this](const QJsonObject& snapshot) {
         if (m_disconnected) return;
         writeMessage({ { "jsonrpc", "2.0" }, { "method", "launcher/event" },
@@ -443,64 +434,16 @@ void McpServer::runWrite(const QJsonValue& id, const QString& operation, const Q
 void McpServer::startNext()
 {
     if (m_disconnected || m_writeActive) return;
-    int writeIndex = -1;
+    int index = -1;
     for (int i = 0; i < m_pending.size(); ++i) {
-        if (m_pending.at(i).highPriority) { writeIndex = i; break; }
+        if (m_pending.at(i).highPriority) { index = i; break; }
     }
-    if (writeIndex < 0) {
-        for (int i = 0; i < m_pending.size(); ++i) {
-            if (!isParallelRead(m_pending.at(i).operation)) { writeIndex = i; break; }
-        }
-    }
-    if (writeIndex < 0) {
-        while (m_activeReads < m_readPool.maxThreadCount()) {
-            int readIndex = -1;
-            for (int i = 0; i < m_pending.size(); ++i) {
-                if (isParallelRead(m_pending.at(i).operation) && m_pending.at(i).highPriority) { readIndex = i; break; }
-            }
-            if (readIndex < 0) {
-                for (int i = 0; i < m_pending.size(); ++i) {
-                    if (isParallelRead(m_pending.at(i).operation)) { readIndex = i; break; }
-                }
-            }
-            if (readIndex < 0) break;
-            const auto request = m_pending.takeAt(readIndex);
-            runRead(request.operation, request.arguments, request.id, request.metadata, request.native);
-        }
-        return;
-    }
-    // A writer is waiting: stop admitting new readers, drain the active read
-    // lanes, then give the writer the exclusive lane.
-    if (m_activeReads > 0) return;
-    const auto request = m_pending.takeAt(writeIndex);
+    if (index < 0 && !m_pending.isEmpty()) index = 0;
+    if (index < 0) return;
+    const auto request = m_pending.takeAt(index);
     m_writeActive = true;
     m_activeWriteKey = request.conflictKey;
     runWrite(request.id, request.operation, request.arguments, request.metadata, request.native, false);
-}
-
-void McpServer::runRead(const QString& operation, const QJsonObject& arguments, const QJsonValue& id,
-                        const QJsonObject& metadata, bool native)
-{
-    Q_UNUSED(metadata);
-    ++m_activeReads;
-    m_readPool.start(QRunnable::create([this, operation, arguments, id, native]() {
-        auto api = std::make_unique<LauncherApi>();
-        McpInteraction interaction(arguments, [](const QJsonObject&) {});
-        const auto result = api->execute(operation, arguments, interaction);
-        QMetaObject::invokeMethod(this, [this, id, result, native]() {
-            if (m_disconnected) return;
-            if (native) {
-                writeResult(id, result);
-            } else {
-                const auto text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-                writeResult(id, QJsonObject{ { "content", QJsonArray{ QJsonObject{ { "type", "text" }, { "text", text } } } },
-                                             { "structuredContent", result }, { "isError", !result.value("ok").toBool() } });
-            }
-            --m_activeReads;
-            ++m_completedReads;
-            startNext();
-        }, Qt::QueuedConnection);
-    }));
 }
 
 QJsonObject McpServer::schedulerStatus() const
@@ -508,24 +451,19 @@ QJsonObject McpServer::schedulerStatus() const
     QJsonArray high;
     for (const auto& operation : { "runtime.info", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list" })
         high.append(operation);
-    int pendingReads = 0, pendingWrites = 0;
-    for (const auto& request : m_pending) {
-        if (isParallelRead(request.operation)) ++pendingReads;
-        else ++pendingWrites;
-    }
     return QJsonObject{
-        { "mode", "priority-serial" },
+        { "mode", "async-runtime-compat" },
         { "readLanes", 0 },
-        { "activeReads", m_activeReads },
+        { "activeReads", 0 },
         { "writeActive", m_writeActive },
         { "queued", m_pending.size() },
-        { "completedReads", m_completedReads },
+        { "completedReads", 0 },
         { "completedWrites", m_completedWrites },
-        { "pendingReads", pendingReads },
-        { "pendingWrites", pendingWrites },
+        { "pendingReads", 0 },
+        { "pendingWrites", m_pending.size() },
         { "activeWriteKey", m_activeWriteKey },
         { "highPriority", high },
-        { "conflictPolicy", "Single safe execution lane with priority ordering; read-thread lanes are disabled because Qt models are not thread-affine." },
+        { "conflictPolicy", "AsyncTaskRuntime owns long-running work. This lane only serializes short compatibility requests." },
     };
 }
 

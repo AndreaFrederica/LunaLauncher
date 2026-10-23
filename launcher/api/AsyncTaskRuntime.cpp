@@ -28,6 +28,7 @@
 #include "java/download/ArchiveDownloadTask.h"
 #include "tasks/SequentialTask.h"
 #include "api/ResourceInstallTask.h"
+#include "api/InstanceExportTask.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
 #include "minecraft/auth/AccountList.h"
@@ -143,7 +144,7 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
     QStringList keys;
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         keys << "instances";
-    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update" || operation == "instance.launch")
+    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
         keys << "java";
@@ -178,6 +179,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "account.refresh") return 5 * 60 * 1000;
     if (operation == "account.login") return 10 * 60 * 1000;
     if (operation == "instance.launch") return 10 * 60 * 1000;
+    if (operation == "instance.export") return 30 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
     return 15 * 60 * 1000;
 }
@@ -185,7 +187,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -760,6 +762,27 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         auto& stored = m_records[id];
         stored.task = task;
         stored.status = "正在准备资源及依赖";
+        connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task, &Task::finished, this, [this, id, task, instanceId = instance->id()]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason(), instanceId);
+        });
+        task->start();
+        return;
+    }
+
+    if (record.operation == "instance.export") {
+        auto instance = findInstance(record.parameters.value("instance").toString());
+        if (!instance) { finish(id, false, "Instance not found."); return; }
+        auto* task = new InstanceExportTask(instance, record.parameters);
+        auto& stored = m_records[id];
+        stored.task = task;
+        stored.status = "正在导出实例";
         connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
         connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
             if (!m_records.contains(id)) return;

@@ -167,6 +167,13 @@
         <span class="pcl-form-row__hint">实例名称和副标题字号</span>
       </div>
       <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例面板宽度</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceWidth" :options="instanceWidthOptions" />
+        </div>
+        <span class="pcl-form-row__hint">占右侧内容区宽度</span>
+      </div>
+      <div class="pcl-form-row">
         <span class="pcl-form-row__label">实例分类方式</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceGrouping" :options="instanceGroupingOptions" />
@@ -186,6 +193,16 @@
           <PclSelect v-model="preferences.pclHomeInstanceColumns" :options="instanceColumnOptions" />
         </div>
         <span class="pcl-form-row__hint">每行显示的实例数量</span>
+      </div>
+      <div class="pcl-home-order">
+        <div class="pcl-home-order__title">首页卡片顺序</div>
+        <div v-for="(item, index) in homeOrderItems" :key="item.key" class="pcl-home-order__row">
+          <span>{{ item.label }}</span>
+          <div>
+            <PclButton size="sm" variant="ghost" icon="chevron-up" :disabled="index === 0" @click="moveHomeOrder(index, -1)" />
+            <PclButton size="sm" variant="ghost" icon="chevron-down" :disabled="index === homeOrderItems.length - 1" @click="moveHomeOrder(index, 1)" />
+          </div>
+        </div>
       </div>
       <div v-for="(card, index) in preferences.pclHomeCards" :key="card.id" class="pcl-home-editor">
         <div class="pcl-home-editor__head">
@@ -254,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -317,6 +334,27 @@ function onBackgroundFile(event: Event) {
   reader.readAsDataURL(file);
 }
 
+const homeOrderItems = computed(() => {
+  const items = [
+    { key: 'hint', label: 'Neo UI 提示' },
+    ...preferences.pclHomeCards.map(card => ({ key: `custom:${card.id}`, label: card.title || '自定义卡片' })),
+    { key: 'log', label: '启动日志' },
+    { key: 'instances', label: '全部实例' },
+    { key: 'servers', label: '当前实例服务器' },
+  ];
+  const valid = new Set(items.map(item => item.key));
+  const ordered = preferences.pclHomeCardOrder.filter(key => valid.has(key));
+  for (const item of items) if (!ordered.includes(item.key)) ordered.push(item.key);
+  return ordered.map(key => items.find(item => item.key === key)!).filter(Boolean);
+});
+function moveHomeOrder(index: number, delta: number) {
+  const keys = homeOrderItems.value.map(item => item.key);
+  const target = index + delta;
+  if (target < 0 || target >= keys.length) return;
+  [keys[index], keys[target]] = [keys[target], keys[index]];
+  preferences.pclHomeCardOrder = keys;
+  persistNeoUiPreferences();
+}
 function addHomeCard() {
   preferences.pclHomeCards.push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -352,6 +390,13 @@ const densityOptions = [
 const backgroundOptions = [
   { label: '渐变背景', value: 'gradient' },
   { label: '纯色背景', value: 'solid' },
+];
+const instanceWidthOptions = [
+  { label: '60%', value: 60 },
+  { label: '70%', value: 70 },
+  { label: '80%', value: 80 },
+  { label: '90%', value: 90 },
+  { label: '100%', value: 100 },
 ];
 const instanceLayoutOptions = [
   { label: '网格', value: 'grid' },
@@ -439,10 +484,12 @@ function reset() {
     pclHomeInstanceLayout: 'grid',
     pclHomeInstanceColumns: 2,
     pclHomeInstanceRows: 4,
+    pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 14,
     pclHomeInstanceGrouping: 'flat',
     pclHomeInstanceSort: 'manual',
     pclHomeInstanceOrder: [],
+    pclHomeCardOrder: ['hint', 'custom:welcome', 'log', 'instances', 'servers'],
   });
   persistNeoUiPreferences();
 }
@@ -735,5 +782,32 @@ function reset() {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.pcl-home-order {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 0 14px;
+  padding: 9px 10px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 4px;
+  background: var(--pcl-c8);
+}
+
+.pcl-home-order__title {
+  margin-bottom: 4px;
+  color: var(--pcl-text);
+  font-size: calc(11px * var(--pcl-font-scale, 1));
+}
+
+.pcl-home-order__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--pcl-muted);
+  font-size: calc(10px * var(--pcl-font-scale, 1));
 }
 </style>

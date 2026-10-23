@@ -108,7 +108,7 @@
         </div>
 
         <div class="pcl-launch-right">
-          <PclCard v-if="hintVisible" title="Neo UI 提示">
+          <PclCard v-if="hintVisible" title="Neo UI 提示" :style="{ order: homeCardOrder('hint') }">
             <template #actions>
               <PclIconButton icon="x" label="关闭提示" :size="24" @click="hintDialog = true" />
             </template>
@@ -116,11 +116,11 @@
             <p class="pcl-launch-card-copy pcl-muted">Neo UI 正在持续完善，遇到问题可以在社区反馈。</p>
           </PclCard>
 
-          <PclCard v-for="card in homeCards" :key="card.id" :title="card.title" class="pcl-home-card">
+          <PclCard v-for="card in homeCards" :key="card.id" :title="card.title" class="pcl-home-card" :style="{ order: homeCardOrder(`custom:${card.id}`) }">
             <p class="pcl-home-card__content">{{ card.content }}</p>
           </PclCard>
 
-          <PclCard title="启动日志">
+          <PclCard title="启动日志" :style="{ order: homeCardOrder('log') }">
             <template #actions>
               <PclIconButton icon="copy" label="复制日志" :size="24" :disabled="!logLines.length" @click="copyLog" />
               <PclIconButton icon="trash-2" label="清空日志" :size="24" :disabled="!logLines.length" @click="emit('clear-log')" />
@@ -132,7 +132,7 @@
             </div>
           </PclCard>
 
-          <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances" :style="homeInstanceStyle">
+          <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances" :style="[homeInstanceStyle, { order: homeCardOrder('instances') }]">
             <template #actions>
               <PclIconButton icon="grid-2x2" label="网格排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'grid' }" @click="setInstanceLayout('grid')" />
               <PclIconButton icon="list" label="单列排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'list' }" @click="setInstanceLayout('list')" />
@@ -186,7 +186,7 @@
             <div v-else class="pcl-empty pcl-empty--compact">还没有实例。</div>
           </PclCard>
 
-          <PclCard v-if="preferences.pclHomeShowServers" title="当前实例服务器" class="pcl-home-servers">
+          <PclCard v-if="preferences.pclHomeShowServers" title="当前实例服务器" class="pcl-home-servers" :style="{ order: homeCardOrder('servers') }">
             <template #actions>
               <PclIconButton icon="refresh-cw" label="刷新服务器" :size="24" :disabled="busy || serversLoading" @click="loadServers" />
             </template>
@@ -285,6 +285,11 @@ const launchError = computed(() => props.launchError || props.error || '');
 const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));
 const preferences = neoUiPreferences;
+function homeCardOrder(key: string) {
+  const index = (preferences.pclHomeCardOrder || []).indexOf(key);
+  return index < 0 ? 1000 : index;
+}
+
 const homeInstanceStyle = computed(() => {
   const font = Number(preferences.pclHomeInstanceFontSize) || 13;
   const rows = Number(preferences.pclHomeInstanceRows) || 4;
@@ -294,6 +299,7 @@ const homeInstanceStyle = computed(() => {
     '--pcl-home-small-size': `${Math.max(9, Math.round(font * 0.8))}px`,
     '--pcl-home-hint-size': `${Math.max(8, Math.round(font * 0.72))}px`,
     '--pcl-home-row-height': `${rowHeight}px`,
+    width: `${Math.max(40, Math.min(100, Number(preferences.pclHomeInstanceWidth) || 100))}%`,
   };
 });
 const homeInstanceMaxHeight = computed(() => {
@@ -475,10 +481,17 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 }
 
 .pcl-launch-right {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
   min-width: 0;
   height: 100%;
   padding: 25px;
   overflow-y: auto;
+}
+
+.pcl-launch-right :deep(.pcl-card) {
+  margin-bottom: 0;
 }
 
 .pcl-launching-panel {

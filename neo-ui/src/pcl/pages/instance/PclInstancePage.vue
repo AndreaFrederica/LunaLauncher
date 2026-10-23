@@ -99,7 +99,7 @@
             @console="emit('connect-console')"
           />
 
-          <PclInstanceResourceView v-else-if="resourceKind" :instance="instance.id" :kind="resourceKind" :busy="busy" :execute="execute" />
+          <PclInstanceResourceView v-else-if="resourceKind" :instance="instance.id" :kind="resourceKind" :busy="busy" :execute="execute" @install-start="emit('install-start', $event)" @install-progress="emit('install-progress', $event)" @install-done="emit('install-done', $event)" />
 
           <PclInstanceExtras v-else-if="section === 'worlds' || section === 'screenshots'" :instance="instance.id" :section="section === 'screenshots' ? 'screenshots' : 'worlds'" :busy="busy" :execute="execute" @changed="emit('refresh')" />
 
@@ -173,7 +173,7 @@ const emit = defineEmits<{
   launch: []; 'open-folder': []; settings: []; delete: []; 'change-icon': []; 'save-notes': [notes: string]; refresh: [];
   'connect-console': []; 'clear-console': []; 'read-log': [file: string]; 'component-enabled': [component: any, enabled: boolean];
   'component-version': [component: any, version: string]; action: [op: string]; browse: [uid: string]; export: [payload: any];
-  'save-setting': [key: string, value: any];
+  'save-setting': [key: string, value: any]; 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any];
 }>();
 
 const navGroups = [

@@ -335,8 +335,10 @@ async function importInstance() {
   if (!importPath.value.trim()) return;
   importing.value = true;
   importError.value = '';
+  const info = { title: '正在导入整合包', name: importName.value.trim() || importPath.value.split(/[\\/]/).pop() || '导入实例' };
+  emit('install-start', info);
   try {
-    const started = await props.execute('neo.task.start', {
+    let task: any = await props.execute('neo.task.start', {
       operation: 'instance.import',
       priority: 'high',
       parameters: {
@@ -344,11 +346,12 @@ async function importInstance() {
         ...(importName.value.trim() ? { name: importName.value.trim() } : {}),
       },
     });
-    let task = started;
     while (task && !task.finished) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      emit('install-progress', task);
+      await new Promise(resolve => setTimeout(resolve, 400));
       task = await props.execute('neo.task.status', { taskId: task.taskId });
     }
+    emit('install-progress', task);
     if (!task || task.state !== 'succeeded') throw new Error(task?.error || '导入任务失败');
     emit('installed', {
       id: task.createdInstanceId || '',
@@ -358,6 +361,7 @@ async function importInstance() {
     importError.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     importing.value = false;
+    emit('install-done', info);
   }
 }
 onMounted(async () => {

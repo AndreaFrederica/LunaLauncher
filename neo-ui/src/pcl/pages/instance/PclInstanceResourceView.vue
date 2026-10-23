@@ -159,6 +159,7 @@ import { launcher } from '../../../boot/launcher-api';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: string; kind: string; busy: boolean; execute: Execute }>();
+const emit = defineEmits<{ 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
 const query = ref(''), installSource = ref(''), resources = ref<any[]>([]), loading = ref(false), localBusy = ref(false), error = ref('');
 type ResourceView = 'grid' | 'list';
 const viewMode = ref<ResourceView>((() => { try { return localStorage.getItem('pcl-resource-view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } })());
@@ -258,14 +259,28 @@ async function install() {
   if (!source) return;
   localBusy.value = true;
   error.value = '';
+  const info = { title: '正在安装资源', name: source.split(/[\\/]/).pop() || source };
+  emit('install-start', info);
   try {
-    await props.execute('resource.install', { instance: props.instance, kind: props.kind, source });
+    let task: any = await props.execute('neo.task.start', {
+      operation: 'resource.install',
+      priority: 'high',
+      parameters: { instance: props.instance, kind: props.kind, source },
+    });
+    while (task && !task.finished) {
+      emit('install-progress', task);
+      await new Promise(resolve => setTimeout(resolve, 350));
+      task = await props.execute('neo.task.status', { taskId: task.taskId });
+    }
+    emit('install-progress', task);
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '资源安装失败');
     installSource.value = '';
     await load();
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     localBusy.value = false;
+    emit('install-done', info);
   }
 }
 async function inspect(item: any) {

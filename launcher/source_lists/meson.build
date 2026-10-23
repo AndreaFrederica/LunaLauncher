@@ -29,7 +29,9 @@ launcher_logic_sources = [
   'api/LauncherApiCustomUi.cpp',
   'api/LauncherApiCustomUi.h',
   'api/AsyncTaskRuntime.cpp',
+  'api/ResourceInstallTask.cpp',
   'api/AsyncTaskRuntime.h',
+  'api/ResourceInstallTask.h',
   'api/LauncherApiNeo.cpp',
   'api/LauncherApiNeo.h',
   'api/LauncherApiExports.cpp',
@@ -1134,6 +1136,7 @@ launcher_qrc_sources = [
 
 launcher_moc_headers = [
   'api/AsyncTaskRuntime.h',
+  'api/ResourceInstallTask.h',
   'cli/CliController.h',
   'cli/McpServer.h',
   'cli/OperationService.h',

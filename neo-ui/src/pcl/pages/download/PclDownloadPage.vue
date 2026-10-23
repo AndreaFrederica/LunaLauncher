@@ -112,6 +112,9 @@
               :default-provider="resourceProvider"
               :tag="resourceTag"
               @installed="emit('refresh')"
+              @install-start="emit('install-start', $event)"
+              @install-progress="emit('install-progress', $event)"
+              @install-done="emit('install-done', $event)"
             />
           </PclCard>
 

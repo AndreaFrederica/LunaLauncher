@@ -331,7 +331,18 @@ async function install(){
       emit('install-progress',task);
       if(!task || task.state!=='succeeded')throw new Error(task?.error || '整合包安装失败');
     }else{
-      await props.execute('resource.install-with-dependencies',{...params(),projectId:project.value.projectId,versionId:version.value,instance:props.instance,includeOptional:optional.value});
+      let task:any=await props.execute('neo.task.start',{
+        operation:'resource.install-with-dependencies',
+        priority:'high',
+        parameters:{...params(),instance:props.instance,projectId:project.value.projectId,versionId:version.value,includeOptional:optional.value},
+      });
+      while(task && !task.finished){
+        emit('install-progress',task);
+        await new Promise(resolve=>setTimeout(resolve,400));
+        task=await props.execute('neo.task.status',{taskId:task.taskId});
+      }
+      emit('install-progress',task);
+      if(!task || task.state!=='succeeded')throw new Error(task?.error || '资源及依赖安装失败');
     }
     emit('installed');
   }catch(e){error.value=String(e);}

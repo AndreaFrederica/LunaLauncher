@@ -27,6 +27,7 @@
 #include "java/download/ManifestDownloadTask.h"
 #include "java/download/ArchiveDownloadTask.h"
 #include "tasks/SequentialTask.h"
+#include "api/ResourceInstallTask.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
@@ -113,7 +114,7 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
     QStringList keys;
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         keys << "instances";
-    else if (operation == "resource.install" || operation == "instance.component.set-version" || operation == "instance.update")
+    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
         keys << "java";
@@ -140,6 +141,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "resource.install") return 15 * 60 * 1000;
     if (operation == "instance.component.set-version") return 10 * 60 * 1000;
     if (operation == "java.install") return 15 * 60 * 1000;
+    if (operation == "resource.install-with-dependencies") return 20 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
     return 15 * 60 * 1000;
 }
@@ -147,7 +149,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "modpack.install", "resource.install", "java.install" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "modpack.install", "resource.install", "resource.install-with-dependencies", "java.install" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -695,6 +697,38 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             }
             if (!created.isEmpty()) m_records[id].createdInstanceId = created;
             finish(id, success, success ? QString() : task->failReason());
+        });
+        task->start();
+        return;
+    }
+
+    if (record.operation == "resource.install-with-dependencies") {
+        const auto parameters = record.parameters;
+        const auto instance = findInstance(parameters.value("instance").toString());
+        if (!instance) { finish(id, false, "Instance not found."); return; }
+        if (instance->isRunning()) { finish(id, false, "Stop the instance before installing resources."); return; }
+        QStringList loaders;
+        for (const auto& loader : parameters.value("loaders").toArray()) loaders.append(loader.toString());
+        auto* task = new ResourceInstallTask(instance,
+                                             parameters.value("kind").toString(),
+                                             parameters.value("provider").toString(),
+                                             parameters.value("projectId").toString(),
+                                             parameters.value("versionId").toString(),
+                                             parameters.value("includeOptional").toBool(false),
+                                             parameters.value("minecraftVersion").toString(),
+                                             loaders);
+        auto& stored = m_records[id];
+        stored.task = task;
+        stored.status = "正在准备资源及依赖";
+        connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task, &Task::finished, this, [this, id, task, instanceId = instance->id()]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason(), instanceId);
         });
         task->start();
         return;

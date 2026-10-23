@@ -131,6 +131,52 @@
               <span v-else>{{ notice || (selected ? `已选择实例：${selected.name}` : '尚未选择实例') }}</span>
             </div>
           </PclCard>
+
+          <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances">
+            <template #actions>
+              <PclIconButton icon="refresh-cw" label="刷新实例" :size="24" :disabled="busy" @click="emit('refresh')" />
+            </template>
+            <div v-if="instances.length" class="pcl-home-instance-list">
+              <button
+                v-for="item in instances"
+                :key="item.id"
+                type="button"
+                class="pcl-home-instance"
+                :class="{ active: item.id === selected?.id }"
+                :title="`双击启动 ${item.name}`"
+                @click="clickInstance(item)"
+                @dblclick="quickLaunch(item)"
+              >
+                <img v-if="icons[item.id]" :src="icons[item.id]" alt="" />
+                <span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span>
+                <span class="pcl-home-instance__copy">
+                  <strong>{{ item.name }}</strong>
+                  <small>{{ item.runtime?.minecraftVersion || item.runtime?.minecraft || item.minecraftVersion || 'Minecraft' }}</small>
+                </span>
+                <span v-if="item.running" class="pcl-home-instance__running">运行中</span>
+                <span v-else class="pcl-home-instance__hint">双击启动</span>
+              </button>
+            </div>
+            <div v-else class="pcl-empty pcl-empty--compact">还没有实例。</div>
+          </PclCard>
+
+          <PclCard v-if="preferences.pclHomeShowServers" title="当前实例服务器" class="pcl-home-servers">
+            <template #actions>
+              <PclIconButton icon="refresh-cw" label="刷新服务器" :size="24" :disabled="busy || serversLoading" @click="loadServers" />
+            </template>
+            <div v-if="!selected" class="pcl-empty pcl-empty--compact">先选择一个实例。</div>
+            <div v-else-if="serversLoading" class="pcl-home-server-loading"><PclLoading inline /> 正在读取服务器列表…</div>
+            <div v-else-if="serversError" class="pcl-home-server-error">{{ serversError }}</div>
+            <div v-else-if="servers.length" class="pcl-home-server-list">
+              <button v-for="server in servers" :key="server.ip" type="button" class="pcl-home-server" @click="connectServer(server)">
+                <PclIcon name="server" :size="17" />
+                <span class="pcl-home-server__copy"><strong>{{ server.name || server.ip }}</strong><small>{{ server.ip }}</small></span>
+                <PclIcon name="play" :size="14" class="pcl-home-server__play" />
+              </button>
+            </div>
+            <div v-else class="pcl-empty pcl-empty--compact">servers.dat 里还没有服务器。</div>
+            <p class="pcl-home-servers__hint">单击或双击服务器即可带地址启动当前实例。</p>
+          </PclCard>
         </div>
       </div>
 
@@ -186,8 +232,8 @@ import { showPclToast } from '../../composables/usePclToast';
 import PclAccountAvatar from '../../components/PclAccountAvatar.vue';
 
 type LaunchState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
-const props = defineProps<{ selected?: any; icon?: string; busy: boolean; notice?: string; error?: string; instances: any[]; icons: Record<string, string>; accounts?: any[]; accountId?: string; launchState?: LaunchState; launchProgress?: number; launchStage?: string; launchLoginMethod?: string; launchSpeed?: number; launchError?: string; launchHint?: string; logLines?: string[] }>();
-const emit = defineEmits<{ launch: []; cancel: []; select: [instance: any]; 'open-folder': []; settings: []; refresh: []; download: []; tasks: []; 'clear-log': []; 'account-change': [id: string]; 'account-page': [mode: 'add' | 'manage']; 'instance-action': [instance: any, action: string] }>();
+const props = defineProps<{ selected?: any; icon?: string; busy: boolean; notice?: string; error?: string; instances: any[]; icons: Record<string, string>; accounts?: any[]; accountId?: string; launchState?: LaunchState; launchProgress?: number; launchStage?: string; launchLoginMethod?: string; launchSpeed?: number; launchError?: string; launchHint?: string; logLines?: string[]; execute?: (operation: string, parameters?: Record<string, unknown>) => Promise<any> }>();
+const emit = defineEmits<{ launch: []; cancel: []; select: [instance: any]; 'open-folder': []; settings: []; refresh: []; download: []; tasks: []; 'clear-log': []; 'account-change': [id: string]; 'account-page': [mode: 'add' | 'manage']; 'instance-action': [instance: any, action: string]; 'quick-launch': [instance: any, switchSelected: boolean]; 'connect-server': [address: string] }>();
 const { selected, busy, notice, error, instances, icons } = toRefs(props);
 const selectionOpen = ref(false), accountMenu = ref(false), hintDialog = ref(false), hintCode = ref('');
 const accounts = computed(() => props.accounts || []);
@@ -212,6 +258,39 @@ const launchSpeed = computed(() => Number(props.launchSpeed || 0));
 const launchError = computed(() => props.launchError || props.error || '');
 const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));
+const preferences = neoUiPreferences;
+const servers = ref<any[]>([]), serversLoading = ref(false), serversError = ref('');
+async function loadServers() {
+  servers.value = [];
+  serversError.value = '';
+  if (!props.execute || !selected.value?.id) return;
+  serversLoading.value = true;
+  try {
+    const result = await props.execute('instance.servers.read', { instance: selected.value.id });
+    servers.value = Array.isArray(result?.servers) ? result.servers.map((server: any) => ({
+      name: String(server.name || server.ip || ''),
+      ip: String(server.ip || ''),
+    })).filter((server: any) => server.ip) : [];
+  } catch (exception) {
+    serversError.value = exception instanceof Error ? exception.message : String(exception);
+  } finally {
+    serversLoading.value = false;
+  }
+}
+watch(() => selected.value?.id, () => { void loadServers(); }, { immediate: true });
+let instanceClickTimer: ReturnType<typeof setTimeout> | undefined;
+function clickInstance(instance: any) {
+  if (instanceClickTimer) clearTimeout(instanceClickTimer);
+  instanceClickTimer = setTimeout(() => emit('select', instance), 220);
+}
+function quickLaunch(instance: any) {
+  if (instanceClickTimer) clearTimeout(instanceClickTimer);
+  emit('quick-launch', instance, Boolean(preferences.pclHomeSwitchOnQuickLaunch));
+}
+function connectServer(server: any) {
+  if (server?.ip) emit('connect-server', String(server.ip));
+}
+
 const logElement = ref<HTMLElement | null>(null);
 function scrollToLog() {
   logElement.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -683,4 +762,54 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
     padding: 16px;
   }
 }
+
+.pcl-home-instances,
+.pcl-home-servers {
+  margin-top: 14px;
+}
+
+.pcl-home-instance-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.pcl-home-instance {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--pcl-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcl-home-instance:hover { background: var(--pcl-c8); }
+.pcl-home-instance.active { border-color: var(--pcl-c3); background: var(--pcl-c8); }
+.pcl-home-instance img,
+.pcl-home-instance__fallback { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 3px; object-fit: cover; }
+.pcl-home-instance__fallback { display: flex; align-items: center; justify-content: center; color: var(--pcl-muted); background: var(--pcl-c7); }
+.pcl-home-instance__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pcl-home-instance__copy strong { overflow: hidden; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-instance__copy small { overflow: hidden; color: var(--pcl-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-instance__hint { flex: 0 0 auto; color: var(--pcl-muted); font-size: 8px; opacity: 0; }
+.pcl-home-instance:hover .pcl-home-instance__hint { opacity: 1; }
+.pcl-home-instance__running { flex: 0 0 auto; color: var(--pcl-c3); font-size: 8px; }
+
+.pcl-home-server-list { display: flex; flex-direction: column; gap: 3px; max-height: 170px; overflow-y: auto; }
+.pcl-home-server { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--pcl-text); text-align: left; cursor: pointer; }
+.pcl-home-server:hover { border-color: var(--pcl-border); background: var(--pcl-c8); }
+.pcl-home-server__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pcl-home-server__copy strong { overflow: hidden; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-server__copy small { overflow: hidden; color: var(--pcl-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-home-server__play { color: var(--pcl-muted); }
+.pcl-home-servers__hint { margin: 6px 0 0; color: var(--pcl-muted); font-size: 9px; }
+.pcl-home-server-loading { display: flex; align-items: center; gap: 6px; color: var(--pcl-muted); font-size: 10px; }
+.pcl-home-server-error { color: #fb7185; font-size: 10px; }
 </style>

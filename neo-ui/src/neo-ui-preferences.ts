@@ -37,6 +37,10 @@ export interface NeoUiPreferences {
   pclBackgroundMusicEnabled: boolean;
   /** Custom cards shown at the top of the PCL launch page. */
   pclHomeCards: PclHomeCard[];
+  /** Optional PCL launch-page widgets. */
+  pclHomeShowInstances: boolean;
+  pclHomeShowServers: boolean;
+  pclHomeSwitchOnQuickLaunch: boolean;
   /** The last instance selected in the classic launcher shell. */
   selectedInstanceId: string;
 }
@@ -64,6 +68,9 @@ const defaults: NeoUiPreferences = {
   pclHomeCards: [
     { id: 'welcome', title: '欢迎回来', content: '在 设置 → 个性化 → 主页卡片 中编辑这张卡片。' },
   ],
+  pclHomeShowInstances: true,
+  pclHomeShowServers: true,
+  pclHomeSwitchOnQuickLaunch: false,
   selectedInstanceId: '',
 };
 

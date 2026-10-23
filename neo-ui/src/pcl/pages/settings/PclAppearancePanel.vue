@@ -133,6 +133,11 @@
     </PclCard>
 
     <PclCard title="主页卡片">
+      <div class="pcl-check-grid">
+        <PclCheckbox v-model="preferences.pclHomeShowInstances" label="显示全部实例面板" />
+        <PclCheckbox v-model="preferences.pclHomeShowServers" label="显示当前实例服务器" />
+        <PclCheckbox v-model="preferences.pclHomeSwitchOnQuickLaunch" label="双击启动时切换当前实例" />
+      </div>
       <div v-for="(card, index) in preferences.pclHomeCards" :key="card.id" class="pcl-home-editor">
         <div class="pcl-home-editor__head">
           <strong>卡片 {{ index + 1 }}</strong>
@@ -332,6 +337,9 @@ function reset() {
     pclBackgroundMusicVolume: 0.35,
     pclBackgroundMusicEnabled: false,
     pclHomeCards: [{ id: 'welcome', title: '欢迎回来', content: '在 设置 → 个性化 → 主页卡片 中编辑这张卡片。' }],
+    pclHomeShowInstances: true,
+    pclHomeShowServers: true,
+    pclHomeSwitchOnQuickLaunch: false,
   });
   persistNeoUiPreferences();
 }

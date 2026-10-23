@@ -4,7 +4,7 @@
 <NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
  <Transition name="pcl-route" mode="out-in"><div v-if="isPclShell" :key="page" class="pcl-route-shell">
- <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-error="launchError" :log-lines="consoleLines" @select="selectPclInstance" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
+ <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
 
  <PclDownloadPage v-if="isPclShell && page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" />
  <PclToolsPage v-if="isPclShell && page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
@@ -188,7 +188,7 @@ function updateLaunchProgress(value:any){
  if(value.failReason || String(value.state || value.status || '').toLowerCase()==='failed'){launchError.value=value.failReason || value.details || '启动任务失败';setLaunchState('failed');}
  else if(!isTaskFinished(value) && (launchInFlight || preparingLaunch))setLaunchState('launching');
 }
-async function launch(i:any, accountId?:string){
+async function launch(i:any, accountId?:string, serverAddress?:string, restoreSelectionId?:string){
  if(busy.value){if(i.id!==launchingId&&!launchQueue.value.some(x=>x.id===i.id))launchQueue.value.push(i);return;}
  if(launchUiResetTimer)clearTimeout(launchUiResetTimer);
   launchProgress.value=0;launchTargetProgress.value=0;launchStage.value='初始化';launchSpeed.value=0;launchError.value='';setLaunchState('launching');
@@ -202,6 +202,7 @@ async function launch(i:any, accountId?:string){
   const fallbackAccount=accounts.value.find((account:any)=>account.default) || accounts.value[0];
   const launchAccount=validAccount ? accountId : String(fallbackAccount?.internalId || fallbackAccount?.id || fallbackAccount?.profileName || '');
   if(launchAccount)parameters.account=launchAccount;
+  if(serverAddress)parameters.server=serverAddress;
   let task:any=await call('neo.task.start',{operation:'instance.launch',priority:'high',parameters});
   launchTaskId.value=task?.taskId || '';
   while(task && !task.finished){
@@ -214,7 +215,16 @@ async function launch(i:any, accountId?:string){
   launchTargetProgress.value=1;launchProgress.value=1;launchStage.value='等待游戏窗口';setLaunchState('launched');
   notice.value=`启动请求已返回（PID ${task.pid}），请查看控制台确认客户端运行状态。`;resetLaunchUiSoon();
  }catch(e){error.value=message(e);if(launchUiState.value!=='cancelled'){launchError.value=error.value;setLaunchState('failed');}void appendConsole('[启动失败] '+error.value,launchingId);resetLaunchUiSoon();}
- finally{busy.value=false;launchInFlight=false;launchingId='';launchTaskId.value='';device.value=null;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
+ finally{busy.value=false;launchInFlight=false;launchingId='';launchTaskId.value='';device.value=null;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;if(restoreSelectionId&&restoreSelectionId!==i.id){const previous=instances.value.find((item:any)=>String(item.id)===restoreSelectionId);if(previous){selected.value=previous;rememberInstance(previous);void call('instance.info',{instance:previous.id}).then((info:any)=>{if(selected.value?.id===previous.id){instanceDetails.value=info;notes.value=info.notes||'';}}).catch(()=>{});}}}
+}
+function quickLaunchHome(instance:any, switchSelected:boolean){
+ if(!instance?.id)return;
+ const previous=selected.value?.id || '';
+ void launch(instance, launchAccountId.value, undefined, switchSelected ? '' : previous);
+}
+function quickConnect(address:string){
+ if(!selected.value?.id || !address)return;
+ void launch(selected.value, launchAccountId.value, address);
 }
 function launchMany(items:any[]){
  const queue=items.filter((item:any)=>!item.running && item.id);

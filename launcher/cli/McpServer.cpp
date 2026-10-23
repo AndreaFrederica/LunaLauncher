@@ -28,6 +28,7 @@
 
 #include "Application.h"
 #include "api/LauncherApi.h"
+#include "api/AsyncTaskRuntime.h"
 #include "cli/UserInteraction.h"
 #include "cli/OperationService.h"
 
@@ -128,6 +129,11 @@ bool isControlOperation(const QString& operation)
 McpServer::McpServer(QObject* parent) : QObject(parent), m_service()
 {
     m_readPool.setMaxThreadCount(3);
+    connect(&AsyncTaskRuntime::instance(), &AsyncTaskRuntime::taskChanged, this, [this](const QJsonObject& snapshot) {
+        if (m_disconnected) return;
+        writeMessage({ { "jsonrpc", "2.0" }, { "method", "launcher/event" },
+                       { "params", QJsonObject{ { "kind", "task" }, { "task", snapshot } } } });
+    });
 }
 
 void McpServer::start()

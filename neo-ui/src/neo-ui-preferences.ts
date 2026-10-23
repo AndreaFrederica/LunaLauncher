@@ -24,6 +24,12 @@ export interface NeoUiPreferences {
   pclFont: PclFont;
   /** Base font size in px for the PCL shell. */
   pclBaseFontSize: number;
+  /** PCL launch-page navigation layout. */
+  pclNavLayout: 'pcl' | 'mmc-classic';
+  pclClassicSide: 'left' | 'right';
+  pclClassicIconSize: number;
+  /** Enable the PCL launch-page transition and launching panel animation. */
+  pclLaunchAnimation: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -68,6 +74,10 @@ const defaults: NeoUiPreferences = {
   animations: true,
   pclFont: 'system',
   pclBaseFontSize: 14,
+  pclNavLayout: 'pcl',
+  pclClassicSide: 'right',
+  pclClassicIconSize: 96,
+  pclLaunchAnimation: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclAccentColor: '#2a80e3',
@@ -188,6 +198,7 @@ export function applyNeoUiPreferences() {
   root.style.setProperty('--pcl-c5', mixHex(pclAccent, '#000000', 0.32));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
   root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
+  root.dataset.pclLaunchAnimation = neoUiPreferences.pclLaunchAnimation ? 'on' : 'off';
   root.dataset.pclBackground = neoUiPreferences.pclBackgroundImage ? 'on' : 'off';
   root.style.setProperty('--pcl-bg-image', neoUiPreferences.pclBackgroundImage ? `url("${neoUiPreferences.pclBackgroundImage}")` : 'none');
   root.style.setProperty('--pcl-bg-overlay', String(Math.max(0, Math.min(1, 1 - neoUiPreferences.pclBackgroundOpacity))));

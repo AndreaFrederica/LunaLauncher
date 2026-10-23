@@ -360,6 +360,8 @@ async function instanceSelectionAction(instance:any,op:string){
  if(labels[op]){const field=op==='group'?'group':'name';const value=await ask(labels[op],field==='group'?(instance.group||''):(instance.name||''));if(value===null)return;await run(`instance.${op}`,{instance:instance.id,[field]:value});return;}
  if(op==='verify'){await run('instance.verify',{instance:instance.id});return;}
  if(op==='stop'){await run('instance.stop',{instance:instance.id});return;}
+ if(op==='shortcut'){await run('instance.create-shortcut',{instance:instance.id,target:'desktop'});return;}
+ if(op==='export'){await openInstance(instance);notice.value='已打开实例页，请在“导出”中完成导出。';return;}
 }
 async function askDelete(op:string,p:any,name:string){if(await ask('确认移除 '+name+'？','',true))await run(op,{...p,confirm:true});}
 async function editSetting(s:any){const value=await ask('编辑 '+s.key,JSON.stringify(s.value));if(value===null)return;try{await run('settings.set',{...settingScope(),key:s.key,value:JSON.parse(value)});}catch(e){error.value='请输入有效的 JSON 值，例如 true、1024 或 "文本"';}}

@@ -1,8 +1,8 @@
 <template>
   <section class="pcl-launch">
     <Transition name="pcl-page" mode="out-in">
-      <div v-if="!selectionOpen" key="launch" class="pcl-launch-grid">
-        <div class="pcl-launch-left">
+      <div v-if="!selectionOpen" key="launch" class="pcl-launch-grid" :class="{ 'is-classic': preferences.pclNavLayout === 'mmc-classic', 'classic-left': preferences.pclClassicSide === 'left' }">
+        <div v-if="preferences.pclNavLayout !== 'mmc-classic'" class="pcl-launch-left">
           <Transition name="pcl-launch-panel" mode="out-in">
             <div v-if="launchState === 'launching' || launchState === 'launched'" key="launching" class="pcl-launching-panel" :class="{ 'pcl-launching-panel--done': launchState === 'launched' }">
               <PclLoading />
@@ -106,6 +106,23 @@
             </div>
           </Transition>
         </div>
+
+        <PclClassicSidebar
+          v-if="preferences.pclNavLayout === 'mmc-classic'"
+          :instance="selected"
+          :icon="selected ? icons[selected.id] : undefined"
+          :account="activeAccount"
+          :servers="servers"
+          :servers-loading="serversLoading"
+          :busy="busy"
+          :icon-size="preferences.pclClassicIconSize"
+          @launch="emit('launch')"
+          @stop="selected && emit('instance-action', selected, 'stop')"
+          @settings="emit('settings')"
+          @folder="emit('open-folder')"
+          @action="(operation) => selected && emit('instance-action', selected, operation)"
+          @connect="connectServer({ ip: $event })"
+        />
 
         <div class="pcl-launch-right">
           <PclCard v-if="hintVisible" title="Neo UI 提示" :style="{ order: homeCardOrder('hint') }">
@@ -243,6 +260,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import PclInstanceSelectView from './PclInstanceSelectView.vue';
+import PclClassicSidebar from '../../components/PclClassicSidebar.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -942,4 +960,17 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-home-instance-group__head small { margin-left: auto; }
 .pcl-home-instance-group__head:hover { color: var(--pcl-c3); }
 .pcl-home-instance.is-drag-over { border-color: var(--pcl-c3); background: var(--pcl-c6); }
+
+.pcl-launch-grid.is-classic {
+  grid-template-columns: minmax(0, 1fr) 264px;
+}
+
+.pcl-launch-grid.is-classic.classic-left {
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
+.pcl-launch-grid.is-classic .pcl-launch-right { order: 1; }
+.pcl-launch-grid.is-classic .pcl-classic-nav { order: 2; }
+.pcl-launch-grid.is-classic.classic-left .pcl-launch-right { order: 2; }
+.pcl-launch-grid.is-classic.classic-left .pcl-classic-nav { order: 1; border-left: 0; border-right: 1px solid var(--pcl-border); }
 </style>

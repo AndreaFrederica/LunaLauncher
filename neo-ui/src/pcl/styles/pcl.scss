@@ -327,6 +327,20 @@
   font-size: calc(18px * var(--pcl-font-scale, 1));
 }
 
+/* Optional PCL launch transition. Disabling it keeps heavy navigation and
+   widgets from animating when the user launches a game. */
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-page-enter-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-page-leave-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-launch-panel-enter-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-launch-panel-leave-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-launch-state-enter-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-launch-state-leave-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-hint-enter-active,
+:root[data-pcl-launch-animation="off"] .pcl-launch .pcl-hint-leave-active {
+  transition: none !important;
+  animation: none !important;
+}
+
 /* ---------- page shell ---------- */
 
 :root[data-neo-shell="pcl"] .pcl-page {

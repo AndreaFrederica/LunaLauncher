@@ -11,6 +11,29 @@
         <span class="pcl-form-row__hint">PCL Style外观 / Neo 原生外观</span>
       </div>
       <div class="pcl-form-row">
+        <span class="pcl-form-row__label">导航栏布局</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclNavLayout" :options="navLayoutOptions" />
+        </div>
+        <span class="pcl-form-row__hint">PCL 侧栏或 MMC Classic 实例面板</span>
+      </div>
+      <template v-if="preferences.pclNavLayout === 'mmc-classic'">
+        <div class="pcl-form-row">
+          <span class="pcl-form-row__label">Classic 面板位置</span>
+          <div class="pcl-form-row__control">
+            <PclSelect v-model="preferences.pclClassicSide" :options="classicSideOptions" />
+          </div>
+          <span class="pcl-form-row__hint">左侧或右侧</span>
+        </div>
+        <div class="pcl-form-row">
+          <span class="pcl-form-row__label">Classic 大图标</span>
+          <div class="pcl-form-row__control">
+            <PclSelect v-model="preferences.pclClassicIconSize" :options="classicIconOptions" />
+          </div>
+          <span class="pcl-form-row__hint">显示当前实例封面</span>
+        </div>
+      </template>
+      <div class="pcl-form-row">
         <span class="pcl-form-row__label">颜色模式</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.theme" :options="themeOptions" />
@@ -223,6 +246,7 @@
       <div class="pcl-check-grid">
         <PclCheckbox v-model="preferences.pclTitleLogo" label="显示 LunaLauncher 文字" />
         <PclCheckbox v-model="preferences.pclTitleBadge" label="显示 NEOUI 副标题" />
+        <PclCheckbox v-model="preferences.pclLaunchAnimation" label="启用 PCL 启动过渡动画" />
       </div>
       <PclHint theme="blue">只修改 PCL 外观顶部标题栏，不影响窗口按钮、导航和内容区。</PclHint>
     </PclCard>
@@ -374,6 +398,21 @@ function clearBackground() {
   preferences.pclBackgroundImageName = '';
   persistNeoUiPreferences();
 }
+const navLayoutOptions = [
+  { label: 'PCL 侧栏', value: 'pcl' },
+  { label: 'MMC Classic', value: 'mmc-classic' },
+];
+const classicSideOptions = [
+  { label: '左侧', value: 'left' },
+  { label: '右侧', value: 'right' },
+];
+const classicIconOptions = [
+  { label: '64 px', value: 64 },
+  { label: '80 px', value: 80 },
+  { label: '96 px', value: 96 },
+  { label: '120 px', value: 120 },
+  { label: '160 px', value: 160 },
+];
 const shellOptions = [
   { label: 'PCL Style外观', value: 'pcl' },
   { label: 'Neo UI 原生外观', value: 'neo' },
@@ -468,6 +507,10 @@ function reset() {
     animations: true,
     pclFont: 'system',
     pclBaseFontSize: 14,
+    pclNavLayout: 'pcl',
+    pclClassicSide: 'right',
+    pclClassicIconSize: 96,
+    pclLaunchAnimation: true,
     pclTitleLogo: true,
     pclTitleBadge: true,
     pclAccentColor: '#2a80e3',

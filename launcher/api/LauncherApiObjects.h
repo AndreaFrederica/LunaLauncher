@@ -18,6 +18,7 @@
 #include "minecraft/PackProfile.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
+#include "minecraft/auth/YggdrasilPresets.h"
 #include "java/JavaInstall.h"
 #include "java/JavaInstallList.h"
 #include "tasks/Task.h"
@@ -136,7 +137,23 @@ class AccountObject {
         profile.insert("capes", capes);
         result.insert("profile", profile);
         if (data->type == AccountType::Yggdrasil) {
-            result.insert("yggdrasil", QJsonObject{ { "authUrl", data->yggdrasilConfig.authServerUrl },
+            QString displayName = data->yggdrasilConfig.sourceName.trimmed();
+            if (displayName.isEmpty()) {
+                const auto authUrl = QUrl(data->yggdrasilConfig.authServerUrl);
+                const auto sessionUrl = QUrl(data->yggdrasilConfig.sessionServerUrl);
+                for (const auto& preset : YggdrasilPresets::getAllPresets()) {
+                    if ((!preset.authUrl.isEmpty() && QUrl(preset.authUrl) == authUrl) ||
+                        (!preset.sessionUrl.isEmpty() && QUrl(preset.sessionUrl) == sessionUrl)) {
+                        displayName = preset.name;
+                        break;
+                    }
+                }
+            }
+            if (displayName.isEmpty()) displayName = QUrl(data->yggdrasilConfig.authServerUrl).host();
+            if (displayName.isEmpty()) displayName = QObject::tr("第三方认证服务器");
+            result.insert("authServerName", displayName);
+            result.insert("yggdrasil", QJsonObject{ { "displayName", displayName },
+                                                       { "authUrl", data->yggdrasilConfig.authServerUrl },
                                                        { "sessionUrl", data->yggdrasilConfig.sessionServerUrl },
                                                        { "sourceName", data->yggdrasilConfig.sourceName },
                                                        { "managedLocal", data->yggdrasilConfig.managedLocal },
@@ -147,7 +164,11 @@ class AccountObject {
                                                        { "oauthTokenEndpoint", data->yggdrasilConfig.oauthTokenEndpoint },
                                                        { "tokenType", data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth ? "OAuth" : "Standard" } });
         } else if (data->type == AccountType::UnifiedPass) {
-            result.insert("unifiedPass", QJsonObject{ { "serverId", data->unifiedPassConfig.serverId },
+            QString displayName = data->unifiedPassConfig.serverName.trimmed();
+            if (displayName.isEmpty()) displayName = data->unifiedPassConfig.serverId.trimmed();
+            if (displayName.isEmpty()) displayName = QObject::tr("UnifiedPass 服务器");
+            result.insert("authServerName", displayName);
+            result.insert("unifiedPass", QJsonObject{ { "displayName", displayName }, { "serverId", data->unifiedPassConfig.serverId },
                                                         { "baseUrl", data->unifiedPassConfig.baseUrl },
                                                         { "serverName", data->unifiedPassConfig.serverName },
                                                         { "serverIP", data->unifiedPassConfig.serverIP },

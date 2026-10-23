@@ -1,6 +1,6 @@
 <template>
-  <section class="pcl-page pcl-setup-page">
-    <PclPageNav v-model="section" :groups="groups" @refresh="refreshSection" />
+  <section class="pcl-page pcl-setup-page" :class="{ 'is-embedded': embedded }">
+    <PclPageNav v-if="!embedded" v-model="section" :groups="groups" @refresh="refreshSection" />
 
     <main class="pcl-page-main">
       <Transition name="pcl-page" mode="out-in">
@@ -594,7 +594,7 @@ import { hiddenPclFeatures, isPclFeatureHidden } from '../../composables/usePclF
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 type ApiSetting = { key: string; value: unknown; type?: string; category?: string; surface?: string };
 
-const props = defineProps<{ settings: ApiSetting[]; busy: boolean; scope: Record<string, unknown>; execute: Execute }>();
+const props = defineProps<{ settings: ApiSetting[]; busy: boolean; scope: Record<string, unknown>; execute: Execute; embedded?: boolean; initialSection?: string }>();
 const emit = defineEmits<{ changed: [] }>();
 
 const section = ref('launch');
@@ -607,6 +607,7 @@ const proxy = reactive({ type: 'None', host: '', port: 7890, username: '', passw
 const proxyTestUrl = ref('https://api.minecraftservices.com/'), proxyTestResult = ref('');
 
 const isInstance = computed(() => props.scope.scope === 'instance');
+watch(() => props.initialSection, value => { if (value && value !== section.value) section.value = value; }, { immediate: true });
 const launcherGroups: PclNavGroup[] = [
   { label: '游戏', items: [
     { id: 'launch', label: '启动', icon: 'rocket', refresh: true },
@@ -1358,5 +1359,22 @@ async function openUpdateLog() {
   .pcl-language-banner__copy {
     margin-right: 60px;
   }
+}
+
+.pcl-setup-page.is-embedded {
+  display: block;
+  height: auto;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+}
+
+.pcl-setup-page.is-embedded .pcl-page-main {
+  width: 100%;
+  height: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
 }
 </style>

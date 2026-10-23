@@ -42,7 +42,6 @@
             </div>
             <div class="pcl-actions">
               <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">刷新</PclButton>
-              <PclButton size="sm" icon="settings" :disabled="busy" @click="emit('settings')">实例设置</PclButton>
             </div>
           </div>
 
@@ -55,7 +54,7 @@
             :busy="busy"
             @launch="emit('launch')"
             @open-folder="emit('open-folder')"
-            @settings="emit('settings')"
+            @settings="select('launch')"
             @delete="emit('delete')"
             @change-icon="emit('change-icon')"
             @save-notes="emit('save-notes', $event)"
@@ -82,8 +81,19 @@
             @clear-console="emit('clear-console')"
           />
 
+          <PclSetupPage
+            v-else-if="['launch', 'java', 'network', 'advanced'].includes(section)"
+            :settings="settings || []"
+            :busy="busy"
+            :scope="{ scope: 'instance', instance: instance.id }"
+            :execute="execute"
+            embedded
+            :initial-section="section"
+            @changed="emit('refresh')"
+          />
+
           <PclInstanceSections
-            v-else-if="['install', 'export', 'java', 'advanced'].includes(section)"
+            v-else-if="['install', 'export'].includes(section)"
             :section="section"
             :components="components"
             :settings="settings"
@@ -165,6 +175,7 @@ import PclInstanceServers from './PclInstanceServers.vue';
 import PclInstanceCustomUi from './PclInstanceCustomUi.vue';
 import PclServerPanel from './PclServerPanel.vue';
 import PclInstanceExtras from './PclInstanceExtras.vue';
+import PclSetupPage from '../settings/PclSetupPage.vue';
 import fallback from '../../../xmcl-port/assets/minecraft.webp';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
@@ -184,6 +195,15 @@ const navGroups = [
       { id: 'memory', label: '内存', icon: 'gauge', description: '查看系统内存并调整此实例的内存分配。' },
       { id: 'install', label: '修改', icon: 'download', description: '安装或更新 Minecraft 与加载器组件。' },
       { id: 'export', label: '导出', icon: 'file-archive', description: '导出实例或制作整合包。' },
+    ],
+  },
+  {
+    label: '实例设置',
+    items: [
+      { id: 'launch', label: '启动选项', icon: 'rocket', description: '调整此实例的窗口、控制台和启动行为。' },
+      { id: 'java', label: 'Java', icon: 'coffee', description: '选择此实例使用的 Java 和 JVM 参数。' },
+      { id: 'network', label: '网络代理', icon: 'server', description: '配置此实例使用的代理和联机设置。' },
+      { id: 'advanced', label: '高级', icon: 'tool-case', description: '渲染器、JVM 参数、游戏参数和启动前命令。' },
     ],
   },
   {

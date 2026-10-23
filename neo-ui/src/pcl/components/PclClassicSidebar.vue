@@ -6,7 +6,7 @@
           <PclAccountAvatar v-if="account?.profile?.skin?.url" :src="account.profile.skin.url" :name="account.profileName || account.displayName" />
           <PclIcon v-else name="user" :size="18" />
         </span>
-        <span><strong>{{ account?.profileName || account?.displayName || '未选择账户' }}</strong><small>{{ account?.type || '点击选择账户' }}</small></span>
+        <span class="pcl-classic-nav__account-copy"><strong>{{ account?.profileName || account?.displayName || '未选择账户' }}</strong><small>{{ account?.type || '点击选择账户' }}</small></span>
         <PclIcon name="chevron-left" :size="12" class="pcl-classic-nav__account-chevron" :class="{ open: accountMenu }" />
       </button>
       <div v-if="accountMenu" class="pcl-classic-nav__account-menu">
@@ -233,10 +233,11 @@ const version = computed(() => props.instance?.runtime?.minecraftVersion || prop
   color: var(--pcl-muted);
 }
 
-.pcl-classic-nav__account > span:last-child {
+.pcl-classic-nav__account-copy {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
 }
 
 .pcl-classic-nav__account strong {

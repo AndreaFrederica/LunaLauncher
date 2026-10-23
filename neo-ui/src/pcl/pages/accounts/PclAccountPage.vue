@@ -174,13 +174,22 @@
             <label class="pcl-login-field"><span>Server ID</span><PclInput v-model="loginForm.serverId" placeholder="Server ID" /></label>
             <label class="pcl-login-field"><span>API Base URL（可选）</span><PclInput v-model="loginForm.baseUrl" placeholder="https://..." /></label>
           </template>
-          <label v-if="loginType === 'microsoft'" class="pcl-login-field">
-            <span>没有 Java 档案时创建的名称（可选）</span>
-            <PclInput v-model="loginForm.minecraftProfileName" placeholder="可选" />
-          </label>
+          <template v-if="loginType === 'microsoft'">
+            <label class="pcl-login-field">
+              <span>Microsoft 登录方式</span>
+              <PclSelect v-model="loginForm.microsoftMode" :options="microsoftModes" />
+            </label>
+            <PclHint theme="blue">
+              {{ loginForm.microsoftMode === 'oauth' ? '会打开浏览器并在本地回调，无需手动输入代码。' : '会显示设备代码，需要在浏览器中输入。' }}
+            </PclHint>
+            <label class="pcl-login-field">
+              <span>没有 Java 档案时创建的名称（可选）</span>
+              <PclInput v-model="loginForm.minecraftProfileName" placeholder="可选" />
+            </label>
+          </template>
         </q-card-section>
         <div v-if="loginDeviceUrl" class="pcl-login-device">
-          <div class="pcl-login-device__label">在浏览器中打开并输入代码</div>
+          <div class="pcl-login-device__label">{{ loginDeviceCode ? '在浏览器中打开并输入代码' : '浏览器授权页面已打开' }}</div>
           <code v-if="loginDeviceCode" class="pcl-login-device__code">{{ loginDeviceCode }}</code>
           <code class="pcl-login-device__url">{{ loginDeviceUrl }}</code>
           <div class="pcl-actions">
@@ -256,6 +265,7 @@ const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), hel
 const localExternal = ref(false), localPort = ref('25585'), localPublicUrl = ref(''), localUsers = ref<any[]>([]);
 const localUserShown = ref(false), localUserForm = reactive({ username: '', password: '' });
 const refreshing = ref(false);
+const microsoftModes = [{ label: '浏览器授权（无需输入代码）', value: 'oauth' }, { label: '设备代码', value: 'device' }];
 const loginTypes = [
   { label: '离线账户', value: 'offline' },
   { label: 'Microsoft 登录', value: 'microsoft' },
@@ -264,7 +274,7 @@ const loginTypes = [
 ];
 const offlineUuidModes = [{label:'按用户名生成（默认）',value:'default'},{label:'每次随机 UUID',value:'random'},{label:'自定义 UUID',value:'custom'}];
 const loginPreset = ref('custom');
-const loginForm = reactive<any>({ username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '', authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '', tokenType: 'Standard', managedLocal: false, serverId: '', baseUrl: '', minecraftProfileName: '', offlineUuidMode: 'default', offlineUuid: '' });
+const loginForm = reactive<any>({ username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '', authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '', tokenType: 'Standard', managedLocal: false, serverId: '', baseUrl: '', minecraftProfileName: '', microsoftMode: 'oauth', offlineUuidMode: 'default', offlineUuid: '' });
 const loginPresetOptions = computed(() => [
   { label: '自定义服务器', value: 'custom' },
   ...presets.value.filter((preset: any) => !preset.official && !preset.managedLocal).map((preset: any) => ({ label: preset.name, value: preset.name })),
@@ -279,7 +289,7 @@ async function openLogin(type: string, managedLocal = false) {
   loginPreset.value = managedLocal ? '__local__' : 'custom';
   Object.assign(loginForm, { username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '',
     authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '',
-    tokenType: 'Standard', managedLocal, serverId: '', baseUrl: '', minecraftProfileName: '',
+    tokenType: 'Standard', managedLocal, serverId: '', baseUrl: '', minecraftProfileName: '', microsoftMode: 'oauth',
     offlineUuidMode: 'default', offlineUuid: '' });
   loginShown.value = true;
 }
@@ -411,6 +421,7 @@ async function copyDeviceCode() {
 
 async function submitLogin() {
   const payload: any = { type: loginType.value, ...loginForm };
+  if (loginType.value === 'microsoft') payload.useDeviceCode = loginForm.microsoftMode !== 'oauth';
   if (loginType.value !== 'offline') { delete payload.offlineUuidMode; delete payload.offlineUuid; }
   if (!payload.username && loginType.value !== 'microsoft') return;
   loginBusy.value = true;

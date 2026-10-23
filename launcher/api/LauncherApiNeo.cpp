@@ -10,7 +10,7 @@
 
 #include "LauncherApi.h"
 #include "LauncherApiSupport.h"
-#include "NeoTaskService.h"
+#include "AsyncTaskRuntime.h"
 
 namespace {
 
@@ -35,17 +35,17 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
                        { "priority", stringProperty("normal or high.") } }, { "operation", "parameters" }),
         "neo", true },
         [](const QJsonObject& p, UserInteraction& interaction) {
-            return NeoTaskService::instance().start(p.value("operation").toString(), p.value("parameters").toObject(), interaction);
+            return AsyncTaskRuntime::instance().start(p.value("operation").toString(), p.value("parameters").toObject(), interaction);
         });
 
     api.registerOperation({ "neo.task.status", "Read one asynchronous Neo task snapshot.", objectSchema({ { "taskId", stringProperty("Neo task id.") } }, { "taskId" }), "neo" },
-        [](const QJsonObject& p, UserInteraction&) { return NeoTaskService::instance().status(p.value("taskId").toString()); });
+        [](const QJsonObject& p, UserInteraction&) { return AsyncTaskRuntime::instance().status(p.value("taskId").toString()); });
 
     api.registerOperation({ "neo.task.list", "List recent asynchronous Neo tasks.", objectSchema({}), "neo" },
-        [](const QJsonObject&, UserInteraction&) { return NeoTaskService::instance().list(); });
+        [](const QJsonObject&, UserInteraction&) { return AsyncTaskRuntime::instance().list(); });
 
     api.registerOperation({ "neo.task.cancel", "Cancel one asynchronous Neo task.", objectSchema({ { "taskId", stringProperty("Neo task id.") } }, { "taskId" }), "neo", true },
-        [](const QJsonObject& p, UserInteraction&) { return NeoTaskService::instance().cancel(p.value("taskId").toString()); });
+        [](const QJsonObject& p, UserInteraction&) { return AsyncTaskRuntime::instance().cancel(p.value("taskId").toString()); });
 
     api.registerOperation({ "neo.task.capabilities", "Describe the asynchronous Neo task API and conflict policy.", objectSchema({}), "neo" },
         [](const QJsonObject&, UserInteraction&) {

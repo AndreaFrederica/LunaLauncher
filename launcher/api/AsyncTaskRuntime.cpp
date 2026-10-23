@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-#include "NeoTaskService.h"
+#include "AsyncTaskRuntime.h"
 
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QSaveFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSet>
 #include <QUrl>
 
+#include <limits>
 #include <memory>
 
 #include "Application.h"
@@ -80,77 +85,270 @@ class NoopInteraction final : public UserInteraction {
 
 }  // namespace
 
-NeoTaskService& NeoTaskService::instance()
+AsyncTaskRuntime& AsyncTaskRuntime::instance()
 {
-    static NeoTaskService service;
+    static AsyncTaskRuntime service;
     return service;
 }
 
-NeoTaskService::NeoTaskService(QObject* parent) : QObject(parent), m_temp() {}
-
-QString NeoTaskService::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const
+AsyncTaskRuntime::AsyncTaskRuntime(QObject* parent) : QObject(parent), m_temp()
 {
-    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install") return "instances";
-    if (operation == "resource.install" || operation == "instance.component.set-version") {
+    loadJournal();
+}
+
+QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const
+{
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
+        return "instances";
+    if (operation == "resource.install" || operation == "instance.component.set-version")
         return "instance:" + parameters.value("instance").toString();
-    }
     return "global";
 }
 
-QJsonObject NeoTaskService::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
+QStringList resourceKeysFor(const QString& operation, const QJsonObject& parameters)
+{
+    QStringList keys;
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
+        keys << "instances";
+    else if (operation == "resource.install" || operation == "instance.component.set-version")
+        keys << "instance:" + parameters.value("instance").toString();
+    else
+        keys << "global";
+    return keys;
+}
+
+void AsyncTaskRuntime::addResourceKeys(Record& record) const
+{
+    const auto keys = resourceKeysFor(record.operation, record.parameters);
+    if (record.operation == "instance.component.set-version" || record.operation == "resource.install") {
+        record.writes = QSet<QString>(keys.begin(), keys.end());
+    } else {
+        record.writes = QSet<QString>(keys.begin(), keys.end());
+    }
+    record.conflictKey = keys.value(0);
+}
+
+int AsyncTaskRuntime::deadlineFor(const QString& operation) const
+{
+    if (operation == "modpack.install") return 30 * 60 * 1000;
+    if (operation == "instance.create" || operation == "instance.import") return 30 * 60 * 1000;
+    if (operation == "resource.install") return 15 * 60 * 1000;
+    if (operation == "instance.component.set-version") return 10 * 60 * 1000;
+    return 15 * 60 * 1000;
+}
+
+QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "modpack.install", "resource.install" }.contains(operation)) {
-        return { { "ok", false }, { "error", QStringLiteral("Unsupported neo task operation: %1").arg(operation) } };
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "modpack.install", "resource.install" }.contains(operation))
+        return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
+
+    const auto idempotencyKey = parameters.value("idempotencyKey").toString();
+    if (!idempotencyKey.isEmpty()) {
+        for (const auto& id : m_order) {
+            const auto& old = m_records.value(id);
+            if (old.idempotencyKey == idempotencyKey && old.idempotencyKey == idempotencyKey)
+                return { { "ok", true }, { "data", snapshot(old) }, { "deduplicated", true } };
+        }
     }
+
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     Record record;
     record.id = id;
     record.operation = operation;
     record.parameters = parameters;
-    record.conflictKey = conflictKeyFor(operation, parameters);
-    record.highPriority = parameters.value("priority").toString() == "high";
+    record.idempotencyKey = idempotencyKey;
+    record.priority = parameters.value("priority").toString() == "high" ? 1 : 0;
+    record.queuedAt = QDateTime::currentMSecsSinceEpoch();
+    record.deadlineMs = deadlineFor(operation);
+    addResourceKeys(record);
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install") {
         for (int i = 0; i < APPLICATION->instances()->count(); ++i)
             record.instancesBefore.insert(APPLICATION->instances()->at(i)->id());
     }
     m_records.insert(id, record);
     m_order.append(id);
-    m_pending.enqueue({ id, operation, parameters, record.conflictKey, record.highPriority });
+    m_pending.enqueue({ id });
+    saveJournal();
+    emitChanged(m_records[id]);
     pump();
     return { { "ok", true }, { "data", snapshot(m_records.value(id)) } };
 }
 
-void NeoTaskService::pump()
+bool AsyncTaskRuntime::canAcquire(const Record& record) const
 {
-    while (m_active < 3 && !m_pending.isEmpty()) {
-        int index = -1;
+    for (const auto& key : record.reads)
+        if (m_writers.contains(key)) return false;
+    for (const auto& key : record.writes) {
+        if (m_writers.contains(key)) return false;
+        if (m_readerCounts.value(key) > 0) return false;
+    }
+    return true;
+}
+
+void AsyncTaskRuntime::acquire(const Record& record)
+{
+    for (const auto& key : record.reads) m_readerCounts[key] += 1;
+    for (const auto& key : record.writes) m_writers.insert(key);
+}
+
+void AsyncTaskRuntime::release(const Record& record)
+{
+    for (const auto& key : record.reads) {
+        const auto count = m_readerCounts.value(key) - 1;
+        if (count <= 0) m_readerCounts.remove(key);
+        else m_readerCounts[key] = count;
+    }
+    for (const auto& key : record.writes) m_writers.remove(key);
+}
+
+void AsyncTaskRuntime::pump()
+{
+    while (m_active < maxActive && !m_pending.isEmpty()) {
+        int best = -1;
+        qint64 bestScore = std::numeric_limits<qint64>::min();
+        const auto now = QDateTime::currentMSecsSinceEpoch();
         for (int i = 0; i < m_pending.size(); ++i) {
-            if (m_pending.at(i).highPriority && !m_activeKeys.contains(m_pending.at(i).conflictKey)) {
-                index = i;
-                break;
-            }
+            const auto& candidate = m_records[m_pending.at(i).id];
+            if (candidate.finished || !canAcquire(candidate)) continue;
+            const qint64 age = now - candidate.queuedAt;
+            const qint64 score = static_cast<qint64>(candidate.priority) * 1000000000LL + age;
+            if (score > bestScore) { best = i; bestScore = score; }
         }
-        if (index < 0) {
-            for (int i = 0; i < m_pending.size(); ++i) {
-                if (!m_activeKeys.contains(m_pending.at(i).conflictKey)) {
-                    index = i;
-                    break;
-                }
-            }
-        }
-        if (index < 0) break;
-        const auto pending = m_pending.takeAt(index);
+        if (best < 0) break;
+        const auto pending = m_pending.takeAt(best);
         auto& record = m_records[pending.id];
+        if (record.finished) continue;
+        acquire(record);
         record.state = "running";
-        record.conflictKey = pending.conflictKey;
-        m_activeKeys.insert(record.conflictKey);
+        record.startedAt = now;
         ++m_active;
+        armDeadline(record.id);
+        saveJournal();
+        emitChanged(record);
         startRecord(record);
+        if (record.finished) continue;
     }
 }
 
-void NeoTaskService::startRecord(const Record& record)
+void AsyncTaskRuntime::armDeadline(const QString& id)
+{
+    auto& record = m_records[id];
+    if (record.deadlineMs <= 0) return;
+    record.deadline = new QTimer(this);
+    record.deadline->setSingleShot(true);
+    connect(record.deadline, &QTimer::timeout, this, [this, id]() {
+        if (!m_records.contains(id) || m_records[id].finished) return;
+        cancel(id);
+        if (m_records.contains(id)) {
+            m_records[id].error = "任务超时";
+            m_records[id].state = "failed";
+            m_records[id].finished = true;
+            saveJournal();
+            emitChanged(m_records[id]);
+        }
+    });
+    record.deadline->start(record.deadlineMs);
+}
+
+void AsyncTaskRuntime::finish(const QString& taskId, bool success, const QString& error, const QString& instanceId)
+{
+    if (!m_records.contains(taskId)) return;
+    auto& record = m_records[taskId];
+    if (record.finished) return;
+    record.finished = true;
+    record.state = record.cancelRequested ? "cancelled" : (success ? "succeeded" : "failed");
+    record.error = error;
+    record.finishedAt = QDateTime::currentMSecsSinceEpoch();
+    if (!instanceId.isEmpty()) record.instanceId = instanceId;
+    if (record.deadline) {
+        record.deadline->stop();
+        record.deadline->deleteLater();
+        record.deadline = nullptr;
+    }
+    if (record.state != "queued") release(record);
+    m_active = qMax(0, m_active - 1);
+    saveJournal();
+    emitChanged(record);
+    pump();
+}
+
+void AsyncTaskRuntime::emitChanged(const Record& record)
+{
+    emit taskChanged(snapshot(record));
+}
+
+QJsonObject AsyncTaskRuntime::snapshot(const Record& record) const
+{
+    QJsonArray reads, writes;
+    for (const auto& key : record.reads) reads.append(key);
+    for (const auto& key : record.writes) writes.append(key);
+    return QJsonObject{
+        { "taskId", record.id },
+        { "operation", record.operation },
+        { "state", record.state },
+        { "status", record.status },
+        { "error", record.error },
+        { "progress", static_cast<double>(record.progress) },
+        { "total", static_cast<double>(record.total) },
+        { "finished", record.finished },
+        { "cancelRequested", record.cancelRequested },
+        { "conflictKey", record.conflictKey },
+        { "reads", reads },
+        { "writes", writes },
+        { "createdAt", static_cast<double>(record.queuedAt) },
+        { "startedAt", static_cast<double>(record.startedAt) },
+        { "finishedAt", static_cast<double>(record.finishedAt) },
+        { "instanceId", record.instanceId },
+        { "createdInstanceId", record.createdInstanceId },
+        { "idempotencyKey", record.idempotencyKey },
+    };
+}
+
+QJsonObject AsyncTaskRuntime::status(const QString& taskId) const
+{
+    if (!m_records.contains(taskId)) return { { "ok", false }, { "error", "Unknown async task." } };
+    return { { "ok", true }, { "data", snapshot(m_records.value(taskId)) } };
+}
+
+QJsonObject AsyncTaskRuntime::list() const
+{
+    QJsonArray tasks;
+    for (auto it = m_order.crbegin(); it != m_order.crend(); ++it) {
+        if (m_records.contains(*it)) tasks.append(snapshot(m_records.value(*it)));
+    }
+    return { { "ok", true }, { "data", QJsonObject{ { "tasks", tasks } } } };
+}
+
+QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
+{
+    if (!m_records.contains(taskId)) return { { "ok", false }, { "error", "Unknown async task." } };
+    auto& record = m_records[taskId];
+    if (record.finished) return { { "ok", true }, { "data", snapshot(record) } };
+    const bool wasRunning = record.state == "running";
+    record.cancelRequested = true;
+    record.finished = true;
+    record.state = "cancelled";
+    record.error = "cancelled";
+    record.status = "已取消";
+    record.finishedAt = QDateTime::currentMSecsSinceEpoch();
+    if (record.deadline) {
+        record.deadline->stop();
+        record.deadline->deleteLater();
+        record.deadline = nullptr;
+    }
+    if (wasRunning) {
+        release(record);
+        m_active = qMax(0, m_active - 1);
+    }
+    if (record.task) record.task->abort();
+    saveJournal();
+    emitChanged(record);
+    pump();
+    return { { "ok", true }, { "data", snapshot(record) } };
+}
+
+void AsyncTaskRuntime::startRecord(const Record& record)
 {
     const auto id = record.id;
     if (record.operation == "instance.component.set-version") {
@@ -469,69 +667,71 @@ void NeoTaskService::startRecord(const Record& record)
     finish(id, false, "Unsupported neo task operation.");
 }
 
-void NeoTaskService::finish(const QString& taskId, bool success, const QString& error, const QString& instanceId)
+QString journalPath()
 {
-    if (!m_records.contains(taskId)) return;
-    auto& record = m_records[taskId];
-    if (record.finished) return;
-    record.finished = true;
-    record.state = success ? "succeeded" : (error.contains("cancel", Qt::CaseInsensitive) ? "cancelled" : "failed");
-    record.error = error;
-    if (!instanceId.isEmpty()) record.instanceId = instanceId;
-    m_activeKeys.remove(record.conflictKey);
-    m_active = qMax(0, m_active - 1);
-    pump();
+    return QDir(APPLICATION->dataRoot()).filePath("neo-tasks.json");
 }
 
-QJsonObject NeoTaskService::snapshot(const Record& record) const
+void AsyncTaskRuntime::loadJournal()
 {
-    return QJsonObject{
-        { "taskId", record.id },
-        { "operation", record.operation },
-        { "state", record.state },
-        { "status", record.status },
-        { "error", record.error },
-        { "progress", static_cast<double>(record.progress) },
-        { "total", static_cast<double>(record.total) },
-        { "finished", record.finished },
-        { "conflictKey", record.conflictKey },
-        { "instanceId", record.instanceId },
-        { "createdInstanceId", record.createdInstanceId },
-    };
+    QFile file(journalPath());
+    if (!file.open(QIODevice::ReadOnly)) return;
+    const auto document = QJsonDocument::fromJson(file.readAll());
+    if (!document.isArray()) return;
+    for (const auto& value : document.array()) {
+        const auto object = value.toObject();
+        const auto id = object.value("taskId").toString();
+        if (id.isEmpty() || m_records.contains(id)) continue;
+        Record record;
+        record.id = id;
+        record.operation = object.value("operation").toString();
+        record.parameters = object.value("parameters").toObject();
+        record.state = object.value("state").toString("interrupted");
+        record.status = object.value("status").toString();
+        record.error = object.value("error").toString();
+        record.instanceId = object.value("instanceId").toString();
+        record.createdInstanceId = object.value("createdInstanceId").toString();
+        record.idempotencyKey = object.value("idempotencyKey").toString();
+        record.progress = static_cast<qint64>(object.value("progress").toDouble());
+        record.total = static_cast<qint64>(object.value("total").toDouble());
+        record.queuedAt = static_cast<qint64>(object.value("createdAt").toDouble());
+        record.finishedAt = static_cast<qint64>(object.value("finishedAt").toDouble());
+        record.finished = true;
+        if (!QStringList{ "succeeded", "failed", "cancelled", "interrupted" }.contains(record.state)) {
+            record.state = "interrupted";
+            record.error = "启动器已重启，任务状态未知";
+        }
+        m_records.insert(id, record);
+        m_order.append(id);
+    }
 }
 
-QJsonObject NeoTaskService::status(const QString& taskId) const
-{
-    if (!m_records.contains(taskId)) return { { "ok", false }, { "error", "Unknown neo task." } };
-    return { { "ok", true }, { "data", snapshot(m_records.value(taskId)) } };
-}
-
-QJsonObject NeoTaskService::list() const
+void AsyncTaskRuntime::saveJournal() const
 {
     QJsonArray tasks;
-    for (auto it = m_order.crbegin(); it != m_order.crend(); ++it) {
-        if (m_records.contains(*it)) tasks.append(snapshot(m_records.value(*it)));
+    const int start = qMax(0, m_order.size() - 100);
+    for (int i = start; i < m_order.size(); ++i) {
+        if (!m_records.contains(m_order.at(i))) continue;
+        const auto& record = m_records.value(m_order.at(i));
+        QJsonObject object{
+            { "taskId", record.id },
+            { "operation", record.operation },
+            { "parameters", record.parameters },
+            { "state", record.state },
+            { "status", record.status },
+            { "error", record.error },
+            { "progress", static_cast<double>(record.progress) },
+            { "total", static_cast<double>(record.total) },
+            { "instanceId", record.instanceId },
+            { "createdInstanceId", record.createdInstanceId },
+            { "idempotencyKey", record.idempotencyKey },
+            { "createdAt", static_cast<double>(record.queuedAt) },
+            { "finishedAt", static_cast<double>(record.finishedAt) },
+        };
+        tasks.append(object);
     }
-    return { { "ok", true }, { "data", QJsonObject{ { "tasks", tasks } } } };
-}
-
-QJsonObject NeoTaskService::cancel(const QString& taskId)
-{
-    if (!m_records.contains(taskId)) return { { "ok", false }, { "error", "Unknown neo task." } };
-    auto& record = m_records[taskId];
-    if (record.finished) return { { "ok", true }, { "data", snapshot(record) } };
-    // Mark terminal before aborting. Qt tasks may emit finished synchronously
-    // from abort(), and their callbacks must not overwrite the cancelled state.
-    const bool wasActive = record.state == "running";
-    record.finished = true;
-    record.state = "cancelled";
-    record.error = "cancelled";
-    record.status = "已取消";
-    if (wasActive) {
-        m_activeKeys.remove(record.conflictKey);
-        m_active = qMax(0, m_active - 1);
-    }
-    if (record.task) record.task->abort();
-    pump();
-    return { { "ok", true }, { "data", snapshot(record) } };
+    QSaveFile file(journalPath());
+    if (!file.open(QIODevice::WriteOnly)) return;
+    file.write(QJsonDocument(tasks).toJson(QJsonDocument::Compact));
+    file.commit();
 }

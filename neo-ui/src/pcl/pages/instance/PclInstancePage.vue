@@ -218,7 +218,7 @@ const navGroups = [
       { id: 'texturepacks', label: '材质包', icon: 'image', description: '管理旧版材质包。' },
       { id: 'shaderpacks', label: '光影包', icon: 'sparkles', description: '管理光影包。' },
       { id: 'datapacks', label: '数据包', icon: 'layers', description: '管理全局数据包。' },
-      { id: 'yesstevemodels', label: '皮肤模型', icon: 'shirt', description: '管理 Yes Steve Model 模型。' },
+      { id: 'yesstevemodels', label: 'YSM模型', icon: 'shirt', description: '管理 Yes Steve Model 模型。' },
       { id: 'customplayermodels', label: '自定义玩家模型', icon: 'user', description: '管理自定义玩家模型。' },
       { id: 'schematics', label: '投影原理图', icon: 'grid-2x2', description: '管理投影原理图。' },
     ],

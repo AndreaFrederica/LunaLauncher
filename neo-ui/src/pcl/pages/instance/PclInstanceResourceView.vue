@@ -3,7 +3,7 @@
     <div class="pcl-resource-toolbar">
       <PclInput v-model="query" placeholder="筛选文件" class="pcl-resource-query" @enter="load" />
       <div class="pcl-resource-view-toggle">
-        <PclIconButton icon="layout-grid" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
+        <PclIconButton icon="grid-2x2" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
         <PclIconButton icon="layout-list" label="列表视图" :size="28" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
       </div>
       <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">刷新</PclButton>
@@ -187,7 +187,7 @@ const selected = ref(new Set<string>()), detailOpen = ref(false), detail = ref<a
 
 const labels: Record<string, string> = {
   mods: '模组', coremods: '核心模组', nilmods: 'NilMod', resourcepacks: '资源包', texturepacks: '材质包',
-  shaderpacks: '光影包', datapacks: '数据包', yesstevemodels: '皮肤模型', customplayermodels: '自定义玩家模型',
+  shaderpacks: '光影包', datapacks: '数据包', yesstevemodels: 'YSM模型', customplayermodels: '自定义玩家模型',
   schematics: '投影原理图', plugins: '插件',
 };
 const icons: Record<string, string> = {

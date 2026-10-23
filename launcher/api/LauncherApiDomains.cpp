@@ -47,6 +47,7 @@
 #include <QNetworkProxy>
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QHttpMultiPart>
 #include <QTimer>
 #include <QSettings>
 #include <QProcess>
@@ -229,6 +230,93 @@ QJsonObject deleteAccountSkin(const QJsonObject& parameters)
     return OperationService::success(QJsonObject{ { "skin", name }, { "deleted", true } });
 }
 
+QList<QUrl> yggdrasilTextureUrls(MinecraftAccountPtr account, const QString& suffix)
+{
+    const auto auth = QUrl(account->accountData()->yggdrasilConfig.authServerUrl);
+    const auto profileId = QString(account->profileId()).remove('-');
+    QList<QUrl> candidates;
+    auto add = [&](QUrl url) {
+        if (!url.isValid() || url.host().isEmpty()) return;
+        if (url.scheme() != "http" && url.scheme() != "https") return;
+        url.setPath("/api/user/profile/" + profileId + "/" + suffix);
+        if (!candidates.contains(url)) candidates.append(url);
+    };
+    // authlib-injector's texture endpoint lives at the server root on the
+    // common Blessing Skin/LittleSkin layout.
+    auto root = auth;
+    root.setPath(QString());
+    add(root);
+    // Some servers mount the Yggdrasil API under a path and expose the texture
+    // endpoint under the same prefix.
+    auto prefixed = auth;
+    auto path = prefixed.path();
+    if (path.endsWith("/authserver")) path.chop(QString("/authserver").size());
+    else if (path.endsWith("/sessionserver")) path.chop(QString("/sessionserver").size());
+    while (path.endsWith('/')) path.chop(1);
+    prefixed.setPath(path + "/api/user/profile/" + profileId + "/" + suffix);
+    if (!prefixed.path().startsWith("//")) candidates.append(prefixed);
+    return candidates;
+}
+
+bool yggdrasilTextureRequest(MinecraftAccountPtr account, const QByteArray& method, const QString& suffix,
+                             const QString& skinPath, const QString& variant, QString& error)
+{
+    if (account->accessToken().isEmpty()) {
+        error = QObject::tr("The account has no access token for skin changes.");
+        return false;
+    }
+    const auto candidates = yggdrasilTextureUrls(account, suffix);
+    if (candidates.isEmpty()) {
+        error = QObject::tr("The authentication server has no usable texture endpoint.");
+        return false;
+    }
+    QString lastError;
+    for (const auto& url : candidates) {
+        QNetworkRequest request(url);
+        request.setRawHeader("Authorization", "Bearer " + account->accessToken().toUtf8());
+        request.setTransferTimeout(15000);
+        QNetworkReply* reply = nullptr;
+        QHttpMultiPart* multipart = nullptr;
+        if (method == "PUT") {
+            multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+            QHttpPart file;
+            file.setHeader(QNetworkRequest::ContentTypeHeader, "image/png");
+            file.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"file\"; filename=\"skin.png\"");
+            file.setBody(FS::read(skinPath));
+            QHttpPart model;
+            model.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"model\"");
+            model.setBody(variant == "slim" ? "slim" : "");
+            multipart->append(file);
+            multipart->append(model);
+            reply = APPLICATION->network()->sendCustomRequest(request, method, multipart);
+            multipart->setParent(reply);
+        } else {
+            reply = APPLICATION->network()->sendCustomRequest(request, method);
+        }
+        QEventLoop loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        QObject::connect(&timeout, &QTimer::timeout, &loop, [&]() {
+            reply->abort();
+            loop.quit();
+        });
+        timeout.start(15000);
+        loop.exec(QEventLoop::ExcludeUserInputEvents);
+        const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto body = reply->readAll();
+        if (reply->error() == QNetworkReply::NoError && status >= 200 && status < 300) {
+            reply->deleteLater();
+            return true;
+        }
+        lastError = QString("HTTP %1 %2").arg(status).arg(reply->errorString());
+        if (!body.isEmpty() && body.size() < 1024) lastError += " " + QString::fromUtf8(body);
+        reply->deleteLater();
+    }
+    error = lastError.isEmpty() ? QObject::tr("The authentication server rejected the skin upload.") : lastError;
+    return false;
+}
+
 QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto account = findAccount(parameters.value("account").toString());
@@ -249,6 +337,22 @@ QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, U
             return OperationService::failure(error, 3);
         if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
         return OperationService::success(QJsonObject{ { "skin", skin->name() }, { "variant", variant }, { "uploaded", true }, { "local", true } });
+    }
+    if (account->accountType() == AccountType::Yggdrasil) {
+        SkinList skins(nullptr, skinDirectory(), account);
+        auto* skin = findSkin(skins, parameters.value("skin").toString());
+        if (!skin)
+            return OperationService::failure(QObject::tr("Skin not found: %1").arg(parameters.value("skin").toString()), 2);
+        if (!QFileInfo::exists(skin->getPath()))
+            return OperationService::failure(QObject::tr("Skin file not found: %1").arg(skin->getPath()), 2);
+        const auto variant = parameters.value("variant").toString(skin->getModelString()).toLower();
+        if (variant != "classic" && variant != "slim")
+            return OperationService::failure(QObject::tr("Skin variant must be classic or slim."), 2);
+        QString error;
+        if (!yggdrasilTextureRequest(account, "PUT", "skin", skin->getPath(), variant, error))
+            return OperationService::failure(error, 3);
+        if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
+        return OperationService::success(QJsonObject{ { "skin", skin->name() }, { "variant", variant }, { "uploaded", true }, { "yggdrasil", true } });
     }
     if (account->accountType() != AccountType::MSA)
         return OperationService::failure(QObject::tr("Skin upload requires a Microsoft or managed local account."), 2);
@@ -300,6 +404,13 @@ QJsonObject resetAccountSkin(LauncherApi& api, const QJsonObject& parameters, Us
             return OperationService::failure(error, 3);
         if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
         return OperationService::success(QJsonObject{ { "account", account->profileId() }, { "reset", true }, { "local", true } });
+    }
+    if (account->accountType() == AccountType::Yggdrasil) {
+        QString error;
+        if (!yggdrasilTextureRequest(account, "DELETE", "skin", {}, {}, error))
+            return OperationService::failure(error, 3);
+        if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
+        return OperationService::success(QJsonObject{ { "account", account->profileId() }, { "reset", true }, { "yggdrasil", true } });
     }
     if (account->accountType() != AccountType::MSA)
         return OperationService::failure(QObject::tr("Skin reset requires a Microsoft or managed local account."), 2);

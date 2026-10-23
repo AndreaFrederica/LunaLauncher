@@ -23,7 +23,7 @@
           v-for="(server, index) in servers"
           :key="`${server.ip}-${index}`"
           :title="server.name || server.ip"
-          :info="server.ip"
+          :info="serverInfo(server)"
           @click="editServer(server, index)"
         >
           <template #icon>
@@ -31,6 +31,8 @@
             <PclIcon v-else name="server" :size="18" />
           </template>
           <template #actions>
+            <span v-if="pingState[server.ip]?.text" class="pcl-server-ping" :class="{ bad: pingState[server.ip]?.bad }">{{ pingState[server.ip].text }}</span>
+            <PclIconButton icon="gauge" label="测试连接" :size="24" :disabled="busy || pingState[server.ip]?.loading" @click.stop="pingServer(server)" />
             <PclIconButton icon="pencil" label="编辑" :size="24" :disabled="busy" @click.stop="editServer(server, index)" />
             <PclIconButton icon="trash-2" label="删除" :size="24" danger :disabled="busy" @click.stop="removeServer(index)" />
           </template>
@@ -48,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
@@ -68,6 +70,30 @@ const editingIndex = ref<number | null>(null);
 const revision = ref('');
 const path = ref('');
 const loading = ref(false);
+const pingState = reactive<Record<string, { loading: boolean; text: string; bad: boolean }>>({});
+function serverInfo(server: ServerEntry) {
+  const ping = pingState[server.ip];
+  return ping?.text ? `${server.ip} · ${ping.text}` : server.ip;
+}
+async function pingServer(server: ServerEntry) {
+  const key = server.ip;
+  pingState[key] = { loading: true, text: '测试中…', bad: false };
+  try {
+    const result = await props.execute('server.ping', { address: key });
+    const players = result?.players || {};
+    const online = Number(players.online ?? result?.onlinePlayers ?? 0);
+    const max = Number(players.max ?? 0);
+    const latency = Number(result?.latencyMs ?? 0);
+    pingState[key] = {
+      loading: false,
+      text: `${max > 0 ? `${online}/${max} · ` : `${online} 人在线 · `}${latency} ms`,
+      bad: false,
+    };
+  } catch (exception) {
+    pingState[key] = { loading: false, text: exception instanceof Error ? exception.message : String(exception), bad: true };
+  }
+}
+
 const error = ref('');
 
 function message(value: unknown) {
@@ -181,4 +207,15 @@ onMounted(() => { void load(); });
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.pcl-server-ping {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--pcl-c3);
+  font-size: calc(9px * var(--pcl-font-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcl-server-ping.bad { color: #fb7185; }
 </style>

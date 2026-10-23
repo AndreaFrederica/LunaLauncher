@@ -29,6 +29,7 @@ void ServerPingTask::executeTask()
         McClient* client = new McClient(nullptr, m_domain, ip, port);
 
         connect(client, &McClient::succeeded, this, [this](QJsonObject data) {
+            m_outputData = data;
             m_outputOnlinePlayers = getOnlinePlayers(data);
             qDebug() << "Online players:" << m_outputOnlinePlayers;
             emitSucceeded();

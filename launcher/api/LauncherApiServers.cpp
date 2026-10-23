@@ -4,6 +4,10 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QPointer>
+#include <QTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -25,6 +29,8 @@
 #include "BaseInstance.h"
 #include "GZip.h"
 #include "InstanceList.h"
+#include "minecraft/launch/MinecraftTarget.h"
+#include "ui/pages/instance/ServerPingTask.h"
 #include "PSaveFile.h"
 #include "LauncherApi.h"
 #include "LauncherApiSupport.h"
@@ -130,6 +136,36 @@ QString readServers(const QJsonObject& parameters, UserInteraction&, QJsonObject
     return {};
 }
 
+QString pingServer(const QJsonObject& parameters, QJsonObject& result)
+{
+    const auto address = parameters.value("address").toString().trimmed();
+    if (address.isEmpty()) return "A server address is required.";
+    const auto target = MinecraftTarget::parse(address, false);
+    if (target.address.isEmpty() || target.port == 0) return "The server address is invalid.";
+    QElapsedTimer elapsed;
+    elapsed.start();
+    QPointer<ServerPingTask> task = new ServerPingTask(target.address, target.port);
+    task->setParent(APPLICATION);
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(task, &Task::finished, &loop, &QEventLoop::quit);
+    QObject::connect(task, &Task::finished, task, &QObject::deleteLater);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeout.start(8000);
+    task->start();
+    if (!task->isFinished()) loop.exec(QEventLoop::ExcludeUserInputEvents);
+    if (!task || !task->isFinished()) return "The server did not respond within 8 seconds.";
+    if (!task->wasSuccessful()) return task->failReason().isEmpty() ? "The server did not respond." : task->failReason();
+    result = task->m_outputData;
+    result["address"] = target.address;
+    result["port"] = target.port;
+    result["latencyMs"] = static_cast<int>(elapsed.elapsed());
+    result["online"] = true;
+    result["onlinePlayers"] = task->m_outputOnlinePlayers;
+    return {};
+}
+
 QString writeServers(const QJsonObject& parameters, UserInteraction&, QJsonObject& result)
 {
     const auto reference = parameters.value("instance").toString();
@@ -203,6 +239,14 @@ void registerLauncherApiServerListOperations(LauncherApi& api)
             QJsonObject result;
             const auto error = readServers(p, i, result);
             return error.isEmpty() ? OperationService::success(result) : OperationService::failure(error, 2);
+        });
+
+    api.registerOperation({ "server.ping", "Ping a Minecraft server and return its MOTD, version, player counts, and latency.",
+        objectSchema({ { "address", stringProperty("Host or host:port.") } }, { "address" }), "instances" },
+        [](const QJsonObject& p, UserInteraction&) {
+            QJsonObject result;
+            const auto error = pingServer(p, result);
+            return error.isEmpty() ? OperationService::success(result) : OperationService::failure(error);
         });
 
     api.registerOperation({ "instance.servers.write",

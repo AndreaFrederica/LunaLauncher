@@ -137,6 +137,15 @@
             <PclInput v-model="loginForm.minecraftProfileName" placeholder="可选" />
           </label>
         </q-card-section>
+        <div v-if="loginDeviceUrl" class="pcl-login-device">
+          <div class="pcl-login-device__label">在浏览器中打开并输入代码</div>
+          <code v-if="loginDeviceCode" class="pcl-login-device__code">{{ loginDeviceCode }}</code>
+          <code class="pcl-login-device__url">{{ loginDeviceUrl }}</code>
+          <div class="pcl-actions">
+            <PclButton size="sm" icon="external-link" @click="openDeviceUrl">打开浏览器</PclButton>
+            <PclButton v-if="loginDeviceCode" size="sm" icon="copy" @click="copyDeviceCode">复制代码</PclButton>
+          </div>
+        </div>
         <PclHint v-if="loginError" theme="red" closable @close="loginError = ''">{{ loginError }}</PclHint>
         <q-card-actions align="right">
           <PclButton variant="ghost" @click="cancelLogin">取消</PclButton>
@@ -183,6 +192,7 @@ const emit = defineEmits<{ changed: []; 'cancel-login': [] }>();
 const items = [{ id: 'profile', label: '账户与皮肤', icon: 'user', description: '管理账户缓存、头像、皮肤和披风。' }, { id: 'services', label: '认证服务', icon: 'shield-check', description: '管理 Microsoft、Luna 本地验证和第三方认证服务。' }, { id: 'tools', label: '账户工具', icon: 'tool-case', description: '刷新账户状态并检查认证组件。' }];
 const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('offline');
 const loginBusy = ref(false), loginError = ref('');
+const loginTaskId = ref(''), loginDeviceUrl = ref(''), loginDeviceCode = ref('');
 const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), helperChecked = ref(false);
 const refreshing = ref(false);
 const loginTypes = [
@@ -229,7 +239,21 @@ async function openLocalDir() {
 function cancelLogin() {
   loginShown.value = false;
   loginBusy.value = false;
+  loginDeviceUrl.value = '';
+  loginDeviceCode.value = '';
+  if (loginTaskId.value) void props.execute('neo.task.cancel', { taskId: loginTaskId.value }).catch(() => {});
+  loginTaskId.value = '';
   emit('cancel-login');
+}
+
+async function openDeviceUrl() {
+  if (!loginDeviceUrl.value) return;
+  try { await props.execute('desktop.open-url', { url: loginDeviceUrl.value }); } catch { /* ignore */ }
+}
+
+async function copyDeviceCode() {
+  if (!loginDeviceCode.value) return;
+  try { await navigator.clipboard.writeText(loginDeviceCode.value); } catch { /* ignore */ }
 }
 
 async function submitLogin() {
@@ -238,9 +262,26 @@ async function submitLogin() {
   if (!payload.username && loginType.value !== 'microsoft') return;
   loginBusy.value = true;
   loginError.value = '';
+  loginDeviceUrl.value = '';
+  loginDeviceCode.value = '';
   try {
-    await props.execute('account.login', payload);
+    if (loginType.value === 'microsoft' || loginType.value === 'offline') {
+      let task: any = await props.execute('neo.task.start', { operation: 'account.login', priority: 'high', parameters: payload });
+      loginTaskId.value = task?.taskId || '';
+      while (task && !task.finished) {
+        loginDeviceUrl.value = task.deviceUrl || '';
+        loginDeviceCode.value = task.deviceCode || '';
+        await new Promise(resolve => setTimeout(resolve, 400));
+        task = await props.execute('neo.task.status', { taskId: task.taskId });
+      }
+      if (!task || task.state !== 'succeeded') throw new Error(task?.error || '账户登录失败');
+    } else {
+      await props.execute('account.login', payload);
+    }
     loginShown.value = false;
+    loginDeviceUrl.value = '';
+    loginDeviceCode.value = '';
+    loginTaskId.value = '';
     emit('changed');
   } catch (exception) {
     loginError.value = exception instanceof Error ? exception.message : String(exception);
@@ -369,5 +410,32 @@ async function loadServiceData() {
 .pcl-login-field .pcl-input,
 .pcl-login-field .pcl-select {
   width: 100%;
+}
+
+.pcl-login-device {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--pcl-c1) 45%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--pcl-c1) 10%, transparent);
+}
+
+.pcl-login-device__label {
+  color: var(--pcl-muted);
+  font-size: 12px;
+}
+
+.pcl-login-device__code {
+  color: var(--pcl-text);
+  font: 700 24px/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 4px;
+}
+
+.pcl-login-device__url {
+  overflow-wrap: anywhere;
+  color: var(--pcl-muted);
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
 }
 </style>

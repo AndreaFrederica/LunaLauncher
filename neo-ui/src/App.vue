@@ -113,7 +113,8 @@ const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=r
 const installProgressOpen=ref(false),installProgressTitle=ref('正在安装整合包'),installTask=ref<any>(null),installCancelling=ref(false);
 const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
 const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
-const launchQueue=ref<any[]>([]);
+const launchQueue=ref<any[]>([])
+const launchTaskId=ref('');
 type LaunchUiState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
 const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref('初始化'), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchAccountId=ref('');
 const selectedAccountStorageKey='luna-neo-selected-account';
@@ -199,11 +200,19 @@ async function launch(i:any, accountId?:string){
   const fallbackAccount=accounts.value.find((account:any)=>account.default) || accounts.value[0];
   const launchAccount=validAccount ? accountId : String(fallbackAccount?.internalId || fallbackAccount?.id || fallbackAccount?.profileName || '');
   if(launchAccount)parameters.account=launchAccount;
-  const result=await call('instance.launch',parameters);
+  let task:any=await call('neo.task.start',{operation:'instance.launch',priority:'high',parameters});
+  launchTaskId.value=task?.taskId || '';
+  while(task && !task.finished){
+    handleTaskUpdate(task);
+    await new Promise(resolve=>setTimeout(resolve,350));
+    task=await call('neo.task.status',{taskId:task.taskId});
+  }
+  handleTaskUpdate(task);
+  if(!task || task.state!=='succeeded')throw new Error(task?.error || '启动失败');
   launchTargetProgress.value=1;launchProgress.value=1;launchStage.value='等待游戏窗口';setLaunchState('launched');
-  notice.value=`启动请求已返回（PID ${result.pid}），请查看控制台确认客户端运行状态。`;resetLaunchUiSoon();
+  notice.value=`启动请求已返回（PID ${task.pid}），请查看控制台确认客户端运行状态。`;resetLaunchUiSoon();
  }catch(e){error.value=message(e);if(launchUiState.value!=='cancelled'){launchError.value=error.value;setLaunchState('failed');}void appendConsole('[启动失败] '+error.value,launchingId);resetLaunchUiSoon();}
- finally{busy.value=false;launchInFlight=false;launchingId='';device.value=null;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
+ finally{busy.value=false;launchInFlight=false;launchingId='';launchTaskId.value='';device.value=null;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
 }
 function launchMany(items:any[]){
  const queue=items.filter((item:any)=>!item.running && item.id);
@@ -369,7 +378,7 @@ async function installComponentVersion(component:any,version:string){
 function beginInstallProgress(info:any){installProgressTitle.value=info?.title || '正在安装整合包';installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
 function endInstallProgress(){installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;}
 async function cancelInstallProgress(){installCancelling.value=true;try{if(installTask.value?.taskId)await launcher.execute('neo.task.cancel',{taskId:installTask.value.taskId});else await launcher.execute('task.cancel',{});}catch{/* the task may already be terminal */}}
-async function cancel(){try{await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value='启动已取消';resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
+async function cancel(){try{if(launchTaskId.value)await call('neo.task.cancel',{taskId:launchTaskId.value});else await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value='启动已取消';resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
 async function openFolder(){
  if(!selected.value)return;
  try{

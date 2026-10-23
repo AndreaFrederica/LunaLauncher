@@ -188,6 +188,14 @@
             </label>
           </template>
         </q-card-section>
+        <div v-if="loginBusy" class="pcl-login-progress">
+          <div class="pcl-login-progress__head"><PclLoading inline /><span>{{ loginStatus || '正在检查登录状态…' }}</span></div>
+          <div v-for="step in loginSteps.slice(0, 8)" :key="step.id || step.label" class="pcl-login-progress__step">
+            <span class="pcl-login-progress__dot" :class="step.state" />
+            <span>{{ step.label || step.status || '检查中' }}</span>
+            <small>{{ step.status || step.details || '' }}</small>
+          </div>
+        </div>
         <div v-if="loginDeviceUrl" class="pcl-login-device">
           <div class="pcl-login-device__label">{{ loginDeviceCode ? '在浏览器中打开并输入代码' : '浏览器授权页面已打开' }}</div>
           <code v-if="loginDeviceCode" class="pcl-login-device__code">{{ loginDeviceCode }}</code>
@@ -252,6 +260,7 @@ import PclIcon from '../../components/PclIcon.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclListItem from '../../components/PclListItem.vue';
+import PclLoading from '../../components/PclLoading.vue';
 import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ accounts: any[]; busy: boolean; execute: Execute }>();
@@ -261,6 +270,7 @@ const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null
 const presetTest = ref<any>(null), testingPreset = ref('');
 const loginBusy = ref(false), loginError = ref('');
 const loginTaskId = ref(''), loginDeviceUrl = ref(''), loginDeviceCode = ref('');
+const loginStatus = ref(''), loginSteps = ref<any[]>([]);
 const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), helperChecked = ref(false);
 const localExternal = ref(false), localPort = ref('25585'), localPublicUrl = ref(''), localUsers = ref<any[]>([]);
 const localUserShown = ref(false), localUserForm = reactive({ username: '', password: '' });
@@ -428,6 +438,8 @@ async function submitLogin() {
   loginError.value = '';
   loginDeviceUrl.value = '';
   loginDeviceCode.value = '';
+  loginStatus.value = '正在准备登录…';
+  loginSteps.value = [];
   try {
     {
       let task: any = await props.execute('neo.task.start', { operation: 'account.login', priority: 'high', parameters: payload });
@@ -435,6 +447,8 @@ async function submitLogin() {
       while (task && !task.finished) {
         loginDeviceUrl.value = task.deviceUrl || '';
         loginDeviceCode.value = task.deviceCode || '';
+        loginStatus.value = task.status || task.details || loginStatus.value;
+        loginSteps.value = Array.isArray(task.children) ? task.children : [];
         await new Promise(resolve => setTimeout(resolve, 400));
         task = await props.execute('neo.task.status', { taskId: task.taskId });
       }
@@ -443,12 +457,16 @@ async function submitLogin() {
     loginShown.value = false;
     loginDeviceUrl.value = '';
     loginDeviceCode.value = '';
+    loginStatus.value = '';
+    loginSteps.value = [];
     loginTaskId.value = '';
     emit('changed');
   } catch (exception) {
     loginError.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     loginBusy.value = false;
+    loginStatus.value = '';
+    loginSteps.value = [];
   }
 }
 function presetInfo(preset: any) {
@@ -692,4 +710,56 @@ async function loadServiceData() {
 @media (max-width: 700px) {
   .pcl-local-network__grid { grid-template-columns: 1fr; }
 }
+
+.pcl-login-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 5px;
+  background: var(--pcl-c8);
+}
+
+.pcl-login-progress__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--pcl-text);
+  font-size: 11px;
+}
+
+.pcl-login-progress__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--pcl-muted);
+  font-size: 10px;
+}
+
+.pcl-login-progress__step > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcl-login-progress__step small {
+  margin-left: auto;
+  color: var(--pcl-c5);
+  font-size: 9px;
+}
+
+.pcl-login-progress__dot {
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pcl-c5);
+}
+
+.pcl-login-progress__dot.running { background: var(--pcl-c3); }
+.pcl-login-progress__dot.succeeded { background: #34d399; }
+.pcl-login-progress__dot.failed { background: #fb7185; }
 </style>

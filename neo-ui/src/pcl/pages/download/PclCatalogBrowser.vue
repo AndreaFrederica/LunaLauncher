@@ -302,7 +302,7 @@ function sanitizeHtml(value: string) {
   return root.innerHTML;
 }
 
-function normalize(v:any){const id=String(v?.projectId||v?.slug||v?.id||'');const icon=v?.iconUrl||v?.icon||v?.logoUrl||'';return {...v,projectId:id,provider:provider.value,name:v?.displayName||v?.name||v?.title||id,description:v?.description||v?.synopsis||v?.summary||'',iconUrl:icon||(provider.value==='modrinth'&&id?`https://cdn.modrinth.com/data/${encodeURIComponent(id)}/icon.png`:'')};}
+function normalize(v:any){const id=String(v?.projectId||v?.slug||v?.id||'');const icon=v?.iconUrl||v?.icon||v?.logoUrl||'';return {...v,projectId:id,provider:provider.value,name:v?.displayName||v?.name||v?.title||id,description:v?.description||v?.synopsis||v?.summary||'',iconUrl:icon};}
 function params(){const p:any={provider:provider.value};if(!props.packs){p.kind=props.kind||'mods';if(gameVersion.value)p.minecraftVersion=gameVersion.value;if(loader.value)p.loaders=[loader.value];if(sort.value!=='relevance')p.sort=sort.value;}return p;}
 function versionLabel(v:any){const game=Array.isArray(v.minecraftVersions)?v.minecraftVersions.slice(0,2).join(', '):(v.minecraftVersion||'');return `${v.name||v.version||v.versionId}${game?' · '+game:''}`;}
 async function search(start:number){if(props.busy)return;error.value='';project.value=null;try{const text=[query.value,props.tag&&props.tag!=='全部'?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:text,offset:start});const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;}catch(e){error.value=String(e);}}
@@ -321,7 +321,7 @@ async function install(){
       let task:any=await props.execute('neo.task.start',{
         operation:'modpack.install',
         priority:'high',
-        parameters:{provider:provider.value,projectId:project.value.projectId,versionId:version.value,name:instanceName.value},
+        parameters:{provider:provider.value,projectId:project.value.projectId,versionId:version.value,name:instanceName.value,iconUrl:project.value.iconUrl},
       });
       while(task && !task.finished){
         emit('install-progress',task);

@@ -2,11 +2,18 @@
 
 #include "AsyncTaskRuntime.h"
 
+#include <QBuffer>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QSaveFile>
+#include <QEventLoop>
+#include <QImage>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QTimer>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -31,6 +38,7 @@
 #include "api/InstanceExportTask.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
+#include "icons/IconList.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/auth/AuthFlow.h"
@@ -49,6 +57,92 @@
 #include "server/ServerInstance.h"
 
 namespace {
+
+QString savePackCover(const QImage& image, QString& error)
+{
+    if (image.isNull()) {
+        error = QObject::tr("The pack cover is not a readable image.");
+        return {};
+    }
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+        error = QObject::tr("Could not encode the pack cover.");
+        return {};
+    }
+    const auto key = "pack_" + QString::fromLatin1(QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex());
+    auto* icons = APPLICATION->icons();
+    const auto path = QDir(icons->getDirectory()).filePath(key + ".png");
+    QSaveFile file(path);
+    if (!QDir().mkpath(icons->getDirectory()) || !file.open(QIODevice::WriteOnly) || file.write(png) != png.size() || !file.commit()) {
+        error = QObject::tr("Could not save the pack cover: %1").arg(file.errorString());
+        return {};
+    }
+    if (!icons->addIcon(key, key, path, IconType::FileBased)) {
+        error = QObject::tr("Could not register the pack cover.");
+        return {};
+    }
+    return key;
+}
+
+QString savePackCoverBytes(const QByteArray& data, const QString& suffix, QString& error)
+{
+    if (data.isEmpty()) {
+        error = QObject::tr("The pack cover response is empty.");
+        return {};
+    }
+    const auto key = "pack_" + QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
+    auto* icons = APPLICATION->icons();
+    const auto path = QDir(icons->getDirectory()).filePath(key + suffix);
+    QSaveFile file(path);
+    if (!QDir().mkpath(icons->getDirectory()) || !file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+        error = QObject::tr("Could not save the pack cover: %1").arg(file.errorString());
+        return {};
+    }
+    if (!icons->addIcon(key, key, path, IconType::FileBased)) {
+        error = QObject::tr("Could not register the pack cover.");
+        return {};
+    }
+    return key;
+}
+
+QString downloadPackCover(const QUrl& url, QString& error)
+{
+    if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https")) {
+        error = QObject::tr("The provider returned an invalid pack cover URL.");
+        return {};
+    }
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "LunaLauncher/NeoUI");
+    request.setRawHeader("Accept", "image/webp,image/png,image/*");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(15000);
+    auto* reply = APPLICATION->network()->get(request);
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, [&]() {
+        reply->abort();
+        loop.quit();
+    });
+    timeout.start(15000);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    const auto data = reply->readAll();
+    if (reply->error() != QNetworkReply::NoError) {
+        error = reply->errorString();
+        reply->deleteLater();
+        return {};
+    }
+    reply->deleteLater();
+    const auto image = QImage::fromData(data);
+    if (!image.isNull()) return savePackCover(image, error);
+    // Qt's WebP plugin may be unavailable in a minimal sidecar installation.
+    // Keep the original cover bytes so the instance still gets the provider icon.
+    const auto suffix = url.path().endsWith(".webp", Qt::CaseInsensitive) ? ".webp" : ".png";
+    return savePackCoverBytes(data, suffix, error);
+}
 
 BaseInstance* findInstance(const QString& reference)
 {
@@ -633,6 +727,22 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             return;
         }
         auto* importTask = new InstanceImportTask(url, nullptr, { { "pack_id", projectId }, { "pack_version_id", versionId } });
+        QString iconKey = parameters.value("icon").toString();
+        if (iconKey.isEmpty() || iconKey == "default") {
+            QString iconUrl = parameters.value("iconUrl").toString();
+            if (iconUrl.isEmpty()) {
+                const auto project = api.execute("resource.project", request, interaction);
+                if (project.value("ok").toBool())
+                    iconUrl = project.value("data").toObject().value("iconUrl").toString();
+            }
+            if (!iconUrl.isEmpty()) {
+                QString iconError;
+                const auto cover = downloadPackCover(QUrl(iconUrl), iconError);
+                if (!cover.isEmpty()) iconKey = cover;
+                else if (!iconError.isEmpty()) m_records[id].status = "整合包封面获取失败，使用默认图标：" + iconError;
+            }
+        }
+        if (!iconKey.isEmpty() && iconKey != "default") importTask->setIcon(iconKey);
         const auto name = parameters.value("name").toString();
         if (!name.isEmpty()) importTask->setName(name);
         auto* task = APPLICATION->instances()->wrapInstanceTask(importTask);

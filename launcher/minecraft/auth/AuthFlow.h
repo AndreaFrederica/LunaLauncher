@@ -25,6 +25,7 @@ class AuthFlow : public Task {
 
     void executeTask() override;
     bool canAbort() const override { return true; }
+    TaskStepProgressList getStepProgress() const override;
 
     AccountTaskState taskState() { return m_taskState; }
 
@@ -49,4 +50,6 @@ class AuthFlow : public Task {
     QList<AuthStep::Ptr> m_steps;
     AuthStep::Ptr m_currentStep;
     AccountData* m_data = nullptr;
+    QStringList m_finishedSteps;
+    QString m_failedStep;
 };

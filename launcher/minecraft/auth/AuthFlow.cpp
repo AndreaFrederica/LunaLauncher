@@ -106,6 +106,25 @@ void AuthFlow::executeTask()
     nextStep();
 }
 
+TaskStepProgressList AuthFlow::getStepProgress() const
+{
+    TaskStepProgressList result;
+    auto add = [&result](const QString& label, TaskStepState state) {
+        if (label.isEmpty()) return;
+        auto step = std::make_shared<TaskStepProgress>();
+        step->label = label;
+        step->state = state;
+        step->current = state == TaskStepState::Succeeded ? 1 : 0;
+        step->total = 1;
+        result.append(step);
+    };
+    for (const auto& label : m_finishedSteps) add(label, TaskStepState::Succeeded);
+    if (!m_failedStep.isEmpty()) add(m_failedStep, TaskStepState::Failed);
+    if (m_currentStep) add(m_currentStep->describe(), TaskStepState::Running);
+    for (const auto& step : m_steps) add(step->describe(), TaskStepState::Waiting);
+    return result;
+}
+
 void AuthFlow::nextStep()
 {
     if (!Task::isRunning()) {
@@ -128,6 +147,12 @@ void AuthFlow::nextStep()
 
 void AuthFlow::stepFinished(AccountTaskState resultingState, QString message)
 {
+    if (m_currentStep) {
+        if (resultingState == AccountTaskState::STATE_SUCCEEDED)
+            m_finishedSteps.append(m_currentStep->describe());
+        else if (resultingState != AccountTaskState::STATE_WORKING)
+            m_failedStep = m_currentStep->describe();
+    }
     if (changeState(resultingState, message))
         nextStep();
 }

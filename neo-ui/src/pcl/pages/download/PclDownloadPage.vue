@@ -15,6 +15,7 @@
             @installed="onInstalled"
             @preset-consumed="preset = null"
             @install-start="emit('install-start', $event)"
+            @install-progress="emit('install-progress', $event)"
             @install-done="emit('install-done', $event)"
           />
 

@@ -15,6 +15,10 @@
 #include "BaseInstance.h"
 #include "FileSystem.h"
 #include "InstanceImportTask.h"
+#include "meta/Index.h"
+#include "minecraft/VanillaInstanceCreationTask.h"
+#include "minecraft/PackProfile.h"
+#include "net/Mode.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
@@ -86,8 +90,8 @@ NeoTaskService::NeoTaskService(QObject* parent) : QObject(parent), m_temp() {}
 
 QString NeoTaskService::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const
 {
-    if (operation == "instance.import" || operation == "modpack.install") return "instances";
-    if (operation == "resource.install") {
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install") return "instances";
+    if (operation == "resource.install" || operation == "instance.component.set-version") {
         return "instance:" + parameters.value("instance").toString();
     }
     return "global";
@@ -96,7 +100,7 @@ QString NeoTaskService::conflictKeyFor(const QString& operation, const QJsonObje
 QJsonObject NeoTaskService::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "modpack.install", "resource.install" }.contains(operation)) {
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "modpack.install", "resource.install" }.contains(operation)) {
         return { { "ok", false }, { "error", QStringLiteral("Unsupported neo task operation: %1").arg(operation) } };
     }
     const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -106,7 +110,7 @@ QJsonObject NeoTaskService::start(const QString& operation, const QJsonObject& p
     record.parameters = parameters;
     record.conflictKey = conflictKeyFor(operation, parameters);
     record.highPriority = parameters.value("priority").toString() == "high";
-    if (operation == "instance.import" || operation == "modpack.install") {
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install") {
         for (int i = 0; i < APPLICATION->instances()->count(); ++i)
             record.instancesBefore.insert(APPLICATION->instances()->at(i)->id());
     }
@@ -149,6 +153,50 @@ void NeoTaskService::pump()
 void NeoTaskService::startRecord(const Record& record)
 {
     const auto id = record.id;
+    if (record.operation == "instance.component.set-version") {
+        const auto parameters = record.parameters;
+        const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
+        if (!instance) { finish(id, false, "Minecraft instance not found."); return; }
+        if (instance->isRunning()) { finish(id, false, "Components cannot be modified while the instance is running."); return; }
+        const auto uid = parameters.value("component").toString().trimmed();
+        const auto version = parameters.value("version").toString().trimmed();
+        if (uid.isEmpty() || version.isEmpty()) { finish(id, false, "A component id and version are required."); return; }
+        auto profile = instance->getPackProfile();
+        if (!profile->isLoaded()) {
+            const auto loaded = profile->reload(Net::Mode::Offline);
+            if (!loaded) { finish(id, false, loaded.error); return; }
+        }
+        if (!profile->setComponentVersion(uid, version, parameters.value("important").toBool(false))) {
+            finish(id, false, "The component version could not be changed.");
+            return;
+        }
+        profile->resolve(Net::Mode::Online);
+        const auto task = profile->getCurrentTask();
+        if (!task) {
+            profile->saveNow();
+            finish(id, true, {}, instance->id());
+            return;
+        }
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = "正在解析组件依赖";
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, profile, instanceId = instance->id()]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            const bool success = profile->getCurrentTask() ? profile->getCurrentTask()->wasSuccessful() : true;
+            if (success) profile->saveNow();
+            finish(id, success, success ? QString() : (profile->getCurrentTask() ? profile->getCurrentTask()->failReason() : "Component resolution failed."), instanceId);
+        });
+        task->start();
+        return;
+    }
+
     if (record.operation == "modpack.install") {
         const auto parameters = record.parameters;
         const auto provider = parameters.value("provider").toString().toLower();
@@ -219,6 +267,104 @@ void NeoTaskService::startRecord(const Record& record)
             finish(id, success, success ? QString() : task->failReason());
         });
         task->start();
+        return;
+    }
+
+    if (record.operation == "instance.create") {
+        const auto parameters = record.parameters;
+        const auto type = parameters.value("type").toString().trimmed().toLower();
+        if (!type.isEmpty() && type != "vanilla") {
+            finish(id, false, "Async instance.create currently supports vanilla and loader instances only.");
+            return;
+        }
+        const auto versionName = parameters.value("version").toString().trimmed();
+        if (versionName.isEmpty()) { finish(id, false, "A Minecraft version is required."); return; }
+        if (!ApiSupport::identifier(versionName)) { finish(id, false, "Invalid Minecraft version."); return; }
+        const auto requestedLoader = parameters.value("loader").toString().trimmed().toLower();
+        const auto loaderVersionName = parameters.value("loaderVersion").toString().trimmed();
+        if (!requestedLoader.isEmpty() && !ApiSupport::identifier(loaderVersionName)) {
+            finish(id, false, "A valid loader version is required.");
+            return;
+        }
+        const auto name = parameters.value("name").toString().trimmed();
+        const auto group = parameters.value("group").toString();
+        const auto icon = parameters.value("icon").toString("default");
+        const auto loader = requestedLoader == "fabric" ? "net.fabricmc.fabric-loader" :
+                            requestedLoader == "quilt" ? "org.quiltmc.quilt-loader" :
+                            requestedLoader == "forge" ? "net.minecraftforge" :
+                            requestedLoader == "neoforge" ? "net.neoforged" :
+                            requestedLoader == "cleanroom" ? "com.cleanroommc.cleanroom" : requestedLoader;
+
+        auto& stored = m_records[id];
+        stored.status = "正在加载 Minecraft 版本 " + versionName;
+        const auto index = APPLICATION->metadataIndex();
+        auto loadMinecraft = index->loadVersion("net.minecraft", versionName);
+        stored.holder = loadMinecraft;
+        stored.task = loadMinecraft.get();
+        connect(loadMinecraft.get(), &Task::status, this, [this, id](const QString& status) {
+            if (m_records.contains(id)) m_records[id].status = status;
+        });
+        connect(loadMinecraft.get(), &Task::finished, this, [this, id, index, versionName, loader, loaderVersionName, name, group, icon]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            const auto minecraft = index->get("net.minecraft", versionName);
+            if (!minecraft || !minecraft->isLoaded()) {
+                finish(id, false, "Minecraft version not found: " + versionName);
+                return;
+            }
+            auto createWrapped = [this, id, minecraft, name, group, icon](BaseVersion::Ptr loaderVersion) {
+                if (!m_records.contains(id) || m_records[id].finished) return;
+                auto* raw = loaderVersion ? new VanillaCreationTask(minecraft, m_records[id].parameters.value("loader").toString(), loaderVersion)
+                                          : new VanillaCreationTask(minecraft);
+                if (!name.isEmpty()) raw->setName(name);
+                raw->setGroup(group);
+                raw->setIcon(icon);
+                auto* task = APPLICATION->instances()->wrapInstanceTask(raw);
+                if (!task) { finish(id, false, "The instance creation task could not be created."); return; }
+                auto& record = m_records[id];
+                record.task = task;
+                record.status = "正在创建实例";
+                connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+                connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
+                    if (!m_records.contains(id)) return;
+                    m_records[id].progress = current;
+                    m_records[id].total = total;
+                });
+                connect(task, &Task::finished, this, [this, id, task]() {
+                    if (!m_records.contains(id)) return;
+                    const bool success = task->wasSuccessful();
+                    QString created;
+                    if (success) {
+                        APPLICATION->instances()->saveNow();
+                        const auto& before = m_records[id].instancesBefore;
+                        for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                            const auto candidate = APPLICATION->instances()->at(i);
+                            if (!before.contains(candidate->id())) { created = candidate->id(); break; }
+                        }
+                    }
+                    if (!created.isEmpty()) m_records[id].createdInstanceId = created;
+                    finish(id, success, success ? QString() : task->failReason());
+                });
+                task->start();
+            };
+            if (loader.isEmpty()) { createWrapped({}); return; }
+            auto& record = m_records[id];
+            record.status = "正在加载加载器 " + loader + " " + loaderVersionName;
+            auto loadLoader = index->loadVersion(loader, loaderVersionName);
+            record.holder = loadLoader;
+            record.task = loadLoader.get();
+            connect(loadLoader.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+            connect(loadLoader.get(), &Task::finished, this, [this, id, index, loader, loaderVersionName, createWrapped]() {
+                if (!m_records.contains(id) || m_records[id].finished) return;
+                const auto loaderVersion = index->get(loader, loaderVersionName);
+                if (!loaderVersion || !loaderVersion->isLoaded()) {
+                    finish(id, false, "Loader version not found: " + loader + ":" + loaderVersionName);
+                    return;
+                }
+                createWrapped(loaderVersion);
+            });
+            loadLoader->start();
+        });
+        loadMinecraft->start();
         return;
     }
 
@@ -374,7 +520,18 @@ QJsonObject NeoTaskService::cancel(const QString& taskId)
     if (!m_records.contains(taskId)) return { { "ok", false }, { "error", "Unknown neo task." } };
     auto& record = m_records[taskId];
     if (record.finished) return { { "ok", true }, { "data", snapshot(record) } };
+    // Mark terminal before aborting. Qt tasks may emit finished synchronously
+    // from abort(), and their callbacks must not overwrite the cancelled state.
+    const bool wasActive = record.state == "running";
+    record.finished = true;
+    record.state = "cancelled";
+    record.error = "cancelled";
+    record.status = "已取消";
+    if (wasActive) {
+        m_activeKeys.remove(record.conflictKey);
+        m_active = qMax(0, m_active - 1);
+    }
     if (record.task) record.task->abort();
-    finish(taskId, false, "cancelled");
+    pump();
     return { { "ok", true }, { "data", snapshot(record) } };
 }

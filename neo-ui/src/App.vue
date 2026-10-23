@@ -351,13 +351,24 @@ function handleTaskUpdate(value:any){
  else {taskSnapshot.value=value;status.value=value.status || value.state || '正在执行';}
 }
 async function installComponentVersion(component:any,version:string){
+ if(!selected.value)return;
  beginInstallProgress({ title: `正在安装 ${component?.name || component?.id || '组件'}`, name: version });
- try { await run('instance.component.set-version',{ instance:selected.value.id, component:component.id, version }); }
+ try {
+  let task:any=await catalogExecute('neo.task.start',{operation:'instance.component.set-version',priority:'high',parameters:{instance:selected.value.id,component:component.id,version}});
+  while(task && !task.finished){
+   installTask.value=task;
+   await new Promise(resolve=>setTimeout(resolve,300));
+   task=await catalogExecute('neo.task.status',{taskId:task.taskId});
+  }
+  installTask.value=task;
+  if(!task || task.state!=='succeeded')throw new Error(task?.error || '组件安装失败');
+  await refresh();
+ } catch(exception){error.value=message(exception);}
  finally { endInstallProgress(); }
 }
 function beginInstallProgress(info:any){installProgressTitle.value=info?.title || '正在安装整合包';installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
 function endInstallProgress(){installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;}
-async function cancelInstallProgress(){installCancelling.value=true;try{await launcher.execute('task.cancel',{});}catch{/* the task may already be terminal */}}
+async function cancelInstallProgress(){installCancelling.value=true;try{if(installTask.value?.taskId)await launcher.execute('neo.task.cancel',{taskId:installTask.value.taskId});else await launcher.execute('task.cancel',{});}catch{/* the task may already be terminal */}}
 async function cancel(){try{await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value='启动已取消';resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
 async function openFolder(){
  if(!selected.value)return;

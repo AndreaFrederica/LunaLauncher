@@ -159,7 +159,7 @@ const props = defineProps<{
   instances?: any[];
   preset?: { label: string; version: string; alias: string } | null;
 }>();
-const emit = defineEmits<{ installed: [result: any]; 'preset-consumed': []; 'install-start': [info: any]; 'install-done': [info: any] }>();
+const emit = defineEmits<{ installed: [result: any]; 'preset-consumed': []; 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
 
 const step = ref<'versions' | 'select'>('versions');
 const loading = ref(false), loadError = ref(''), installing = ref(false), error = ref('');
@@ -349,8 +349,19 @@ async function install() {
       parameters.loader = selectedLoader.value.id;
       parameters.loaderVersion = selectedLoader.value.version;
     }
-    const result = await props.execute('instance.create', parameters);
-    emit('installed', result);
+    let task: any = await props.execute('neo.task.start', {
+      operation: 'instance.create',
+      priority: 'high',
+      parameters,
+    });
+    while (task && !task.finished) {
+      emit('install-progress', task);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      task = await props.execute('neo.task.status', { taskId: task.taskId });
+    }
+    emit('install-progress', task);
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '实例创建失败');
+    emit('installed', { id: task.createdInstanceId || '', name: instanceName.value.trim() || selectedVersion.value.version });
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {

@@ -54,10 +54,11 @@ export interface NeoUiPreferences {
   pclHomeShowServers: boolean;
   pclHomeSwitchOnQuickLaunch: boolean;
   pclHomeInstanceLayout: 'grid' | 'list';
-  pclHomeInstanceColumns: number;
+  pclHomeInstanceColumns: number | 'auto';
   pclHomeInstanceRows: number;
   pclHomeInstanceWidth: number;
   pclHomeInstanceFontSize: number;
+  pclHomeInstanceTextPosition: 'beside' | 'below';
   pclHomeInstanceGrouping: 'flat' | 'grouped';
   pclHomeInstanceSort: 'manual' | 'name' | 'version';
   pclHomeInstanceOrder: string[];
@@ -101,10 +102,11 @@ const defaults: NeoUiPreferences = {
   pclHomeShowServers: true,
   pclHomeSwitchOnQuickLaunch: false,
   pclHomeInstanceLayout: 'grid',
-  pclHomeInstanceColumns: 2,
+  pclHomeInstanceColumns: 'auto',
   pclHomeInstanceRows: 4,
   pclHomeInstanceWidth: 100,
   pclHomeInstanceFontSize: 14,
+  pclHomeInstanceTextPosition: 'beside',
   pclHomeInstanceGrouping: 'flat',
   pclHomeInstanceSort: 'manual',
   pclHomeInstanceOrder: [],

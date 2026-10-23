@@ -173,14 +173,14 @@
                 <div
                   class="pcl-home-instance-list"
                   :class="`is-${preferences.pclHomeInstanceLayout}`"
-                  :style="preferences.pclHomeInstanceLayout === 'grid' ? { gridTemplateColumns: `repeat(${preferences.pclHomeInstanceColumns}, minmax(0, 1fr))` } : undefined"
+                  :style="preferences.pclHomeInstanceLayout === 'grid' ? homeInstanceGridStyle : undefined"
                 >
                   <button
                     v-for="item in group.items"
                     :key="item.id"
                     type="button"
                     class="pcl-home-instance"
-                    :class="{ active: item.id === selected?.id, 'is-drag-over': dragOverId === item.id }"
+                    :class="{ active: item.id === selected?.id, 'is-drag-over': dragOverId === item.id, 'text-below': preferences.pclHomeInstanceTextPosition === 'below' }"
                     :draggable="true"
                     :title="`双击启动 ${item.name}`"
                     @click="clickInstance(item)"
@@ -195,7 +195,7 @@
                     <span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span>
                     <span class="pcl-home-instance__copy">
                       <strong>{{ item.name }}</strong>
-                      <small>{{ item.runtime?.minecraftVersion || item.runtime?.minecraft || item.minecraftVersion || 'Minecraft' }}</small>
+                      <small v-if="instanceSubtitle(item)">{{ instanceSubtitle(item) }}</small>
                     </span>
                     <span v-if="item.running" class="pcl-home-instance__running">运行中</span>
                     <span v-else class="pcl-home-instance__hint">{{ preferences.pclHomeInstanceSort === 'manual' ? '拖拽排序 · 双击启动' : '双击启动' }}</span>
@@ -307,6 +307,9 @@ const launchError = computed(() => props.launchError || props.error || '');
 const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));
 const preferences = neoUiPreferences;
+function instanceSubtitle(instance: any) {
+  return String(instance?.runtime?.minecraftVersion || instance?.runtime?.minecraft || instance?.minecraftVersion || '').trim();
+}
 function homeCardOrder(key: string) {
   const index = (preferences.pclHomeCardOrder || []).indexOf(key);
   return index < 0 ? 1000 : index;
@@ -315,7 +318,7 @@ function homeCardOrder(key: string) {
 const homeInstanceStyle = computed(() => {
   const font = Number(preferences.pclHomeInstanceFontSize) || 13;
   const rows = Number(preferences.pclHomeInstanceRows) || 4;
-  const rowHeight = Math.round(font * 2.75);
+  const rowHeight = Math.round(font * (preferences.pclHomeInstanceTextPosition === 'below' ? 5.2 : 2.75));
   return {
     '--pcl-home-font-size': `${font}px`,
     '--pcl-home-small-size': `${Math.max(9, Math.round(font * 0.8))}px`,
@@ -324,10 +327,16 @@ const homeInstanceStyle = computed(() => {
     width: `${Math.max(40, Math.min(100, Number(preferences.pclHomeInstanceWidth) || 100))}%`,
   };
 });
+const homeInstanceGridStyle = computed(() => {
+  if (preferences.pclHomeInstanceColumns === 'auto') {
+    return { gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' };
+  }
+  return { gridTemplateColumns: `repeat(${preferences.pclHomeInstanceColumns}, minmax(0, 1fr))` };
+});
 const homeInstanceMaxHeight = computed(() => {
   const font = Number(preferences.pclHomeInstanceFontSize) || 13;
   const rows = Number(preferences.pclHomeInstanceRows) || 4;
-  const rowHeight = Math.round(font * 2.75);
+  const rowHeight = Math.round(font * (preferences.pclHomeInstanceTextPosition === 'below' ? 5.2 : 2.75));
   return `${rowHeight * rows + 6 * Math.max(0, rows - 1) + 8}px`;
 });
 const orderedInstances = computed(() => {
@@ -977,4 +986,53 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-launch-grid.is-classic .pcl-classic-nav { order: 2; }
 .pcl-launch-grid.is-classic.classic-left .pcl-launch-right { order: 2; }
 .pcl-launch-grid.is-classic.classic-left .pcl-classic-nav { order: 1; border-left: 0; border-right: 1px solid var(--pcl-border); }
+
+.pcl-home-instance.text-below {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 7px 5px;
+  text-align: center;
+}
+
+.pcl-home-instance.text-below img,
+.pcl-home-instance.text-below .pcl-home-instance__fallback {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.pcl-home-instance.text-below .pcl-home-instance__copy {
+  flex: 0 0 auto;
+  width: 100%;
+  align-items: center;
+}
+
+.pcl-home-instance.text-below .pcl-home-instance__copy strong {
+  display: -webkit-box;
+  width: 100%;
+  max-height: 2.4em;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pcl-home-instance.text-below .pcl-home-instance__copy small {
+  margin-top: 1px;
+}
+
+.pcl-home-instance.text-below .pcl-home-instance__hint {
+  display: none;
+}
+
+.pcl-home-instance.text-below .pcl-home-instance__running {
+  margin-top: 1px;
+}
 </style>

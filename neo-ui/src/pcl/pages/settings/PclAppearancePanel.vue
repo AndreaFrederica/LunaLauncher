@@ -183,6 +183,13 @@
         <span class="pcl-form-row__hint">超出后滚动</span>
       </div>
       <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例文字位置</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceTextPosition" :options="instanceTextPositionOptions" />
+        </div>
+        <span class="pcl-form-row__hint">图标右侧或图标下方</span>
+      </div>
+      <div class="pcl-form-row">
         <span class="pcl-form-row__label">实例面板字号</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceFontSize" :options="instanceFontOptions" />
@@ -460,10 +467,20 @@ const instanceSortOptions = [
   { label: '按版本自动排序', value: 'version' },
 ];
 const instanceColumnOptions = [
+  { label: '自动（按宽度）', value: 'auto' },
   { label: '1 列', value: 1 },
   { label: '2 列', value: 2 },
   { label: '3 列', value: 3 },
   { label: '4 列', value: 4 },
+  { label: '5 列', value: 5 },
+  { label: '6 列', value: 6 },
+  { label: '7 列', value: 7 },
+  { label: '8 列', value: 8 },
+  { label: '10 列', value: 10 },
+];
+const instanceTextPositionOptions = [
+  { label: '图标右侧', value: 'beside' },
+  { label: '图标下方（MMC）', value: 'below' },
 ];
 const instanceRowOptions = [
   { label: '2 行', value: 2 },
@@ -537,10 +554,11 @@ function reset() {
     pclHomeShowServers: true,
     pclHomeSwitchOnQuickLaunch: false,
     pclHomeInstanceLayout: 'grid',
-    pclHomeInstanceColumns: 2,
+    pclHomeInstanceColumns: 'auto',
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 14,
+    pclHomeInstanceTextPosition: 'beside',
     pclHomeInstanceGrouping: 'flat',
     pclHomeInstanceSort: 'manual',
     pclHomeInstanceOrder: [],

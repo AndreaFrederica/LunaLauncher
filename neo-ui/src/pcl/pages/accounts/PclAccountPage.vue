@@ -37,16 +37,24 @@
             v-for="preset in presets"
             :key="preset.name"
             :title="preset.name"
-            :info="`${preset.managedLocal ? 'Luna 本地验证服务' : `${preset.authUrl || ''} · ${preset.sessionUrl || ''}`}${preset.builtin ? ' · 内置' : ''}`"
+            :info="presetInfo(preset)"
           >
             <template #icon><PclIcon name="shield-check" :size="18" /></template>
             <template #actions>
+              <PclButton v-if="preset.official" size="sm" variant="highlight" icon="account" @click.stop="openLogin('microsoft')">官方登录</PclButton>
+              <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="busy || testingPreset === preset.name" @click.stop="testPreset(preset, 'ping')">Ping</PclButton>
+              <PclButton size="sm" variant="ghost" icon="fact_check" :disabled="busy || testingPreset === preset.name" @click.stop="testPreset(preset, 'function')">功能测试</PclButton>
               <PclButton v-if="!preset.builtin" size="sm" variant="ghost" icon="pencil" @click.stop="openPreset(preset)">编辑</PclButton>
               <PclIconButton v-if="!preset.builtin" icon="trash-2" label="删除服务" :size="24" danger :disabled="busy" @click.stop="removePreset(preset)" />
             </template>
           </PclListItem>
           <div v-if="!presets.length" class="pcl-empty">没有认证服务。</div>
         </div>
+        <PclHint v-if="presetTest" :theme="presetTest.passed ? 'blue' : 'yellow'" closable @close="presetTest = null">
+          {{ presetTest.name }} · {{ presetTest.message }}
+          <span v-if="presetTest.elapsedMs !== undefined"> · {{ Math.round(Number(presetTest.elapsedMs) || 0) }} ms</span>
+          <span v-if="presetTest.statusCode"> · HTTP {{ presetTest.statusCode }}</span>
+        </PclHint>
       </PclCard>
 
       <PclCard v-if="section === 'services'" title="本地验证服务">
@@ -191,6 +199,7 @@ const props = defineProps<{ accounts: any[]; busy: boolean; execute: Execute }>(
 const emit = defineEmits<{ changed: []; 'cancel-login': [] }>();
 const items = [{ id: 'profile', label: '账户与皮肤', icon: 'user', description: '管理账户缓存、头像、皮肤和披风。' }, { id: 'services', label: '认证服务', icon: 'shield-check', description: '管理 Microsoft、Luna 本地验证和第三方认证服务。' }, { id: 'tools', label: '账户工具', icon: 'tool-case', description: '刷新账户状态并检查认证组件。' }];
 const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('offline');
+const presetTest = ref<any>(null), testingPreset = ref('');
 const loginBusy = ref(false), loginError = ref('');
 const loginTaskId = ref(''), loginDeviceUrl = ref(''), loginDeviceCode = ref('');
 const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), helperChecked = ref(false);
@@ -285,6 +294,26 @@ async function submitLogin() {
     loginError.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     loginBusy.value = false;
+  }
+}
+function presetInfo(preset: any) {
+  if (preset.official) return 'Microsoft 官方账户 · 官方服务器 · 内置';
+  if (preset.managedLocal) return 'Luna 本地验证服务 · 内置';
+  return `${preset.authUrl || ''} · ${preset.sessionUrl || ''}${preset.builtin ? ' · 内置' : ''}`;
+}
+async function testPreset(preset: any, mode: 'ping' | 'function') {
+  if (testingPreset.value) return;
+  const url = preset.testUrl || preset.authUrl || preset.sessionUrl;
+  if (!url) { presetTest.value = { name: preset.name, passed: false, message: '没有可测试的地址' }; return; }
+  testingPreset.value = preset.name;
+  presetTest.value = null;
+  try {
+    const result = await props.execute('account.preset.test', { url, mode });
+    presetTest.value = { name: preset.name, ...result };
+  } catch (exception) {
+    presetTest.value = { name: preset.name, passed: false, message: exception instanceof Error ? exception.message : String(exception) };
+  } finally {
+    testingPreset.value = '';
   }
 }
 function openPreset(preset?: any) { editingPreset.value = preset || null; Object.assign(presetForm, preset ? { name: preset.name, authUrl: preset.authUrl || '', sessionUrl: preset.sessionUrl || '' } : { name: '', authUrl: '', sessionUrl: '', tokenType: 'Standard' }); presetShown.value = true; }

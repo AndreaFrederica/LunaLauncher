@@ -164,7 +164,14 @@ async function run(action: () => Promise<void>) {
   finally { loading.value = false; }
 }
 function startServer() {
-  return run(async () => { await props.execute('server.start', { instance: props.instance.id }); });
+  return run(async () => {
+    let task: any = await props.execute('neo.task.start', { operation: 'server.start', priority: 'high', parameters: { instance: props.instance.id } });
+    while (task && !task.finished) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      task = await props.execute('neo.task.status', { taskId: task.taskId });
+    }
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '服务端启动失败');
+  });
 }
 function stopServer() {
   return run(async () => { await props.execute('instance.stop', { instance: props.instance.id }); });

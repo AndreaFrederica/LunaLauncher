@@ -392,7 +392,7 @@ async function exportInstance(payload:any){
   if(!selected.value)return;
   beginInstallProgress({title:'正在导出实例',name:selected.value.name});
   try{
-    let task:any=await call('neo.task.start',{operation:'instance.export',priority:'high',parameters:{instance:selected.value.id,output:payload.output,format:'zip',name:payload.name,version:payload.version,overwrite:true}});
+    let task:any=await call('neo.task.start',{operation:'instance.export',priority:'high',parameters:{instance:selected.value.id,output:payload.output,format:payload.format||'zip',name:payload.name,version:payload.version,summary:payload.summary,author:payload.author,optionalFiles:Boolean(payload.optionalFiles),overwrite:payload.overwrite!==false}});
     while(task && !task.finished){installTask.value=task;await new Promise(resolve=>setTimeout(resolve,400));task=await call('neo.task.status',{taskId:task.taskId});}
     installTask.value=task;
     if(!task || task.state!=='succeeded')throw new Error(task?.error||'导出失败');

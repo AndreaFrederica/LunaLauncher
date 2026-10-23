@@ -39,9 +39,66 @@
       <PclHint theme="blue">安装项的顺序和可选状态与 Luna 实例安装页保持一致；版本变更会通过启动器组件 API 写入实例。</PclHint>
     </section>
 
-    <section v-else-if="section === 'export'" class="pcl-section-card">
-      <div class="section-heading"><div><span class="pcl-kicker">INSTANCE EXPORT</span><h2>导出实例</h2><p>选择要打包的内容，然后导出为整合包文件。</p></div></div>
-      <div class="export-form"><q-input v-model="exportName" outlined label="整合包名称"/><q-input v-model="exportVersion" outlined label="整合包版本"/><q-input v-model="exportOutput" outlined label="输出 ZIP 路径" placeholder="例如：D:/Export/pack.zip"/><div class="export-grid"><label v-for="item in exportItems" :key="item.key" class="export-option"><q-checkbox v-model="selectedExport" :val="item.key" color="primary"/><span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span></label></div><q-card flat class="export-advanced"><q-card-section><div class="export-advanced__title"><span>高级选项</span><q-toggle v-model="bundleFiles" label="打包外部文件"/><q-toggle v-model="includeLauncher" label="包含启动器配置"/></div><p>导出的内容会遵循当前实例的文件结构，并保留 Mod、资源包、存档和截图等选项。</p></q-card-section></q-card><q-btn color="primary" icon="archive" label="开始导出" :disable="busy || !exportName.trim() || !exportOutput.trim()" @click="emit('export', { name: exportName.trim(), version: exportVersion.trim(), output: exportOutput.trim(), items: selectedExport, bundleFiles, includeLauncher })"/></div>
+    <section v-else-if="section === 'export'" class="pcl-section-card pcl-export">
+      <div class="pcl-export__head">
+        <div>
+          <span class="pcl-kicker">INSTANCE EXPORT</span>
+          <h2>导出实例</h2>
+          <p>选择格式和要打包的内容，导出为整合包或启动器压缩包。</p>
+        </div>
+      </div>
+      <div class="pcl-export__body">
+        <PclHint v-if="exportError" theme="red" closable @close="exportError = ''">{{ exportError }}</PclHint>
+        <div class="pcl-export__grid">
+          <label class="pcl-export__field">
+            <span>整合包名称</span>
+            <PclInput v-model="exportName" placeholder="例如：Fabulously Optimized" />
+          </label>
+          <label class="pcl-export__field">
+            <span>整合包版本</span>
+            <PclInput v-model="exportVersion" placeholder="例如：1.0.0" />
+          </label>
+          <label class="pcl-export__field">
+            <span>导出格式</span>
+            <PclSelect v-model="exportFormat" :options="exportFormats" />
+          </label>
+          <label class="pcl-export__field">
+            <span>输出路径</span>
+            <PclInput v-model="exportOutput" :placeholder="exportOutputPlaceholder" />
+          </label>
+          <label v-if="exportFormat === 'modrinth'" class="pcl-export__field pcl-export__field--wide">
+            <span>Modrinth 简介</span>
+            <PclInput v-model="exportSummary" placeholder="可选，简短介绍这个整合包" />
+          </label>
+          <label v-if="exportFormat === 'curseforge'" class="pcl-export__field pcl-export__field--wide">
+            <span>CurseForge 作者</span>
+            <PclInput v-model="exportAuthor" placeholder="可选，作者名称" />
+          </label>
+        </div>
+
+        <div class="pcl-export__section-title">打包内容</div>
+        <div class="pcl-export__options">
+          <div v-for="item in exportItems" :key="item.key" class="pcl-export__option" @click="toggleExport(item.key, !selectedExport.includes(item.key))">
+            <PclCheckbox :model-value="selectedExport.includes(item.key)" @update:model-value="toggleExport(item.key, $event)" @click.stop />
+            <span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span>
+          </div>
+        </div>
+
+        <div class="pcl-export__checks">
+          <PclCheckbox v-model="exportOptionalFiles" label="标记可选资源" />
+          <PclCheckbox v-model="exportOverwrite" label="覆盖已有文件" />
+        </div>
+
+        <PclHint theme="blue">
+          ZIP 用于保留完整实例；Modrinth / CurseForge 会按平台格式重新生成整合包，需要填写版本。
+        </PclHint>
+
+        <div class="pcl-export__actions">
+          <PclButton variant="highlight" icon="archive" :disabled="busy || exporting || !canExport" @click="startExport">
+            {{ exporting ? '正在导出…' : '开始导出' }}
+          </PclButton>
+        </div>
+      </div>
     </section>
 
     <section v-else-if="section === 'settings'" class="pcl-section-card">
@@ -66,10 +123,24 @@ import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclInput from '../../components/PclInput.vue';
+import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props=defineProps<{section:string;components:any[];settings?:any[];busy:boolean;instance?:string;execute?:Execute}>();
 const emit=defineEmits<{refresh:[];browse:[uid:string];'component-enabled':[component:any,enabled:boolean];'component-version':[component:any,version:string];export:[payload:any];save:[payload:{key:string;value:any}];console:[]}>();
-const expanded=ref('minecraft'), versions=reactive<Record<string,string>>({}), exportName=ref(''), exportVersion=ref('1.0'), exportOutput=ref(''), bundleFiles=ref(false), includeLauncher=ref(false), selectedExport=ref(['game','gameSettings','gameProfile','mod','resourcepacks','shaderpacks','saves','screenshots']);
+const expanded=ref('minecraft'), versions=reactive<Record<string,string>>({}), exportName=ref(''), exportVersion=ref('1.0'), exportOutput=ref(''), exportFormat=ref('zip'), exportSummary=ref(''), exportAuthor=ref(''), exportOptionalFiles=ref(false), exportOverwrite=ref(true), exportError=ref(''), exporting=ref(false), selectedExport=ref(['game','gameSettings','gameProfile','mod','resourcepacks','shaderpacks','saves','screenshots']);
+const exportFormats=[{label:'ZIP 实例包（.zip）',value:'zip'},{label:'Modrinth 整合包（.mrpack）',value:'modrinth'},{label:'CurseForge 整合包（.zip）',value:'curseforge'}];
+const exportOutputPlaceholder=computed(()=>exportFormat.value==='modrinth'?'例如：D:/Export/pack.mrpack':'例如：D:/Export/pack.zip');
+const canExport=computed(()=>Boolean(exportName.value.trim() && exportOutput.value.trim() && (exportFormat.value==='zip' || exportVersion.value.trim())));
+function toggleExport(key:string, enabled:boolean){selectedExport.value=enabled?[...selectedExport.value,key]:selectedExport.value.filter(item=>item!==key);}
+function startExport(){
+  exportError.value='';
+  if(!exportName.value.trim()){exportError.value='请填写整合包名称。';return;}
+  if(!exportOutput.value.trim()){exportError.value='请填写输出路径。';return;}
+  if(exportFormat.value!=='zip'&&!exportVersion.value.trim()){exportError.value='该格式需要填写整合包版本。';return;}
+  exporting.value=true;
+  emit('export',{name:exportName.value.trim(),version:exportVersion.value.trim(),output:exportOutput.value.trim(),format:exportFormat.value,summary:exportSummary.value.trim(),author:exportAuthor.value.trim(),optionalFiles:exportOptionalFiles.value,overwrite:exportOverwrite.value,items:selectedExport.value});
+  window.setTimeout(()=>{exporting.value=false;},800);
+}
 const serverLoading=ref(false), serverError=ref(''), eulaAgreed=ref(false), serverPort=ref(25565), serverMaxPlayers=ref(20), serverGamemode=ref('survival'), serverWhitelist=ref('false'), serverCommand=ref(''), consoleText=ref('');
 const installItems=[{id:'minecraft',label:'Minecraft',icon:'box',uid:'net.minecraft',description:'选择实例使用的 Minecraft 客户端版本。'},{id:'forge',label:'Forge',icon:'anvil',uid:'net.minecraftforge',description:'安装 Forge 加载器及其依赖。'},{id:'neoforge',label:'NeoForge',icon:'cat',uid:'net.neoforged',description:'安装 NeoForge 加载器。'},{id:'cleanroom',label:'Cleanroom',icon:'flask-conical',uid:'com.cleanroommc:cleanroom',description:'安装 Cleanroom 加载器。'},{id:'fabric',label:'Fabric',icon:'scroll',uid:'net.fabricmc.fabric-loader',description:'安装 Fabric 加载器。'},{id:'legacy-fabric',label:'Legacy Fabric',icon:'scroll',uid:'net.legacyfabric.loader',description:'安装旧版 Fabric 加载器。'},{id:'fabric-api',label:'Fabric API',icon:'puzzle',uid:'net.fabricmc.fabric-api',description:'安装 Fabric API。'},{id:'optifine',label:'OptiFine',icon:'gauge',uid:'optifine',description:'安装 OptiFine 或 OptiFabric。'},{id:'liteloader',label:'LiteLoader',icon:'egg',uid:'com.mumfrey:liteloader',description:'安装 LiteLoader。'}];
 const exportItems=[{key:'game',label:'游戏核心',description:'Minecraft 客户端与加载器'},{key:'gameSettings',label:'游戏设置',description:'options.txt 等设置文件'},{key:'gameProfile',label:'游戏配置',description:'实例组件配置'},{key:'mod',label:'模组',description:'mods 文件夹和禁用模组'},{key:'resourcepacks',label:'资源包',description:'resourcepacks 文件夹'},{key:'shaderpacks',label:'光影',description:'shaderpacks 文件夹'},{key:'saves',label:'存档',description:'saves 文件夹'},{key:'screenshots',label:'截图',description:'screenshots 文件夹'},{key:'servers',label:'服务器列表',description:'servers.dat'}];
@@ -105,6 +176,11 @@ async function startServer(){
   }catch(e){serverError.value=e instanceof Error?e.message:String(e);}finally{serverLoading.value=false;}
 }
 async function sendServerCommand(){ const command=serverCommand.value.trim();if(!command||!props.execute||!props.instance)return;try{await props.execute('server.console.command',{instance:props.instance,command});consoleText.value += `${consoleText.value?'\n':''}> ${command}`;serverCommand.value='';}catch(e){serverError.value=e instanceof Error?e.message:String(e);} }
+watch(exportFormat,value=>{
+  const suffix=value==='modrinth'?'.mrpack':'.zip';
+  if(!exportOutput.value)return;
+  if(/\.(zip|mrpack)$/i.test(exportOutput.value))exportOutput.value=exportOutput.value.replace(/\.(zip|mrpack)$/i,suffix);
+},{immediate:true});
 watch(()=>[props.section,props.instance],([section])=>{if(section==='server')void loadServer();});
 onMounted(()=>{if(props.section==='server')void loadServer();});
 </script>
@@ -229,5 +305,121 @@ onMounted(()=>{if(props.section==='server')void loadServer();});
 
 .pcl-install-section :deep(.pcl-hint) {
   margin-top: 12px;
+}
+
+/* Export page uses the same card/input language as the rest of Neo UI. */
+.pcl-section-card.pcl-export {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--pcl-card-border);
+  background: var(--pcl-card);
+  color: var(--pcl-text);
+  box-shadow: var(--pcl-shadow);
+}
+
+.pcl-export__head {
+  padding: 20px 22px 15px;
+  border-bottom: 1px solid var(--pcl-border);
+}
+
+.pcl-export__head h2 {
+  margin: 4px 0 3px;
+  color: var(--pcl-text);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.pcl-export__head p {
+  margin: 0;
+  color: var(--pcl-muted);
+  font-size: 11px;
+}
+
+.pcl-export__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 20px;
+}
+
+.pcl-export__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.pcl-export__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--pcl-muted);
+  font-size: 10px;
+}
+
+.pcl-export__field--wide { grid-column: 1 / -1; }
+
+.pcl-export__section-title {
+  padding-top: 2px;
+  color: var(--pcl-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pcl-export__options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pcl-export__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 4px;
+  background: var(--pcl-c8);
+  cursor: pointer;
+}
+
+.pcl-export__option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pcl-export__option strong {
+  color: var(--pcl-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pcl-export__option small {
+  overflow: hidden;
+  color: var(--pcl-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcl-export__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  padding: 2px 0;
+}
+
+.pcl-export__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+@media (max-width: 700px) {
+  .pcl-export__grid,
+  .pcl-export__options { grid-template-columns: 1fr; }
 }
 </style>

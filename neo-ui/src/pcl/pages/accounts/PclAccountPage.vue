@@ -1,6 +1,6 @@
 <template>
-  <section class="pcl-page pcl-account-page">
-    <aside class="pcl-page-nav">
+  <section class="pcl-page pcl-account-page" :class="{ 'is-embedded': embedded }">
+    <aside v-if="!embedded" class="pcl-page-nav">
       <div class="pcl-page-nav__title"><span class="material-icons">person</span><span>账户</span></div>
       <div class="pcl-page-nav__group">账户管理</div>
       <button v-for="item in items" :key="item.id" class="pcl-page-nav__item" :class="{ active: section === item.id }" @click="openSection(item.id)">
@@ -263,7 +263,7 @@ import PclListItem from '../../components/PclListItem.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
-const props = defineProps<{ accounts: any[]; busy: boolean; execute: Execute }>();
+const props = defineProps<{ accounts: any[]; busy: boolean; execute: Execute; embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; 'cancel-login': [] }>();
 const items = [{ id: 'profile', label: '账户与皮肤', icon: 'user', description: '管理账户缓存、头像、皮肤和披风。' }, { id: 'services', label: '认证服务', icon: 'shield-check', description: '管理 Microsoft、Luna 本地验证和第三方认证服务。' }, { id: 'tools', label: '账户工具', icon: 'tool-case', description: '刷新账户状态并检查认证组件。' }];
 const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('offline');
@@ -762,4 +762,18 @@ async function loadServiceData() {
 .pcl-login-progress__dot.running { background: var(--pcl-c3); }
 .pcl-login-progress__dot.succeeded { background: #34d399; }
 .pcl-login-progress__dot.failed { background: #fb7185; }
+
+.pcl-account-page.is-embedded {
+  display: block;
+  height: auto;
+  overflow: visible;
+  background: transparent;
+}
+
+.pcl-account-page.is-embedded .pcl-page-main {
+  width: 100%;
+  height: auto;
+  padding: 0;
+  overflow: visible;
+}
 </style>

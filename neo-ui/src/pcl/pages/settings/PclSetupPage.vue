@@ -8,7 +8,11 @@
           <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
           <PclHint v-if="notice" theme="blue" closable @close="notice = ''">{{ notice }}</PclHint>
 
-          <template v-if="section === 'launch'">
+          <template v-if="section === 'accounts'">
+            <PclAccountPage :accounts="accounts || []" :busy="busy" :execute="execute" embedded @changed="emit('changed')" />
+          </template>
+
+          <template v-else-if="section === 'launch'">
             <PclCard title="启动选项">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">默认实例隔离</span>
@@ -586,6 +590,7 @@ import PclRadio from '../../components/PclRadio.vue';
 import PclSlider from '../../components/PclSlider.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclIcon from '../../components/PclIcon.vue';
+import PclAccountPage from '../accounts/PclAccountPage.vue';
 import PclJavaPanel from './PclJavaPanel.vue';
 import PclAppearancePanel from './PclAppearancePanel.vue';
 import type { PclNavGroup } from '../../types';
@@ -594,7 +599,7 @@ import { hiddenPclFeatures, isPclFeatureHidden } from '../../composables/usePclF
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 type ApiSetting = { key: string; value: unknown; type?: string; category?: string; surface?: string };
 
-const props = defineProps<{ settings: ApiSetting[]; busy: boolean; scope: Record<string, unknown>; execute: Execute; embedded?: boolean; initialSection?: string }>();
+const props = defineProps<{ settings: ApiSetting[]; busy: boolean; scope: Record<string, unknown>; execute: Execute; accounts?: any[]; embedded?: boolean; initialSection?: string }>();
 const emit = defineEmits<{ changed: [] }>();
 
 const section = ref('launch');
@@ -618,6 +623,7 @@ const launcherGroups: PclNavGroup[] = [
     { id: 'network', label: '联机', icon: 'bubbles', refresh: true },
   ] },
   { label: '启动器', items: [
+    { id: 'accounts', label: '账户管理', icon: 'user', refresh: true },
     { id: 'ui', label: '个性化', icon: 'palette', refresh: true },
     { id: 'language', label: '语言', icon: 'earth', refresh: true },
     { id: 'misc', label: '杂项', icon: 'monitor-cog', refresh: true },

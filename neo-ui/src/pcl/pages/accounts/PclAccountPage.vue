@@ -122,7 +122,11 @@
             <PclInput v-model="loginForm.password" type="password" placeholder="密码" />
           </label>
           <template v-if="loginType === 'yggdrasil'">
-            <PclCheckbox v-model="loginForm.managedLocal" label="使用 Luna 本地验证服务器" />
+            <label class="pcl-login-field">
+              <span>验证服务器</span>
+              <PclSelect v-model="loginPreset" :options="loginPresetOptions" @update:model-value="applyLoginPreset" />
+            </label>
+            <PclCheckbox v-model="loginForm.managedLocal" label="使用 Luna 本地验证服务器" @update:model-value="toggleManagedLocal" />
             <label v-if="!loginForm.managedLocal" class="pcl-login-field">
               <span>认证 URL</span>
               <PclInput v-model="loginForm.authUrl" placeholder="https://..." />
@@ -183,7 +187,7 @@
   </section>
 </template>
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import PclAccountPanel from './PclAccountPanel.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
@@ -211,10 +215,49 @@ const loginTypes = [
   { label: '统一通行证', value: 'unified-pass' },
 ];
 const offlineUuidModes = [{label:'按用户名生成（默认）',value:'default'},{label:'每次随机 UUID',value:'random'},{label:'自定义 UUID',value:'custom'}];
-const loginForm = reactive<any>({ username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '', managedLocal: false, serverId: '', baseUrl: '', minecraftProfileName: '', offlineUuidMode: 'default', offlineUuid: '' });
+const loginPreset = ref('custom');
+const loginForm = reactive<any>({ username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '', authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '', tokenType: 'Standard', managedLocal: false, serverId: '', baseUrl: '', minecraftProfileName: '', offlineUuidMode: 'default', offlineUuid: '' });
+const loginPresetOptions = computed(() => [
+  { label: '自定义服务器', value: 'custom' },
+  ...presets.value.filter((preset: any) => !preset.official && !preset.managedLocal).map((preset: any) => ({ label: preset.name, value: preset.name })),
+  { label: 'Luna 本地验证服务器', value: '__local__' },
+]);
 const presetForm = reactive<any>({ name: '', authUrl: '', sessionUrl: '', tokenType: 'Standard' });
 async function loadPresets() { try { const result = await props.execute('account.preset.list'); presets.value = Array.isArray(result) ? result : []; } catch { presets.value = []; } }
-async function openLogin(type: string, managedLocal = false) { loginType.value = type; loginError.value = ''; Object.assign(loginForm,{username:'',password:'',authUrl:'',sessionUrl:'',sourceName:'',managedLocal,serverId:'',baseUrl:'',minecraftProfileName:'',offlineUuidMode:'default',offlineUuid:''}); loginShown.value = true; }
+onMounted(() => { void loadPresets(); });
+async function openLogin(type: string, managedLocal = false) {
+  loginType.value = type;
+  loginError.value = '';
+  loginPreset.value = managedLocal ? '__local__' : 'custom';
+  Object.assign(loginForm, { username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '',
+    authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '',
+    tokenType: 'Standard', managedLocal, serverId: '', baseUrl: '', minecraftProfileName: '',
+    offlineUuidMode: 'default', offlineUuid: '' });
+  loginShown.value = true;
+}
+function applyLoginPreset(name: string) {
+  if (name === '__local__') {
+    loginForm.managedLocal = true;
+    Object.assign(loginForm, { authUrl: '', sessionUrl: '', sourceName: 'Luna 本地验证服务器',
+      authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '' });
+    return;
+  }
+  loginForm.managedLocal = false;
+  if (name === 'custom') return;
+  const preset = presets.value.find((item: any) => item.name === name);
+  if (!preset) return;
+  Object.assign(loginForm, {
+    authUrl: preset.authUrl || '', sessionUrl: preset.sessionUrl || '',
+    sourceName: preset.sourceName || preset.name || '',
+    authenticateEndpoint: preset.authenticateEndpoint || '', refreshEndpoint: preset.refreshEndpoint || '',
+    validateEndpoint: preset.validateEndpoint || '', profileEndpoint: preset.profileEndpoint || '',
+    oauthTokenEndpoint: preset.oauthTokenEndpoint || '', tokenType: preset.tokenType || 'Standard',
+  });
+}
+function toggleManagedLocal(value: boolean) {
+  if (value) { loginPreset.value = '__local__'; applyLoginPreset('__local__'); }
+  else if (loginPreset.value === '__local__') loginPreset.value = 'custom';
+}
 function localBool(key: string): boolean {
   const value = localSettings.value[key];
   if (typeof value === 'string') return ['true', '1', 'yes', 'on'].includes(value.trim().toLowerCase());

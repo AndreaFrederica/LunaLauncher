@@ -13,7 +13,7 @@
         <PclCard title="账户">
           <template #actions>
             <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('offline')">添加账户</PclButton>
-            <PclIconButton icon="refresh-cw" label="刷新账户" :size="24" :disabled="busy" @click="emit('changed')" />
+            <PclIconButton icon="refresh-cw" label="刷新账户" :size="24" :disabled="busy || refreshing" @click="refreshAll" />
           </template>
           <PclAccountPanel v-if="accounts.length" :accounts="accounts" :busy="busy" :execute="execute" @changed="emit('changed')" />
           <div v-else class="pcl-empty pcl-account-empty">
@@ -184,6 +184,7 @@ const items = [{ id: 'profile', label: '账户与皮肤', icon: 'user', descript
 const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('offline');
 const loginBusy = ref(false), loginError = ref('');
 const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), helperChecked = ref(false);
+const refreshing = ref(false);
 const loginTypes = [
   { label: '离线账户', value: 'offline' },
   { label: 'Microsoft 登录', value: 'microsoft' },
@@ -250,7 +251,29 @@ async function submitLogin() {
 function openPreset(preset?: any) { editingPreset.value = preset || null; Object.assign(presetForm, preset ? { name: preset.name, authUrl: preset.authUrl || '', sessionUrl: preset.sessionUrl || '' } : { name: '', authUrl: '', sessionUrl: '', tokenType: 'Standard' }); presetShown.value = true; }
 async function savePreset() { const payload: any = { ...presetForm }; if (editingPreset.value) await props.execute('account.preset.edit', { originalName: editingPreset.value.name, ...payload }); else await props.execute('account.preset.add', payload); presetShown.value = false; await loadPresets(); }
 async function removePreset(preset: any) { await props.execute('account.preset.remove', { name: preset.name, confirm: true }); await loadPresets(); }
-async function refreshAll() { for (const account of props.accounts) await props.execute('account.refresh', { account: String(account.internalId || account.id || account.profileName) }); emit('changed'); }
+async function refreshAll() {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  try {
+    let tasks: any[] = [];
+    for (const account of props.accounts) {
+      const key = String(account.internalId || account.id || account.profileName);
+      const task = await props.execute('neo.task.start', { operation: 'account.refresh', priority: 'high', parameters: { account: key } });
+      if (task?.taskId) tasks.push(task);
+    }
+    while (tasks.some(task => task && !task.finished)) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      tasks = await Promise.all(tasks.map(task => task.finished ? task : props.execute('neo.task.status', { taskId: task.taskId })));
+    }
+    const failed = tasks.find(task => task?.state !== 'succeeded');
+    if (failed) throw new Error(failed.error || '账户刷新失败');
+    emit('changed');
+  } catch (exception) {
+    loginError.value = exception instanceof Error ? exception.message : String(exception);
+  } finally {
+    refreshing.value = false;
+  }
+}
 async function checkAuthlib() {
   try {
     helper.value = await props.execute('authentication.helper.status', { helper: 'authlib-injector' });

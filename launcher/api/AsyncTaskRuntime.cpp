@@ -33,6 +33,7 @@
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/auth/AuthFlow.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "LaunchController.h"
 #include "minecraft/launch/MinecraftTarget.h"
 #include "api/LauncherApiSupport.h"
@@ -862,11 +863,52 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             finish(id, true);
             return;
         }
-        if (type != "microsoft") {
-            finish(id, false, "Async login currently supports Microsoft and offline accounts.");
+        MinecraftAccountPtr account;
+        bool useDeviceCode = false;
+        if (type == "microsoft") {
+            account = MinecraftAccount::createBlankMSA();
+            useDeviceCode = true;
+        } else if (type == "yggdrasil" || type == "unified-pass") {
+            const auto password = parameters.value("password").toString();
+            if (password.isEmpty()) { finish(id, false, "A password is required."); return; }
+            if (type == "yggdrasil") {
+                const auto authUrl = parameters.value("authUrl").toString();
+                const auto sessionUrl = parameters.value("sessionUrl").toString();
+                const auto managedLocal = parameters.value("managedLocal").toBool(false);
+                const auto isHttpUrl = [](const QString& value) {
+                    const QUrl url(value, QUrl::TolerantMode);
+                    return url.isValid() && !url.host().isEmpty() && (url.scheme() == "http" || url.scheme() == "https");
+                };
+                if (!managedLocal && (authUrl.isEmpty() || sessionUrl.isEmpty())) { finish(id, false, "Yggdrasil login requires authUrl and sessionUrl."); return; }
+                if (!managedLocal && (!isHttpUrl(authUrl) || !isHttpUrl(sessionUrl))) { finish(id, false, "Yggdrasil authUrl and sessionUrl must be HTTP(S) URLs."); return; }
+                account = MinecraftAccount::createYggdrasil(username, password, authUrl, sessionUrl, parameters.value("sourceName").toString(),
+                    parameters.value("refreshEndpoint").toString(), parameters.value("validateEndpoint").toString(),
+                    parameters.value("authenticateEndpoint").toString(), parameters.value("profileEndpoint").toString(),
+                    parameters.value("oauthTokenEndpoint").toString(),
+                    parameters.value("tokenType").toString().compare("OAuth", Qt::CaseInsensitive) == 0 ? YggdrasilTokenType::OAuth : YggdrasilTokenType::Standard);
+                account->accountData()->yggdrasilConfig.managedLocal = managedLocal;
+                if (managedLocal) {
+                    QJsonObject profile;
+                    QString localError;
+                    if (!LocalYggdrasil::instance().ensureProfile(username, password, profile, localError)) {
+                        finish(id, false, localError.isEmpty() ? "Could not provision the local verification account." : localError);
+                        return;
+                    }
+                }
+            } else {
+                const auto serverId = parameters.value("serverId").toString();
+                if (serverId.isEmpty()) { finish(id, false, "UnifiedPass login requires serverId."); return; }
+                const auto baseUrl = parameters.value("baseUrl").toString().trimmed();
+                if (!baseUrl.isEmpty()) {
+                    const QUrl url(baseUrl, QUrl::TolerantMode);
+                    if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https")) { finish(id, false, "UnifiedPass baseUrl must be an HTTP(S) URL."); return; }
+                }
+                account = MinecraftAccount::createUnifiedPass(username, password, serverId, baseUrl);
+            }
+        } else {
+            finish(id, false, "Unsupported account type: " + type);
             return;
         }
-        auto account = MinecraftAccount::createBlankMSA();
         const auto requestedProfile = parameters.value("profileId").toString();
         auto selector = [requestedProfile](const QJsonArray& profiles) -> std::optional<int> {
             if (profiles.isEmpty()) return std::nullopt;
@@ -877,7 +919,7 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             }
             return 0;
         };
-        auto task = account->login(true, selector);
+        auto task = account->login(useDeviceCode, selector);
         if (!task) { finish(id, false, "Could not start the Microsoft login flow."); return; }
         auto& stored = m_records[id];
         stored.task = task.get();

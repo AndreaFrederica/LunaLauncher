@@ -6,7 +6,7 @@
  <Transition name="pcl-route" mode="out-in"><div v-if="isPclShell" :key="page" class="pcl-route-shell">
  <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-error="launchError" :log-lines="consoleLines" @select="selectPclInstance" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
 
- <PclDownloadPage v-if="isPclShell && page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" />
+ <PclDownloadPage v-if="isPclShell && page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-done="endInstallProgress" />
  <PclToolsPage v-if="isPclShell && page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
  <PclSetupPage v-if="isPclShell && page==='pcl-settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
  <PclAccountPage v-if="page==='accounts' && isPclShell" :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" @cancel-login="cancelDeviceLogin" />
@@ -55,6 +55,7 @@
   </q-card-actions>
  </q-card>
 </q-dialog>
+<PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" />
 <PclToastHost />
 <NeoUiOverlays :add-dialog="addDialog" :busy="busy" :execute="catalogExecute" :call="call" :is-pcl-shell="isPclShell" :status="status" :task-snapshot="taskSnapshot" :task-center-open="taskCenterOpen" :search-shown="searchShown" :global-search="globalSearch" :search-results="searchResults" :icons="icons" :dialog="dialog" :prompt="prompt" :answer="answer" :choices="choices" :confirmation="confirmation" :secret="secret" @update:add-dialog="addDialog=$event" @created="refresh" @cancel="cancel" @task-updated="handleTaskUpdate" @update:task-center-open="taskCenterOpen=$event" @update:search-shown="searchShown=$event" @update:global-search="globalSearch=$event" @search-result="openSearchResult" @dialog-finish="finishDialog" @update:answer="answer=$event" />
 </div>
@@ -77,6 +78,7 @@ import XmclStoreWorkspace from './xmcl-port/XmclStoreWorkspace.vue';
 import XmclMultiplayerWorkspace from './xmcl-port/XmclMultiplayerWorkspace.vue';
 import XmclSystemBar from './xmcl-port/XmclSystemBar.vue';
 import PclDownloadPage from './pcl/pages/download/PclDownloadPage.vue';
+import PclInstallProgressDialog from './pcl/pages/download/PclInstallProgressDialog.vue';
 import PclToolsPage from './pcl/pages/tools/PclToolsPage.vue';
 import PclSetupPage from './pcl/pages/settings/PclSetupPage.vue';
 import PclInstancePage from './pcl/pages/instance/PclInstancePage.vue';
@@ -108,6 +110,7 @@ const components=ref<any[]>([]),componentError=ref('');
 async function loadComponents(){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});components.value=r.components;}catch(e){componentError.value=message(e);}}
 async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name||c.id)+' 版本',c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
 const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false),searchShown=ref(false),globalSearch=ref('');
+const installProgressOpen=ref(false),installProgressTitle=ref('正在安装整合包'),installTask=ref<any>(null),installCancelling=ref(false);
 const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
 const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
 const launchQueue=ref<any[]>([]);
@@ -342,10 +345,14 @@ async function editSetting(s:any){const value=await ask('编辑 '+s.key,JSON.str
 function isTaskFinished(value:any){return Boolean(value?.finished) || value?.running === false || ['succeeded','failed','aborted','finished','completed','cancelled','canceled'].includes(String(value?.state || value?.status || '').toLowerCase());}
 function handleTaskUpdate(value:any){
  if(!value)return;
+ if(installProgressOpen.value)installTask.value=value;
  updateLaunchProgress(value);
  if(isTaskFinished(value)){if(launchInFlight && (value.failReason || value.successful===false)){launchError.value=value.failReason || value.details || '启动任务失败';setLaunchState('failed');}taskSnapshot.value=null;taskCenterOpen.value=false;status.value='';}
  else {taskSnapshot.value=value;status.value=value.status || value.state || '正在执行';}
 }
+function beginInstallProgress(info:any){installProgressTitle.value=info?.title || '正在安装整合包';installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
+function endInstallProgress(){installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;}
+async function cancelInstallProgress(){installCancelling.value=true;try{await launcher.execute('task.cancel',{});}catch{/* the task may already be terminal */}}
 async function cancel(){try{await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value='启动已取消';resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
 async function openFolder(){
  if(!selected.value)return;

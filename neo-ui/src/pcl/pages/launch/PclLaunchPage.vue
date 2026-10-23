@@ -163,7 +163,7 @@
         @click="togglePclMusic"
       />
       <PclExtraButton icon="scroll-text" label="启动日志" @click="scrollToLog" />
-      <PclExtraButton icon="refresh-cw" label="刷新" :disabled="busy" @click="emit('refresh')" />
+      <PclExtraButton icon="refresh-cw" label="刷新" :disabled="busy" @click="refreshHome" />
     </div>
   </section>
 </template>
@@ -215,6 +215,11 @@ const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(ca
 const logElement = ref<HTMLElement | null>(null);
 function scrollToLog() {
   logElement.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showPclToast({ type: 'info', title: '启动日志', message: logLines.value.length ? '已定位到启动日志' : '暂无启动日志', timeout: 2200 });
+}
+function refreshHome() {
+  emit('refresh');
+  showPclToast({ type: 'info', title: '刷新', message: '正在刷新实例和账户信息…', timeout: 2200 });
 }
 const logLines = computed(() => (props.logLines || []).slice(-500));
 

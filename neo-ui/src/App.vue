@@ -55,6 +55,7 @@
   </q-card-actions>
  </q-card>
 </q-dialog>
+<PclTaskCenter v-model="taskCenterOpen" :execute="call" />
 <PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" />
 <PclToastHost />
 <NeoUiOverlays :add-dialog="addDialog" :busy="busy" :execute="catalogExecute" :call="call" :is-pcl-shell="isPclShell" :status="status" :task-snapshot="taskSnapshot" :task-center-open="taskCenterOpen" :search-shown="searchShown" :global-search="globalSearch" :search-results="searchResults" :icons="icons" :dialog="dialog" :prompt="prompt" :answer="answer" :choices="choices" :confirmation="confirmation" :secret="secret" @update:add-dialog="addDialog=$event" @created="refresh" @cancel="cancel" @task-updated="handleTaskUpdate" @update:task-center-open="taskCenterOpen=$event" @update:search-shown="searchShown=$event" @update:global-search="globalSearch=$event" @search-result="openSearchResult" @dialog-finish="finishDialog" @update:answer="answer=$event" />
@@ -79,6 +80,7 @@ import XmclMultiplayerWorkspace from './xmcl-port/XmclMultiplayerWorkspace.vue';
 import XmclSystemBar from './xmcl-port/XmclSystemBar.vue';
 import PclDownloadPage from './pcl/pages/download/PclDownloadPage.vue';
 import PclInstallProgressDialog from './pcl/pages/download/PclInstallProgressDialog.vue';
+import PclTaskCenter from './pcl/components/PclTaskCenter.vue';
 import PclToolsPage from './pcl/pages/tools/PclToolsPage.vue';
 import PclSetupPage from './pcl/pages/settings/PclSetupPage.vue';
 import PclInstancePage from './pcl/pages/instance/PclInstancePage.vue';

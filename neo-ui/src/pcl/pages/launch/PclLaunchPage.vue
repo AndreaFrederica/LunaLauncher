@@ -229,6 +229,22 @@
       <PclInstanceSelectView v-else key="selection" :instances="instances" :icons="icons" :selected="selected" @back="selectionOpen = false" @select="selectInstance" @download="emit('download')" @action="(instance, action) => emit('instance-action', instance, action)" />
     </Transition>
 
+    <PclLaunchProgressDialog
+      v-if="preferences.pclNavLayout === 'mmc-classic'"
+      v-model="launchDialogOpen"
+      :state="launchState"
+      :progress="launchProgress"
+      :stage="launchStage"
+      :speed="launchSpeed"
+      :error="launchError"
+      :instance-name="selected?.name"
+      :account-name="activeAccount?.profileName || activeAccount?.displayName"
+      :login-method="launchLoginMethod"
+      :hint="launchHint"
+      @cancel="emit('cancel')"
+      @retry="emit('launch')"
+    />
+
     <q-dialog v-model="hintDialog">
       <PclCard title="关闭社区提示" class="pcl-hint-dialog">
         <p>请输入 <b>pclcommunity</b> 以确认关闭。</p>
@@ -265,6 +281,7 @@
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import PclInstanceSelectView from './PclInstanceSelectView.vue';
 import PclClassicSidebar from '../../components/PclClassicSidebar.vue';
+import PclLaunchProgressDialog from '../../components/PclLaunchProgressDialog.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -288,6 +305,12 @@ const accounts = computed(() => props.accounts || []);
 const accountId = computed(() => props.accountId || '');
 const launchState = computed<LaunchState>(() => props.launchState || (props.busy ? 'loading' : props.instances.length ? (props.selected ? 'launch' : 'disabled') : 'download'));
 const activeAccount = computed(() => accounts.value.find(account => accountKey(account) === props.accountId) || accounts.value.find(account => account.default) || accounts.value[0]);
+const launchDialogOpen = ref(false);
+watch(launchState, value => {
+  if (['launching', 'launched', 'failed', 'cancelled'].includes(value)) launchDialogOpen.value = true;
+  if (value === 'launch') launchDialogOpen.value = false;
+});
+
 const hasAccount = computed(() => Boolean(activeAccount.value));
 const instanceDescription = computed(() => { const version = props.selected?.runtime?.minecraftVersion || props.selected?.runtime?.minecraft || props.selected?.minecraftVersion; return version ? `Minecraft ${version}` : (props.selected?.name || 'Minecraft 实例'); });
 const loginMethodLabel = computed(() => props.launchLoginMethod || accountTypeLabel(activeAccount.value));

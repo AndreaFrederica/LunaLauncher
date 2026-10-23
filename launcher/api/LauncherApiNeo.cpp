@@ -58,7 +58,7 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
                 { "ok", true },
                 { "data", QJsonObject{
                     { "parallel", true },
-                    { "maxActive", 3 },
+                    { "maxActive", AsyncTaskRuntime::maxActive },
                     { "operations", QJsonArray{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.launch", "instance.export", "server.start" } },
                     { "conflictPolicy", "instance.import/instance.create/modpack.install use the global 'instances' key; resource.install, resource.install-with-dependencies, instance.update and component updates use 'instance:<id>'; java.install uses 'java'; account.refresh uses 'account:<id>'; account.login uses 'accounts'; instance.launch, instance.export and server.start use 'instance:<id>'. Different keys run concurrently." },
                 } }

@@ -311,6 +311,24 @@ function readFavorites():any[]{try{return JSON.parse(localStorage.getItem('luna-
 function writeFavorites(value:any[]){try{localStorage.setItem('luna-pcl-favorites',JSON.stringify(value.slice(-200)));}catch{/* storage unavailable in native webview */}}
 function toggleFavorite(){if(!project.value)return;const key=favoriteKey(project.value),all=readFavorites();if(favorite.value){writeFavorites(all.filter(item=>item.key!==key));favorite.value=false;}else{writeFavorites([...all.filter(item=>item.key!==key),{key,provider:provider.value,kind:props.kind,name:project.value.name,description:project.value.description,projectId:project.value.projectId,iconUrl:project.value.iconUrl}]);favorite.value=true;}}
 async function select(item:any){if(props.busy)return;error.value='';project.value=normalize(item);favorite.value=readFavorites().some(entry=>entry.key===favoriteKey(project.value));detailLoading.value=true;projectTab.value='overview';try{const detail=await props.execute(props.packs?'modpack.project':'resource.project',{...params(),projectId:item.projectId});project.value={...project.value,...normalize(detail)};const r=await props.execute(props.packs?'modpack.versions':'resource.versions',{...params(),projectId:item.projectId});versions.value=(Array.isArray(r)?r:(r?.versions||[])).sort((a:any,b:any)=>String(b.datePublished||b.created||'').localeCompare(String(a.datePublished||a.created||'')));version.value=versions.value[0]?.versionId||'';instanceName.value=item.name;}catch(e){error.value=String(e);}finally{detailLoading.value=false;}}
+async function packIconData(url: string): Promise<string> {
+  if (!url) return '';
+  try {
+    const response = await fetch(url, { mode: 'cors' });
+    if (!response.ok) return '';
+    const bitmap = await createImageBitmap(await response.blob());
+    const canvas = document.createElement('canvas');
+    canvas.width = 96;
+    canvas.height = 96;
+    const context = canvas.getContext('2d');
+    if (!context) return '';
+    context.drawImage(bitmap, 0, 0, 96, 96);
+    return canvas.toDataURL('image/png').split(',')[1] || '';
+  } catch {
+    return '';
+  }
+}
+
 async function install(){
   if(!project.value||!version.value)return;
   installing.value=true;error.value='';
@@ -318,10 +336,11 @@ async function install(){
   emit('install-start',info);
   try{
     if(props.packs){
+      const iconData=await packIconData(project.value.iconUrl);
       let task:any=await props.execute('neo.task.start',{
         operation:'modpack.install',
         priority:'high',
-        parameters:{provider:provider.value,projectId:project.value.projectId,versionId:version.value,name:instanceName.value,iconUrl:project.value.iconUrl},
+        parameters:{provider:provider.value,projectId:project.value.projectId,versionId:version.value,name:instanceName.value,iconUrl:project.value.iconUrl,iconData},
       });
       while(task && !task.finished){
         emit('install-progress',task);

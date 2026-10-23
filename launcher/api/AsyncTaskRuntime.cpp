@@ -729,17 +729,24 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         auto* importTask = new InstanceImportTask(url, nullptr, { { "pack_id", projectId }, { "pack_version_id", versionId } });
         QString iconKey = parameters.value("icon").toString();
         if (iconKey.isEmpty() || iconKey == "default") {
-            QString iconUrl = parameters.value("iconUrl").toString();
-            if (iconUrl.isEmpty()) {
-                const auto project = api.execute("resource.project", request, interaction);
-                if (project.value("ok").toBool())
-                    iconUrl = project.value("data").toObject().value("iconUrl").toString();
-            }
-            if (!iconUrl.isEmpty()) {
+            const auto iconData = QByteArray::fromBase64(parameters.value("iconData").toString().toLatin1());
+            if (!iconData.isEmpty()) {
                 QString iconError;
-                const auto cover = downloadPackCover(QUrl(iconUrl), iconError);
-                if (!cover.isEmpty()) iconKey = cover;
-                else if (!iconError.isEmpty()) m_records[id].status = "整合包封面获取失败，使用默认图标：" + iconError;
+                iconKey = savePackCover(QImage::fromData(iconData, "PNG"), iconError);
+            }
+            if (iconKey.isEmpty() || iconKey == "default") {
+                QString iconUrl = parameters.value("iconUrl").toString();
+                if (iconUrl.isEmpty()) {
+                    const auto project = api.execute("resource.project", request, interaction);
+                    if (project.value("ok").toBool())
+                        iconUrl = project.value("data").toObject().value("iconUrl").toString();
+                }
+                if (!iconUrl.isEmpty()) {
+                    QString iconError;
+                    const auto cover = downloadPackCover(QUrl(iconUrl), iconError);
+                    if (!cover.isEmpty()) iconKey = cover;
+                    else if (!iconError.isEmpty()) m_records[id].status = "整合包封面获取失败，使用默认图标：" + iconError;
+                }
             }
         }
         if (!iconKey.isEmpty() && iconKey != "default") importTask->setIcon(iconKey);

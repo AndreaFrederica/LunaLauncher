@@ -174,7 +174,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "modpack.install", "resource.install", "resource.install-with-dependencies", "java.install" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();

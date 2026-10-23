@@ -70,9 +70,39 @@
           </div>
           <PclButton size="sm" icon="folder-open" :disabled="!localDataRoot" @click="openLocalDir">打开</PclButton>
         </div>
+        <div class="pcl-local-network">
+          <div class="pcl-local-network__head">
+            <strong>对外服务</strong>
+            <PclButton size="sm" variant="highlight" icon="save" :disabled="busy" @click="applyLocalService">应用并重启</PclButton>
+          </div>
+          <PclCheckbox v-model="localExternal" label="允许局域网 / 外网连接" />
+          <div class="pcl-local-network__grid">
+            <label class="pcl-login-field"><span>监听端口</span><PclInput v-model="localPort" placeholder="25585" /></label>
+            <label class="pcl-login-field"><span>对外访问 URL</span><PclInput v-model="localPublicUrl" placeholder="http://192.168.1.10:25585" /></label>
+          </div>
+          <PclHint v-if="localExternal && !localPublicUrl" theme="yellow">开启对外服务前请填写客户端可访问的 HTTP URL。</PclHint>
+        </div>
         <div class="pcl-check-grid">
           <PclCheckbox :model-value="localBool('LocalServiceCache')" label="缓存游戏资源" @update:model-value="setLocalSetting('LocalServiceCache', $event)" />
           <PclCheckbox :model-value="localBool('YggdrasilAccountCache')" label="缓存账户与皮肤" @update:model-value="setLocalSetting('YggdrasilAccountCache', $event)" />
+        </div>
+        <div class="pcl-local-users">
+          <div class="pcl-local-users__head">
+            <strong>本地用户数据库</strong>
+            <div class="pcl-actions">
+              <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadLocalServiceStatus">刷新</PclButton>
+              <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLocalUser">添加用户</PclButton>
+            </div>
+          </div>
+          <div v-if="localUsers.length" class="pcl-local-users__list">
+            <div v-for="user in localUsers" :key="user.id" class="pcl-local-users__row">
+              <PclIcon name="user" :size="16" />
+              <span>{{ user.username }}</span>
+              <small>{{ user.enabled ? '启用' : '禁用' }}</small>
+              <PclIconButton icon="trash-2" label="删除用户" :size="22" danger :disabled="busy" @click="removeLocalUser(user)" />
+            </div>
+          </div>
+          <div v-else class="pcl-empty pcl-empty--compact">还没有本地用户。</div>
         </div>
         <PclHint theme="blue">
           服务进程由 Luna 后端在登录或启动时按需拉起，退出启动器时自动停止。这里管理缓存策略、数据目录和认证组件状态。
@@ -184,6 +214,22 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+    <q-dialog v-model="localUserShown">
+      <q-card class="pcl-dialog">
+        <q-card-section>
+          <div class="pcl-kicker">本地用户</div>
+          <h3>添加本地验证用户</h3>
+        </q-card-section>
+        <q-card-section class="pcl-login-body">
+          <label class="pcl-login-field"><span>用户名</span><PclInput v-model="localUserForm.username" placeholder="本地用户名" /></label>
+          <label class="pcl-login-field"><span>密码</span><PclInput v-model="localUserForm.password" type="password" placeholder="密码" /></label>
+        </q-card-section>
+        <q-card-actions align="right">
+          <PclButton variant="ghost" @click="localUserShown = false">取消</PclButton>
+          <PclButton variant="highlight" :disabled="busy || !localUserForm.username || !localUserForm.password" @click="createLocalUser">创建</PclButton>
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </section>
 </template>
 <script setup lang="ts">
@@ -207,6 +253,8 @@ const presetTest = ref<any>(null), testingPreset = ref('');
 const loginBusy = ref(false), loginError = ref('');
 const loginTaskId = ref(''), loginDeviceUrl = ref(''), loginDeviceCode = ref('');
 const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), helperChecked = ref(false);
+const localExternal = ref(false), localPort = ref('25585'), localPublicUrl = ref(''), localUsers = ref<any[]>([]);
+const localUserShown = ref(false), localUserForm = reactive({ username: '', password: '' });
 const refreshing = ref(false);
 const loginTypes = [
   { label: '离线账户', value: 'offline' },
@@ -258,6 +306,54 @@ function toggleManagedLocal(value: boolean) {
   if (value) { loginPreset.value = '__local__'; applyLoginPreset('__local__'); }
   else if (loginPreset.value === '__local__') loginPreset.value = 'custom';
 }
+async function loadLocalServiceStatus() {
+  try {
+    const status = await props.execute('local.yggdrasil.status');
+    localExternal.value = Boolean(status?.external);
+    localPort.value = String(status?.port || 25585);
+    localPublicUrl.value = String(status?.publicUrl || '');
+    localUsers.value = (Array.isArray(status?.users) ? status.users : []).filter((user: any) => !String(user.username || '').startsWith('snapshot-'));
+    if (status?.dataDirectory) localDataRoot.value = String(status.dataDirectory);
+  } catch {
+    localUsers.value = [];
+  }
+}
+async function applyLocalService() {
+  try {
+    await props.execute('local.yggdrasil.configure', {
+      external: localExternal.value,
+      port: Number(localPort.value) || 25585,
+      publicUrl: localPublicUrl.value.trim(),
+    });
+    await loadLocalServiceStatus();
+  } catch (exception) {
+    alert(exception instanceof Error ? exception.message : String(exception));
+  }
+}
+function openLocalUser() {
+  localUserForm.username = '';
+  localUserForm.password = '';
+  localUserShown.value = true;
+}
+async function createLocalUser() {
+  try {
+    await props.execute('local.yggdrasil.users.create', { username: localUserForm.username, password: localUserForm.password });
+    localUserShown.value = false;
+    await loadLocalServiceStatus();
+  } catch (exception) {
+    alert(exception instanceof Error ? exception.message : String(exception));
+  }
+}
+async function removeLocalUser(user: any) {
+  if (!window.confirm(`删除本地用户 ${user.username}？`)) return;
+  try {
+    await props.execute('local.yggdrasil.users.remove', { id: user.id, confirm: true });
+    await loadLocalServiceStatus();
+  } catch (exception) {
+    alert(exception instanceof Error ? exception.message : String(exception));
+  }
+}
+
 function localBool(key: string): boolean {
   const value = localSettings.value[key];
   if (typeof value === 'string') return ['true', '1', 'yes', 'on'].includes(value.trim().toLowerCase());
@@ -403,6 +499,7 @@ async function loadServiceData() {
   await loadPresets();
   await loadLocalSettings();
   await checkAuthlib();
+  await loadLocalServiceStatus();
 }
 
 </script>
@@ -507,5 +604,76 @@ async function loadServiceData() {
   overflow-wrap: anywhere;
   color: var(--pcl-muted);
   font: 12px/1.5 ui-monospace, Consolas, monospace;
+}
+
+.pcl-local-network {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 5px;
+  background: var(--pcl-c8);
+}
+
+.pcl-local-network__head,
+.pcl-local-users__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pcl-local-network__head strong,
+.pcl-local-users__head strong {
+  color: var(--pcl-text);
+  font-size: 12px;
+}
+
+.pcl-local-network__grid {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+}
+
+.pcl-local-users {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 5px;
+  background: var(--pcl-c8);
+}
+
+.pcl-local-users__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pcl-local-users__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 5px;
+  border-bottom: 1px solid var(--pcl-border);
+  color: var(--pcl-text);
+  font-size: 11px;
+}
+
+.pcl-local-users__row span {
+  flex: 1;
+}
+
+.pcl-local-users__row small {
+  color: var(--pcl-muted);
+  font-size: 9px;
+}
+
+@media (max-width: 700px) {
+  .pcl-local-network__grid { grid-template-columns: 1fr; }
 }
 </style>

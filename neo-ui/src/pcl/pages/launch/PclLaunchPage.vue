@@ -238,7 +238,7 @@ watch(() => props.logLines?.length, async () => {
 const hintVisible = ref(loadHintVisibility());
 function loadHintVisibility() { try { return localStorage.getItem('pcl-ce-community-hint-hidden') !== '1'; } catch { return true; } }
 function accountKey(account: any) { return String(account?.internalId || account?.id || account?.profileName || ''); }
-function accountTypeLabel(account: any) { if (!account) return '请先添加启动账户'; const type = String(account.type || '').toLowerCase(); if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户'; if (type.includes('ygg')) return '第三方认证账户'; return '离线账户'; }
+function accountTypeLabel(account: any) { if (!account) return '请先添加启动账户'; const type = String(account.type || '').toLowerCase(); if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户'; if (type.includes('ygg')) { const server = account.yggdrasil?.displayName || account.yggdrasil?.sourceName || account.authServerName || '第三方认证'; return `第三方认证 · ${server}`; } if (type.includes('unified')) { const server = account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServerName || 'UnifiedPass'; return `UnifiedPass · ${server}`; } return '离线账户'; }
 function chooseAccount(account: any) { accountMenu.value = false; emit('account-change', accountKey(account)); }
 function openAccountPage(mode: 'add' | 'manage') { accountMenu.value = false; emit('account-page', mode); }
 function selectInstance(instance: any) { selectionOpen.value = false; emit('select', instance); }

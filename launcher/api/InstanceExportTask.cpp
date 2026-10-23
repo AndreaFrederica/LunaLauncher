@@ -174,6 +174,11 @@ void InstanceExportTask::fail(const QString& message)
     if (!m_aborted) emitFailed(message);
 }
 
+QList<Task*> InstanceExportTask::getSubTasks() const
+{
+    return m_child ? QList<Task*>{ m_child.get() } : QList<Task*>{};
+}
+
 bool InstanceExportTask::abort()
 {
     m_aborted = true;

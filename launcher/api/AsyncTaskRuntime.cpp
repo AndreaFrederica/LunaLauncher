@@ -327,19 +327,89 @@ void AsyncTaskRuntime::emitChanged(const Record& record)
     emit taskChanged(snapshot(record));
 }
 
+namespace {
+
+QString stepStateName(TaskStepState state)
+{
+    switch (state) {
+        case TaskStepState::Running: return "running";
+        case TaskStepState::Succeeded: return "succeeded";
+        case TaskStepState::Failed: return "failed";
+        default: return "waiting";
+    }
+}
+
+void collectTaskChildren(Task* task, QJsonArray& out, QSet<QUuid>& seen, int depth = 0)
+{
+    if (!task || depth > 4 || out.size() >= 96) return;
+    for (const auto& step : task->getStepProgress()) {
+        if (!step || seen.contains(step->uid) || out.size() >= 96) continue;
+        seen.insert(step->uid);
+        out.append(QJsonObject{
+            { "id", step->uid.toString(QUuid::WithoutBraces) },
+            { "label", step->label.isEmpty() ? step->status : step->label },
+            { "current", static_cast<double>(step->current) },
+            { "total", static_cast<double>(step->total) },
+            { "transferRate", static_cast<double>(step->transferRate) },
+            { "status", step->status },
+            { "details", step->details },
+            { "state", stepStateName(step->state) },
+        });
+    }
+    for (Task* child : task->getSubTasks()) {
+        if (!child || out.size() >= 96) continue;
+        const auto steps = child->getStepProgress();
+        if (!steps.isEmpty()) {
+            collectTaskChildren(child, out, seen, depth + 1);
+            continue;
+        }
+        const auto uid = child->getUid();
+        if (seen.contains(uid)) continue;
+        seen.insert(uid);
+        const auto label = child->getStatus().isEmpty() ? child->objectName() : child->getStatus();
+        if (label.isEmpty() && child->getTotalProgress() <= 0) continue;
+        out.append(QJsonObject{
+            { "id", uid.toString(QUuid::WithoutBraces) },
+            { "label", label },
+            { "current", static_cast<double>(child->getProgress()) },
+            { "total", static_cast<double>(child->getTotalProgress()) },
+            { "transferRate", static_cast<double>(child->getTransferRate()) },
+            { "status", child->getStatus() },
+            { "details", child->getDetails() },
+            { "state", child->isFinished() ? (child->wasSuccessful() ? "succeeded" : "failed") : "running" },
+        });
+    }
+}
+
+}  // namespace
+
 QJsonObject AsyncTaskRuntime::snapshot(const Record& record) const
 {
-    QJsonArray reads, writes;
+    QJsonArray reads, writes, children;
     for (const auto& key : record.reads) reads.append(key);
     for (const auto& key : record.writes) writes.append(key);
+    QSet<QUuid> seen;
+    qint64 transferRate = 0;
+    QString details;
+    if (record.task) {
+        transferRate = record.task->getTransferRate();
+        details = record.task->getDetails();
+        collectTaskChildren(record.task.data(), children, seen);
+    }
     return QJsonObject{
         { "taskId", record.id },
         { "operation", record.operation },
         { "state", record.state },
         { "status", record.status },
+        { "name", record.parameters.value("name").toString() },
         { "error", record.error },
         { "progress", static_cast<double>(record.progress) },
         { "total", static_cast<double>(record.total) },
+        { "totalProgress", static_cast<double>(record.total) },
+        { "transferRate", static_cast<double>(transferRate) },
+        { "details", details },
+        { "children", children },
+        { "steps", children },
         { "finished", record.finished },
         { "cancelRequested", record.cancelRequested },
         { "conflictKey", record.conflictKey },

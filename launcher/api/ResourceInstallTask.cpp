@@ -265,6 +265,11 @@ void ResourceInstallTask::fail(const QString& message)
     emitFailed(message);
 }
 
+QList<Task*> ResourceInstallTask::getSubTasks() const
+{
+    return m_current ? QList<Task*>{ m_current.get() } : QList<Task*>{};
+}
+
 bool ResourceInstallTask::abort()
 {
     m_aborted = true;

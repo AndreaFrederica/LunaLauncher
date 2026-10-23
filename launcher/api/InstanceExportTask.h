@@ -24,6 +24,8 @@ class InstanceExportTask final : public Task {
 
     void executeTask() override;
     bool abort() override;
+    bool isMultiStep() const override { return true; }
+    QList<Task*> getSubTasks() const override;
     bool canAbort() const override { return true; }
 
    private:

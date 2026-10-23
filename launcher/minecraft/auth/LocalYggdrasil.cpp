@@ -190,6 +190,30 @@ bool LocalYggdrasil::removeUser(const QString& id, QString& error)
     return request("DELETE", "users/" + QUrl::toPercentEncoding(id), {}, ignored, error);
 }
 
+bool LocalYggdrasil::uploadSkin(const QString& profileId, const QString& path, const QString& variant, QString& error)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        error = tr("Could not read the skin PNG.");
+        return false;
+    }
+    const auto body = file.readAll();
+    if (body.isEmpty() || body.size() > 2 * 1024 * 1024) {
+        error = tr("The skin PNG is empty or too large.");
+        return false;
+    }
+    const auto model = variant == "slim" ? "slim" : "classic";
+    QJsonObject ignored;
+    return request("PUT", "profiles/" + QString::fromLatin1(QUrl::toPercentEncoding(profileId)) + "/skin?model=" + model,
+                   body, ignored, error, "image/png");
+}
+
+bool LocalYggdrasil::deleteSkin(const QString& profileId, QString& error)
+{
+    QJsonObject ignored;
+    return request("DELETE", "profiles/" + QString::fromLatin1(QUrl::toPercentEncoding(profileId)) + "/skin", {}, ignored, error);
+}
+
 bool LocalYggdrasil::createProfile(const QString& name, const QString& password, const QString& uuid, QJsonObject& profile, QString& error)
 {
     QJsonObject user;

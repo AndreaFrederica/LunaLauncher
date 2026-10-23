@@ -12,6 +12,7 @@
 #include "minecraft/World.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "minecraft/skins/CapeChange.h"
 #include "minecraft/skins/SkinDelete.h"
 #include "minecraft/skins/SkinList.h"
@@ -233,8 +234,24 @@ QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, U
     const auto account = findAccount(parameters.value("account").toString());
     if (!account)
         return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
+    if (account->accountType() == AccountType::Yggdrasil && account->accountData()->yggdrasilConfig.managedLocal) {
+        SkinList skins(nullptr, skinDirectory(), account);
+        auto* skin = findSkin(skins, parameters.value("skin").toString());
+        if (!skin)
+            return OperationService::failure(QObject::tr("Skin not found: %1").arg(parameters.value("skin").toString()), 2);
+        if (!QFileInfo::exists(skin->getPath()))
+            return OperationService::failure(QObject::tr("Skin file not found: %1").arg(skin->getPath()), 2);
+        const auto variant = parameters.value("variant").toString(skin->getModelString()).toLower();
+        if (variant != "classic" && variant != "slim")
+            return OperationService::failure(QObject::tr("Skin variant must be classic or slim."), 2);
+        QString error;
+        if (!LocalYggdrasil::instance().uploadSkin(account->profileId(), skin->getPath(), variant, error))
+            return OperationService::failure(error, 3);
+        if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
+        return OperationService::success(QJsonObject{ { "skin", skin->name() }, { "variant", variant }, { "uploaded", true }, { "local", true } });
+    }
     if (account->accountType() != AccountType::MSA)
-        return OperationService::failure(QObject::tr("Skin upload requires a Microsoft account."), 2);
+        return OperationService::failure(QObject::tr("Skin upload requires a Microsoft or managed local account."), 2);
     if (account->accessToken().isEmpty())
         return OperationService::failure(QObject::tr("The account has no access token for skin changes."), 3);
     SkinList skins(nullptr, skinDirectory(), account);
@@ -277,8 +294,15 @@ QJsonObject resetAccountSkin(LauncherApi& api, const QJsonObject& parameters, Us
     const auto account = findAccount(parameters.value("account").toString());
     if (!account)
         return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
+    if (account->accountType() == AccountType::Yggdrasil && account->accountData()->yggdrasilConfig.managedLocal) {
+        QString error;
+        if (!LocalYggdrasil::instance().deleteSkin(account->profileId(), error))
+            return OperationService::failure(error, 3);
+        if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
+        return OperationService::success(QJsonObject{ { "account", account->profileId() }, { "reset", true }, { "local", true } });
+    }
     if (account->accountType() != AccountType::MSA)
-        return OperationService::failure(QObject::tr("Skin reset requires a Microsoft account."), 2);
+        return OperationService::failure(QObject::tr("Skin reset requires a Microsoft or managed local account."), 2);
     if (account->accessToken().isEmpty())
         return OperationService::failure(QObject::tr("The account has no access token for skin changes."), 3);
     auto job = makeShared<NetJob>(QObject::tr("Reset skin"), APPLICATION->network(), 1);

@@ -25,6 +25,8 @@ class LocalYggdrasil : public QObject {
     bool listUsers(QJsonArray& users, QString& error);
     bool createUser(const QString& username, const QString& password, QJsonObject& user, QString& error);
     bool removeUser(const QString& id, QString& error);
+    bool uploadSkin(const QString& profileId, const QString& path, const QString& variant, QString& error);
+    bool deleteSkin(const QString& profileId, QString& error);
     bool request(const QByteArray& method,
                  const QString& path,
                  const QByteArray& body,

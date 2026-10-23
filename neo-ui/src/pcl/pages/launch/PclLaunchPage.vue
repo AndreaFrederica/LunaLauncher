@@ -239,6 +239,7 @@
 
     <div class="pcl-extra-rail">
       <PclExtraButton
+        v-if="preferences.pclFloatTasks"
         icon="list"
         label="任务中心"
         :badge="busy ? '·' : ''"
@@ -251,8 +252,8 @@
         :label="pclMusic.playing ? '暂停背景音乐' : '播放背景音乐'"
         @click="togglePclMusic"
       />
-      <PclExtraButton icon="scroll-text" label="启动日志" @click="scrollToLog" />
-      <PclExtraButton icon="refresh-cw" label="刷新" :disabled="busy" @click="refreshHome" />
+      <PclExtraButton v-if="preferences.pclFloatLog" icon="scroll-text" label="启动日志" @click="scrollToLog" />
+      <PclExtraButton v-if="preferences.pclFloatRefresh" icon="refresh-cw" label="刷新" :disabled="busy" @click="refreshHome" />
     </div>
   </section>
 </template>

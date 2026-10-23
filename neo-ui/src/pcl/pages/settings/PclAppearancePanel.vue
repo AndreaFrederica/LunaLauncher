@@ -251,6 +251,15 @@
       <PclHint theme="blue">只修改 PCL 外观顶部标题栏，不影响窗口按钮、导航和内容区。</PclHint>
     </PclCard>
 
+    <PclCard title="启动页浮动按钮">
+      <div class="pcl-check-grid">
+        <PclCheckbox v-model="preferences.pclFloatTasks" label="任务中心" />
+        <PclCheckbox v-model="preferences.pclFloatLog" label="启动日志" />
+        <PclCheckbox v-model="preferences.pclFloatRefresh" label="刷新按钮" />
+      </div>
+      <PclHint theme="blue">关闭后不会在 PCL 启动页右侧显示对应浮动按钮，功能仍可从页面内进入。</PclHint>
+    </PclCard>
+
     <PclCard title="Web UI 加载">
       <p class="pcl-appearance-copy">设置启动界面、扫描目录和是否记住上次选择，也可以切换到独立 Web UI。</p>
       <div class="pcl-actions">
@@ -511,6 +520,9 @@ function reset() {
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: true,
+    pclFloatTasks: true,
+    pclFloatLog: true,
+    pclFloatRefresh: true,
     pclTitleLogo: true,
     pclTitleBadge: true,
     pclAccentColor: '#2a80e3',

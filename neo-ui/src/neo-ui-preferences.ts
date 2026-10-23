@@ -30,6 +30,10 @@ export interface NeoUiPreferences {
   pclClassicIconSize: number;
   /** Enable the PCL launch-page transition and launching panel animation. */
   pclLaunchAnimation: boolean;
+  /** Optional floating quick-action buttons on the PCL launch page. */
+  pclFloatTasks: boolean;
+  pclFloatLog: boolean;
+  pclFloatRefresh: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -78,6 +82,9 @@ const defaults: NeoUiPreferences = {
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
   pclLaunchAnimation: true,
+  pclFloatTasks: true,
+  pclFloatLog: true,
+  pclFloatRefresh: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclAccentColor: '#2a80e3',

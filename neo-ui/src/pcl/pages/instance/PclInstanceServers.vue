@@ -24,10 +24,11 @@
           :key="`${server.ip}-${index}`"
           :title="server.name || server.ip"
           :info="serverInfo(server)"
+          :tags="pingState[server.ip]?.version ? [pingState[server.ip].version] : []"
           @click="editServer(server, index)"
         >
           <template #icon>
-            <img v-if="server.icon" :src="server.icon" class="pcl-server-icon" alt="" />
+            <img v-if="pingState[server.ip]?.icon || server.icon" :src="pingState[server.ip]?.icon || server.icon" class="pcl-server-icon" alt="" />
             <PclIcon v-else name="server" :size="18" />
           </template>
           <template #actions>
@@ -70,14 +71,22 @@ const editingIndex = ref<number | null>(null);
 const revision = ref('');
 const path = ref('');
 const loading = ref(false);
-const pingState = reactive<Record<string, { loading: boolean; text: string; bad: boolean }>>({});
+const pingState = reactive<Record<string, { loading: boolean; text: string; bad: boolean; icon: string; motd: string; version: string }>>({});
+function flattenMotd(value: any): string {
+  if (typeof value === 'string') return value.replace(/\u00a7./g, '').trim();
+  if (!value || typeof value !== 'object') return '';
+  let text = typeof value.text === 'string' ? value.text : '';
+  if (Array.isArray(value.extra)) for (const part of value.extra) text += flattenMotd(part);
+  return text.replace(/\u00a7./g, '').trim();
+}
 function serverInfo(server: ServerEntry) {
   const ping = pingState[server.ip];
-  return ping?.text ? `${server.ip} · ${ping.text}` : server.ip;
+  const motd = ping?.motd || '';
+  return motd ? `${motd} · ${server.ip}` : server.ip;
 }
 async function pingServer(server: ServerEntry) {
   const key = server.ip;
-  pingState[key] = { loading: true, text: '测试中…', bad: false };
+  pingState[key] = { loading: true, text: '测试中…', bad: false, icon: server.icon, motd: '', version: '' };
   try {
     const result = await props.execute('server.ping', { address: key });
     const players = result?.players || {};
@@ -88,9 +97,12 @@ async function pingServer(server: ServerEntry) {
       loading: false,
       text: `${max > 0 ? `${online}/${max} · ` : `${online} 人在线 · `}${latency} ms`,
       bad: false,
+      icon: String(result?.favicon || server.icon || ''),
+      motd: flattenMotd(result?.description),
+      version: String(result?.version?.name || ''),
     };
   } catch (exception) {
-    pingState[key] = { loading: false, text: exception instanceof Error ? exception.message : String(exception), bad: true };
+    pingState[key] = { loading: false, text: exception instanceof Error ? exception.message : String(exception), bad: true, icon: server.icon, motd: '', version: '' };
   }
 }
 

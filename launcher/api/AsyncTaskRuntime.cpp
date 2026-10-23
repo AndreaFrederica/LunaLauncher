@@ -30,6 +30,8 @@
 #include "api/ResourceInstallTask.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
+#include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/MinecraftAccount.h"
 #include "api/LauncherApiSupport.h"
 #include "api/ResourceModelSupport.h"
 #include "minecraft/MinecraftInstance.h"
@@ -79,6 +81,19 @@ std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, Q
     return index < lists.size() ? lists.at(index) : nullptr;
 }
 
+MinecraftAccountPtr findAccount(const QString& reference)
+{
+    const auto accounts = APPLICATION->accounts();
+    for (int i = 0; i < accounts->count(); ++i) {
+        const auto account = accounts->at(i);
+        if (account->profileId() == reference || account->internalId() == reference ||
+            account->profileName().compare(reference, Qt::CaseInsensitive) == 0) {
+            return account;
+        }
+    }
+    return nullptr;
+}
+
 class NoopInteraction final : public UserInteraction {
    public:
     void status(const QString&) override {}
@@ -118,6 +133,8 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
         keys << "java";
+    else if (operation == "account.refresh")
+        keys << "account:" + parameters.value("account").toString();
     else
         keys << "global";
     return keys;
@@ -142,6 +159,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "instance.component.set-version") return 10 * 60 * 1000;
     if (operation == "java.install") return 15 * 60 * 1000;
     if (operation == "resource.install-with-dependencies") return 20 * 60 * 1000;
+    if (operation == "account.refresh") return 5 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
     return 15 * 60 * 1000;
 }
@@ -729,6 +747,30 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         connect(task, &Task::finished, this, [this, id, task, instanceId = instance->id()]() {
             if (!m_records.contains(id) || m_records[id].finished) return;
             finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason(), instanceId);
+        });
+        task->start();
+        return;
+    }
+
+    if (record.operation == "account.refresh") {
+        const auto account = findAccount(record.parameters.value("account").toString());
+        if (!account) { finish(id, false, "Account not found."); return; }
+        auto task = account->refresh();
+        if (!task) { finish(id, true); return; }
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = "正在刷新账户";
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            if (task->wasSuccessful()) APPLICATION->accounts()->saveList();
+            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason());
         });
         task->start();
         return;

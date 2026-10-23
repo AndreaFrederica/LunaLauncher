@@ -265,7 +265,7 @@ async function submitLogin() {
   loginDeviceUrl.value = '';
   loginDeviceCode.value = '';
   try {
-    if (loginType.value === 'microsoft' || loginType.value === 'offline') {
+    {
       let task: any = await props.execute('neo.task.start', { operation: 'account.login', priority: 'high', parameters: payload });
       loginTaskId.value = task?.taskId || '';
       while (task && !task.finished) {
@@ -275,8 +275,6 @@ async function submitLogin() {
         task = await props.execute('neo.task.status', { taskId: task.taskId });
       }
       if (!task || task.state !== 'succeeded') throw new Error(task?.error || '账户登录失败');
-    } else {
-      await props.execute('account.login', payload);
     }
     loginShown.value = false;
     loginDeviceUrl.value = '';

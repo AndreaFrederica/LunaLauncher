@@ -396,7 +396,12 @@ function cancelLogin() {
 
 async function openDeviceUrl() {
   if (!loginDeviceUrl.value) return;
-  try { await props.execute('desktop.open-url', { url: loginDeviceUrl.value }); } catch { /* ignore */ }
+  try {
+    await props.execute('desktop.open-url', { url: loginDeviceUrl.value });
+  } catch (exception) {
+    loginError.value = exception instanceof Error ? exception.message : String(exception);
+    try { window.open(loginDeviceUrl.value, '_blank', 'noopener,noreferrer'); } catch { /* WebView may block popups. */ }
+  }
 }
 
 async function copyDeviceCode() {

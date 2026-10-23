@@ -37,6 +37,15 @@ void YggdrasilPresets::initDefaults()
         return;
     }
 
+    // Microsoft's official account service. It has no Yggdrasil URL; the UI
+    // uses this entry to expose the official login flow next to third-party
+    // authentication services.
+    YggdrasilPreset official;
+    official.name = QCoreApplication::translate("YggdrasilPresets", "Minecraft 官方服务器");
+    official.sourceName = QCoreApplication::translate("YggdrasilPresets", "Microsoft");
+    official.official = true;
+    s_defaults.append(official);
+
     // LittleSkin - 国内常用的 Yggdrasil 皮肤站
     // LittleSkin uses /authserver/ prefix for refresh/validate, not /sessionserver/
     YggdrasilPreset littleSkin;

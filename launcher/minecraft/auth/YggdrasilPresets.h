@@ -37,6 +37,8 @@ struct YggdrasilPreset {
     YggdrasilTokenType tokenType = YggdrasilTokenType::Standard;
     // Use Luna's launcher-managed local verification service.
     bool managedLocal = false;
+    // Microsoft's official account service, not a Yggdrasil endpoint.
+    bool official = false;
     QString sourceName;
 };
 

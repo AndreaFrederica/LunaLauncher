@@ -821,6 +821,54 @@ void registerLauncherApiDomains(LauncherApi& api)
             const auto count = APPLICATION->importPrismSettings(&error);
             return count < 0 ? OperationService::failure(error) : OperationService::success(QJsonObject{ { "imported", count } });
         });
+    api.registerOperation({ "account.preset.test",
+        "Probe an authentication service URL. ping measures reachability/latency; function additionally checks the HTTP response and JSON payload.",
+        objectSchema({ { "url", stringProperty("HTTP(S) URL to probe.") }, { "mode", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "ping", "function" } }, { "default", "ping" } } } }, { "url" }), "accounts" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const QUrl url(p.value("url").toString(), QUrl::TolerantMode);
+            if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https"))
+                return OperationService::failure("A valid HTTP(S) service URL is required.", 2);
+            QNetworkRequest request(url);
+            request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+            request.setHeader(QNetworkRequest::UserAgentHeader, "LunaLauncher/NeoUI");
+            auto* manager = APPLICATION->network().get();
+            QElapsedTimer timer;
+            timer.start();
+            auto* reply = manager->get(request);
+            QEventLoop loop;
+            QTimer timeout;
+            timeout.setSingleShot(true);
+            QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+            QObject::connect(&timeout, &QTimer::timeout, &loop, [&]() {
+                reply->abort();
+                loop.quit();
+            });
+            timeout.start(8000);
+            loop.exec();
+            const auto elapsed = timer.elapsed();
+            const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const auto error = reply->error();
+            const auto body = reply->readAll();
+            const auto contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
+            const bool reachable = error == QNetworkReply::NoError || status > 0;
+            const bool timedOut = error == QNetworkReply::OperationCanceledError && !timeout.isActive();
+            QJsonParseError parseError;
+            const auto document = QJsonDocument::fromJson(body, &parseError);
+            const bool json = document.isObject() || document.isArray();
+            const auto mode = p.value("mode").toString("ping");
+            const bool passed = reachable && status >= 200 && status < 400 && (mode != "function" || json || !contentType.contains("json", Qt::CaseInsensitive));
+            QString message;
+            if (!reachable) message = error == QNetworkReply::HostNotFoundError ? "无法解析服务器地址" :
+                timedOut ? "连接超时" : reply->errorString();
+            else if (status <= 0) message = "未收到 HTTP 响应";
+            else if (status >= 400) message = QString("HTTP %1").arg(status);
+            else message = json ? "服务可达，返回 JSON" : QString("服务可达（HTTP %1）").arg(status);
+            const auto result = QJsonObject{ { "url", url.toString() }, { "mode", mode }, { "reachable", reachable }, { "passed", passed },
+                { "statusCode", status }, { "elapsedMs", static_cast<double>(elapsed) }, { "contentType", contentType },
+                { "json", json }, { "message", message } };
+            reply->deleteLater();
+            return OperationService::success(result);
+        });
     for (const QString action : { "list", "add", "edit", "remove" }) {
         QJsonObject properties{ { "name", stringProperty("Preset name.") }, { "authUrl", stringProperty("Authentication URL.") },
             { "originalName", stringProperty("Existing custom preset name when renaming; defaults to name.") },
@@ -836,6 +884,8 @@ void registerLauncherApiDomains(LauncherApi& api)
                     for (int row = 0; row < all.size(); ++row) {
                         const auto& v = all[row];
                             result.append(QJsonObject{ { "name", v.name }, { "authUrl", v.authUrl }, { "sessionUrl", v.sessionUrl }, { "sourceName", v.sourceName }, { "managedLocal", v.managedLocal },
+                            { "official", v.official },
+                            { "testUrl", v.official ? "https://login.microsoftonline.com/consumers/v2.0/.well-known/openid-configuration" : v.sessionUrl },
                             { "authenticateEndpoint", v.authenticateEndpoint }, { "refreshEndpoint", v.refreshEndpoint },
                             { "validateEndpoint", v.validateEndpoint }, { "profileEndpoint", v.profileEndpoint }, { "oauthTokenEndpoint", v.oauthTokenEndpoint },
                             { "tokenType", v.tokenType == YggdrasilTokenType::OAuth ? "OAuth" : "Standard" }, { "builtin", row < defaults.size() } });

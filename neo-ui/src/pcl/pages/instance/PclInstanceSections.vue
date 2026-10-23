@@ -94,7 +94,16 @@ async function loadServer(){
 }
 async function saveEula(value:boolean){ if(!props.execute||!props.instance)return; try{await props.execute('server.eula.write',{instance:props.instance,agreed:value});}catch(e){serverError.value=e instanceof Error?e.message:String(e);} }
 async function saveProperty(key:string,value:any){ if(!props.execute||!props.instance)return; try{const current=await props.execute('server.properties.read',{instance:props.instance});const properties={...(current?.properties||current||{}),[key]:String(value)};await props.execute('server.properties.write',{instance:props.instance,properties});}catch(e){serverError.value=e instanceof Error?e.message:String(e);} }
-async function startServer(){ if(!props.execute||!props.instance)return; serverLoading.value=true;serverError.value='';try{await props.execute('server.start',{instance:props.instance});consoleText.value='服务端已请求启动，请通过控制台查看输出。';}catch(e){serverError.value=e instanceof Error?e.message:String(e);}finally{serverLoading.value=false;} }
+async function startServer(){
+  if(!props.execute||!props.instance)return;
+  serverLoading.value=true;serverError.value='';
+  try{
+    let task:any=await props.execute('neo.task.start',{operation:'server.start',priority:'high',parameters:{instance:props.instance}});
+    while(task && !task.finished){await new Promise(resolve=>setTimeout(resolve,300));task=await props.execute('neo.task.status',{taskId:task.taskId});}
+    if(!task || task.state!=='succeeded')throw new Error(task?.error||'服务端启动失败');
+    consoleText.value='服务端已请求启动，请通过控制台查看输出。';
+  }catch(e){serverError.value=e instanceof Error?e.message:String(e);}finally{serverLoading.value=false;}
+}
 async function sendServerCommand(){ const command=serverCommand.value.trim();if(!command||!props.execute||!props.instance)return;try{await props.execute('server.console.command',{instance:props.instance,command});consoleText.value += `${consoleText.value?'\n':''}> ${command}`;serverCommand.value='';}catch(e){serverError.value=e instanceof Error?e.message:String(e);} }
 watch(()=>[props.section,props.instance],([section])=>{if(section==='server')void loadServer();});
 onMounted(()=>{if(props.section==='server')void loadServer();});

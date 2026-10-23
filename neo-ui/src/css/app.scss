@@ -11,6 +11,7 @@
   --neo-border: rgba(148, 163, 184, .14);
   --neo-muted: #94a3b8;
   --neo-primary: #a5b4fc;
+  --neo-text: #f8fafc;
 }
 :root[data-neo-theme="light"] {
   --neo-bg: #f1f5f9;
@@ -18,6 +19,8 @@
   --neo-panel-raised: #f8fafc;
   --neo-border: rgba(15, 23, 42, .14);
   --neo-muted: #64748b;
+  --neo-text: #0f172a;
+  --neo-primary: #4f46e5;
   --v-theme-surface: 255 255 255;
   --v-theme-on-surface: 15 23 42;
 }
@@ -28,7 +31,81 @@
 *::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(129, 140, 248, .82), rgba(99, 102, 241, .72)); border: 2px solid rgba(11, 15, 23, .72); border-radius: 10px; }
 *::-webkit-scrollbar-thumb:hover { background: #a5b4fc; }
 html, body, #q-app { width: 100%; height: 100%; overflow: hidden; }
-body { margin: 0; min-width: 320px; background: var(--neo-bg); color: #f8fafc; font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow-x: hidden; }
+body { margin: 0; min-width: 320px; background: var(--neo-bg); color: var(--neo-text); font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow-x: hidden; }
+:root[data-neo-theme="light"] body { color: var(--neo-text); }
+:root[data-neo-theme="light"] .xmcl-app {
+  color: var(--neo-text);
+  background: radial-gradient(circle at 15% -10%, rgba(79,70,229,.12), transparent 34%), var(--neo-bg);
+}
+:root[data-neo-theme="light"] .system-bar {
+  background: rgba(255,255,255,.92);
+  color: #475569;
+  box-shadow: 0 1px 0 rgba(15,23,42,.10);
+}
+:root[data-neo-theme="light"] .system-bar-drag strong { color: #0f172a; }
+:root[data-neo-theme="light"] .system-bar-drag small { color: #6366f1; }
+:root[data-neo-theme="light"] .system-bar-brand-ce { background: #0f172a; color: #fff; }
+:root[data-neo-theme="light"] .system-bar-status { color: #64748b; }
+:root[data-neo-theme="light"] .system-bar-back:hover,
+:root[data-neo-theme="light"] .system-bar-badge:hover,
+:root[data-neo-theme="light"] .system-bar-window:hover { background: rgba(15,23,42,.08); color: #0f172a; }
+:root[data-neo-theme="light"] .sidebar {
+  background: rgba(255,255,255,.80);
+  color: #475569;
+  box-shadow: 0 8px 32px rgba(15,23,42,.10);
+}
+:root[data-neo-theme="light"] .sidebar__divider { background: rgba(15,23,42,.12); }
+:root[data-neo-theme="light"] .sidebar-item:hover .sidebar-item__content { background: rgba(15,23,42,.08); }
+:root[data-neo-theme="light"] .sidebar-instance__status { border-color: #fff; }
+:root[data-neo-theme="light"] .dashboard-header h1,
+:root[data-neo-theme="light"] .dashboard-card-title,
+:root[data-neo-theme="light"] .dashboard-empty h3,
+:root[data-neo-theme="light"] .workspace-heading h1,
+:root[data-neo-theme="light"] .instance-hero-copy h1 { color: var(--neo-text) !important; }
+:root[data-neo-theme="light"] .dashboard-header p,
+:root[data-neo-theme="light"] .dashboard-count,
+:root[data-neo-theme="light"] .dashboard-card-meta,
+:root[data-neo-theme="light"] .dashboard-notes,
+:root[data-neo-theme="light"] .dashboard-empty,
+:root[data-neo-theme="light"] .workspace-heading p,
+:root[data-neo-theme="light"] .instance-hero-copy p,
+:root[data-neo-theme="light"] .resource-description,
+:root[data-neo-theme="light"] .xmcl-market-empty { color: #64748b !important; }
+:root[data-neo-theme="light"] .dashboard-toolbar,
+:root[data-neo-theme="light"] .workspace-toolbar { background: rgba(255,255,255,.72); border-color: rgba(15,23,42,.12); }
+:root[data-neo-theme="light"] .q-field--dark .q-field__native,
+:root[data-neo-theme="light"] .q-field--dark .q-field__input,
+:root[data-neo-theme="light"] .q-field--dark .q-field__prefix,
+:root[data-neo-theme="light"] .q-field--dark .q-field__suffix { color: #0f172a !important; }
+:root[data-neo-theme="light"] .q-field--dark .q-field__label,
+:root[data-neo-theme="light"] .q-field--dark .q-field__bottom { color: #64748b !important; }
+:root[data-neo-theme="light"] .q-field--dark .q-field__control:before { border-color: rgba(15,23,42,.22) !important; }
+:root[data-neo-theme="light"] .q-field--dark .q-field__control:hover:before { border-color: rgba(15,23,42,.38) !important; }
+:root[data-neo-theme="light"] .dashboard-toolbar .q-btn { color: #475569 !important; }
+:root[data-neo-theme="light"] .dashboard-toolbar .q-btn.text-primary,
+:root[data-neo-theme="light"] .dashboard-toolbar .q-btn--active { color: var(--neo-primary) !important; }
+:root[data-neo-theme="light"] .dashboard-card,
+:root[data-neo-theme="light"] .workspace-card,
+:root[data-neo-theme="light"] .xmcl-setting-card,
+:root[data-neo-theme="light"] .xmcl-store-card,
+:root[data-neo-theme="light"] .xmcl-server-card,
+:root[data-neo-theme="light"] .xmcl-dialog,
+:root[data-neo-theme="light"] .xmcl-provider-cards button,
+:root[data-neo-theme="light"] .xmcl-resource-row { background: #fff !important; border-color: rgba(15,23,42,.12) !important; color: var(--neo-text) !important; }
+:root[data-neo-theme="light"] .dashboard-card:hover,
+:root[data-neo-theme="light"] .xmcl-resource-row:hover { border-color: color-mix(in srgb, var(--neo-primary) 55%, transparent) !important; }
+:root[data-neo-theme="light"] .dashboard-card-actions .q-btn,
+:root[data-neo-theme="light"] .xmcl-provider-cards button { color: #475569; }
+:root[data-neo-theme="light"] .xmcl-dialog-title small,
+:root[data-neo-theme="light"] .dashboard-art-meta { color: #64748b; }
+:root[data-neo-theme="light"] .home-card,
+:root[data-neo-theme="light"] .xmcl-account-nav button,
+:root[data-neo-theme="light"] .xmcl-setting-card button { color: #475569; }
+:root[data-neo-theme="light"] .xmcl-account-nav button.active,
+:root[data-neo-theme="light"] .xmcl-setting-card button.active { color: var(--neo-primary); }
+:root[data-neo-theme="light"] .xmcl-account-header p,
+:root[data-neo-theme="light"] .xmcl-setting-section p,
+:root[data-neo-theme="light"] .xmcl-store-header p { color: #64748b !important; }
 .xmcl-app { width: 100%; height: 100vh; min-height: 0; overflow: hidden; background: radial-gradient(circle at 15% -10%, rgba(79,70,229,.18), transparent 34%), var(--neo-bg); }
 :root[data-neo-background="solid"] .xmcl-app { background: var(--neo-bg); }
 :root[data-neo-density="compact"] .neo-toolbar { min-height: 56px; }

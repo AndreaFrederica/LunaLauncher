@@ -138,6 +138,34 @@
         <PclCheckbox v-model="preferences.pclHomeShowServers" label="显示当前实例服务器" />
         <PclCheckbox v-model="preferences.pclHomeSwitchOnQuickLaunch" label="双击启动时切换当前实例" />
       </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例面板排列</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceLayout" :options="instanceLayoutOptions" />
+        </div>
+        <span class="pcl-form-row__hint">网格或单列列表</span>
+      </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例分类方式</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceGrouping" :options="instanceGroupingOptions" />
+        </div>
+        <span class="pcl-form-row__hint">平铺或按 MMC 分组显示</span>
+      </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">实例排序方式</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceSort" :options="instanceSortOptions" />
+        </div>
+        <span class="pcl-form-row__hint">手动排序可拖拽调整</span>
+      </div>
+      <div v-if="preferences.pclHomeInstanceLayout === 'grid'" class="pcl-form-row">
+        <span class="pcl-form-row__label">实例面板列数</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclHomeInstanceColumns" :options="instanceColumnOptions" />
+        </div>
+        <span class="pcl-form-row__hint">每行显示的实例数量</span>
+      </div>
       <div v-for="(card, index) in preferences.pclHomeCards" :key="card.id" class="pcl-home-editor">
         <div class="pcl-home-editor__head">
           <strong>卡片 {{ index + 1 }}</strong>
@@ -304,6 +332,24 @@ const backgroundOptions = [
   { label: '渐变背景', value: 'gradient' },
   { label: '纯色背景', value: 'solid' },
 ];
+const instanceLayoutOptions = [
+  { label: '网格', value: 'grid' },
+  { label: '单列列表', value: 'list' },
+];
+const instanceGroupingOptions = [
+  { label: '平铺显示', value: 'flat' },
+  { label: 'MMC 分组', value: 'grouped' },
+];
+const instanceSortOptions = [
+  { label: '手动排序（可拖拽）', value: 'manual' },
+  { label: '按名称自动排序', value: 'name' },
+  { label: '按版本自动排序', value: 'version' },
+];
+const instanceColumnOptions = [
+  { label: '1 列', value: 1 },
+  { label: '2 列', value: 2 },
+  { label: '3 列', value: 3 },
+];
 const fontOptions = [
   { label: '系统默认（Segoe UI / 微软雅黑）', value: 'system' },
   { label: '微软雅黑 UI', value: 'yahei' },
@@ -340,6 +386,11 @@ function reset() {
     pclHomeShowInstances: true,
     pclHomeShowServers: true,
     pclHomeSwitchOnQuickLaunch: false,
+    pclHomeInstanceLayout: 'grid',
+    pclHomeInstanceColumns: 2,
+    pclHomeInstanceGrouping: 'flat',
+    pclHomeInstanceSort: 'manual',
+    pclHomeInstanceOrder: [],
   });
   persistNeoUiPreferences();
 }

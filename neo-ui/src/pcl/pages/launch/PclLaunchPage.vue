@@ -134,28 +134,54 @@
 
           <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances">
             <template #actions>
+              <PclIconButton icon="grid-2x2" label="网格排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'grid' }" @click="setInstanceLayout('grid')" />
+              <PclIconButton icon="list" label="单列排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'list' }" @click="setInstanceLayout('list')" />
               <PclIconButton icon="refresh-cw" label="刷新实例" :size="24" :disabled="busy" @click="emit('refresh')" />
             </template>
-            <div v-if="instances.length" class="pcl-home-instance-list">
-              <button
-                v-for="item in instances"
-                :key="item.id"
-                type="button"
-                class="pcl-home-instance"
-                :class="{ active: item.id === selected?.id }"
-                :title="`双击启动 ${item.name}`"
-                @click="clickInstance(item)"
-                @dblclick="quickLaunch(item)"
-              >
-                <img v-if="icons[item.id]" :src="icons[item.id]" alt="" />
-                <span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span>
-                <span class="pcl-home-instance__copy">
-                  <strong>{{ item.name }}</strong>
-                  <small>{{ item.runtime?.minecraftVersion || item.runtime?.minecraft || item.minecraftVersion || 'Minecraft' }}</small>
-                </span>
-                <span v-if="item.running" class="pcl-home-instance__running">运行中</span>
-                <span v-else class="pcl-home-instance__hint">双击启动</span>
-              </button>
+            <div v-if="instances.length" class="pcl-home-instance-groups">
+              <div v-for="group in homeInstanceGroups" :key="group.id" class="pcl-home-instance-group">
+                <div
+                  v-if="preferences.pclHomeInstanceGrouping === 'grouped'"
+                  class="pcl-home-instance-group__head"
+                  @dragover.prevent
+                  @drop.prevent="dropOnGroup(group.id)"
+                >
+                  <PclIcon name="folder-open" :size="13" />
+                  <strong>{{ group.label }}</strong>
+                  <small>{{ group.items.length }}</small>
+                </div>
+                <div
+                  class="pcl-home-instance-list"
+                  :class="`is-${preferences.pclHomeInstanceLayout}`"
+                  :style="preferences.pclHomeInstanceLayout === 'grid' ? { gridTemplateColumns: `repeat(${preferences.pclHomeInstanceColumns}, minmax(0, 1fr))` } : undefined"
+                >
+                  <button
+                    v-for="item in group.items"
+                    :key="item.id"
+                    type="button"
+                    class="pcl-home-instance"
+                    :class="{ active: item.id === selected?.id, 'is-drag-over': dragOverId === item.id }"
+                    :draggable="true"
+                    :title="`双击启动 ${item.name}`"
+                    @click="clickInstance(item)"
+                    @dblclick="quickLaunch(item)"
+                    @dragstart="startDrag(item, $event)"
+                    @dragend="endDrag"
+                    @dragover.prevent="dragOverId = item.id"
+                    @dragleave="dragOverId = ''"
+                    @drop.prevent="dropOnInstance(item, $event)"
+                  >
+                    <img v-if="icons[item.id]" :src="icons[item.id]" alt="" />
+                    <span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span>
+                    <span class="pcl-home-instance__copy">
+                      <strong>{{ item.name }}</strong>
+                      <small>{{ item.runtime?.minecraftVersion || item.runtime?.minecraft || item.minecraftVersion || 'Minecraft' }}</small>
+                    </span>
+                    <span v-if="item.running" class="pcl-home-instance__running">运行中</span>
+                    <span v-else class="pcl-home-instance__hint">{{ preferences.pclHomeInstanceSort === 'manual' ? '拖拽排序 · 双击启动' : '双击启动' }}</span>
+                  </button>
+                </div>
+              </div>
             </div>
             <div v-else class="pcl-empty pcl-empty--compact">还没有实例。</div>
           </PclCard>
@@ -259,6 +285,57 @@ const launchError = computed(() => props.launchError || props.error || '');
 const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));
 const preferences = neoUiPreferences;
+const orderedInstances = computed(() => {
+  const list = [...props.instances];
+  if (preferences.pclHomeInstanceSort === 'name') return list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+  if (preferences.pclHomeInstanceSort === 'version') return list.sort((a, b) => String(a.runtime?.minecraftVersion || a.runtime?.minecraft || a.minecraftVersion || '').localeCompare(String(b.runtime?.minecraftVersion || b.runtime?.minecraft || b.minecraftVersion || ''), 'zh-CN'));
+  const rank = new Map(preferences.pclHomeInstanceOrder.map((id, index) => [id, index]));
+  return list.sort((a, b) => (rank.get(a.id) ?? 100000) - (rank.get(b.id) ?? 100000));
+});
+const homeInstanceGroups = computed(() => {
+  if (preferences.pclHomeInstanceGrouping === 'flat') return [{ id: '__all', label: '全部实例', items: orderedInstances.value }];
+  const groups = new Map<string, any[]>();
+  for (const item of orderedInstances.value) {
+    const id = String(item.group || '').trim() || '__regular';
+    const list = groups.get(id) || [];
+    list.push(item);
+    groups.set(id, list);
+  }
+  return [...groups.entries()].map(([id, items]) => ({ id, label: id === '__regular' ? '常规实例' : id, items })).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
+});
+const draggingInstance = ref<any>(null), dragOverId = ref('');
+function startDrag(instance: any, event: DragEvent) {
+  draggingInstance.value = instance;
+  dragOverId.value = '';
+  if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', instance.id); }
+}
+function endDrag() { draggingInstance.value = null; dragOverId.value = ''; }
+async function moveInstanceToGroup(instance: any, group: string) {
+  if (!props.execute || !instance?.id) return;
+  await props.execute('instance.group', { instance: instance.id, group });
+  emit('refresh');
+}
+function dropOnGroup(groupId: string) {
+  const instance = draggingInstance.value;
+  endDrag();
+  if (!instance) return;
+  void moveInstanceToGroup(instance, groupId === '__regular' ? '' : groupId);
+}
+function dropOnInstance(target: any, _event: DragEvent) {
+  const source = draggingInstance.value;
+  endDrag();
+  if (!source || !target || source.id === target.id) return;
+  if (preferences.pclHomeInstanceGrouping === 'grouped' && String(source.group || '') !== String(target.group || '')) {
+    void moveInstanceToGroup(source, String(target.group || ''));
+  }
+  if (preferences.pclHomeInstanceSort !== 'manual') return;
+  const ids = orderedInstances.value.map((item: any) => item.id);
+  const from = ids.indexOf(source.id), to = ids.indexOf(target.id);
+  if (from < 0 || to < 0) return;
+  ids.splice(from, 1);
+  ids.splice(to, 0, source.id);
+  preferences.pclHomeInstanceOrder = ids;
+}
 const servers = ref<any[]>([]), serversLoading = ref(false), serversError = ref('');
 async function loadServers() {
   servers.value = [];
@@ -283,6 +360,7 @@ function clickInstance(instance: any) {
   if (instanceClickTimer) clearTimeout(instanceClickTimer);
   instanceClickTimer = setTimeout(() => emit('select', instance), 220);
 }
+function setInstanceLayout(layout: 'grid' | 'list') { preferences.pclHomeInstanceLayout = layout; }
 function quickLaunch(instance: any) {
   if (instanceClickTimer) clearTimeout(instanceClickTimer);
   emit('quick-launch', instance, Boolean(preferences.pclHomeSwitchOnQuickLaunch));
@@ -812,4 +890,25 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-home-servers__hint { margin: 6px 0 0; color: var(--pcl-muted); font-size: 9px; }
 .pcl-home-server-loading { display: flex; align-items: center; gap: 6px; color: var(--pcl-muted); font-size: 10px; }
 .pcl-home-server-error { color: #fb7185; font-size: 10px; }
+
+.pcl-home-instance-list.is-list {
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-height: 330px;
+}
+
+.pcl-home-instance-list.is-grid {
+  max-height: 230px;
+}
+
+.pcl-icon-btn.active {
+  color: var(--pcl-c3);
+  background: var(--pcl-c6);
+}
+
+.pcl-home-instance-groups { display: flex; flex-direction: column; gap: 7px; }
+.pcl-home-instance-group__head { display: flex; align-items: center; gap: 5px; min-height: 18px; color: var(--pcl-muted); font-size: 9px; }
+.pcl-home-instance-group__head strong { color: var(--pcl-text); font-weight: 500; }
+.pcl-home-instance-group__head small { margin-left: auto; }
+.pcl-home-instance-group__head:hover { color: var(--pcl-c3); }
+.pcl-home-instance.is-drag-over { border-color: var(--pcl-c3); background: var(--pcl-c6); }
 </style>

@@ -41,6 +41,11 @@ export interface NeoUiPreferences {
   pclHomeShowInstances: boolean;
   pclHomeShowServers: boolean;
   pclHomeSwitchOnQuickLaunch: boolean;
+  pclHomeInstanceLayout: 'grid' | 'list';
+  pclHomeInstanceColumns: 1 | 2 | 3;
+  pclHomeInstanceGrouping: 'flat' | 'grouped';
+  pclHomeInstanceSort: 'manual' | 'name' | 'version';
+  pclHomeInstanceOrder: string[];
   /** The last instance selected in the classic launcher shell. */
   selectedInstanceId: string;
 }
@@ -71,6 +76,11 @@ const defaults: NeoUiPreferences = {
   pclHomeShowInstances: true,
   pclHomeShowServers: true,
   pclHomeSwitchOnQuickLaunch: false,
+  pclHomeInstanceLayout: 'grid',
+  pclHomeInstanceColumns: 2,
+  pclHomeInstanceGrouping: 'flat',
+  pclHomeInstanceSort: 'manual',
+  pclHomeInstanceOrder: [],
   selectedInstanceId: '',
 };
 
@@ -86,6 +96,9 @@ function load(): NeoUiPreferences {
   try {
     const value = JSON.parse(localStorage.getItem(storageKey) || '{}');
     const merged = { ...defaults, ...value };
+    merged.pclHomeInstanceOrder = Array.isArray(merged.pclHomeInstanceOrder)
+      ? merged.pclHomeInstanceOrder.map(String).filter(Boolean)
+      : [];
     merged.pclHomeCards = Array.isArray(merged.pclHomeCards)
       ? merged.pclHomeCards.filter((card: any) => card && typeof card === 'object').map((card: any) => ({
         id: String(card.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),

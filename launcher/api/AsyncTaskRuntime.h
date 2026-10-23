@@ -58,6 +58,10 @@ class AsyncTaskRuntime final : public QObject {
         QString error;
         QString instanceId;
         QString createdInstanceId;
+        qint64 pid = -1;
+        QString deviceCode;
+        QString deviceUrl;
+        int deviceExpiresIn = 0;
         qint64 progress = 0;
         qint64 total = 0;
         bool finished = false;

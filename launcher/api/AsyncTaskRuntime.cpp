@@ -32,6 +32,9 @@
 #include "InstanceList.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
+#include "minecraft/auth/AuthFlow.h"
+#include "LaunchController.h"
+#include "minecraft/launch/MinecraftTarget.h"
 #include "api/LauncherApiSupport.h"
 #include "api/ResourceModelSupport.h"
 #include "minecraft/MinecraftInstance.h"
@@ -129,12 +132,14 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
     QStringList keys;
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         keys << "instances";
-    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update")
+    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update" || operation == "instance.launch")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
         keys << "java";
     else if (operation == "account.refresh")
         keys << "account:" + parameters.value("account").toString();
+    else if (operation == "account.login")
+        keys << "accounts";
     else
         keys << "global";
     return keys;
@@ -160,6 +165,8 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "java.install") return 15 * 60 * 1000;
     if (operation == "resource.install-with-dependencies") return 20 * 60 * 1000;
     if (operation == "account.refresh") return 5 * 60 * 1000;
+    if (operation == "account.login") return 10 * 60 * 1000;
+    if (operation == "instance.launch") return 10 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
     return 15 * 60 * 1000;
 }
@@ -328,6 +335,10 @@ QJsonObject AsyncTaskRuntime::snapshot(const Record& record) const
         { "finishedAt", static_cast<double>(record.finishedAt) },
         { "instanceId", record.instanceId },
         { "createdInstanceId", record.createdInstanceId },
+        { "pid", static_cast<double>(record.pid) },
+        { "deviceCode", record.deviceCode },
+        { "deviceUrl", record.deviceUrl },
+        { "deviceExpiresIn", record.deviceExpiresIn },
         { "idempotencyKey", record.idempotencyKey },
     };
 }
@@ -752,6 +763,165 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         return;
     }
 
+    if (record.operation == "instance.launch") {
+        const auto parameters = record.parameters;
+        auto instance = findInstance(parameters.value("instance").toString());
+        if (!instance) { finish(id, false, "Instance not found."); return; }
+        const auto modeName = parameters.value("mode").toString("normal");
+        if (modeName != "normal" && modeName != "offline" && modeName != "demo") { finish(id, false, "mode must be normal, offline, or demo."); return; }
+        const auto mode = modeName == "demo" ? LaunchMode::Demo : modeName == "offline" ? LaunchMode::Offline : LaunchMode::Normal;
+        MinecraftAccountPtr account;
+        const auto accountId = parameters.value("account").toString();
+        const auto profile = parameters.value("profile").toString();
+        if (!accountId.isEmpty() || !profile.isEmpty()) {
+            account = findAccount(accountId.isEmpty() ? profile : accountId);
+            if (!account) { finish(id, false, "Selected account not found."); return; }
+        } else {
+            if (instance->settings()->get("UseAccountForInstance").toBool())
+                account = findAccount(instance->settings()->get("InstanceAccountId").toString());
+            if (!account) account = APPLICATION->accounts()->defaultAccount();
+        }
+        const auto offlineName = parameters.value("offlineName").toString();
+        if (!offlineName.isEmpty()) {
+            if (!QRegularExpression("^[A-Za-z0-9_]{1,16}$").match(offlineName).hasMatch()) { finish(id, false, "Invalid offline player name."); return; }
+            account = MinecraftAccount::createOffline(offlineName);
+        }
+        if (!account && mode != LaunchMode::Demo) { finish(id, false, "No account is available. Log in or pass an offline player name."); return; }
+        if (account && account->accountType() == AccountType::MSA && !account->hasProfile() && mode == LaunchMode::Normal) {
+            finish(id, false, "This Microsoft account has no Minecraft Java profile.");
+            return;
+        }
+        MinecraftTarget::Ptr target;
+        if (!parameters.value("server").toString().isEmpty())
+            target.reset(new MinecraftTarget(MinecraftTarget::parse(parameters.value("server").toString(), false)));
+        else if (!parameters.value("world").toString().isEmpty())
+            target.reset(new MinecraftTarget(MinecraftTarget::parse(parameters.value("world").toString(), true)));
+
+        auto* controller = new LaunchController();
+        const auto profilerName = parameters.value("profiler").toString();
+        if (!profilerName.isEmpty()) {
+            const auto profiler = APPLICATION->profilers().value(profilerName);
+            if (!profiler) { delete controller; finish(id, false, "Unknown profiler."); return; }
+            controller->setProfiler(profiler.get());
+        }
+        controller->setParent(this);
+        controller->setHeadless(true);
+        controller->setInstance(instance);
+        controller->setLaunchMode(mode);
+        controller->setOfflineName(offlineName);
+        controller->setAccountToUse(account);
+        controller->setTargetToJoin(target);
+        controller->setReauthenticateHandler([this, id](const MinecraftAccountPtr&, const QString& reason) -> MinecraftAccountPtr {
+            if (m_records.contains(id)) m_records[id].status = reason;
+            return nullptr;
+        });
+        auto& stored = m_records[id];
+        stored.task = controller;
+        stored.status = "正在准备启动";
+        connect(controller, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(controller, &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(controller, &LaunchController::gameStarted, this, [this, id, controller, instanceId = instance->id()](qint64 processId) {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            m_records[id].pid = processId;
+            m_records[id].status = "游戏进程已启动";
+            finish(id, true, {}, instanceId);
+            controller->deleteLater();
+        });
+        connect(controller, &Task::finished, this, [this, id, controller, instanceId = instance->id()]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            finish(id, controller->wasSuccessful(), controller->wasSuccessful() ? QString() : controller->failReason(), instanceId);
+            controller->deleteLater();
+        });
+        controller->start();
+        return;
+    }
+
+    if (record.operation == "account.login") {
+        const auto parameters = record.parameters;
+        auto type = parameters.value("type").toString().trimmed().toLower();
+        if (type == "msa" || type == "microsoft-account") type = "microsoft";
+        const auto username = parameters.value("username").toString().trimmed();
+        if (type == "offline") {
+            if (username.isEmpty()) { finish(id, false, "A username is required."); return; }
+            auto account = MinecraftAccount::createOffline(username);
+            const auto uuidMode = parameters.value("offlineUuidMode").toString("default").trimmed().toLower();
+            if (uuidMode == "random") account->accountData()->minecraftProfile.id = QUuid::createUuid().toString(QUuid::Id128);
+            else if (uuidMode == "custom") {
+                const auto custom = QUuid::fromString(parameters.value("offlineUuid").toString());
+                if (custom.isNull()) { finish(id, false, "A valid custom offline UUID is required."); return; }
+                account->accountData()->minecraftProfile.id = custom.toString(QUuid::Id128);
+            } else if (uuidMode != "default" && !uuidMode.isEmpty()) { finish(id, false, "Unsupported offline UUID mode."); return; }
+            auto accounts = APPLICATION->accounts();
+            accounts->addAccount(account);
+            if (!accounts->defaultAccount()) accounts->setDefaultAccount(account);
+            accounts->saveList();
+            finish(id, true);
+            return;
+        }
+        if (type != "microsoft") {
+            finish(id, false, "Async login currently supports Microsoft and offline accounts.");
+            return;
+        }
+        auto account = MinecraftAccount::createBlankMSA();
+        const auto requestedProfile = parameters.value("profileId").toString();
+        auto selector = [requestedProfile](const QJsonArray& profiles) -> std::optional<int> {
+            if (profiles.isEmpty()) return std::nullopt;
+            if (!requestedProfile.isEmpty()) {
+                for (int i = 0; i < profiles.size(); ++i)
+                    if (profiles.at(i).toObject().value("id").toString() == requestedProfile) return i;
+                return std::nullopt;
+            }
+            return 0;
+        };
+        auto task = account->login(true, selector);
+        if (!task) { finish(id, false, "Could not start the Microsoft login flow."); return; }
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = "正在等待 Microsoft 登录";
+        connect(task.get(), &AuthFlow::authorizeWithBrowserWithExtra, this,
+                [this, id](const QString& url, const QString& code, int expiresIn) {
+                    if (!m_records.contains(id)) return;
+                    auto& record = m_records[id];
+                    record.deviceUrl = url;
+                    record.deviceCode = code;
+                    record.deviceExpiresIn = expiresIn;
+                    record.status = "请在浏览器中完成 Microsoft 登录";
+                    emitChanged(record);
+                });
+        connect(task.get(), &AuthFlow::authorizeWithBrowser, this,
+                [this, id](const QUrl& url) {
+                    if (!m_records.contains(id)) return;
+                    auto& record = m_records[id];
+                    record.deviceUrl = url.toString();
+                    record.deviceExpiresIn = 0;
+                    record.status = "请在浏览器中完成 Microsoft 登录";
+                    emitChanged(record);
+                });
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, account, task]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            if (!task->wasSuccessful()) { finish(id, false, task->failReason()); return; }
+            if (!account->hasProfile()) { finish(id, false, "This Microsoft account has no Minecraft Java profile."); return; }
+            auto accounts = APPLICATION->accounts();
+            accounts->addAccount(account);
+            if (!accounts->defaultAccount()) accounts->setDefaultAccount(account);
+            accounts->saveList();
+            finish(id, true);
+        });
+        task->start();
+        return;
+    }
+
     if (record.operation == "account.refresh") {
         const auto account = findAccount(record.parameters.value("account").toString());
         if (!account) { finish(id, false, "Account not found."); return; }
@@ -849,6 +1019,10 @@ void AsyncTaskRuntime::loadJournal()
         record.error = object.value("error").toString();
         record.instanceId = object.value("instanceId").toString();
         record.createdInstanceId = object.value("createdInstanceId").toString();
+        record.pid = static_cast<qint64>(object.value("pid").toDouble());
+        record.deviceCode = object.value("deviceCode").toString();
+        record.deviceUrl = object.value("deviceUrl").toString();
+        record.deviceExpiresIn = object.value("deviceExpiresIn").toInt();
         record.conflictKey = object.value("conflictKey").toString();
         record.startedAt = static_cast<qint64>(object.value("startedAt").toDouble());
         for (const auto& key : object.value("reads").toArray()) record.reads.insert(key.toString());
@@ -886,6 +1060,10 @@ void AsyncTaskRuntime::saveJournal() const
             { "total", static_cast<double>(record.total) },
             { "instanceId", record.instanceId },
             { "createdInstanceId", record.createdInstanceId },
+            { "pid", static_cast<double>(record.pid) },
+            { "deviceCode", record.deviceCode },
+            { "deviceUrl", record.deviceUrl },
+            { "deviceExpiresIn", record.deviceExpiresIn },
             { "conflictKey", record.conflictKey },
             { "reads", QJsonArray::fromStringList(QStringList(record.reads.begin(), record.reads.end())) },
             { "writes", QJsonArray::fromStringList(QStringList(record.writes.begin(), record.writes.end())) },

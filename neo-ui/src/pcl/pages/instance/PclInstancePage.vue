@@ -181,7 +181,6 @@ const navGroups = [
     label: '游戏本体',
     items: [
       { id: 'overall', label: '概览', icon: 'layout-dashboard', description: '查看实例信息、备注和常用操作。' },
-      { id: 'settings', label: '设置', icon: 'settings', description: '调整此实例的启动、Java、内存和高级参数。' },
       { id: 'memory', label: '内存', icon: 'gauge', description: '查看系统内存并调整此实例的内存分配。' },
       { id: 'install', label: '修改', icon: 'download', description: '安装或更新 Minecraft 与加载器组件。' },
       { id: 'export', label: '导出', icon: 'file-archive', description: '导出实例或制作整合包。' },
@@ -233,10 +232,6 @@ watch(() => props.notes, value => { localNotes.value = value; });
 watch(() => props.fileLog, () => { /* fileLog is rendered directly */ });
 
 function select(id: string) {
-  if (id === 'settings') {
-    emit('settings');
-    return;
-  }
   section.value = id;
   if (id === 'logs' && !activeLog.value && props.logFiles.length) readLog(props.logFiles[0]);
 }

@@ -10,7 +10,6 @@
         </div>
         <div class="pcl-overview-actions">
           <PclButton size="sm" icon="folder-open" :disabled="busy" @click="emit('open-folder')">打开目录</PclButton>
-          <PclButton size="sm" icon="settings" :disabled="busy" @click="emit('settings')">实例设置</PclButton>
           <PclButton variant="highlight" icon="play" :disabled="busy || instance.running" @click="emit('launch')">启动</PclButton>
         </div>
       </div>

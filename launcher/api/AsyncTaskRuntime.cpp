@@ -144,7 +144,7 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
     QStringList keys;
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         keys << "instances";
-    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export")
+    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export" || operation == "server.start")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
         keys << "java";
@@ -180,6 +180,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "account.login") return 10 * 60 * 1000;
     if (operation == "instance.launch") return 10 * 60 * 1000;
     if (operation == "instance.export") return 30 * 60 * 1000;
+    if (operation == "server.start") return 5 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
     return 15 * 60 * 1000;
 }
@@ -187,7 +188,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "server.start" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -773,6 +774,14 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason(), instanceId);
         });
         task->start();
+        return;
+    }
+
+    if (record.operation == "server.start") {
+        auto server = dynamic_cast<ServerInstance*>(findInstance(record.parameters.value("instance").toString()));
+        if (!server) { finish(id, false, "Server instance not found."); return; }
+        if (!server->isRunning() && !server->startServer()) { finish(id, false, "The server could not be started."); return; }
+        finish(id, true, {}, server->id());
         return;
     }
 

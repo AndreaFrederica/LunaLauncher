@@ -30,7 +30,7 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
 {
     api.registerOperation({ "neo.task.start",
         "Start an asynchronous Neo UI task immediately. Independent instance keys run in parallel; conflicting keys queue.",
-        objectSchema({ { "operation", stringProperty("instance.import, instance.create, instance.component.set-version, instance.update, java.install, modpack.install, resource.install, resource.install-with-dependencies, account.refresh, account.login, instance.launch, or instance.export.") },
+        objectSchema({ { "operation", stringProperty("instance.import, instance.create, instance.component.set-version, instance.update, java.install, modpack.install, resource.install, resource.install-with-dependencies, account.refresh, account.login, instance.launch, instance.export, or server.start.") },
                        { "parameters", QJsonObject{ { "type", "object" }, { "description", "Operation parameters." } } },
                        { "priority", stringProperty("normal or high.") } }, { "operation", "parameters" }),
         "neo", true },
@@ -54,8 +54,8 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
                 { "data", QJsonObject{
                     { "parallel", true },
                     { "maxActive", 3 },
-                    { "operations", QJsonArray{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.launch", "instance.export" } },
-                    { "conflictPolicy", "instance.import/instance.create/modpack.install use the global 'instances' key; resource.install, resource.install-with-dependencies, instance.update and component updates use 'instance:<id>'; java.install uses 'java'; account.refresh uses 'account:<id>'; account.login uses 'accounts'; instance.launch and instance.export use 'instance:<id>'. Different keys run concurrently." },
+                    { "operations", QJsonArray{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.launch", "instance.export", "server.start" } },
+                    { "conflictPolicy", "instance.import/instance.create/modpack.install use the global 'instances' key; resource.install, resource.install-with-dependencies, instance.update and component updates use 'instance:<id>'; java.install uses 'java'; account.refresh uses 'account:<id>'; account.login uses 'accounts'; instance.launch, instance.export and server.start use 'instance:<id>'. Different keys run concurrently." },
                 } }
             };
         });

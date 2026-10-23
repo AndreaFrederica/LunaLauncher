@@ -82,10 +82,15 @@ bool LocalYggdrasil::ensureRunning(QString& error)
         return false;
     }
     m_process.setProgram(executable);
-    // An ephemeral loopback port allows separate portable launcher installations.
-    // Account URLs are updated before every local authentication/refresh.
-    m_process.setArguments(
-        { "--launcher", "--listen", "127.0.0.1:0", "--data-dir", QDir(APPLICATION->dataRoot()).absoluteFilePath("yggdrasil") });
+    const auto settings = APPLICATION->settings();
+    const bool external = settings->get("LocalYggdrasilExternal").toBool();
+    int port = settings->get("LocalYggdrasilPort").toInt();
+    if (port <= 0 || port > 65535) port = 25585;
+    const auto publicUrl = settings->get("LocalYggdrasilPublicUrl").toString().trimmed();
+    QStringList arguments{ "--launcher", "--listen", external ? QString("0.0.0.0:%1").arg(port) : QString("127.0.0.1:0"),
+                           "--data-dir", QDir(APPLICATION->dataRoot()).absoluteFilePath("yggdrasil") };
+    if (external && !publicUrl.isEmpty()) arguments << "--public-url" << publicUrl;
+    m_process.setArguments(arguments);
     m_process.start();
     QEventLoop loop;
     QTimer timer;
@@ -144,6 +149,45 @@ bool LocalYggdrasil::request(const QByteArray& method,
             error = reply->errorString();
     }
     return success;
+}
+
+bool LocalYggdrasil::restart(QString& error)
+{
+    stop();
+    return ensureRunning(error);
+}
+
+QString LocalYggdrasil::dataDirectory() const
+{
+    return QDir(APPLICATION->dataRoot()).absoluteFilePath("yggdrasil");
+}
+
+bool LocalYggdrasil::listUsers(QJsonArray& users, QString& error)
+{
+    QJsonObject response;
+    if (!request("GET", "users?limit=200", {}, response, error)) return false;
+    users = response.value("items").toArray();
+    return true;
+}
+
+bool LocalYggdrasil::createUser(const QString& username, const QString& password, QJsonObject& user, QString& error)
+{
+    if (username.trimmed().isEmpty() || password.isEmpty()) {
+        error = tr("A username and password are required.");
+        return false;
+    }
+    return request("POST", "users", QJsonDocument(QJsonObject{ { "username", username.trimmed() }, { "password", password } }).toJson(),
+                   user, error);
+}
+
+bool LocalYggdrasil::removeUser(const QString& id, QString& error)
+{
+    if (id.isEmpty()) {
+        error = tr("A user id is required.");
+        return false;
+    }
+    QJsonObject ignored;
+    return request("DELETE", "users/" + QUrl::toPercentEncoding(id), {}, ignored, error);
 }
 
 bool LocalYggdrasil::createProfile(const QString& name, const QString& password, const QString& uuid, QJsonObject& profile, QString& error)

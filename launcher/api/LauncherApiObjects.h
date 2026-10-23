@@ -150,6 +150,8 @@ class AccountObject {
                 }
             }
             if (displayName.isEmpty()) displayName = QUrl(data->yggdrasilConfig.authServerUrl).host();
+            if (displayName == "127.0.0.1" || displayName == "localhost" || displayName == "::1")
+                displayName = "LocalServer";
             if (displayName.isEmpty()) displayName = QObject::tr("第三方认证服务器");
             result.insert("authServerName", displayName);
             result.insert("yggdrasil", QJsonObject{ { "displayName", displayName },

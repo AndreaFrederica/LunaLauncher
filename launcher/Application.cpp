@@ -1067,6 +1067,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("MetaURLOverride", "");
         m_settings->registerSetting("LocalServiceCache", true);
         m_settings->registerSetting("YggdrasilAccountCache", true);
+        m_settings->registerSetting("LocalYggdrasilExternal", false);
+        m_settings->registerSetting("LocalYggdrasilPort", 25585);
+        m_settings->registerSetting("LocalYggdrasilPublicUrl", "");
 
             QUrl metaUrl(m_settings->get("MetaURLOverride").toString());
 

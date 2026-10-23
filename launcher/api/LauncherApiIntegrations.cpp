@@ -14,6 +14,7 @@
 #include "minecraft/auth/AuthlibInjectorDownload.h"
 #include "minecraft/auth/Nide8Auth.h"
 #include "minecraft/auth/Nide8AuthDownload.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "tools/BaseProfiler.h"
 #include "tools/MCEditTool.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
@@ -245,5 +246,69 @@ void registerLauncherApiIntegrationOperations(LauncherApi& api)
             if (p.value("integration").toString() != "yukari") return OperationService::failure("Retry is only available for Yukari.", 2);
             if (!YukariConnect::instance().isProcessRunning() || !YukariConnect::instance().retryRoom()) return OperationService::failure("Yukari room retry failed.");
             return OperationService::success(QJsonObject{ { "accepted", true } });
+        });
+    api.registerOperation({ "local.yggdrasil.status", "Read the managed local Yggdrasil service configuration and user database.",
+        schema({}), "integrations" },
+        [](const QJsonObject&, UserInteraction&) {
+            auto& service = LocalYggdrasil::instance();
+            QString error;
+            const bool running = service.ensureRunning(error);
+            QJsonArray users;
+            if (running) service.listUsers(users, error);
+            const auto settings = APPLICATION->settings();
+            return OperationService::success(QJsonObject{
+                { "running", running }, { "url", service.apiUrl() }, { "dataDirectory", service.dataDirectory() },
+                { "external", settings->get("LocalYggdrasilExternal").toBool() },
+                { "port", settings->get("LocalYggdrasilPort").toInt() },
+                { "publicUrl", settings->get("LocalYggdrasilPublicUrl").toString() },
+                { "users", users }, { "error", running ? QString() : error },
+            });
+        });
+    api.registerOperation({ "local.yggdrasil.configure", "Apply the local Yggdrasil listen mode and restart the managed service.",
+        schema({ { "external", boolean() },
+                 { "port", QJsonObject{ { "type", "integer" }, { "minimum", 1 }, { "maximum", 65535 } } },
+                 { "publicUrl", string("Public HTTP URL used by clients when external access is enabled.") } }), "integrations", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            const bool external = p.value("external").toBool();
+            const int port = p.value("port").toInt(25585);
+            const auto publicUrl = p.value("publicUrl").toString().trimmed();
+            if (port < 1 || port > 65535) return OperationService::failure("Port must be between 1 and 65535.", 2);
+            if (external) {
+                const QUrl url(publicUrl, QUrl::TolerantMode);
+                if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https"))
+                    return OperationService::failure("An HTTP(S) public URL is required for external access.", 2);
+            }
+            auto settings = APPLICATION->settings();
+            settings->set("LocalYggdrasilExternal", external);
+            settings->set("LocalYggdrasilPort", port);
+            settings->set("LocalYggdrasilPublicUrl", publicUrl);
+            QString error;
+            if (!LocalYggdrasil::instance().restart(error)) return OperationService::failure(error);
+            return OperationService::success(QJsonObject{ { "running", true }, { "url", LocalYggdrasil::instance().apiUrl() },
+                { "external", external }, { "port", port }, { "publicUrl", publicUrl } });
+        });
+    api.registerOperation({ "local.yggdrasil.users.list", "List users in the managed local Yggdrasil database.", schema({}), "integrations" },
+        [](const QJsonObject&, UserInteraction&) {
+            QJsonArray users;
+            QString error;
+            if (!LocalYggdrasil::instance().listUsers(users, error)) return OperationService::failure(error);
+            return OperationService::success(QJsonObject{ { "users", users } });
+        });
+    api.registerOperation({ "local.yggdrasil.users.create", "Create a local Yggdrasil user.",
+        schema({ { "username", string("User name.") }, { "password", string("Password.") } }, { "username", "password" }), "integrations", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            QJsonObject user;
+            QString error;
+            if (!LocalYggdrasil::instance().createUser(p.value("username").toString(), p.value("password").toString(), user, error))
+                return OperationService::failure(error);
+            return OperationService::success(user);
+        });
+    api.registerOperation({ "local.yggdrasil.users.remove", "Remove a local Yggdrasil user.",
+        schema({ { "id", string("User id.") }, { "confirm", boolean() } }, { "id", "confirm" }), "integrations", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            if (!p.value("confirm").toBool()) return OperationService::failure("Removal requires confirm=true.", 2);
+            QString error;
+            if (!LocalYggdrasil::instance().removeUser(p.value("id").toString(), error)) return OperationService::failure(error);
+            return OperationService::success(QJsonObject{ { "removed", true } });
         });
 }

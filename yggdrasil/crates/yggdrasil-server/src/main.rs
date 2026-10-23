@@ -42,19 +42,22 @@ async fn main() -> anyhow::Result<()> {
     if let Some(listen) = args.listen {
         config.listen = listen
     }
-    if let Some(url) = args.public_url {
+    let explicit_public_url = args.public_url.is_some();
+    if let Some(url) = args.public_url.clone() {
         config.public_url = url
     }
     if let Some(db) = args.database_url {
         config.database_url = Some(db)
     }
     let addr: std::net::SocketAddr = config.listen.parse()?;
-    if args.launcher && !addr.ip().is_loopback() {
-        anyhow::bail!("Launcher mode requires a loopback address.")
-    }
+    // Launcher mode normally listens on loopback. It may also be exposed on a
+    // LAN/interface address when the user explicitly opts into an external
+    // local server; the management token still protects the control API.
     let listener = tokio::net::TcpListener::bind(addr).await?;
     if args.launcher {
-        config.public_url = format!("http://{}", listener.local_addr()?);
+        if !explicit_public_url {
+            config.public_url = format!("http://{}", listener.local_addr()?);
+        }
         // Launcher-managed identities are provisioned through its private API.
         config.registration_enabled = false;
     }

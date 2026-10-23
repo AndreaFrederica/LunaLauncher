@@ -19,7 +19,12 @@ class LocalYggdrasil : public QObject {
    public:
     static LocalYggdrasil& instance();
     bool ensureRunning(QString& error);
+    bool restart(QString& error);
     QString apiUrl() const { return m_url; }
+    QString dataDirectory() const;
+    bool listUsers(QJsonArray& users, QString& error);
+    bool createUser(const QString& username, const QString& password, QJsonObject& user, QString& error);
+    bool removeUser(const QString& id, QString& error);
     bool request(const QByteArray& method,
                  const QString& path,
                  const QByteArray& body,

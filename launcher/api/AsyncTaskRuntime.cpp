@@ -36,6 +36,7 @@
 #include "minecraft/auth/AuthFlow.h"
 #include "minecraft/auth/LocalYggdrasil.h"
 #include "LaunchController.h"
+#include "DesktopServices.h"
 #include "minecraft/launch/MinecraftTarget.h"
 #include "api/LauncherApiSupport.h"
 #include "api/ResourceModelSupport.h"
@@ -977,10 +978,9 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             return;
         }
         MinecraftAccountPtr account;
-        bool useDeviceCode = false;
+        bool useDeviceCode = parameters.value("useDeviceCode").toBool(true);
         if (type == "microsoft") {
             account = MinecraftAccount::createBlankMSA();
-            useDeviceCode = true;
         } else if (type == "yggdrasil" || type == "unified-pass") {
             const auto password = parameters.value("password").toString();
             if (password.isEmpty()) { finish(id, false, "A password is required."); return; }
@@ -1049,13 +1049,14 @@ void AsyncTaskRuntime::startRecord(const Record& record)
                     emitChanged(record);
                 });
         connect(task.get(), &AuthFlow::authorizeWithBrowser, this,
-                [this, id](const QUrl& url) {
+                [this, id, useDeviceCode](const QUrl& url) {
                     if (!m_records.contains(id)) return;
                     auto& record = m_records[id];
                     record.deviceUrl = url.toString();
                     record.deviceExpiresIn = 0;
-                    record.status = "请在浏览器中完成 Microsoft 登录";
+                    record.status = useDeviceCode ? "请在浏览器中完成 Microsoft 登录" : "正在浏览器中完成 Microsoft 授权";
                     emitChanged(record);
+                    if (!useDeviceCode) DesktopServices::openUrl(url);
                 });
         connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
         connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {

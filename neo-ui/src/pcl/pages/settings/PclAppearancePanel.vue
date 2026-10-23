@@ -557,7 +557,7 @@ function reset() {
     pclFloatRefresh: true,
     pclTitleLogo: true,
     pclTitleBadge: true,
-    pclAccentColor: '#2a80e3',
+    pclAccentColor: '#d65c9a',
     pclBackgroundImage: '',
     pclBackgroundImageName: '',
     pclBackgroundOpacity: 0.45,

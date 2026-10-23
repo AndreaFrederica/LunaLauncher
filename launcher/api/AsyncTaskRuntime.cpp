@@ -136,7 +136,8 @@ QString downloadPackCover(const QUrl& url, QString& error)
         return {};
     }
     reply->deleteLater();
-    const auto image = QImage::fromData(data);
+    auto image = QImage::fromData(data, "WEBP");
+    if (image.isNull()) image = QImage::fromData(data);
     if (!image.isNull()) return savePackCover(image, error);
     // Qt's WebP plugin may be unavailable in a minimal sidecar installation.
     // Keep the original cover bytes so the instance still gets the provider icon.

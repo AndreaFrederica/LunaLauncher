@@ -5,6 +5,7 @@ export type NeoDensity = 'comfortable' | 'compact';
 export type NeoBackground = 'solid' | 'gradient';
 export type NeoShell = 'neo' | 'pcl';
 export type PclFont = 'system' | 'yahei' | 'dengxian' | 'simsun';
+export type PclStylePreset = 'luna-neo' | 'pcl';
 
 export interface PclHomeCard {
   id: string;
@@ -22,6 +23,8 @@ export interface NeoUiPreferences {
   animations: boolean;
   /** Font stack used by the PCL-inspired shell only. */
   pclFont: PclFont;
+  /** Selected sub-preset inside the PCL Style theme. */
+  pclStylePreset: PclStylePreset;
   /** Base font size in px for the PCL shell. */
   pclBaseFontSize: number;
   /** PCL launch-page navigation layout. */
@@ -78,11 +81,12 @@ const defaults: NeoUiPreferences = {
   background: 'gradient',
   animations: true,
   pclFont: 'system',
+  pclStylePreset: 'luna-neo',
   pclBaseFontSize: 14,
-  pclNavLayout: 'pcl',
+  pclNavLayout: 'mmc-classic',
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
-  pclLaunchAnimation: true,
+  pclLaunchAnimation: false,
   pclFloatTasks: true,
   pclFloatLog: true,
   pclFloatRefresh: true,
@@ -106,13 +110,78 @@ const defaults: NeoUiPreferences = {
   pclHomeInstanceRows: 4,
   pclHomeInstanceWidth: 100,
   pclHomeInstanceFontSize: 14,
-  pclHomeInstanceTextPosition: 'beside',
-  pclHomeInstanceGrouping: 'flat',
-  pclHomeInstanceSort: 'manual',
+  pclHomeInstanceTextPosition: 'below',
+  pclHomeInstanceGrouping: 'grouped',
+  pclHomeInstanceSort: 'name',
   pclHomeInstanceOrder: [],
-  pclHomeCardOrder: ['hint', 'custom:welcome', 'log', 'instances', 'servers'],
+  pclHomeCardOrder: ['instances', 'log', 'hint', 'custom:welcome', 'servers'],
   selectedInstanceId: '',
 };
+
+export const pclStylePresetLabels: Record<PclStylePreset, string> = {
+  'luna-neo': 'Luna Neo',
+  pcl: 'PCL',
+};
+
+const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
+  'luna-neo': {
+    pclFont: 'system',
+    pclBaseFontSize: 14,
+    pclNavLayout: 'mmc-classic',
+    pclClassicSide: 'right',
+    pclClassicIconSize: 96,
+    pclLaunchAnimation: false,
+    pclFloatTasks: true,
+    pclFloatLog: true,
+    pclFloatRefresh: true,
+    pclTitleLogo: true,
+    pclTitleBadge: true,
+    pclHomeShowInstances: true,
+    pclHomeShowServers: true,
+    pclHomeSwitchOnQuickLaunch: false,
+    pclHomeInstanceLayout: 'grid',
+    pclHomeInstanceColumns: 'auto',
+    pclHomeInstanceRows: 4,
+    pclHomeInstanceWidth: 100,
+    pclHomeInstanceFontSize: 14,
+    pclHomeInstanceTextPosition: 'below',
+    pclHomeInstanceGrouping: 'grouped',
+    pclHomeInstanceSort: 'name',
+    pclHomeCardOrder: ['instances', 'log', 'hint', 'custom:welcome', 'servers'],
+  },
+  pcl: {
+    pclFont: 'system',
+    pclBaseFontSize: 13,
+    pclNavLayout: 'pcl',
+    pclClassicSide: 'right',
+    pclClassicIconSize: 96,
+    pclLaunchAnimation: true,
+    pclFloatTasks: true,
+    pclFloatLog: true,
+    pclFloatRefresh: true,
+    pclTitleLogo: true,
+    pclTitleBadge: true,
+    pclHomeShowInstances: true,
+    pclHomeShowServers: true,
+    pclHomeSwitchOnQuickLaunch: false,
+    pclHomeInstanceLayout: 'grid',
+    pclHomeInstanceColumns: 2,
+    pclHomeInstanceRows: 4,
+    pclHomeInstanceWidth: 100,
+    pclHomeInstanceFontSize: 13,
+    pclHomeInstanceTextPosition: 'beside',
+    pclHomeInstanceGrouping: 'flat',
+    pclHomeInstanceSort: 'manual',
+    pclHomeCardOrder: ['hint', 'custom:welcome', 'log', 'instances', 'servers'],
+  },
+};
+
+export function applyPclStylePreset(preset: PclStylePreset) {
+  const values = PCL_STYLE_PRESETS[preset];
+  if (!values) return;
+  Object.assign(neoUiPreferences, values, { pclStylePreset: preset });
+  persistNeoUiPreferences();
+}
 
 const pclFontStacks: Record<PclFont, string> = {
   system: '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PCL English", sans-serif',

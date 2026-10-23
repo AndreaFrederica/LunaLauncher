@@ -4,6 +4,13 @@
 
     <PclCard title="界面外观">
       <div class="pcl-form-row">
+        <span class="pcl-form-row__label">PCL Style 预设</span>
+        <div class="pcl-form-row__control">
+          <PclSelect :model-value="preferences.pclStylePreset" :options="pclStylePresetOptions" @update:model-value="selectPclPreset" />
+        </div>
+        <span class="pcl-form-row__hint">仅影响 PCL Style 的子设置</span>
+      </div>
+      <div class="pcl-form-row">
         <span class="pcl-form-row__label">界面风格</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.shell" :options="shellOptions" />
@@ -320,7 +327,7 @@ import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclColorPicker from '../../components/PclColorPicker.vue';
 import PclInput from '../../components/PclInput.vue';
 import { choosePclMusic, pclMusic, removePclMusic, setPclMusicVolume, togglePclMusic } from '../../composables/usePclMusic';
-import { neoUiPreferences, persistNeoUiPreferences } from '../../../neo-ui-preferences';
+import { applyPclStylePreset, neoUiPreferences, persistNeoUiPreferences } from '../../../neo-ui-preferences';
 import { launcher } from '../../../boot/launcher-api';
 import {
   hiddenPclFeatures as hiddenFeatures,
@@ -395,6 +402,9 @@ function moveHomeOrder(index: number, delta: number) {
   preferences.pclHomeCardOrder = keys;
   persistNeoUiPreferences();
 }
+function selectPclPreset(value: string) {
+  applyPclStylePreset(value === 'pcl' ? 'pcl' : 'luna-neo');
+}
 function addHomeCard() {
   preferences.pclHomeCards.push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -414,6 +424,10 @@ function clearBackground() {
   preferences.pclBackgroundImageName = '';
   persistNeoUiPreferences();
 }
+const pclStylePresetOptions = [
+  { label: 'Luna Neo（默认）', value: 'luna-neo' },
+  { label: 'PCL', value: 'pcl' },
+];
 const navLayoutOptions = [
   { label: 'PCL 侧栏', value: 'pcl' },
   { label: 'MMC Classic', value: 'mmc-classic' },
@@ -532,11 +546,12 @@ function reset() {
     background: 'gradient',
     animations: true,
     pclFont: 'system',
+    pclStylePreset: 'luna-neo',
     pclBaseFontSize: 14,
-    pclNavLayout: 'pcl',
+    pclNavLayout: 'mmc-classic',
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
-    pclLaunchAnimation: true,
+    pclLaunchAnimation: false,
     pclFloatTasks: true,
     pclFloatLog: true,
     pclFloatRefresh: true,
@@ -558,11 +573,11 @@ function reset() {
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 14,
-    pclHomeInstanceTextPosition: 'beside',
-    pclHomeInstanceGrouping: 'flat',
-    pclHomeInstanceSort: 'manual',
+    pclHomeInstanceTextPosition: 'below',
+    pclHomeInstanceGrouping: 'grouped',
+    pclHomeInstanceSort: 'name',
     pclHomeInstanceOrder: [],
-    pclHomeCardOrder: ['hint', 'custom:welcome', 'log', 'instances', 'servers'],
+    pclHomeCardOrder: ['instances', 'log', 'hint', 'custom:welcome', 'servers'],
   });
   persistNeoUiPreferences();
 }

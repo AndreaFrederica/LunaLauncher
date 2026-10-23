@@ -86,7 +86,6 @@
                 >
                   <span class="pcl-launch-button__copy">
                     <span class="pcl-launch-button__label"><PclIcon name="play" :size="18" />{{ launchButtonLabel }}</span>
-                    <small v-if="selected">{{ instanceDescription }}</small>
                   </span>
                 </PclButton>
               </Transition>
@@ -312,7 +311,6 @@ watch(launchState, value => {
 });
 
 const hasAccount = computed(() => Boolean(activeAccount.value));
-const instanceDescription = computed(() => { const version = props.selected?.runtime?.minecraftVersion || props.selected?.runtime?.minecraft || props.selected?.minecraftVersion; return version ? `Minecraft ${version}` : (props.selected?.name || 'Minecraft 实例'); });
 const loginMethodLabel = computed(() => props.launchLoginMethod || accountTypeLabel(activeAccount.value));
 const launchButtonLabel = computed(() => launchState.value === 'loading' ? '正在加载' : launchState.value === 'download' ? '下载 Minecraft' : !hasAccount.value ? '添加账户' : '启动游戏');
 const launchButtonDisabled = computed(() => {

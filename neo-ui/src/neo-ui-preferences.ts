@@ -133,7 +133,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
-    pclFloatTasks: false,
+      pclFloatTasks: false,
     pclFloatLog: false,
     pclFloatRefresh: false,
     pclFloatMusic: false,
@@ -201,6 +201,7 @@ function load(): NeoUiPreferences {
   try {
     const value = JSON.parse(localStorage.getItem(storageKey) || '{}');
     const merged = { ...defaults, ...value };
+
     merged.pclHomeCardOrder = Array.isArray(merged.pclHomeCardOrder)
       ? merged.pclHomeCardOrder.map(String).filter(Boolean)
       : ['hint', 'log', 'instances', 'servers'];

@@ -326,7 +326,7 @@ const launchDialogOpen = ref(false);
 watch(launchState, value => {
   if (['launching', 'launched', 'failed', 'cancelled'].includes(value)) launchDialogOpen.value = true;
   if (value === 'launch') launchDialogOpen.value = false;
-});
+}, { immediate: true });
 
 const hasAccount = computed(() => Boolean(activeAccount.value));
 const loginMethodLabel = computed(() => props.launchLoginMethod || accountTypeLabel(activeAccount.value));

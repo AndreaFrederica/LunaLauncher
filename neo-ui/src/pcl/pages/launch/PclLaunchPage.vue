@@ -184,6 +184,7 @@
                     :title="`双击启动 ${item.name}`"
                     @click="clickInstance(item)"
                     @dblclick="quickLaunch(item)"
+                    @contextmenu.prevent.stop="openContextMenu(item, $event)"
                     @dragstart="startDrag(item, $event)"
                     @dragend="endDrag"
                     @dragover.prevent="dragOverId = item.id"
@@ -255,6 +256,22 @@
       </PclCard>
     </q-dialog>
 
+    <div v-if="contextMenu" class="pcl-context-backdrop" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu" />
+    <div v-if="contextMenu" class="pcl-instance-context" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+      <div class="pcl-instance-context__head">{{ contextMenu.item?.name || '实例操作' }}</div>
+      <button
+        v-for="action in contextActions(contextMenu.item)"
+        :key="action.id"
+        type="button"
+        :class="{ danger: action.danger }"
+        :disabled="action.disabled"
+        @click="runContextMenu(action.id)"
+      >
+        <PclIcon :name="action.icon" :size="15" />
+        <span>{{ action.label }}</span>
+      </button>
+    </div>
+
     <div class="pcl-extra-rail">
       <PclExtraButton
         v-if="preferences.pclFloatTasks"
@@ -297,7 +314,7 @@ import PclAccountAvatar from '../../components/PclAccountAvatar.vue';
 
 type LaunchState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
 const props = defineProps<{ selected?: any; icon?: string; busy: boolean; notice?: string; error?: string; instances: any[]; icons: Record<string, string>; accounts?: any[]; accountId?: string; launchState?: LaunchState; launchProgress?: number; launchStage?: string; launchLoginMethod?: string; launchSpeed?: number; launchError?: string; launchHint?: string; logLines?: string[]; execute?: (operation: string, parameters?: Record<string, unknown>) => Promise<any> }>();
-const emit = defineEmits<{ launch: []; cancel: []; select: [instance: any]; 'open-folder': []; settings: []; refresh: []; download: []; tasks: []; 'clear-log': []; 'account-change': [id: string]; 'account-page': [mode: 'add' | 'manage']; 'instance-action': [instance: any, action: string]; 'quick-launch': [instance: any, switchSelected: boolean]; 'connect-server': [address: string] }>();
+const emit = defineEmits<{ launch: []; cancel: []; select: [instance: any]; 'open-folder': []; settings: []; refresh: []; download: []; tasks: []; 'clear-log': []; 'account-change': [id: string]; 'account-page': [mode: 'add' | 'manage']; 'instance-action': [instance: any, action: string]; 'quick-launch': [instance: any, switchSelected: boolean]; 'launch-instance': [instance: any]; 'edit-instance': [instance: any]; 'open-instance-folder': [instance: any]; 'connect-server': [address: string] }>();
 const { selected, busy, notice, error, instances, icons } = toRefs(props);
 const selectionOpen = ref(false), accountMenu = ref(false), hintDialog = ref(false), hintCode = ref('');
 const accounts = computed(() => props.accounts || []);
@@ -410,6 +427,35 @@ function dropOnInstance(target: any, _event: DragEvent) {
   ids.splice(from, 1);
   ids.splice(to, 0, source.id);
   preferences.pclHomeInstanceOrder = ids;
+}
+const contextMenu = ref<{ item: any; x: number; y: number } | null>(null);
+function openContextMenu(instance: any, event: MouseEvent) {
+  const x = Math.min(event.clientX, Math.max(0, window.innerWidth - 210));
+  const y = Math.min(event.clientY, Math.max(0, window.innerHeight - 320));
+  contextMenu.value = { item: instance, x, y };
+}
+function closeContextMenu() { contextMenu.value = null; }
+function contextActions(instance: any) {
+  return [
+    { id: 'launch', label: '启动', icon: 'play', disabled: Boolean(instance?.running) },
+    { id: 'stop', label: '结束进程', icon: 'power', disabled: !instance?.running },
+    { id: 'edit', label: '编辑', icon: 'settings', disabled: false },
+    { id: 'group', label: '改变分组', icon: 'folder-open', disabled: false },
+    { id: 'folder', label: '实例文件夹', icon: 'folder-open', disabled: false },
+    { id: 'export', label: '导出', icon: 'file-archive', disabled: false },
+    { id: 'copy', label: '复制', icon: 'copy', disabled: false },
+    { id: 'delete', label: '删除', icon: 'trash-2', disabled: false, danger: true },
+    { id: 'shortcut', label: '创建快捷方式', icon: 'external-link', disabled: false },
+  ];
+}
+function runContextMenu(action: string) {
+  const item = contextMenu.value?.item;
+  closeContextMenu();
+  if (!item) return;
+  if (action === 'launch') emit('launch-instance', item);
+  else if (action === 'edit') emit('edit-instance', item);
+  else if (action === 'folder') emit('open-instance-folder', item);
+  else emit('instance-action', item, action);
 }
 const servers = ref<any[]>([]), serversLoading = ref(false), serversError = ref('');
 async function loadServers() {
@@ -1056,4 +1102,51 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
 .pcl-home-instance.text-below .pcl-home-instance__running {
   margin-top: 1px;
 }
+
+.pcl-context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.pcl-instance-context {
+  position: fixed;
+  z-index: 91;
+  width: 200px;
+  padding: 5px;
+  border: 1px solid var(--pcl-card-border);
+  border-radius: 4px;
+  background: var(--pcl-card);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .38);
+}
+
+.pcl-instance-context__head {
+  overflow: hidden;
+  padding: 5px 7px 7px;
+  border-bottom: 1px solid var(--pcl-border);
+  color: var(--pcl-muted);
+  font-size: calc(9px * var(--pcl-font-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcl-instance-context button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--pcl-text);
+  font-size: calc(11px * var(--pcl-font-scale, 1));
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcl-instance-context button:hover:not(:disabled) { background: var(--pcl-c8); }
+.pcl-instance-context button:disabled { color: var(--pcl-c5); cursor: not-allowed; }
+.pcl-instance-context button.danger { color: #e06c75; }
 </style>

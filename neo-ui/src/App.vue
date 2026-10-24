@@ -4,7 +4,7 @@
 <NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
  <Transition name="pcl-route" mode="out-in"><div v-if="isPclShell" :key="page" class="pcl-route-shell">
- <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
+ <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
 
  <PclDownloadPage v-if="isPclShell && page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" />
  <PclToolsPage v-if="isPclShell && page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
@@ -55,6 +55,16 @@
   </q-card-actions>
  </q-card>
 </q-dialog>
+<PclInstanceEditWindow
+ v-for="(editWindow, index) in editWindows"
+ :key="editWindow.key"
+ :instance="editWindow.instance"
+ :index="index"
+ :icon="icons[editWindow.instance.id]"
+ :execute="call"
+ @close="editWindows = editWindows.filter(item => item.key !== editWindow.key)"
+ @changed="refresh"
+/>
 <PclTaskCenter v-if="isPclShell" v-model="taskCenterOpen" :execute="call" />
 <PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" />
 <PclToastHost />
@@ -81,6 +91,7 @@ import XmclSystemBar from './xmcl-port/XmclSystemBar.vue';
 import PclDownloadPage from './pcl/pages/download/PclDownloadPage.vue';
 import PclInstallProgressDialog from './pcl/pages/download/PclInstallProgressDialog.vue';
 import PclTaskCenter from './pcl/components/PclTaskCenter.vue';
+import PclInstanceEditWindow from './pcl/components/PclInstanceEditWindow.vue';
 import PclToolsPage from './pcl/pages/tools/PclToolsPage.vue';
 import PclSetupPage from './pcl/pages/settings/PclSetupPage.vue';
 import PclInstancePage from './pcl/pages/instance/PclInstancePage.vue';
@@ -111,7 +122,7 @@ async function loadIcons(){
 const components=ref<any[]>([]),componentError=ref('');
 async function loadComponents(){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});components.value=r.components;}catch(e){componentError.value=message(e);}}
 async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name||c.id)+' 版本',c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
-const instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false),searchShown=ref(false),globalSearch=ref('');
+const editWindows=ref<any[]>([]), instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false),searchShown=ref(false),globalSearch=ref('');
 const installProgressOpen=ref(false),installProgressTitle=ref('正在安装整合包'),installTask=ref<any>(null),installCancelling=ref(false);
 const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
 const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
@@ -221,6 +232,28 @@ function quickLaunchHome(instance:any, switchSelected:boolean){
  if(!instance?.id)return;
  const previous=selected.value?.id || '';
  void launch(instance, launchAccountId.value, undefined, switchSelected ? '' : previous);
+}
+function openInstanceEditor(instance: any) {
+  if (!instance?.id) return;
+  if (editWindows.value.some(window => window.instance.id === instance.id)) return;
+  editWindows.value.push({ key: `edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, instance: { ...instance } });
+}
+function editInstance(instance: any) {
+  if (!instance?.id) return;
+  if (selected.value?.id === instance.id && !neoUiPreferences.pclEditCurrentInWindow) {
+    void openInstance(instance);
+    return;
+  }
+  openInstanceEditor(instance);
+}
+function menuLaunch(instance: any) {
+  if (!instance?.id) return;
+  void launch(instance, launchAccountId.value, undefined, selected.value?.id || '');
+}
+async function openInstanceFolder(instance: any) {
+  if (!instance?.id) return;
+  try { await call('instance.open-folder', { instance: instance.id }); }
+  catch (exception) { error.value = message(exception); }
 }
 function quickConnect(address:string){
  if(!selected.value?.id || !address)return;

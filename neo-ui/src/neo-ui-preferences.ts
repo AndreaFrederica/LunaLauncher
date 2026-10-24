@@ -38,6 +38,8 @@ export interface NeoUiPreferences {
   pclFloatLog: boolean;
   pclFloatRefresh: boolean;
   pclFloatMusic: boolean;
+  /** Open an independent editor window even for the currently selected instance. */
+  pclEditCurrentInWindow: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -92,6 +94,7 @@ const defaults: NeoUiPreferences = {
   pclFloatLog: false,
   pclFloatRefresh: false,
   pclFloatMusic: false,
+  pclEditCurrentInWindow: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclAccentColor: '#d65c9a',

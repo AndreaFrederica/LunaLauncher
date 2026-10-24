@@ -36,13 +36,15 @@ import { dismissPclToast, pclToasts } from '../composables/usePclToast';
 <style scoped>
 .pcl-toast-host {
   position: fixed;
-  right: 20px;
-  bottom: 232px;
+  top: 52px;
+  left: 50%;
   z-index: 7500;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
+  align-items: center;
   gap: 8px;
   width: min(320px, calc(100vw - 32px));
+  transform: translateX(-50%);
   pointer-events: none;
 }
 

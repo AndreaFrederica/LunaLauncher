@@ -5,18 +5,20 @@
         <PclIcon name="tool-case" :size="19" />
         <span>工具</span>
       </div>
-      <div class="pcl-tools-group">实用工具</div>
-      <button
-        v-for="item in items"
-        :key="item.id"
-        type="button"
-        class="pcl-page-nav__item"
-        :class="{ active: section === item.id }"
-        @click="section = item.id"
-      >
-        <PclIcon :name="item.icon" :size="18" />
-        <span>{{ item.label }}</span>
-      </button>
+      <template v-for="group in itemGroups" :key="group.label">
+        <div class="pcl-tools-group">{{ group.label }}</div>
+        <button
+          v-for="item in group.items"
+          :key="item.id"
+          type="button"
+          class="pcl-page-nav__item"
+          :class="{ active: section === item.id }"
+          @click="section = item.id"
+        >
+          <PclIcon :name="item.icon" :size="18" />
+          <span>{{ item.label }}</span>
+        </button>
+      </template>
       <div class="pcl-tools-hint">
         <PclIcon name="info" :size="15" />
         <span>任务、下载和实例状态实时读取启动器；服务器查询使用 mcsrvstat.us。</span>
@@ -36,13 +38,13 @@
 
           <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
-          <div v-if="section === 'multiplayer'" class="pcl-tools-stack">
+          <div v-if="isMultiplayerSection" class="pcl-tools-stack">
             <PclCard title="P2P 联机">
               <template #actions>
                 <PclButton size="sm" icon="refresh-cw" :disabled="backendBusy" @click="refreshBackend">刷新</PclButton>
               </template>
 
-              <div class="pcl-backend-tabs">
+              <div v-if="section === 'multiplayer'" class="pcl-backend-tabs">
                 <button
                   v-for="item in backends"
                   :key="item.id"
@@ -215,6 +217,28 @@
             </PclHint>
           </PclCard>
 
+          <div v-else-if="section === 'authlib' || section === 'nide8auth'" class="pcl-tools-stack">
+            <PclCard :title="section === 'authlib' ? 'authlib-injector' : 'Nide8Auth'">
+              <template #actions>
+                <PclButton size="sm" icon="refresh-cw" :disabled="helperBusy" @click="loadHelper(helperKey(section))">刷新状态</PclButton>
+              </template>
+              <PclLoading v-if="helperBusy" text="正在处理认证组件" inline />
+              <div v-if="helperStatus[helperKey(section)]" class="pcl-helper-status">
+                <span class="pcl-local-status__dot" :class="{ ok: helperStatus[helperKey(section)].installed }" />
+                <div>
+                  <strong>{{ helperStatus[helperKey(section)].installed ? '已安装' : '未安装' }} <template v-if="helperStatus[helperKey(section)].version">· {{ helperStatus[helperKey(section)].version }}</template></strong>
+                  <small>{{ helperStatus[helperKey(section)].path || '尚未读取路径' }}</small>
+                  <small v-if="helperStatus[helperKey(section)].error" class="pcl-helper-error">{{ helperStatus[helperKey(section)].error }}</small>
+                </div>
+              </div>
+              <div class="pcl-actions">
+                <PclButton variant="highlight" icon="download" :disabled="helperBusy" @click="installHelper(helperKey(section))">{{ helperStatus[helperKey(section)]?.installed ? '重新安装' : '安装组件' }}</PclButton>
+                <PclButton variant="red" icon="trash-2" :disabled="helperBusy || !helperStatus[helperKey(section)]?.installed" @click="removeHelper(helperKey(section))">删除组件</PclButton>
+              </div>
+              <PclHint theme="blue">认证组件用于第三方 Yggdrasil 账户登录。安装后由启动器在启动对应账户时自动注入。</PclHint>
+            </PclCard>
+          </div>
+
           <div v-else class="pcl-tools-grid">
             <PclCard title="API 测试">
               <template #actions>
@@ -300,13 +324,22 @@ type Execute = (operation: string, parameters?: Record<string, unknown>) => Prom
 const props = defineProps<{ busy: boolean; execute: Execute; selected?: any; instances: any[] }>();
 const emit = defineEmits<{ refresh: []; 'open-instance': [instance: any] }>();
 
-const items = [
-  { id: 'multiplayer', label: '联机', icon: 'earth', description: '打开联机工具和服务器连接功能。' },
-  { id: 'tasks', label: '任务管理', icon: 'list', description: '查看后台任务和下载队列。' },
-  { id: 'logs', label: '日志查看', icon: 'scroll-text', description: '快速进入实例控制台和历史日志。' },
-  { id: 'scheduler', label: '调度分析', icon: 'gauge', description: '查看 API 排队、缓存命中与耗时。' },
-  { id: 'test', label: '工具测试', icon: 'flask-conical', description: '检查工具能力和 API 连接状态。' },
+const itemGroups = [
+  { label: '实用工具', items: [
+    { id: 'multiplayer', label: '联机', icon: 'earth', description: '打开联机工具和服务器连接功能。' },
+    { id: 'tasks', label: '任务管理', icon: 'list', description: '查看后台任务和下载队列。' },
+    { id: 'logs', label: '日志查看', icon: 'scroll-text', description: '快速进入实例控制台和历史日志。' },
+    { id: 'scheduler', label: '调度分析', icon: 'gauge', description: '查看 API 排队、缓存命中与耗时。' },
+    { id: 'test', label: '工具测试', icon: 'flask-conical', description: '检查工具能力和 API 连接状态。' },
+  ] },
+  { label: '外挂组件', items: [
+    { id: 'yukari', label: 'YukariConnect', icon: 'globe', description: '管理 YukariConnect P2P 联机后端、房间与日志。' },
+    { id: 'terracotta', label: 'Terracotta', icon: 'network', description: '管理 Terracotta P2P 联机后端、房间与日志。' },
+    { id: 'authlib', label: 'authlib-injector', icon: 'shield-check', description: '管理 Yggdrasil 认证注入组件。' },
+    { id: 'nide8auth', label: 'Nide8Auth', icon: 'key-round', description: '管理 Nide8Auth 认证组件。' },
+  ] },
 ];
+const items = itemGroups.flatMap(group => group.items);
 const section = ref('multiplayer'), tasks = ref<any[]>([]), downloads = ref<any[]>([]), loading = ref(false);
 const apiInfo = ref<any>(null), servers = ref<any[]>([]), serverAddress = ref(''), serverStatus = ref<any>(null);
 const skinUrl = ref(''), skinPreview = ref(''), testServer = ref(''), achievementTitle = ref(''), achievementLine = ref('');
@@ -328,7 +361,10 @@ const backendMode = ref<'host' | 'guest'>('host');
 const playerName = ref('Player');
 const roomCode = ref('');
 const backendLog = ref('');
+const helperStatus = ref<Record<string, any>>({});
+const helperBusy = ref(false);
 const current = computed(() => items.find(item => item.id === section.value) || items[0]);
+const isMultiplayerSection = computed(() => ['multiplayer', 'yukari', 'terracotta'].includes(section.value));
 const selectedBackend = computed(() => backends.value.find(item => item.id === backend.value) || null);
 const backendState = computed(() => backendStatus.value?.state || null);
 const backendProfiles = computed(() => Array.isArray(backendState.value?.profiles) ? backendState.value.profiles : []);
@@ -544,12 +580,42 @@ function saveSkinPreview() {
   try { localStorage.setItem('luna-tool-skin-preview', JSON.stringify({ url: skinPreview.value, size: avatarSize.value, variant: skinVariant.value })); }
   catch { /* storage unavailable */ }
 }
+function helperKey(kind: string) {
+  return kind === 'authlib' || kind === 'nide8auth' ? (kind === 'authlib' ? 'authlib-injector' : 'nide8auth') : '';
+}
+async function loadHelper(helper: string) {
+  if (!helper) return;
+  helperBusy.value = true;
+  try { helperStatus.value[helper] = await props.execute('authentication.helper.status', { helper }); }
+  catch (exception) { helperStatus.value[helper] = { error: message(exception) }; }
+  finally { helperBusy.value = false; }
+}
+async function installHelper(helper: string) {
+  helperBusy.value = true;
+  try { helperStatus.value[helper] = await props.execute('authentication.helper.install', { helper }); }
+  catch (exception) { helperStatus.value[helper] = { error: message(exception) }; }
+  finally { helperBusy.value = false; }
+}
+async function removeHelper(helper: string) {
+  if (!window.confirm(`确定删除 ${helper} 吗？`)) return;
+  helperBusy.value = true;
+  try { helperStatus.value[helper] = await props.execute('authentication.helper.remove', { helper, confirm: true }); }
+  catch (exception) { helperStatus.value[helper] = { error: message(exception) }; }
+  finally { helperBusy.value = false; }
+}
+
 function saveAchievement() {
   try { localStorage.setItem('luna-tool-achievement-preview', JSON.stringify({ title: achievementTitle.value, line: achievementLine.value })); }
   catch { /* storage unavailable */ }
 }
 watch(section, value => {
   if (value === 'scheduler') loadStats();
+  if (value === 'yukari' || value === 'terracotta') {
+    backend.value = value;
+    backendStatus.value = null;
+    void refreshBackend();
+  }
+  if (value === 'authlib' || value === 'nide8auth') void loadHelper(helperKey(value));
 });
 
 onMounted(() => {
@@ -924,4 +990,10 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 }
+
+.pcl-helper-status { display: flex; align-items: flex-start; gap: 8px; padding: 10px; margin: 8px 0; border: 1px solid var(--pcl-border); border-radius: 4px; background: var(--pcl-c8); }
+.pcl-helper-status > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pcl-helper-status strong { color: var(--pcl-text); font-size: calc(11px * var(--pcl-font-scale, 1)); }
+.pcl-helper-status small { color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); overflow-wrap: anywhere; }
+.pcl-helper-error { color: #fb7185 !important; }
 </style>

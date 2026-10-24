@@ -9,6 +9,11 @@
       <div class="pcl-page-nav__hint"><span class="material-icons">info_outline</span><span>账户、皮肤和认证服务都由 Luna 后端缓存并持久化。</span></div>
     </aside>
     <main class="pcl-page-main">
+      <nav v-if="embedded" class="pcl-account-embedded-tabs" aria-label="账户管理">
+        <button v-for="item in items" :key="item.id" type="button" :class="{ active: section === item.id }" @click="openSection(item.id)">
+          <PclIcon :name="item.icon" :size="16" /><span>{{ item.label }}</span>
+        </button>
+      </nav>
       <template v-if="section === 'profile'">
         <PclCard title="账户">
           <template #actions>
@@ -776,4 +781,8 @@ async function loadServiceData() {
   padding: 0;
   overflow: visible;
 }
+
+.pcl-account-embedded-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.pcl-account-embedded-tabs button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 1px solid var(--pcl-border); border-radius: 3px; background: var(--pcl-c8); color: var(--pcl-muted); font: inherit; font-size: calc(10px * var(--pcl-font-scale, 1)); cursor: pointer; }
+.pcl-account-embedded-tabs button.active { border-color: var(--pcl-c3); color: var(--pcl-c3); background: var(--pcl-c6); }
 </style>

@@ -199,7 +199,7 @@ function startLaunchProgressAnimation(){
 }
 function stopLaunchProgressAnimation(){if(launchProgressTimer){clearInterval(launchProgressTimer);launchProgressTimer=undefined;}}
 function setLaunchState(state:LaunchUiState){launchUiState.value=state;if(state==='launching'||state==='launched')startLaunchProgressAnimation();else stopLaunchProgressAnimation();}
-function resetLaunchUiSoon(){if(launchUiResetTimer)clearTimeout(launchUiResetTimer);launchUiResetTimer=setTimeout(()=>{if(launchUiState.value==='launched' || launchUiState.value==='failed' || launchUiState.value==='cancelled'){setLaunchState(selected.value ? 'launch' : (instances.value.length ? 'disabled' : 'download'));launchError.value='';}},2200);}
+function resetLaunchUiSoon(){if(launchUiResetTimer)clearTimeout(launchUiResetTimer);launchUiResetTimer=setTimeout(()=>{if(launchUiState.value==='launched' || launchUiState.value==='cancelled'){setLaunchState(selected.value ? 'launch' : (instances.value.length ? 'disabled' : 'download'));launchError.value='';}},2200);}
 function updateLaunchProgress(value:any){
  if(!value)return;
  if(!launchInFlight && !preparingLaunch && !['launching','launched'].includes(launchUiState.value))return;

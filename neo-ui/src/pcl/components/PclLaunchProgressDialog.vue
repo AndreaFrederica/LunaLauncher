@@ -23,6 +23,13 @@
           <span>{{ stage || (state === 'launching' ? '正在准备启动…' : state === 'launched' ? '游戏进程已启动' : '启动流程已结束') }}</span>
         </div>
         <p v-if="details" class="pcl-launch-dialog__details">{{ details }}</p>
+        <div v-if="failedRows.length" class="pcl-launch-dialog__downloads pcl-launch-dialog__failures">
+          <div class="pcl-launch-dialog__downloads-head">失败的项目</div>
+          <div v-for="row in failedRows" :key="row.id" class="pcl-launch-dialog__download">
+            <span class="pcl-launch-dialog__download-name">{{ row.label || '下载任务' }}</span>
+            <span class="pcl-launch-dialog__download-meta">{{ row.details || row.status || '校验失败' }}</span>
+          </div>
+        </div>
         <div v-if="activeRows.length" class="pcl-launch-dialog__downloads">
           <div class="pcl-launch-dialog__downloads-head">正在处理</div>
           <div v-for="row in activeRows" :key="row.id" class="pcl-launch-dialog__download">
@@ -106,6 +113,9 @@ const percent = computed<number | null>(() => {
 });
 const percentText = computed(() => percent.value === null ? '—' : `${percent.value}%`);
 
+const failedRows = computed(() => (props.children || [])
+  .filter((row: any) => row && (row.state === 'failed' || /fail|失败/i.test(String(row.status || ''))))
+  .slice(0, 8));
 const activeRows = computed(() => (props.children || [])
   .filter((row: any) => row && row.state === 'running' && (Number(row.total) > 0 || row.details || row.label))
   .slice(0, 8));
@@ -224,4 +234,8 @@ function formatRate(value: unknown) {
   white-space: nowrap;
 }
 .pcl-launch-dialog__child-track { grid-column: 1 / -1; margin-top: 2px; }
+
+.pcl-launch-dialog__failures { border-color: color-mix(in srgb, #fb7185 55%, var(--pcl-border)); }
+.pcl-launch-dialog__failures .pcl-launch-dialog__downloads-head { color: #fb7185; }
+.pcl-launch-dialog__failures .pcl-launch-dialog__download-meta { color: #fecdd3; white-space: normal; }
 </style>

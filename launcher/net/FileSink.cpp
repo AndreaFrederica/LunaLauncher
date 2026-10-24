@@ -117,7 +117,7 @@ Task::State FileSink::finalize(QNetworkReply& reply)
         // ask validators for data consistency
         // we only do this for actual downloads, not 'your data is still the same' cache hits
         if (!finalizeAllValidators(reply)) {
-            m_fail_reason = "Failed to finalize validators";
+            m_fail_reason = QString("Failed to finalize validators for %1 (%2)").arg(m_filename, reply.url().toString());
             return Task::State::Failed;
         }
 

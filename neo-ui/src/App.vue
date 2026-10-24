@@ -206,7 +206,8 @@ function updateLaunchProgress(value:any){
  const total=Number(value.totalProgress ?? value.total ?? 0), current=Number(value.progress ?? value.current ?? 0);
   if(total>0 && Number.isFinite(current)) launchTargetProgress.value=Math.max(0,Math.min(1,current/total));
   else if(value.finished || value.running===false) launchTargetProgress.value=1;
- launchStage.value=value.details || value.status || launchStage.value || '正在执行';
+ const activeStep=Array.isArray(value.children)?value.children.find((row:any)=>row&&row.state==='running'&&(row.label||row.status)):null;
+ launchStage.value=activeStep?.label || activeStep?.status || value.details || value.status || launchStage.value || '正在执行';
  launchDetails.value=String(value.details || '');
  launchChildren.value=Array.isArray(value.children) ? value.children : [];
  launchSpeed.value=Number(value.transferRate || 0);

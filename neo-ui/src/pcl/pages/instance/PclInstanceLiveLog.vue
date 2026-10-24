@@ -126,7 +126,8 @@ async function launch() {
     });
     currentTaskId = String(task?.taskId || '');
     const finished = await waitForTask(currentTaskId, snapshot => {
-      stage.value = snapshot?.details || snapshot?.status || stage.value;
+      const activeStep = Array.isArray(snapshot?.children) ? snapshot.children.find((row: any) => row && row.state === 'running' && (row.label || row.status)) : null;
+      stage.value = activeStep?.label || activeStep?.status || snapshot?.details || snapshot?.status || stage.value;
       launchDetails.value = String(snapshot?.details || '');
       launchChildren.value = Array.isArray(snapshot?.children) ? snapshot.children : [];
       const total = Number(snapshot?.totalProgress || snapshot?.total || 0);

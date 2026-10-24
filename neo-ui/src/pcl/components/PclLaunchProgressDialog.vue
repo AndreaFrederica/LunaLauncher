@@ -30,12 +30,13 @@
             <span class="pcl-launch-dialog__download-meta">{{ row.details || row.status || '校验失败' }}</span>
           </div>
         </div>
-        <div v-if="activeRows.length" class="pcl-launch-dialog__downloads">
-          <div class="pcl-launch-dialog__downloads-head">正在处理</div>
-          <div v-for="row in activeRows" :key="row.id" class="pcl-launch-dialog__download">
-            <span class="pcl-launch-dialog__download-name">{{ row.label || row.details || '子任务' }}</span>
-            <span class="pcl-launch-dialog__download-meta">{{ childPercent(row) }}<template v-if="row.transferRate"> · {{ formatRate(row.transferRate) }}</template></span>
-            <div class="pcl-progress-track pcl-launch-dialog__child-track"><span :style="{ width: `${childPercentValue(row)}%` }" /></div>
+        <div v-if="stepRows.length" class="pcl-launch-dialog__downloads">
+          <div class="pcl-launch-dialog__downloads-head">启动步骤</div>
+          <div v-for="row in stepRows" :key="row.id" class="pcl-launch-dialog__download pcl-launch-dialog__step" :class="`is-${row.state}`">
+            <span class="pcl-launch-dialog__step-mark">{{ row.mark }}</span>
+            <span class="pcl-launch-dialog__download-name">{{ row.label }}</span>
+            <span class="pcl-launch-dialog__download-meta">{{ row.detail }}<template v-if="row.rate"> · {{ formatRate(row.rate) }}</template></span>
+            <div v-if="row.state === 'running' && row.total > 0" class="pcl-progress-track pcl-launch-dialog__child-track"><span :style="{ width: `${row.percentValue}%` }" /></div>
           </div>
         </div>
 
@@ -116,9 +117,26 @@ const percentText = computed(() => percent.value === null ? '—' : `${percent.v
 const failedRows = computed(() => (props.children || [])
   .filter((row: any) => row && (row.state === 'failed' || /fail|失败/i.test(String(row.status || ''))))
   .slice(0, 8));
-const activeRows = computed(() => (props.children || [])
-  .filter((row: any) => row && row.state === 'running' && (Number(row.total) > 0 || row.details || row.label))
-  .slice(0, 8));
+const stateLabels: Record<string, string> = { running: '进行中', succeeded: '已完成', failed: '失败', waiting: '等待中' };
+const stateMarks: Record<string, string> = { running: '●', succeeded: '✓', failed: '×', waiting: '○' };
+const stepRows = computed(() => (props.children || [])
+  .filter((row: any) => row && (row.label || row.status || row.details))
+  .slice(-16)
+  .map((row: any) => {
+    const state = String(row.state || 'waiting');
+    const total = Number(row.total || 0), current = Number(row.current || 0);
+    const percentValue = total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
+    return {
+      ...row,
+      state,
+      mark: stateMarks[state] || '○',
+      label: row.label || row.status || row.details,
+      detail: state === 'running' && total > 0 ? `${percentValue}%` : (stateLabels[state] || state),
+      percentValue,
+      total,
+    };
+  }));
+
 function childPercentValue(row: any) {
   const total = Number(row?.total || 0), current = Number(row?.current || 0);
   return total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
@@ -238,4 +256,14 @@ function formatRate(value: unknown) {
 .pcl-launch-dialog__failures { border-color: color-mix(in srgb, #fb7185 55%, var(--pcl-border)); }
 .pcl-launch-dialog__failures .pcl-launch-dialog__downloads-head { color: #fb7185; }
 .pcl-launch-dialog__failures .pcl-launch-dialog__download-meta { color: #fecdd3; white-space: normal; }
+
+.pcl-launch-dialog__step { grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; }
+.pcl-launch-dialog__step-mark { color: var(--pcl-muted); font-size: 10px; line-height: 1; }
+.pcl-launch-dialog__step.is-running .pcl-launch-dialog__step-mark { color: var(--pcl-c3); }
+.pcl-launch-dialog__step.is-succeeded .pcl-launch-dialog__step-mark { color: #34d399; }
+.pcl-launch-dialog__step.is-failed .pcl-launch-dialog__step-mark { color: #fb7185; }
+.pcl-launch-dialog__step.is-waiting { opacity: .62; }
+.pcl-launch-dialog__step .pcl-launch-dialog__download-name { grid-column: 2; }
+.pcl-launch-dialog__step .pcl-launch-dialog__download-meta { grid-column: 3; }
+.pcl-launch-dialog__step .pcl-launch-dialog__child-track { grid-column: 2 / -1; }
 </style>

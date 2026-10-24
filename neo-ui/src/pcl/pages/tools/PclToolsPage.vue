@@ -563,8 +563,9 @@ onMounted(() => {
 
 <style scoped>
 .pcl-tools-page {
-  max-width: 1420px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .pcl-tools-nav {

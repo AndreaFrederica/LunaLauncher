@@ -61,6 +61,7 @@
  :instance="editWindow.instance"
  :index="index"
  :icon="icons[editWindow.instance.id]"
+ :accounts="accounts"
  :execute="call"
  @close="editWindows = editWindows.filter(item => item.key !== editWindow.key)"
  @changed="refresh"

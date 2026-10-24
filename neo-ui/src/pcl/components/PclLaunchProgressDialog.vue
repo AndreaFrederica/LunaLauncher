@@ -1,6 +1,6 @@
 <template>
-  <q-dialog :model-value="modelValue" persistent :transition-show="plain ? 'none' : 'scale'" :transition-hide="plain ? 'none' : 'scale'" @update:model-value="emit('update:modelValue', $event)">
-    <q-card class="pcl-dialog pcl-launch-dialog" :class="{ 'pcl-launch-dialog--plain': plain }">
+  <q-dialog :model-value="modelValue" persistent @update:model-value="emit('update:modelValue', $event)">
+    <q-card class="pcl-dialog pcl-launch-dialog" >
       <q-card-section class="pcl-launch-dialog__head">
         <span class="pcl-launch-dialog__badge"><PclIcon name="play" :size="20" /></span>
         <div class="pcl-launch-dialog__head-copy">
@@ -17,8 +17,7 @@
         </div>
 
         <div class="pcl-launch-dialog__stage">
-          <PclLoading v-if="state === 'launching'" inline />
-          <PclIcon v-else-if="state === 'launched'" name="circle-check" :size="15" />
+          <PclIcon v-if="state === 'launched'" name="circle-check" :size="15" />
           <PclIcon v-else name="info" :size="15" />
           <span>{{ stage || (state === 'launching' ? '正在准备启动…' : state === 'launched' ? '游戏进程已启动' : '启动流程已结束') }}</span>
         </div>
@@ -71,7 +70,6 @@ import { computed, ref, watch } from 'vue';
 import PclButton from './PclButton.vue';
 import PclHint from './PclHint.vue';
 import PclIcon from './PclIcon.vue';
-import PclLoading from './PclLoading.vue';
 
 const props = withDefaults(defineProps<{
   modelValue: boolean;
@@ -84,7 +82,6 @@ const props = withDefaults(defineProps<{
   accountName?: string;
   loginMethod?: string;
   hint?: string;
-  plain?: boolean;
   details?: string;
   children?: any[];
   cancelling?: boolean;
@@ -98,7 +95,6 @@ const props = withDefaults(defineProps<{
   accountName: '',
   loginMethod: '',
   hint: '',
-  plain: false,
   details: '',
   children: () => [],
   cancelling: false,
@@ -292,5 +288,4 @@ function formatRate(value: unknown) {
 
 .pcl-launch-dialog__downloads { height: 152px; max-height: 152px; overflow-y: auto; }
 .pcl-launch-dialog__step-empty { padding: 8px 2px; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
-.pcl-launch-dialog--plain, .pcl-launch-dialog--plain * { animation: none !important; transition: none !important; }
 </style>

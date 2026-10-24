@@ -289,7 +289,7 @@ export function applyNeoUiPreferences() {
   root.style.setProperty('--pcl-c5', mixHex(pclAccent, '#000000', 0.32));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
   root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
-  root.dataset.pclLaunchAnimation = (neoUiPreferences.pclLaunchAnimation && neoUiPreferences.pclNavLayout !== 'mmc-classic') ? 'on' : 'off';
+  root.dataset.pclLaunchAnimation = neoUiPreferences.pclLaunchAnimation ? 'on' : 'off';
   root.dataset.pclBackground = neoUiPreferences.pclBackgroundImage ? 'on' : 'off';
   root.style.setProperty('--pcl-bg-image', neoUiPreferences.pclBackgroundImage ? `url("${neoUiPreferences.pclBackgroundImage}")` : 'none');
   root.style.setProperty('--pcl-bg-overlay', String(Math.max(0, Math.min(1, 1 - neoUiPreferences.pclBackgroundOpacity))));

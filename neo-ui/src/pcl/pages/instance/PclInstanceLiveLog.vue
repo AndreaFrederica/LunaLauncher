@@ -20,6 +20,18 @@
 
       <pre ref="logElement" class="pcl-live-log__console" aria-live="polite">{{ text || '连接实例控制台后，启动日志会显示在这里。' }}</pre>
     </PclCard>
+
+    <PclLaunchProgressDialog
+      v-model="launchDialogOpen"
+      :state="launchDialogState"
+      :progress="progress"
+      :stage="stage"
+      :error="launchError"
+      :instance-name="instance?.name || instance?.id || ''"
+      :cancelling="cancelling"
+      @cancel="cancelLaunch"
+      @retry="launch"
+    />
   </div>
 </template>
 
@@ -37,6 +49,10 @@ const lines = ref<string[]>([]);
 const state = ref('正在连接控制台…');
 const connected = ref(false);
 const launching = ref(false);
+const launchDialogOpen = ref(false);
+const launchError = ref('');
+const launchCancelled = ref(false);
+const cancelling = ref(false);
 const running = ref(Boolean(props.instance?.running));
 let currentTaskId = '';
 const progress = ref(0);
@@ -47,6 +63,13 @@ let unlistenStream: (() => void) | undefined;
 
 const text = computed(() => lines.value.join(''));
 const stateText = computed(() => running.value ? '客户端运行中' : state.value);
+const launchDialogState = computed(() => {
+  if (launching.value) return 'launching';
+  if (launchError.value) return 'failed';
+  if (launchCancelled.value) return 'cancelled';
+  if (running.value) return 'launched';
+  return 'launching';
+});
 
 async function append(value: string) {
   lines.value.push(value);
@@ -84,6 +107,9 @@ async function connect() {
 async function launch() {
   if (launching.value) return;
   launching.value = true;
+  launchDialogOpen.value = true;
+  launchError.value = '';
+  launchCancelled.value = false;
   progress.value = 0;
   stage.value = '正在准备启动';
   try {
@@ -104,21 +130,29 @@ async function launch() {
       progress.value = 1;
       stage.value = '游戏进程已启动';
       running.value = true;
+    } else if (finished?.state === 'cancelled') {
+      launchCancelled.value = true;
+      stage.value = '启动已取消';
     } else {
-      state.value = finished?.error || '启动失败';
+      launchError.value = finished?.error || '启动失败';
+      state.value = launchError.value;
     }
   } catch (exception) {
     launching.value = false;
-    state.value = exception instanceof Error ? exception.message : String(exception);
+    launchError.value = exception instanceof Error ? exception.message : String(exception);
+    state.value = launchError.value;
   }
 }
 
 async function cancelLaunch() {
+  cancelling.value = true;
   launching.value = false;
+  launchCancelled.value = true;
   if (currentTaskId) {
     try { await props.execute('neo.task.cancel', { taskId: currentTaskId }); } catch { /* Task may already be terminal. */ }
   }
   stage.value = '已取消启动';
+  cancelling.value = false;
 }
 
 async function forceStop() {

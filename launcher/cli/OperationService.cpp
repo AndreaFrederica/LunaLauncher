@@ -763,10 +763,11 @@ QJsonObject OperationService::listResources(const QJsonObject& parameters)
     if (!model)
         return failure(tr("Unknown or unavailable resource kind: %1").arg(kind), 2);
 
-    ApiSupport::ensureResourceModelReady(model);
+    const bool includeIcons = parameters.value("includeIcons").toBool(true);
+    ApiSupport::ensureResourceModelReady(model, includeIcons);
     QJsonArray resources;
     for (const auto* resource : model->allResources())
-        resources.append(ApiSupport::resourceSnapshot(*resource));
+        resources.append(ApiSupport::resourceSnapshot(*resource, includeIcons));
     return success(resources);
 }
 
@@ -972,6 +973,8 @@ QJsonObject OperationService::setSetting(const QJsonObject& parameters, UserInte
     QVariant converted;
     if (!convertSettingValue(input, reference, &converted, &error))
         return failure(error, 2);
+    if (key == "AssetIntegrityTrusted" && converted.toBool())
+        return failure(tr("An instance can be added to the integrity whitelist only after instance.verify succeeds with trust=true."), 2);
     if (!settings->set(key, converted))
         return failure(tr("Could not set %1.").arg(key));
     if (instance)
@@ -1166,6 +1169,8 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
 
     MinecraftAccountPtr account;
     if (type == "offline") {
+        if (!APPLICATION->accounts()->canAddOfflineAccount())
+            return failure(tr("You must add a Microsoft account that owns Minecraft before adding an offline account."), 2);
         account = MinecraftAccount::createOffline(username);
         const auto uuidMode = parameters.value("offlineUuidMode").toString("default").trimmed().toLower();
         if (uuidMode == "random") {
@@ -1206,6 +1211,12 @@ QJsonObject OperationService::loginAccount(const QJsonObject& parameters, UserIn
                 QString localError;
                 if (!LocalYggdrasil::instance().ensureProfile(username, *password, profile, localError))
                     return failure(localError.isEmpty() ? tr("Could not provision the local verification account.") : localError, 2);
+                // Keep the launcher account bound to the profile created in the
+                // local service even if the first authentication attempt is
+                // interrupted. This also lets skin management repair older
+                // accounts by name.
+                account->accountData()->minecraftProfile.id = profile.value("id").toString();
+                account->accountData()->minecraftProfile.name = profile.value("name").toString(username);
             }
         } else {
             const auto serverId = parameters.value("serverId").toString();

@@ -41,7 +41,22 @@ inline QString resourceStatusName(ResourceStatus status)
 // Keep the transport shape shared by resource.list and resource.inspect.  The
 // Qt models already parse mod loader manifests and indexed metadata; using the
 // model objects here avoids a second, incomplete archive parser in the API.
-inline QJsonObject resourceSnapshot(const Resource& resource)
+inline QString resourceIconData(const Resource& resource)
+{
+    const auto* mod = dynamic_cast<const Mod*>(&resource);
+    if (!mod)
+        return {};
+    const auto icon = mod->icon({ 96, 96 }, Qt::KeepAspectRatio);
+    if (icon.isNull())
+        return {};
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !icon.toImage().save(&buffer, "PNG"))
+        return {};
+    return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(bytes.toBase64());
+}
+
+inline QJsonObject resourceSnapshot(const Resource& resource, bool includeIcon = true)
 {
     auto result = LauncherApiModel::ResourceObject(const_cast<Resource*>(&resource)).snapshot();
     result.insert("type", resourceTypeName(resource.type()));
@@ -84,24 +99,35 @@ inline QJsonObject resourceSnapshot(const Resource& resource)
         result.insert("dependencies", QJsonArray::fromStringList(mod->dependencies()));
         result.insert("resolved", mod->isResolved());
         result.insert("resolving", mod->isResolving());
-        const auto icon = mod->icon({ 96, 96 }, Qt::KeepAspectRatio);
-        if (!icon.isNull()) {
-            QByteArray bytes;
-            QBuffer buffer(&bytes);
-            if (buffer.open(QIODevice::WriteOnly) && icon.toImage().save(&buffer, "PNG"))
-                result.insert("icon", QStringLiteral("data:image/png;base64,") + QString::fromLatin1(bytes.toBase64()));
+        if (includeIcon) {
+            const auto icon = resourceIconData(resource);
+            if (!icon.isEmpty()) result.insert("icon", icon);
         }
     }
     return result;
 }
 
-inline void ensureResourceModelReady(const std::shared_ptr<ResourceFolderModel>& model)
+inline void ensureResourceModelReady(const std::shared_ptr<ResourceFolderModel>& model, bool waitForParse = true)
 {
     if (!model) return;
     QEventLoop updateLoop;
     QObject::connect(model.get(), &ResourceFolderModel::updateFinished, &updateLoop, &QEventLoop::quit);
-    if (model->update()) updateLoop.exec();
-    if (model->hasPendingParseTasks()) {
+    // ResourceFolderModel instances are owned by MinecraftInstance and remain
+    // alive between API calls.  Calling update() for every resource.list used
+    // to rescan the entire directory (and all .index files) on every page
+    // visit.  Only perform the initial scan here; if a watcher-triggered scan
+    // is already running, wait for it instead.
+    if (!model->isLoaded()) {
+        model->update();
+        if (model->isUpdating()) updateLoop.exec();
+    } else if (model->isUpdating()) {
+        updateLoop.exec();
+    }
+    // Parsing manifests and dependency information is deliberately allowed to
+    // continue in the background for lightweight list requests.  The model
+    // already exposes the inexpensive file/name fields immediately, while
+    // resource.inspect can still request the fully resolved object.
+    if (waitForParse && model->hasPendingParseTasks()) {
         QEventLoop parseLoop;
         QTimer timeout;
         timeout.setSingleShot(true);

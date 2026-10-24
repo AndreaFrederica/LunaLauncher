@@ -37,7 +37,7 @@ class McpServer final : public QObject {
                   const QJsonObject& metadata, bool native, bool control);
     void startNext();
     QJsonObject schedulerStatus() const;
-    QJsonValue requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices);
+    QJsonValue requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices, const QJsonObject& context = {});
     void disconnectInput();
 
     QObject* m_notifier = nullptr;

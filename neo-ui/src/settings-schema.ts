@@ -201,6 +201,10 @@ export const settingMetadata: Record<string, {label:string;group:string;minimum?
     "label": "资源校验模式",
     "group": "下载与资源"
   },
+  "AssetIntegrityTrusted": {
+    "label": "实例完整性白名单",
+    "group": "下载与资源"
+  },
   "TechnicClientID": {
     "label": "TechnicClientID",
     "group": "API"

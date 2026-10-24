@@ -176,6 +176,25 @@ void registerLauncherApiIntegrationOperations(LauncherApi& api)
                     { "version", authlib && file.isFile() ? AuthlibInjector::instance().getVersion() : QString() } });
             });
     }
+    api.registerOperation({ "yggdrasil.cache.status", "Read the embedded Yggdrasil metadata, texture and account cache state.",
+                            schema({}), "cache" },
+                           [](const QJsonObject&, UserInteraction&) {
+                               QJsonObject status;
+                               QString error;
+                               if (!LocalYggdrasil::instance().cacheStatus(status, error)) return OperationService::failure(error);
+                               return OperationService::success(status);
+                           });
+    api.registerOperation({ "yggdrasil.cache.purge", "Remove entries from the embedded Yggdrasil cache.",
+                            schema({ { "routeId", string("Optional cache route id.") }, { "key", string("Optional exact cache key.") },
+                                     { "confirm", boolean() } }, { "confirm" }), "cache", true },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               if (!p.value("confirm").toBool()) return OperationService::failure("Cache purging requires confirm=true.", 2);
+                               QJsonObject result;
+                               QString error;
+                               if (!LocalYggdrasil::instance().purgeCache(p.value("routeId").toString(), p.value("key").toString(), result, error))
+                                   return OperationService::failure(error);
+                               return OperationService::success(result);
+                           });
     // The authlib-injector metadata endpoint is useful to account UIs before a
     // user creates a Yggdrasil account. Keep it separate from installation so
     // frontends can validate a skin server without downloading a Java agent.

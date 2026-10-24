@@ -317,6 +317,36 @@ bool yggdrasilTextureRequest(MinecraftAccountPtr account, const QByteArray& meth
     return false;
 }
 
+QString managedLocalProfileName(const MinecraftAccountPtr& account)
+{
+    const auto* data = account->accountData();
+    if (!data->minecraftProfile.name.trimmed().isEmpty())
+        return data->minecraftProfile.name.trimmed();
+    const auto username = data->yggdrasilToken.extra.value("username").toString().trimmed();
+    return username;
+}
+
+bool syncManagedLocalProfile(const MinecraftAccountPtr& account, const QString& profileId, QString& error)
+{
+    QJsonObject remote;
+    if (!LocalYggdrasil::instance().profileInfo(profileId, remote, error))
+        return false;
+
+    auto* data = account->accountData();
+    data->minecraftProfile.id = remote.value("id").toString(profileId);
+    data->minecraftProfile.name = remote.value("name").toString(data->minecraftProfile.name);
+    data->minecraftProfile.validity = Validity::Certain;
+    const auto digest = remote.value("skin").toString().trimmed();
+    if (digest.isEmpty()) {
+        data->minecraftProfile.skin = Skin();
+    } else {
+        data->minecraftProfile.skin.id = digest;
+        data->minecraftProfile.skin.url = LocalYggdrasil::instance().apiUrl() + "/textures/" + digest;
+        data->minecraftProfile.skin.variant = remote.value("slim").toBool(false) ? "slim" : "classic";
+    }
+    return true;
+}
+
 QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto account = findAccount(parameters.value("account").toString());
@@ -333,10 +363,19 @@ QJsonObject uploadAccountSkin(LauncherApi& api, const QJsonObject& parameters, U
         if (variant != "classic" && variant != "slim")
             return OperationService::failure(QObject::tr("Skin variant must be classic or slim."), 2);
         QString error;
-        if (!LocalYggdrasil::instance().uploadSkin(account->profileId(), skin->getPath(), variant, error))
+        QString profileId;
+        if (!LocalYggdrasil::instance().resolveProfileId(account->profileId(), managedLocalProfileName(account), profileId, error))
             return OperationService::failure(error, 3);
-        if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
-        return OperationService::success(QJsonObject{ { "skin", skin->name() }, { "variant", variant }, { "uploaded", true }, { "local", true } });
+        if (!LocalYggdrasil::instance().uploadSkin(profileId, skin->getPath(), variant, error))
+            return OperationService::failure(error, 3);
+        account->accountData()->minecraftProfile.id = profileId;
+        if (!syncManagedLocalProfile(account, profileId, error))
+            return OperationService::failure(error, 3);
+        auto refresh = account->refresh();
+        if (refresh) waitForAccountTask(refresh.get(), interaction, &error, api);
+        APPLICATION->accounts()->saveList();
+        return OperationService::success(QJsonObject{ { "skin", skin->name() }, { "variant", variant }, { "uploaded", true }, { "local", true },
+                                                      { "profileId", profileId } });
     }
     if (account->accountType() == AccountType::Yggdrasil) {
         SkinList skins(nullptr, skinDirectory(), account);
@@ -400,10 +439,18 @@ QJsonObject resetAccountSkin(LauncherApi& api, const QJsonObject& parameters, Us
         return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
     if (account->accountType() == AccountType::Yggdrasil && account->accountData()->yggdrasilConfig.managedLocal) {
         QString error;
-        if (!LocalYggdrasil::instance().deleteSkin(account->profileId(), error))
+        QString profileId;
+        if (!LocalYggdrasil::instance().resolveProfileId(account->profileId(), managedLocalProfileName(account), profileId, error))
             return OperationService::failure(error, 3);
-        if (auto refresh = account->refresh()) waitForAccountTask(refresh.get(), interaction, &error, api);
-        return OperationService::success(QJsonObject{ { "account", account->profileId() }, { "reset", true }, { "local", true } });
+        if (!LocalYggdrasil::instance().deleteSkin(profileId, error))
+            return OperationService::failure(error, 3);
+        account->accountData()->minecraftProfile.id = profileId;
+        if (!syncManagedLocalProfile(account, profileId, error))
+            return OperationService::failure(error, 3);
+        auto refresh = account->refresh();
+        if (refresh) waitForAccountTask(refresh.get(), interaction, &error, api);
+        APPLICATION->accounts()->saveList();
+        return OperationService::success(QJsonObject{ { "account", profileId }, { "reset", true }, { "local", true } });
     }
     if (account->accountType() == AccountType::Yggdrasil) {
         QString error;
@@ -793,16 +840,26 @@ QJsonObject uploadLog(LauncherApi& api, const QJsonObject& parameters, UserInter
     }
     if (content.isEmpty())
         return OperationService::failure(QObject::tr("Either content or file is required."), 2);
+    if (content.toUtf8().size() > 16 * 1024 * 1024)
+        return OperationService::failure("Log exceeds the upload limit (16 MiB).", 2);
     int type = parameters.value("pasteType").toInt(APPLICATION->settings()->get("PastebinType").toInt());
     type = qBound<int>(PasteUpload::First, type, PasteUpload::Last);
     QString base = parameters.value("baseUrl").toString(APPLICATION->settings()->get("PastebinCustomAPIBase").toString());
+    bool truncated = false;
+    if (type == PasteUpload::Mclogs && parameters.value("truncate").toBool() && content.count('\n') >= PasteUpload::MaxMclogsLines) {
+        content = PasteUpload::truncateLogForMclogs(content);
+        truncated = true;
+    }
     auto job = makeShared<NetJob>("API log upload", APPLICATION->network());
     auto upload = new PasteUpload(content, base, static_cast<PasteUpload::PasteType>(type));
     job->addNetAction(Net::NetRequest::Ptr(upload));
     QString error;
     if (!waitForAccountTask(job.get(), interaction, &error, api))
         return OperationService::failure(error);
-    return OperationService::success(QJsonObject{ { "url", upload->pasteLink() }, { "pasteType", type } });
+    const QUrl link(upload->pasteLink());
+    if (!link.isValid() || link.host().isEmpty() || (link.scheme() != "https" && link.scheme() != "http"))
+        return OperationService::failure("The paste service did not return a valid share URL.");
+    return OperationService::success(QJsonObject{ { "url", upload->pasteLink() }, { "pasteType", type }, { "truncated", truncated } });
 }
 
 QJsonObject uploadScreenshot(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
@@ -931,6 +988,13 @@ void registerLauncherApiDomains(LauncherApi& api)
             if (!p.value("confirm").toBool()) return OperationService::failure("Cache clearing requires confirm=true.", 2);
             const auto cleared = APPLICATION->metacache()->evictAll(); APPLICATION->metacache()->SaveNow();
             return cleared ? OperationService::success() : OperationService::failure("Some metadata cache files could not be cleared.");
+        });
+    api.registerOperation({ "launcher.cache.status", "Read the local HTTP metadata cache used by Prism metadata and resource services.",
+        objectSchema({}), "launcher" },
+        [](const QJsonObject&, UserInteraction&) {
+            const auto cache = APPLICATION->metacache();
+            return OperationService::success(QJsonObject{ { "entries", cache->entryCount() }, { "bases", cache->baseCount() },
+                { "bytes", cache->byteCount() }, { "indexPath", cache->indexPath() } });
         });
     api.registerOperation({ "instance.world.edit", "Open a world in the configured MCEdit executable.",
         objectSchema({ { "instance", stringProperty("Instance ID.") }, { "world", stringProperty("World folder name.") } }, { "instance", "world" }), "worlds", true },
@@ -1197,6 +1261,20 @@ void registerLauncherApiDomains(LauncherApi& api)
                                const auto account = findAccount(parameters.value("account").toString());
                                if (!account)
                                    return OperationService::failure(QObject::tr("Account not found: %1").arg(parameters.value("account").toString()), 2);
+
+                               // The managed service can outlive an account entry. Re-resolve the
+                               // local profile by id/name before rendering the skin page so old
+                               // accounts immediately see the profile that is actually in the
+                               // current local database.
+                               if (account->accountType() == AccountType::Yggdrasil && account->accountData()->yggdrasilConfig.managedLocal) {
+                                   QString resolvedId;
+                                   QString localError;
+                                   if (LocalYggdrasil::instance().resolveProfileId(account->profileId(), managedLocalProfileName(account), resolvedId, localError)) {
+                                       account->accountData()->minecraftProfile.id = resolvedId;
+                                       syncManagedLocalProfile(account, resolvedId, localError);
+                                       APPLICATION->accounts()->saveList();
+                                   }
+                               }
 
                                const auto* data = account->accountData();
                                const auto& profile = data->minecraftProfile;
@@ -1467,6 +1545,7 @@ void registerLauncherApiDomains(LauncherApi& api)
                             objectSchema({ { "instance", stringProperty("Instance ID or name, required when file is used.") },
                                            { "file", stringProperty("Log file name or path returned by log.list.") },
                                            { "content", stringProperty("Log text to upload.") },
+                                           { "truncate", boolProperty("For mclo.gs, keep the beginning and end of logs over 25000 lines.") },
                                            { "pasteType", QJsonObject{ { "type", "integer" }, { "description", "0=0x0.st, 1=hastebin, 2=paste.gg, 3=mclo.gs" } } },
                                            { "baseUrl", stringProperty("Optional paste service API base URL.") } }) },
                            [&api](const QJsonObject& parameters, UserInteraction& interaction) { return uploadLog(api, parameters, interaction); });

@@ -57,6 +57,7 @@ bool ResourceFolderModel::startWatching(const QStringList& paths)
 {
     // Remove orphaned metadata next time
     m_first_folder_load = true;
+    m_loaded = false;
 
     if (m_is_watching)
         return false;
@@ -406,6 +407,7 @@ void ResourceFolderModel::onUpdateSucceeded()
     QSet<QString> new_set(new_list.begin(), new_list.end());
 
     applyUpdates(current_set, new_set, new_resources);
+    m_loaded = true;
 }
 
 void ResourceFolderModel::onParseSucceeded(int ticket, QString resource_id)

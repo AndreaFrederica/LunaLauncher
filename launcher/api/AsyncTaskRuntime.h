@@ -34,6 +34,7 @@ class AsyncTaskRuntime final : public QObject {
     QJsonObject status(const QString& taskId) const;
     QJsonObject list() const;
     QJsonObject cancel(const QString& taskId);
+    QJsonObject respond(const QJsonObject& parameters);
 
     static constexpr int maxActive = 6;
 

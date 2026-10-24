@@ -27,6 +27,7 @@
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/update/AssetUpdateTask.h"
 #include "minecraft/VanillaInstanceCreationTask.h"
+#include "meta/CleanroomMeta.h"
 #include "meta/Index.h"
 #include "meta/Version.h"
 #include "server/ServerInstance.h"
@@ -160,7 +161,14 @@ QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& inter
             const auto loaderVersion = index->get(loader, loaderVersionName);
             if (!loaderVersion || !loaderVersion->isLoaded())
                 return OperationService::failure(QObject::tr("Loader version not found: %1:%2").arg(loader, loaderVersionName), 2);
-            rawTask = new VanillaCreationTask(version, loader, loaderVersion);
+            if (Meta::Cleanroom::isUid(loader)) {
+                // Cleanroom is distributed as a complete instance package;
+                // creating a vanilla profile with only the loader component
+                // omits the package and patch files required at launch.
+                rawTask = new InstanceImportTask(QUrl(Meta::Cleanroom::packageUrl(loaderVersion->descriptor())));
+            } else {
+                rawTask = new VanillaCreationTask(version, loader, loaderVersion);
+            }
         }
     }
 
@@ -322,7 +330,12 @@ QJsonObject verifyInstance(LauncherApi& api, const QJsonObject& parameters, User
 
     if (!successful)
         return OperationService::failure(error);
-    return OperationService::success(QJsonObject{ { "id", instance->id() }, { "verified", true } });
+    if (parameters.value("trust").toBool()) {
+        settings->set("AssetIntegrityTrusted", true);
+        instance->saveNow();
+    }
+    return OperationService::success(QJsonObject{ { "id", instance->id() }, { "verified", true },
+        { "trusted", parameters.value("trust").toBool() } });
 }
 
 QJsonObject createInstanceShortcut(const QJsonObject& parameters)
@@ -523,8 +536,8 @@ void registerInstanceApiOperations(LauncherApi& api)
     api.registerOperation({ "instance.set-notes", "Set the notes shown for an instance.",
                             objectSchema({ { "instance", instance }, { "notes", stringProperty("Instance notes.") } }, { "instance", "notes" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return setInstanceNotes(parameters); });
-    api.registerOperation({ "instance.verify", "Verify and repair Minecraft asset integrity.",
-                            objectSchema({ { "instance", instance } }, { "instance" }) },
+    api.registerOperation({ "instance.verify", "Verify and repair Minecraft asset integrity; optionally trust the instance after a successful full check.",
+                            objectSchema({ { "instance", instance }, { "trust", ApiSupport::boolean() } }, { "instance" }) },
                            [&api](const QJsonObject& parameters, UserInteraction& interaction) {
                                return verifyInstance(api, parameters, interaction);
                            });

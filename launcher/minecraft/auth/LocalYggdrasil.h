@@ -27,12 +27,19 @@ class LocalYggdrasil : public QObject {
     bool removeUser(const QString& id, QString& error);
     bool uploadSkin(const QString& profileId, const QString& path, const QString& variant, QString& error);
     bool deleteSkin(const QString& profileId, QString& error);
+    // Resolve a profile against the currently running local service. Older
+    // accounts may retain an id from a previous service database, so the
+    // profile name is used as a safe fallback.
+    bool resolveProfileId(const QString& profileId, const QString& profileName, QString& resolvedId, QString& error);
+    bool profileInfo(const QString& profileId, QJsonObject& profile, QString& error);
     bool request(const QByteArray& method,
                  const QString& path,
                  const QByteArray& body,
                  QJsonObject& result,
                  QString& error,
                  const QByteArray& contentType = "application/json");
+    bool cacheStatus(QJsonObject& status, QString& error);
+    bool purgeCache(const QString& routeId, const QString& key, QJsonObject& result, QString& error);
     // Provision the launcher-managed account used by the local Yggdrasil
     // preset. Existing users are reused so logging in again is idempotent.
     bool ensureProfile(const QString& name, const QString& password, QJsonObject& profile, QString& error);

@@ -36,7 +36,7 @@ namespace {
 
 class McpInteraction final : public UserInteraction {
    public:
-    using Ask = std::function<QJsonValue(const QString&, bool, const QJsonArray*)>;
+    using Ask = std::function<QJsonValue(const QString&, bool, const QJsonArray*, const QJsonObject&)>;
     McpInteraction(QJsonObject parameters, std::function<void(const QJsonObject&)> notify, Ask ask = {})
         : m_parameters(std::move(parameters)), m_notify(std::move(notify)), m_ask(std::move(ask))
     {}
@@ -51,12 +51,17 @@ class McpInteraction final : public UserInteraction {
         const auto key = secret ? "password" : "username";
         if (m_parameters.contains(key))
             return m_parameters.value(key).toString();
-        const auto answer = m_ask ? m_ask(prompt, secret, nullptr) : QJsonValue();
+        const auto answer = m_ask ? m_ask(prompt, secret, nullptr, {}) : QJsonValue();
+        return answer.isString() ? std::optional<QString>(answer.toString()) : std::nullopt;
+    }
+    std::optional<QString> inputWithContext(const QString& prompt, const QJsonObject& context) override
+    {
+        const auto answer = m_ask ? m_ask(prompt, false, nullptr, context) : QJsonValue();
         return answer.isString() ? std::optional<QString>(answer.toString()) : std::nullopt;
     }
     std::optional<int> select(const QString& prompt, const QJsonArray& choices) override
     {
-        const auto answer = m_ask ? m_ask(prompt, false, &choices) : QJsonValue();
+        const auto answer = m_ask ? m_ask(prompt, false, &choices, {}) : QJsonValue();
         return answer.isDouble() ? std::optional<int>(answer.toInt()) : std::nullopt;
     }
 
@@ -381,7 +386,7 @@ void McpServer::runWrite(const QJsonValue& id, const QString& operation, const Q
     };
     McpInteraction::Ask ask;
     if (native)
-        ask = [this](const QString& prompt, bool secret, const QJsonArray* choices) { return requestInteraction(prompt, secret, choices); };
+        ask = [this](const QString& prompt, bool secret, const QJsonArray* choices, const QJsonObject& context) { return requestInteraction(prompt, secret, choices, context); };
     McpInteraction interaction(arguments, notify, ask);
     const bool ownsRequest = !m_activeService;
     if (ownsRequest) {
@@ -467,7 +472,7 @@ QJsonObject McpServer::schedulerStatus() const
     };
 }
 
-QJsonValue McpServer::requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices)
+QJsonValue McpServer::requestInteraction(const QString& prompt, bool secret, const QJsonArray* choices, const QJsonObject& context)
 {
     if (m_cancelled || m_disconnected)
         return {};
@@ -483,6 +488,7 @@ QJsonValue McpServer::requestInteraction(const QString& prompt, bool secret, con
                        { "prompt", prompt }, { "secret", secret }, { "expiresIn", 300 } };
     if (choices)
         event.insert("choices", *choices);
+    if (!context.isEmpty()) event.insert("context", context);
     writeMessage({ { "jsonrpc", "2.0" }, { "method", "launcher/event" }, { "params", event } });
     timeout.start(300000);
     loop.exec();

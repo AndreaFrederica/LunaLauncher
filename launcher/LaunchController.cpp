@@ -281,9 +281,14 @@ bool LaunchController::askPlayDemo() const
         return headlessConfirm(tr("This account cannot play the full game. Play the Minecraft demo?"));
     QMessageBox box(m_parentWidget);
     box.setWindowTitle(tr("Play demo?"));
-    QString text = m_accountToUse
-                       ? tr("This account does not own Minecraft.\nYou need to purchase the game first to play the full version.")
-                       : tr("No account was selected for launch.");
+    QString text;
+    if (!m_accountToUse || m_accountToUse->accountType() != AccountType::MSA) {
+        text = tr("A Microsoft account that owns Minecraft: Java Edition is required to launch the full game.\n"
+                  "Open Account Manager and sign in with Microsoft, then try again.");
+    } else {
+        text = tr("This Microsoft account does not own Minecraft.\n"
+                  "You need to purchase the game first to play the full version.");
+    }
     text += tr("\n\nDo you want to play the demo?");
     box.setText(text);
     box.setIcon(QMessageBox::Warning);
@@ -366,7 +371,8 @@ void LaunchController::login()
     }
 
     if (!m_forceLocalYggdrasil && m_headless && !m_accountToUse && m_wantedLaunchMode != LaunchMode::Offline && m_wantedLaunchMode != LaunchMode::Demo) {
-        emitFailed(tr("No account selected for launch"));
+        emitFailed(tr("A Microsoft account that owns Minecraft: Java Edition is required to launch this instance. "
+                      "Open Account Manager and sign in with Microsoft, then try again."));
         return;
     }
 
@@ -393,7 +399,12 @@ void LaunchController::login()
             }
         }
 
-        emitFailed(tr("No account selected for launch"));
+        if (m_wantedLaunchMode == LaunchMode::Normal) {
+            emitFailed(tr("A Microsoft account that owns Minecraft: Java Edition is required to launch the full game. "
+                          "Open Account Manager and sign in with Microsoft, then try again."));
+        } else {
+            emitFailed(tr("No account selected for launch"));
+        }
         return;
     }
 

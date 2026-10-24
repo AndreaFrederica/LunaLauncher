@@ -41,6 +41,8 @@ class LauncherApi final : public QObject {
     void trackTask(Task* task);
     void clearTrackedTask(Task* task);
     void cancelCurrent();
+    /** Return the task currently tracked by this API operation, if any. */
+    Task* currentTask() const;
     bool isCancellationRequested() const { return m_cancelRequested; }
     QJsonArray streamNotifications();
     /** Snapshot of the most recently registered task, including its terminal state. */
@@ -62,8 +64,6 @@ class LauncherApi final : public QObject {
     QJsonObject taskList(const QJsonObject& parameters) const;
     QJsonObject taskCancel(const QJsonObject& parameters);
     QJsonObject snapshotTask(const QString& taskId, Task* task) const;
-    Task* currentTask() const;
-
     QHash<QString, RegisteredOperation> m_operations;
     QHash<QString, TrackedTask> m_tasks;
     QStringList m_taskOrder;

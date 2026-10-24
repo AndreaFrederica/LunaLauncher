@@ -42,13 +42,32 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
-#include <QUrlQuery>
+#include <QUrl>
 #include "logs/AnonymizeLog.h"
 
 const std::array<PasteUpload::PasteTypeInfo, 4> PasteUpload::PasteTypes = { { { "0x0.st", "https://0x0.st", "" },
                                                                               { "hastebin", "https://hst.sh", "/documents" },
                                                                               { "paste.gg", "https://paste.gg", "/api/v1/pastes" },
                                                                               { "mclo.gs", "https://api.mclo.gs", "/1/log" } } };
+
+QString PasteUpload::truncateLogForMclogs(const QString& logContent)
+{
+    QStringList lines = logContent.split("\n");
+    if (lines.size() > MaxMclogsLines) {
+        QString truncatedLog = lines.mid(0, InitialMclogsLines).join("\n");
+        truncatedLog +=
+            "\n\n\n\n\n\n\n\n\n\n"
+            "------------------------------------------------------------\n"
+            "----------------------- Log truncated ----------------------\n"
+            "------------------------------------------------------------\n"
+            "----- Middle portion omitted to fit mclo.gs size limits ----\n"
+            "------------------------------------------------------------\n"
+            "\n\n\n\n\n\n\n\n\n\n";
+        truncatedLog += lines.mid(lines.size() - FinalMclogsLines).join("\n");
+        return truncatedLog;
+    }
+    return logContent;
+}
 
 QNetworkReply* PasteUpload::getReply(QNetworkRequest& request)
 {
@@ -68,10 +87,10 @@ QNetworkReply* PasteUpload::getReply(QNetworkRequest& request)
             return m_network->post(request, m_log.toUtf8());
         }
         case PasteUpload::Mclogs: {
-            QUrlQuery postData;
-            postData.addQueryItem("content", m_log);
             request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
-            return m_network->post(request, postData.toString().toUtf8());
+            // Form decoding treats '+' as a space and decodes literal percent
+            // sequences. Encode the full value so uploaded logs stay intact.
+            return m_network->post(request, QByteArray("content=") + QUrl::toPercentEncoding(m_log));
         }
         case PasteUpload::PasteGG: {
             QJsonObject obj;

@@ -204,6 +204,36 @@ QJsonObject inspectResource(const QJsonObject& parameters)
     return OperationService::success(resourceInfo(*resource));
 }
 
+QJsonObject resourceIcon(const QJsonObject& parameters)
+{
+    const auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
+    const auto model = findResourceModel(instance, parameters.value("kind").toString(), parameters.value("world").toString());
+    if (!model)
+        return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
+                                         2);
+
+    // The list endpoint deliberately skips archive parsing.  Resolve the model
+    // here, on demand, so the first icon request pays the parse cost while the
+    // list itself remains immediately available to the UI.
+    ApiSupport::ensureResourceModelReady(model, true);
+    const auto reference = parameters.value("resource").toString();
+    const auto* loaded = findLoadedResource(model, reference);
+    std::unique_ptr<Resource> fallback;
+    if (!loaded) {
+        fallback = findResource(model, reference);
+        loaded = fallback.get();
+    }
+    if (!loaded)
+        return OperationService::failure(QObject::tr("Resource not found: %1").arg(reference), 2);
+
+    QJsonObject result{ { "resource", reference }, { "pending", model->hasPendingParseTasks() } };
+    const auto icon = ApiSupport::resourceIconData(*loaded);
+    if (!icon.isEmpty()) result.insert("icon", icon);
+    return OperationService::success(result);
+}
+
 QJsonObject updateResources(const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto instance = findInstance(parameters.value("instance").toString());
@@ -470,6 +500,9 @@ void registerLauncherApiResourceOperations(LauncherApi& api)
     api.registerOperation({ "resource.inspect", "Inspect an installed resource and its metadata.",
                             objectSchema(resourceRef, { "instance", "kind", "resource" }), "resources" },
                           [](const QJsonObject& parameters, UserInteraction&) { return inspectResource(parameters); });
+    api.registerOperation({ "resource.icon", "Read the icon for one installed resource.",
+                            objectSchema(resourceRef, { "instance", "kind", "resource" }), "resources" },
+                          [](const QJsonObject& parameters, UserInteraction&) { return resourceIcon(parameters); });
     api.registerOperation(
         { "resource.update", "Reload resource files and metadata for an instance.", objectSchema(resourceRef, { "instance", "kind" }),
           "resources" },

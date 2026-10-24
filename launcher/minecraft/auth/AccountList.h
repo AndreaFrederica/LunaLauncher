@@ -105,6 +105,9 @@ class AccountList : public QAbstractListModel {
     MinecraftAccountPtr defaultAccount() const;
     void setDefaultAccount(MinecraftAccountPtr profileId);
     bool anyAccountIsValid();
+    // Offline accounts are only available when ownership checks are disabled
+    // for developer builds, or after a valid Minecraft-owning account exists.
+    bool canAddOfflineAccount() const;
     bool anyMSAAccountOwnsMinecraft();
 
     bool isActive() const;

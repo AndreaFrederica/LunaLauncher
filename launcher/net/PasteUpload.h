@@ -69,6 +69,10 @@ class PasteUpload : public Net::NetRequest {
     };
 
     static const std::array<PasteTypeInfo, 4> PasteTypes;
+    static constexpr int MaxMclogsLines = 25000;
+    static constexpr int InitialMclogsLines = 10000;
+    static constexpr int FinalMclogsLines = 14900;
+    static QString truncateLogForMclogs(const QString& logContent);
 
     class Sink : public Net::ByteArraySink {
        public:

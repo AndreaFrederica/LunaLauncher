@@ -25,6 +25,7 @@
 #include "api/LauncherApiExports.h"
 #include "api/LauncherApiComponents.h"
 #include "api/LauncherApiCatalog.h"
+#include "api/LauncherApiSpecial.h"
 #include "api/LauncherApiIntegrations.h"
 #include "api/LauncherApiAppearance.h"
 #include "api/LauncherApiPacks.h"
@@ -125,6 +126,8 @@ QList<ApiOperation> legacyOperations()
     for (auto& operation : operations) {
         auto properties = operation.inputSchema.value("properties").toObject();
         if (operation.name.startsWith("resource.")) properties.insert("world", stringProperty("Optional world folder for datapacks."));
+        if (operation.name == "resource.list")
+            properties.insert("includeIcons", boolProperty("Include base64 resource icons. Disabling this avoids reading icons from archives." , true));
         if (operation.name == "instance.copy") {
             for (const auto key : { "copySaves", "keepPlaytime", "copyMods", "copyResourcePacks", "copyShaderPacks", "copyScreenshots" })
                 properties.insert(key, QJsonObject{ { "type", "boolean" } });
@@ -198,6 +201,7 @@ LauncherApi::LauncherApi(QObject* parent) : QObject(parent), m_legacyService(new
     registerLauncherApiExportOperations(*this);
     registerLauncherApiComponentOperations(*this);
     registerLauncherApiCatalogOperations(*this);
+    registerLauncherApiSpecialOperations(*this);
     registerLauncherApiIntegrationOperations(*this);
     registerLauncherApiAppearanceOperations(*this);
     registerLauncherApiPackOperations(*this);

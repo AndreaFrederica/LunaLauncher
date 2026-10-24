@@ -656,6 +656,19 @@ bool AccountList::anyAccountIsValid()
     return false;
 }
 
+bool AccountList::canAddOfflineAccount() const
+{
+#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+    return true;
+#else
+    for (const auto& account : m_accounts) {
+        if (account->ownsMinecraft())
+            return true;
+    }
+    return false;
+#endif
+}
+
 bool AccountList::anyMSAAccountOwnsMinecraft()
 {
     for (auto account : m_accounts) {

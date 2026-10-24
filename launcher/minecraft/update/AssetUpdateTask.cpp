@@ -51,6 +51,8 @@ void AssetUpdateTask::executeTask()
     if (m_verificationMode < AssetVerificationMode::AlwaysVerify || m_verificationMode > AssetVerificationMode::SkipVerification)
         m_verificationMode = AssetVerificationMode::CheckExistence;
     m_cacheExpiryDays = qBound(1, m_inst->settings()->get("AssetCacheExpiryDays").toInt(), 365);
+    if (!m_forceIntegrityCheck && m_inst->settings()->get("AssetIntegrityTrusted").toBool())
+        m_verificationMode = AssetVerificationMode::SkipVerification;
 
     auto metacache = APPLICATION->metacache();
     if (m_verificationMode == AssetVerificationMode::CacheWithExpiry) {

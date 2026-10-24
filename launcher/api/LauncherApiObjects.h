@@ -52,12 +52,21 @@ class LauncherObject {
         if (caps & Application::SupportsFlame) capabilities.append("curseforge");
         if (caps & Application::SupportsGameMode) capabilities.append("game-mode");
         if (caps & Application::SupportsMangoHud) capabilities.append("mangohud");
+#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+        const bool developerBuild = true;
+#else
+        const bool developerBuild = false;
+#endif
+        const bool offlineAccountAllowed = developerBuild || m_application->accounts()->anyAccountIsValid();
+        if (offlineAccountAllowed) capabilities.append("offline-account");
         return QJsonObject{ { "applicationVersion", QCoreApplication::applicationVersion() },
                             { "root", m_application->root() },
                             { "dataRoot", m_application->dataRoot() },
                             { "javaRoot", m_application->javaPath() },
                             { "portable", m_application->isPortable() },
                             { "headless", m_application->isHeadless() },
+                            { "developerBuild", developerBuild },
+                            { "offlineAccountAllowed", offlineAccountAllowed },
                             { "capabilities", capabilities } };
     }
 

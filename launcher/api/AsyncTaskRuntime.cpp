@@ -2,17 +2,14 @@
 
 #include "AsyncTaskRuntime.h"
 
-#include <QBuffer>
 #include <QDateTime>
+#include <QEventLoop>
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QJsonDocument>
+#include <QPointer>
 #include <QSaveFile>
-#include <QEventLoop>
-#include <QImage>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QTimer>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -22,6 +19,7 @@
 
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include "Application.h"
 #include "BaseInstance.h"
@@ -38,7 +36,6 @@
 #include "api/InstanceExportTask.h"
 #include "api/LauncherApi.h"
 #include "InstanceList.h"
-#include "icons/IconList.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/auth/AuthFlow.h"
@@ -52,98 +49,12 @@
 #include "minecraft/mod/ModFolderModel.h"
 #include "minecraft/mod/PluginFolderModel.h"
 #include "minecraft/mod/ResourceFolderModel.h"
+#include "meta/CleanroomMeta.h"
 #include "net/Download.h"
 #include "net/NetJob.h"
 #include "server/ServerInstance.h"
 
 namespace {
-
-QString savePackCover(const QImage& image, QString& error)
-{
-    if (image.isNull()) {
-        error = QObject::tr("The pack cover is not a readable image.");
-        return {};
-    }
-    QByteArray png;
-    QBuffer buffer(&png);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "PNG")) {
-        error = QObject::tr("Could not encode the pack cover.");
-        return {};
-    }
-    const auto key = "pack_" + QString::fromLatin1(QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex());
-    auto* icons = APPLICATION->icons();
-    const auto path = QDir(icons->getDirectory()).filePath(key + ".png");
-    QSaveFile file(path);
-    if (!QDir().mkpath(icons->getDirectory()) || !file.open(QIODevice::WriteOnly) || file.write(png) != png.size() || !file.commit()) {
-        error = QObject::tr("Could not save the pack cover: %1").arg(file.errorString());
-        return {};
-    }
-    if (!icons->addIcon(key, key, path, IconType::FileBased)) {
-        error = QObject::tr("Could not register the pack cover.");
-        return {};
-    }
-    return key;
-}
-
-QString savePackCoverBytes(const QByteArray& data, const QString& suffix, QString& error)
-{
-    if (data.isEmpty()) {
-        error = QObject::tr("The pack cover response is empty.");
-        return {};
-    }
-    const auto key = "pack_" + QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
-    auto* icons = APPLICATION->icons();
-    const auto path = QDir(icons->getDirectory()).filePath(key + suffix);
-    QSaveFile file(path);
-    if (!QDir().mkpath(icons->getDirectory()) || !file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-        error = QObject::tr("Could not save the pack cover: %1").arg(file.errorString());
-        return {};
-    }
-    if (!icons->addIcon(key, key, path, IconType::FileBased)) {
-        error = QObject::tr("Could not register the pack cover.");
-        return {};
-    }
-    return key;
-}
-
-QString downloadPackCover(const QUrl& url, QString& error)
-{
-    if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https")) {
-        error = QObject::tr("The provider returned an invalid pack cover URL.");
-        return {};
-    }
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, "LunaLauncher/NeoUI");
-    request.setRawHeader("Accept", "image/webp,image/png,image/*");
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setTransferTimeout(15000);
-    auto* reply = APPLICATION->network()->get(request);
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timeout, &QTimer::timeout, &loop, [&]() {
-        reply->abort();
-        loop.quit();
-    });
-    timeout.start(15000);
-    loop.exec(QEventLoop::ExcludeUserInputEvents);
-    const auto data = reply->readAll();
-    if (reply->error() != QNetworkReply::NoError) {
-        error = reply->errorString();
-        reply->deleteLater();
-        return {};
-    }
-    reply->deleteLater();
-    auto image = QImage::fromData(data, "WEBP");
-    if (image.isNull()) image = QImage::fromData(data);
-    if (!image.isNull()) return savePackCover(image, error);
-    // Qt's WebP plugin may be unavailable in a minimal sidecar installation.
-    // Keep the original cover bytes so the instance still gets the provider icon.
-    const auto suffix = url.path().endsWith(".webp", Qt::CaseInsensitive) ? ".webp" : ".png";
-    return savePackCoverBytes(data, suffix, error);
-}
 
 BaseInstance* findInstance(const QString& reference)
 {
@@ -159,6 +70,22 @@ BaseInstance* findInstance(const QString& reference)
         }
     }
     return instance;
+}
+
+// The UI uses short loader names, while PackProfile and metadata providers
+// use the component UID. Keep the async API on the same canonical identifiers
+// as LauncherApiInstances and the legacy installer.
+QString loaderUid(QString loader)
+{
+    loader = loader.trimmed().toLower();
+    static const QHash<QString, QString> aliases{ { "minecraft", "net.minecraft" },
+                                                  { "fabric", "net.fabricmc.fabric-loader" },
+                                                  { "quilt", "org.quiltmc.quilt-loader" },
+                                                  { "forge", "net.minecraftforge" },
+                                                  { "neoforge", "net.neoforged" },
+                                                  { "cleanroom", "com.cleanroommc.cleanroom" },
+                                                  { "liteloader", "com.mumfrey.liteloader" } };
+    return aliases.value(loader, loader);
 }
 
 std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind, const QString& world = {})
@@ -195,12 +122,143 @@ MinecraftAccountPtr findAccount(const QString& reference)
     return nullptr;
 }
 
-class NoopInteraction final : public UserInteraction {
+/**
+ * Adapt the synchronous headless API operations to the event-driven Neo task
+ * runtime.  The pack APIs already own the provider-specific install tasks and
+ * cancellation logic; keeping them behind this proxy means every provider
+ * follows the same task lifecycle as instance imports and resource installs.
+ */
+class ApiOperationTask final : public Task {
    public:
-    void status(const QString&) override {}
-    void deviceCode(const QString&, const QString&, int) override {}
-    std::optional<QString> input(const QString&, bool) override { return std::nullopt; }
-    std::optional<int> select(const QString&, const QJsonArray&) override { return std::nullopt; }
+    ApiOperationTask(QString operation, QJsonObject parameters) : m_operation(std::move(operation)), m_parameters(std::move(parameters))
+    {
+        setAbortable(true);
+    }
+
+    bool abort() override
+    {
+        m_cancelled = true;
+        if (m_inputLoop) m_inputLoop->quit();
+        m_api.cancelCurrent();
+        return true;
+    }
+
+    QJsonObject pendingInteraction() const { return m_pendingInput; }
+
+    QJsonObject respond(const QJsonObject& parameters)
+    {
+        if (!m_inputLoop || parameters.value("interactionId").toString() != m_pendingInput.value("interactionId").toString())
+            return { { "ok", false }, { "error", "No matching pending task interaction." } };
+        const auto answer = parameters.value("value");
+        if (!parameters.value("cancel").toBool()) {
+            const auto choices = m_pendingInput.value("choices");
+            if ((!choices.isArray() && !answer.isString()) ||
+                (choices.isArray() && (!answer.isDouble() || answer.toDouble() != answer.toInt(-1) ||
+                 answer.toInt(-1) < 0 || answer.toInt() >= choices.toArray().size())))
+                return { { "ok", false }, { "error", "Expected text or a valid choice index." } };
+        }
+        m_answer = parameters.value("cancel").toBool() ? QJsonValue() : answer;
+        m_inputLoop->quit();
+        m_inputLoop = nullptr;
+        return { { "ok", true }, { "data", QJsonObject{ { "accepted", true } } } };
+    }
+
+    QJsonValue ask(QJsonObject context)
+    {
+        if (m_cancelled) return {};
+        QEventLoop loop;
+        m_answer = QJsonValue();
+        context.insert("interactionId", QUuid::createUuid().toString(QUuid::WithoutBraces));
+        m_pendingInput = context;
+        m_inputLoop = &loop;
+        setStatus(context.value("type").toString() == "restricted-downloads" ?
+                  tr("Waiting for restricted downloads and confirmation") : tr("Waiting for input"));
+        loop.exec();
+        m_inputLoop = nullptr;
+        m_pendingInput = {};
+        if (m_cancelled) return {};
+        return std::exchange(m_answer, QJsonValue());
+    }
+
+    QList<Task*> getSubTasks() const override
+    {
+        return m_child ? QList<Task*>{ m_child.data() } : QList<Task*>{};
+    }
+
+   protected:
+    void executeTask() override
+    {
+        class Interaction final : public UserInteraction {
+           public:
+            explicit Interaction(ApiOperationTask* owner) : m_owner(owner) {}
+            void status(const QString& message) override { m_owner->setStatus(message); }
+            void deviceCode(const QString& url, const QString& code, int expiresIn) override
+            {
+                m_owner->setDetails(url.isEmpty() ? code : url + " " + code);
+                Q_UNUSED(expiresIn);
+            }
+            std::optional<QString> input(const QString& prompt, bool secret) override
+            {
+                const auto answer = m_owner->ask({ { "type", "input" }, { "prompt", prompt }, { "secret", secret } });
+                return answer.isString() ? std::optional<QString>(answer.toString()) : std::nullopt;
+            }
+            std::optional<QString> inputWithContext(const QString& prompt, const QJsonObject& context) override
+            {
+                auto request = context;
+                request.insert("prompt", prompt);
+                const auto answer = m_owner->ask(request);
+                return answer.isString() ? std::optional<QString>(answer.toString()) : std::nullopt;
+            }
+            std::optional<int> select(const QString& prompt, const QJsonArray& choices) override
+            {
+                const auto answer = m_owner->ask({ { "type", "select" }, { "prompt", prompt }, { "choices", choices } });
+                return answer.isDouble() ? std::optional<int>(answer.toInt()) : std::nullopt;
+            }
+
+           private:
+            ApiOperationTask* m_owner = nullptr;
+        } interaction(this);
+
+        QTimer bridge;
+        bridge.setInterval(100);
+        connect(&bridge, &QTimer::timeout, this, [this] {
+            auto* child = m_api.currentTask();
+            if (!child || child == this || child == m_child.data())
+                return;
+            m_child = child;
+            connect(child, &Task::status, this, &Task::setStatus, Qt::UniqueConnection);
+            connect(child, &Task::details, this, &Task::setDetails, Qt::UniqueConnection);
+            connect(child, &Task::progress, this, &Task::setProgress, Qt::UniqueConnection);
+            connect(child, &Task::transferRate, this, &Task::setTransferRate, Qt::UniqueConnection);
+            connect(child, &Task::stepProgress, this, &Task::propagateStepProgress, Qt::UniqueConnection);
+        });
+        bridge.start();
+        const auto result = m_api.execute(m_operation, m_parameters, interaction);
+        bridge.stop();
+        if (m_api.isCancellationRequested()) {
+            emitAborted();
+        } else if (result.value("ok").toBool() &&
+                   !(m_operation == "resource.install-with-dependencies" && !result.value("data").toObject().value("complete").toBool())) {
+            setProgress(1, 1);
+            emitSucceeded();
+        } else {
+            QString reason = result.value("error").toString();
+            for (const auto& item : result.value("data").toObject().value("items").toArray()) {
+                if (reason.isEmpty() && !item.toObject().value("ok").toBool()) reason = item.toObject().value("error").toString();
+            }
+            emitFailed(reason.isEmpty() ? QObject::tr("操作未全部完成。") : reason);
+        }
+    }
+
+   private:
+    QString m_operation;
+    QJsonObject m_parameters;
+    LauncherApi m_api;
+    QPointer<Task> m_child;
+    QPointer<QEventLoop> m_inputLoop;
+    QJsonObject m_pendingInput;
+    QJsonValue m_answer;
+    bool m_cancelled = false;
 };
 
 }  // namespace
@@ -230,7 +288,7 @@ QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonOb
 {
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         return "instances";
-    if (operation == "resource.install" || operation == "instance.component.set-version")
+    if (operation == "resource.install" || operation == "resource.install-version" || operation == "instance.component.set-version" || operation == "instance.special-loader.install")
         return "instance:" + parameters.value("instance").toString();
     return "global";
 }
@@ -240,7 +298,7 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
     QStringList keys;
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
         keys << "instances";
-    else if (operation == "resource.install" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export" || operation == "server.start")
+    else if (operation == "resource.install" || operation == "resource.install-version" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.special-loader.install" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export" || operation == "server.start")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
         keys << "java";
@@ -262,14 +320,21 @@ void AsyncTaskRuntime::addResourceKeys(Record& record) const
         record.writes = QSet<QString>(keys.begin(), keys.end());
     }
     record.conflictKey = keys.value(0);
+    // These compatibility operations own a ScopedUserInteraction across a
+    // nested Qt event loop. Do not nest two such installs: a callback from the
+    // outer task must not consume the inner task's interaction channel.
+    if (QStringList{ "instance.import", "modpack.install", "resource.install-version",
+                     "resource.install-with-dependencies", "instance.special-loader.install" }.contains(record.operation))
+        record.writes.insert("interactive-install");
 }
 
 int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 {
     if (operation == "modpack.install") return 30 * 60 * 1000;
     if (operation == "instance.create" || operation == "instance.import") return 30 * 60 * 1000;
-    if (operation == "resource.install") return 15 * 60 * 1000;
+    if (operation == "resource.install" || operation == "resource.install-version") return 15 * 60 * 1000;
     if (operation == "instance.component.set-version") return 10 * 60 * 1000;
+    if (operation == "instance.special-loader.install") return 30 * 60 * 1000;
     if (operation == "java.install") return 15 * 60 * 1000;
     if (operation == "resource.install-with-dependencies") return 20 * 60 * 1000;
     if (operation == "account.refresh") return 5 * 60 * 1000;
@@ -284,7 +349,7 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
     Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "server.start" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "server.start" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -371,8 +436,16 @@ void AsyncTaskRuntime::pump()
         armDeadline(record.id);
         saveJournal();
         emitChanged(record);
-        startRecord(record);
-        if (record.finished) continue;
+        // Start on the next event-loop turn. Most task implementations return
+        // immediately from start(), but provider-backed operations adapt the
+        // synchronous compatibility API with a nested event loop. Deferring
+        // the call lets neo.task.start return its task id first, so status,
+        // progress and cancellation requests can be processed while that
+        // provider task is running.
+        QTimer::singleShot(0, this, [this, id = record.id] {
+            if (!m_records.contains(id) || m_records[id].finished || m_records[id].state != "running") return;
+            startRecord(m_records[id]);
+        });
     }
 }
 
@@ -504,6 +577,8 @@ QJsonObject AsyncTaskRuntime::snapshot(const Record& record) const
         { "totalProgress", static_cast<double>(record.total) },
         { "transferRate", static_cast<double>(transferRate) },
         { "details", details },
+        { "interaction", dynamic_cast<ApiOperationTask*>(record.task.data()) ?
+                         static_cast<ApiOperationTask*>(record.task.data())->pendingInteraction() : QJsonObject{} },
         { "children", children },
         { "steps", children },
         { "finished", record.finished },
@@ -537,6 +612,16 @@ QJsonObject AsyncTaskRuntime::list() const
         if (m_records.contains(*it)) tasks.append(snapshot(m_records.value(*it)));
     }
     return { { "ok", true }, { "data", QJsonObject{ { "tasks", tasks } } } };
+}
+
+QJsonObject AsyncTaskRuntime::respond(const QJsonObject& parameters)
+{
+    const auto id = parameters.value("taskId").toString();
+    if (!m_records.contains(id) || m_records[id].finished)
+        return { { "ok", false }, { "error", "Unknown or finished task." } };
+    auto* task = dynamic_cast<ApiOperationTask*>(m_records[id].task.data());
+    if (!task) return { { "ok", false }, { "error", "Task is not awaiting input." } };
+    return task->respond(parameters);
 }
 
 QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
@@ -650,15 +735,89 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
         if (!instance) { finish(id, false, "Minecraft instance not found."); return; }
         if (instance->isRunning()) { finish(id, false, "Components cannot be modified while the instance is running."); return; }
-        const auto uid = parameters.value("component").toString().trimmed();
+        const auto requestedUid = parameters.value("component").toString().trimmed();
         const auto version = parameters.value("version").toString().trimmed();
-        if (uid.isEmpty() || version.isEmpty()) { finish(id, false, "A component id and version are required."); return; }
+        if (requestedUid.isEmpty() || version.isEmpty()) { finish(id, false, "A component id and version are required."); return; }
+        const auto uid = loaderUid(requestedUid);
         auto profile = instance->getPackProfile();
         if (!profile->isLoaded()) {
             const auto loaded = profile->reload(Net::Mode::Offline);
             if (!loaded) { finish(id, false, loaded.error); return; }
         }
-        if (!profile->setComponentVersion(uid, version, parameters.value("important").toBool(false))) {
+
+        // Match VersionPage: Minecraft is the important root component and a
+        // version switch clears an instance-specific Java override when the
+        // automatic Java switch settings are enabled.
+        auto important = parameters.value("important").toBool(false);
+        if (uid == "net.minecraft") {
+            important = true;
+            if (APPLICATION->settings()->get("AutomaticJavaSwitch").toBool() && instance->settings()->get("AutomaticJava").toBool() &&
+                instance->settings()->get("OverrideJavaLocation").toBool()) {
+                instance->settings()->set("OverrideJavaLocation", false);
+                instance->settings()->set("JavaPath", "");
+            }
+        }
+
+        // Cleanroom updates replace the instance package and patch files. A
+        // plain PackProfile version edit leaves the old package in place, so
+        // use the same dedicated task as the legacy VersionPage.
+        if (Meta::Cleanroom::isUid(uid)) {
+            profile->saveNow();
+            const auto cleanroomTask = Meta::Cleanroom::updateInstanceTask(instance->instanceRoot(), version);
+            if (!cleanroomTask) { finish(id, false, "The Cleanroom update task could not be created."); return; }
+            auto& stored = m_records[id];
+            stored.task = cleanroomTask.get();
+            stored.holder = cleanroomTask;
+            stored.status = "正在更新 Cleanroom " + version;
+            connect(cleanroomTask.get(), &Task::status, this, [this, id](const QString& status) {
+                if (m_records.contains(id)) m_records[id].status = status;
+            });
+            connect(cleanroomTask.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+                if (!m_records.contains(id)) return;
+                m_records[id].progress = current;
+                m_records[id].total = total;
+            });
+            connect(cleanroomTask.get(), &Task::finished, this, [this, id, profile, cleanroomTask, instanceId = instance->id()]() {
+                if (!m_records.contains(id) || m_records[id].finished) return;
+                if (!cleanroomTask->wasSuccessful()) {
+                    finish(id, false, cleanroomTask->failReason(), instanceId);
+                    return;
+                }
+                const auto reloaded = profile->reload(Net::Mode::Online);
+                if (!reloaded) {
+                    finish(id, false, reloaded.error, instanceId);
+                    return;
+                }
+                const auto resolveTask = profile->getCurrentTask();
+                if (!resolveTask) {
+                    profile->saveNow();
+                    finish(id, true, {}, instanceId);
+                    return;
+                }
+                auto& record = m_records[id];
+                record.task = resolveTask.get();
+                record.holder = resolveTask;
+                record.status = "正在解析 Cleanroom 组件依赖";
+                connect(resolveTask.get(), &Task::status, this, [this, id](const QString& status) {
+                    if (m_records.contains(id)) m_records[id].status = status;
+                });
+                connect(resolveTask.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+                    if (!m_records.contains(id)) return;
+                    m_records[id].progress = current;
+                    m_records[id].total = total;
+                });
+                connect(resolveTask.get(), &Task::finished, this, [this, id, profile, resolveTask, instanceId]() {
+                    if (!m_records.contains(id) || m_records[id].finished) return;
+                    const bool success = resolveTask->wasSuccessful();
+                    if (success) profile->saveNow();
+                    finish(id, success, success ? QString() : resolveTask->failReason(), instanceId);
+                });
+            });
+            cleanroomTask->start();
+            return;
+        }
+
+        if (!profile->setComponentVersion(uid, version, important)) {
             finish(id, false, "The component version could not be changed.");
             return;
         }
@@ -679,107 +838,64 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             m_records[id].progress = current;
             m_records[id].total = total;
         });
-        connect(task.get(), &Task::finished, this, [this, id, profile, instanceId = instance->id()]() {
+        connect(task.get(), &Task::finished, this, [this, id, profile, task, instanceId = instance->id()]() {
             if (!m_records.contains(id) || m_records[id].finished) return;
-            const bool success = profile->getCurrentTask() ? profile->getCurrentTask()->wasSuccessful() : true;
+            const bool success = task ? task->wasSuccessful() : true;
             if (success) profile->saveNow();
-            finish(id, success, success ? QString() : (profile->getCurrentTask() ? profile->getCurrentTask()->failReason() : "Component resolution failed."), instanceId);
+            finish(id, success, success ? QString() : (task ? task->failReason() : "Component resolution failed."), instanceId);
         });
         task->start();
         return;
     }
 
-    if (record.operation == "modpack.install") {
-        const auto parameters = record.parameters;
-        const auto provider = parameters.value("provider").toString().toLower();
-        const auto projectId = parameters.value("projectId").toString();
-        const auto versionId = parameters.value("versionId").toString();
-        if (provider != "modrinth" && provider != "curseforge") {
-            finish(id, false, "Async modpack install currently supports Modrinth and CurseForge.");
-            return;
+    if (record.operation == "instance.import" || record.operation == "resource.install-with-dependencies" || record.operation == "modpack.install" || record.operation == "resource.install-version" || record.operation == "instance.special-loader.install" || record.operation == "instance.launch") {
+        QJsonObject parameters;
+        if (record.operation == "instance.launch") {
+            // Route launches through the same compatibility API adapter as
+            // installs. This preserves the UserInteraction channel used by
+            // headless launch checks (for example, the low-memory prompt),
+            // allowing Neo UI to answer instead of treating it as cancelled.
+            parameters = record.parameters;
+        } else if (record.operation == "modpack.install") {
+            for (const auto key : { "provider", "projectId", "versionId", "name", "group", "icon", "optionalMods", "privateCode", "offline" })
+                if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
+        } else if (record.operation == "resource.install-version") {
+            for (const auto key : { "provider", "kind", "projectId", "versionId", "instance", "world", "replace", "minecraftVersion", "loaders", "pluginLoaders", "includeChangelog" })
+                if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
+        } else if (record.operation == "instance.import") {
+            for (const auto key : { "source", "name", "group", "icon", "optionalMods" })
+                if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
+        } else if (record.operation == "resource.install-with-dependencies") {
+            parameters = record.parameters;
+        } else {
+            for (const auto key : { "instance", "loader", "minecraftVersion", "loaderVersion", "commitRef" })
+                if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         }
-        if (projectId.isEmpty() || versionId.isEmpty()) {
-            finish(id, false, "A pack project and version are required.");
-            return;
-        }
-        NoopInteraction interaction;
-        LauncherApi api;
-        const QJsonObject request{ { "provider", provider }, { "kind", "modpacks" }, { "projectId", projectId } };
-        const auto versions = api.execute("resource.versions", request, interaction);
-        if (!versions.value("ok").toBool()) {
-            finish(id, false, versions.value("error").toString("Could not read pack versions."));
-            return;
-        }
-        QString download;
-        for (const auto& value : versions.value("data").toArray()) {
-            const auto entry = value.toObject();
-            if (entry.value("versionId").toString() == versionId) {
-                download = entry.value("downloadUrl").toString();
-                break;
-            }
-        }
-        if (download.isEmpty()) {
-            finish(id, false, "The provider did not supply a downloadable pack archive.");
-            return;
-        }
-        const QUrl url(download);
-        if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) {
-            finish(id, false, "The provider returned an invalid pack URL.");
-            return;
-        }
-        auto* importTask = new InstanceImportTask(url, nullptr, { { "pack_id", projectId }, { "pack_version_id", versionId } });
-        QString iconKey = parameters.value("icon").toString();
-        if (iconKey.isEmpty() || iconKey == "default") {
-            const auto iconData = QByteArray::fromBase64(parameters.value("iconData").toString().toLatin1());
-            if (!iconData.isEmpty()) {
-                QString iconError;
-                iconKey = savePackCover(QImage::fromData(iconData, "PNG"), iconError);
-            }
-            if (iconKey.isEmpty() || iconKey == "default") {
-                QString iconUrl = parameters.value("iconUrl").toString();
-                if (iconUrl.isEmpty()) {
-                    const auto project = api.execute("resource.project", request, interaction);
-                    if (project.value("ok").toBool())
-                        iconUrl = project.value("data").toObject().value("iconUrl").toString();
-                }
-                if (!iconUrl.isEmpty()) {
-                    QString iconError;
-                    const auto cover = downloadPackCover(QUrl(iconUrl), iconError);
-                    if (!cover.isEmpty()) iconKey = cover;
-                    else if (!iconError.isEmpty()) m_records[id].status = "整合包封面获取失败，使用默认图标：" + iconError;
-                }
-            }
-        }
-        if (!iconKey.isEmpty() && iconKey != "default") importTask->setIcon(iconKey);
-        const auto name = parameters.value("name").toString();
-        if (!name.isEmpty()) importTask->setName(name);
-        auto* task = APPLICATION->instances()->wrapInstanceTask(importTask);
-        if (!task) {
-            finish(id, false, "The modpack import task could not be created.");
-            return;
-        }
+        auto task = makeShared<ApiOperationTask>(record.operation, parameters);
         auto& stored = m_records[id];
-        stored.task = task;
-        connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-        connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
+        stored.task = task.get();
+        stored.holder = task;
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
             if (!m_records.contains(id)) return;
             m_records[id].progress = current;
             m_records[id].total = total;
         });
-        connect(task, &Task::finished, this, [this, id, task]() {
+        connect(task.get(), &Task::finished, this, [this, id, task, instanceId = parameters.value("instance").toString()]() {
             if (!m_records.contains(id)) return;
             const bool success = task->wasSuccessful();
-            QString created;
-            if (success) {
+            if ((m_records[id].operation == "modpack.install" || m_records[id].operation == "instance.import") && success) {
                 APPLICATION->instances()->saveNow();
                 const auto& before = m_records[id].instancesBefore;
                 for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
                     const auto candidate = APPLICATION->instances()->at(i);
-                    if (!before.contains(candidate->id())) { created = candidate->id(); break; }
+                    if (!before.contains(candidate->id())) {
+                        m_records[id].createdInstanceId = candidate->id();
+                        break;
+                    }
                 }
             }
-            if (!created.isEmpty()) m_records[id].createdInstanceId = created;
-            finish(id, success, success ? QString() : task->failReason());
+            finish(id, success, success ? QString() : task->failReason(), instanceId);
         });
         task->start();
         return;
@@ -804,11 +920,7 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         const auto name = parameters.value("name").toString().trimmed();
         const auto group = parameters.value("group").toString();
         const auto icon = parameters.value("icon").toString("default");
-        const auto loader = requestedLoader == "fabric" ? "net.fabricmc.fabric-loader" :
-                            requestedLoader == "quilt" ? "org.quiltmc.quilt-loader" :
-                            requestedLoader == "forge" ? "net.minecraftforge" :
-                            requestedLoader == "neoforge" ? "net.neoforged" :
-                            requestedLoader == "cleanroom" ? "com.cleanroommc.cleanroom" : requestedLoader;
+        const auto loader = loaderUid(requestedLoader);
 
         auto& stored = m_records[id];
         stored.status = "正在加载 Minecraft 版本 " + versionName;
@@ -826,10 +938,19 @@ void AsyncTaskRuntime::startRecord(const Record& record)
                 finish(id, false, "Minecraft version not found: " + versionName);
                 return;
             }
-            auto createWrapped = [this, id, minecraft, name, group, icon](BaseVersion::Ptr loaderVersion) {
+            auto createWrapped = [this, id, minecraft, loader, name, group, icon](BaseVersion::Ptr loaderVersion) {
                 if (!m_records.contains(id) || m_records[id].finished) return;
-                auto* raw = loaderVersion ? new VanillaCreationTask(minecraft, m_records[id].parameters.value("loader").toString(), loaderVersion)
-                                          : new VanillaCreationTask(minecraft);
+                InstanceTask* raw = nullptr;
+                if (Meta::Cleanroom::isUid(loader) && loaderVersion) {
+                    // Cleanroom's legacy installer downloads a complete package
+                    // and normalizes its patches. A plain VanillaCreationTask
+                    // only adds the metadata component and leaves the package
+                    // files missing, so mirror the established installer path.
+                    raw = new InstanceImportTask(QUrl(Meta::Cleanroom::packageUrl(loaderVersion->descriptor())), nullptr);
+                } else {
+                    raw = loaderVersion ? new VanillaCreationTask(minecraft, loader, loaderVersion)
+                                         : new VanillaCreationTask(minecraft);
+                }
                 if (!name.isEmpty()) raw->setName(name);
                 raw->setGroup(group);
                 raw->setIcon(icon);
@@ -883,90 +1004,6 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         return;
     }
 
-    if (record.operation == "instance.import") {
-        const auto parameters = record.parameters;
-        const auto source = parameters.value("source").toString().trimmed();
-        QUrl url(source, QUrl::TolerantMode);
-        if (QFileInfo::exists(source)) {
-            url = QUrl::fromLocalFile(QFileInfo(source).absoluteFilePath());
-        } else if (url.scheme() != "http" && url.scheme() != "https") {
-            finish(id, false, "A local pack file or HTTP(S) URL is required.");
-            return;
-        }
-        if (source.isEmpty() || !url.isValid()) {
-            finish(id, false, "A valid local path or URL is required.");
-            return;
-        }
-        auto* importTask = new InstanceImportTask(url, nullptr);
-        const auto name = parameters.value("name").toString();
-        if (!name.isEmpty()) importTask->setName(name);
-        auto* task = APPLICATION->instances()->wrapInstanceTask(importTask);
-        if (!task) {
-            finish(id, false, "The import task could not be created.");
-            return;
-        }
-        auto& stored = m_records[id];
-        stored.task = task;
-        connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-        connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
-            if (!m_records.contains(id)) return;
-            m_records[id].progress = current;
-            m_records[id].total = total;
-        });
-        connect(task, &Task::finished, this, [this, id, task]() {
-            if (!m_records.contains(id)) return;
-            const bool success = task->wasSuccessful();
-            QString created;
-            if (success) {
-                APPLICATION->instances()->saveNow();
-                const auto& before = m_records[id].instancesBefore;
-                for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
-                    const auto candidate = APPLICATION->instances()->at(i);
-                    if (!before.contains(candidate->id())) {
-                        created = candidate->id();
-                        break;
-                    }
-                }
-            }
-            if (!created.isEmpty()) m_records[id].createdInstanceId = created;
-            finish(id, success, success ? QString() : task->failReason());
-        });
-        task->start();
-        return;
-    }
-
-    if (record.operation == "resource.install-with-dependencies") {
-        const auto parameters = record.parameters;
-        const auto instance = findInstance(parameters.value("instance").toString());
-        if (!instance) { finish(id, false, "Instance not found."); return; }
-        if (instance->isRunning()) { finish(id, false, "Stop the instance before installing resources."); return; }
-        QStringList loaders;
-        for (const auto& loader : parameters.value("loaders").toArray()) loaders.append(loader.toString());
-        auto* task = new ResourceInstallTask(instance,
-                                             parameters.value("kind").toString(),
-                                             parameters.value("provider").toString(),
-                                             parameters.value("projectId").toString(),
-                                             parameters.value("versionId").toString(),
-                                             parameters.value("includeOptional").toBool(false),
-                                             parameters.value("minecraftVersion").toString(),
-                                             loaders);
-        auto& stored = m_records[id];
-        stored.task = task;
-        stored.status = "正在准备资源及依赖";
-        connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-        connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
-            if (!m_records.contains(id)) return;
-            m_records[id].progress = current;
-            m_records[id].total = total;
-        });
-        connect(task, &Task::finished, this, [this, id, task, instanceId = instance->id()]() {
-            if (!m_records.contains(id) || m_records[id].finished) return;
-            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason(), instanceId);
-        });
-        task->start();
-        return;
-    }
-
     if (record.operation == "server.start") {
         auto server = dynamic_cast<ServerInstance*>(findInstance(record.parameters.value("instance").toString()));
         if (!server) { finish(id, false, "Server instance not found."); return; }
@@ -996,89 +1033,16 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         return;
     }
 
-    if (record.operation == "instance.launch") {
-        const auto parameters = record.parameters;
-        auto instance = findInstance(parameters.value("instance").toString());
-        if (!instance) { finish(id, false, "Instance not found."); return; }
-        const auto modeName = parameters.value("mode").toString("normal");
-        if (modeName != "normal" && modeName != "offline" && modeName != "demo") { finish(id, false, "mode must be normal, offline, or demo."); return; }
-        const auto mode = modeName == "demo" ? LaunchMode::Demo : modeName == "offline" ? LaunchMode::Offline : LaunchMode::Normal;
-        MinecraftAccountPtr account;
-        const auto accountId = parameters.value("account").toString();
-        const auto profile = parameters.value("profile").toString();
-        if (!accountId.isEmpty() || !profile.isEmpty()) {
-            account = findAccount(accountId.isEmpty() ? profile : accountId);
-            if (!account) { finish(id, false, "Selected account not found."); return; }
-        } else {
-            if (instance->settings()->get("UseAccountForInstance").toBool())
-                account = findAccount(instance->settings()->get("InstanceAccountId").toString());
-            if (!account) account = APPLICATION->accounts()->defaultAccount();
-        }
-        const auto offlineName = parameters.value("offlineName").toString();
-        if (!offlineName.isEmpty()) {
-            if (!QRegularExpression("^[A-Za-z0-9_]{1,16}$").match(offlineName).hasMatch()) { finish(id, false, "Invalid offline player name."); return; }
-            account = MinecraftAccount::createOffline(offlineName);
-        }
-        if (!account && mode != LaunchMode::Demo) { finish(id, false, "No account is available. Log in or pass an offline player name."); return; }
-        if (account && account->accountType() == AccountType::MSA && !account->hasProfile() && mode == LaunchMode::Normal) {
-            finish(id, false, "This Microsoft account has no Minecraft Java profile.");
-            return;
-        }
-        MinecraftTarget::Ptr target;
-        if (!parameters.value("server").toString().isEmpty())
-            target.reset(new MinecraftTarget(MinecraftTarget::parse(parameters.value("server").toString(), false)));
-        else if (!parameters.value("world").toString().isEmpty())
-            target.reset(new MinecraftTarget(MinecraftTarget::parse(parameters.value("world").toString(), true)));
-
-        auto* controller = new LaunchController();
-        const auto profilerName = parameters.value("profiler").toString();
-        if (!profilerName.isEmpty()) {
-            const auto profiler = APPLICATION->profilers().value(profilerName);
-            if (!profiler) { delete controller; finish(id, false, "Unknown profiler."); return; }
-            controller->setProfiler(profiler.get());
-        }
-        controller->setParent(this);
-        controller->setHeadless(true);
-        controller->setInstance(instance);
-        controller->setLaunchMode(mode);
-        controller->setOfflineName(offlineName);
-        controller->setAccountToUse(account);
-        controller->setTargetToJoin(target);
-        controller->setReauthenticateHandler([this, id](const MinecraftAccountPtr&, const QString& reason) -> MinecraftAccountPtr {
-            if (m_records.contains(id)) m_records[id].status = reason;
-            return nullptr;
-        });
-        auto& stored = m_records[id];
-        stored.task = controller;
-        stored.status = "正在准备启动";
-        connect(controller, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-        connect(controller, &Task::progress, this, [this, id](qint64 current, qint64 total) {
-            if (!m_records.contains(id)) return;
-            m_records[id].progress = current;
-            m_records[id].total = total;
-        });
-        connect(controller, &LaunchController::gameStarted, this, [this, id, controller, instanceId = instance->id()](qint64 processId) {
-            if (!m_records.contains(id) || m_records[id].finished) return;
-            m_records[id].pid = processId;
-            m_records[id].status = "游戏进程已启动";
-            finish(id, true, {}, instanceId);
-            controller->deleteLater();
-        });
-        connect(controller, &Task::finished, this, [this, id, controller, instanceId = instance->id()]() {
-            if (!m_records.contains(id) || m_records[id].finished) return;
-            finish(id, controller->wasSuccessful(), controller->wasSuccessful() ? QString() : controller->failReason(), instanceId);
-            controller->deleteLater();
-        });
-        controller->start();
-        return;
-    }
-
     if (record.operation == "account.login") {
         const auto parameters = record.parameters;
         auto type = parameters.value("type").toString().trimmed().toLower();
         if (type == "msa" || type == "microsoft-account") type = "microsoft";
         const auto username = parameters.value("username").toString().trimmed();
         if (type == "offline") {
+            if (!APPLICATION->accounts()->canAddOfflineAccount()) {
+                finish(id, false, "You must add a Microsoft account that owns Minecraft before adding an offline account.");
+                return;
+            }
             if (username.isEmpty()) { finish(id, false, "A username is required."); return; }
             auto account = MinecraftAccount::createOffline(username);
             const auto uuidMode = parameters.value("offlineUuidMode").toString("default").trimmed().toLower();
@@ -1125,6 +1089,8 @@ void AsyncTaskRuntime::startRecord(const Record& record)
                         finish(id, false, localError.isEmpty() ? "Could not provision the local verification account." : localError);
                         return;
                     }
+                    account->accountData()->minecraftProfile.id = profile.value("id").toString();
+                    account->accountData()->minecraftProfile.name = profile.value("name").toString(username);
                 }
             } else {
                 const auto serverId = parameters.value("serverId").toString();

@@ -244,6 +244,9 @@ void MinecraftInstance::loadSpecificSettings()
         auto assetVerificationOverride = m_settings->registerSetting("OverrideAssetVerification", false);
         m_settings->registerOverride(global_settings->getSetting("AssetVerificationMode"), assetVerificationOverride);
         m_settings->registerOverride(global_settings->getSetting("AssetCacheExpiryDays"), assetVerificationOverride);
+        // Set only after a completed full integrity check. This is a
+        // per-instance trust marker for skipping repeated asset hashes.
+        m_settings->registerSetting("AssetIntegrityTrusted", false);
 
         m_settings->set("InstanceType", "OneSix");
     }

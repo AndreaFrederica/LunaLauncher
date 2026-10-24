@@ -28,6 +28,16 @@
 #include <qt_windows.h>
 #endif
 
+namespace {
+QString normalizedProfileId(const QString& value)
+{
+    const auto parsed = parseMinecraftUuid(value.trimmed());
+    if (parsed.isNull())
+        return value.trimmed().toLower();
+    return parsed.toString(QUuid::WithoutBraces).remove('-').toLower();
+}
+}
+
 LocalYggdrasil& LocalYggdrasil::instance()
 {
     static auto* service = new LocalYggdrasil(QCoreApplication::instance());
@@ -151,6 +161,40 @@ bool LocalYggdrasil::request(const QByteArray& method,
     return success;
 }
 
+bool LocalYggdrasil::cacheStatus(QJsonObject& status, QString& error)
+{
+    if (!ensureRunning(error))
+        return false;
+
+    // Configure the launcher routes when the normal metadata cache setting is
+    // enabled. This also refreshes the paths after a service restart.
+    const bool configured = configureCache();
+    QJsonObject stats;
+    if (!request("GET", "cache/stats", {}, stats, error))
+        return false;
+    QJsonObject routes;
+    if (!request("GET", "cache/routes?limit=200", {}, routes, error))
+        return false;
+    status = { { "running", true },
+               { "enabled", APPLICATION->settings()->get("LocalServiceCache").toBool() },
+               { "accountCacheEnabled", APPLICATION->settings()->get("YggdrasilAccountCache").toBool() },
+               { "configured", configured },
+               { "metadataPath", m_metadataPath },
+               { "texturesPath", m_texturesPath },
+               { "stats", stats },
+               { "routes", routes.value("items").toArray() },
+               { "routeCount", routes.value("total").toInt(routes.value("items").toArray().size()) } };
+    return true;
+}
+
+bool LocalYggdrasil::purgeCache(const QString& routeId, const QString& key, QJsonObject& result, QString& error)
+{
+    QJsonObject body;
+    if (!routeId.trimmed().isEmpty()) body.insert("route_id", routeId.trimmed());
+    if (!key.trimmed().isEmpty()) body.insert("key", key.trimmed());
+    return request("POST", "cache/purge", QJsonDocument(body).toJson(QJsonDocument::Compact), result, error);
+}
+
 bool LocalYggdrasil::restart(QString& error)
 {
     stop();
@@ -212,6 +256,55 @@ bool LocalYggdrasil::deleteSkin(const QString& profileId, QString& error)
 {
     QJsonObject ignored;
     return request("DELETE", "profiles/" + QString::fromLatin1(QUrl::toPercentEncoding(profileId)) + "/skin", {}, ignored, error);
+}
+
+bool LocalYggdrasil::profileInfo(const QString& profileId, QJsonObject& profile, QString& error)
+{
+    if (profileId.trimmed().isEmpty()) {
+        error = tr("The local account has no selected profile.");
+        return false;
+    }
+    return request("GET", "profiles/" + QString::fromLatin1(QUrl::toPercentEncoding(profileId.trimmed())), {}, profile, error);
+}
+
+bool LocalYggdrasil::resolveProfileId(const QString& profileId,
+                                      const QString& profileName,
+                                      QString& resolvedId,
+                                      QString& error)
+{
+    QJsonObject profiles;
+    if (!request("GET", "profiles?limit=200", {}, profiles, error))
+        return false;
+
+    const auto wantedId = normalizedProfileId(profileId);
+    const auto wantedName = profileName.trimmed();
+    QString idMatch;
+    for (const auto& value : profiles.value("items").toArray()) {
+        const auto candidate = value.toObject();
+        const auto candidateId = candidate.value("id").toString().trimmed();
+        if (candidateId.isEmpty())
+            continue;
+        // A name match is preferred when repairing an account whose old UUID
+        // belongs to a previous local database. Fall back to the UUID when a
+        // profile was legitimately renamed.
+        if (!wantedName.isEmpty() && candidate.value("name").toString().compare(wantedName, Qt::CaseInsensitive) == 0) {
+            resolvedId = candidateId;
+            return true;
+        }
+        if (!profileId.trimmed().isEmpty() && normalizedProfileId(candidateId) == wantedId)
+            idMatch = candidateId;
+    }
+    if (!idMatch.isEmpty()) {
+        resolvedId = idMatch;
+        return true;
+    }
+
+    if (wantedName.isEmpty()) {
+        error = tr("The local profile is no longer present. Re-authenticate this LocalServer account to recreate it.");
+    } else {
+        error = tr("The LocalServer profile '%1' is no longer present. Re-authenticate this account to recreate it.").arg(wantedName);
+    }
+    return false;
 }
 
 bool LocalYggdrasil::createProfile(const QString& name, const QString& password, const QString& uuid, QJsonObject& profile, QString& error)

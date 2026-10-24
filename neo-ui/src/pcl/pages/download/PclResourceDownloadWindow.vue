@@ -3,9 +3,9 @@
     <PclWindowTitleBar :title="`下载${kindLabel}`" :subtitle="instanceName || instanceId" />
     <div class="pcl-resource-download-window__body">
       <div class="pcl-resource-download-window__toolbar">
-        <PclSelect v-model="provider" :options="providers" @update:model-value="search" />
-        <PclInput v-model="query" :placeholder="`搜索${kindLabel}`" @enter="search" />
-        <PclButton variant="highlight" icon="search" :disabled="searching" @click="search">{{ searching ? '搜索中…' : '搜索' }}</PclButton>
+        <PclSelect v-model="provider" :options="providers" @update:model-value="() => search(true)" />
+        <PclInput v-model="query" :placeholder="`搜索${kindLabel}`" @enter="search(true)" />
+        <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? '搜索中…' : '搜索' }}</PclButton>
         <div class="pcl-resource-download-window__view">
           <PclIconButton icon="grid-2x2" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" />
           <PclIconButton icon="layout-list" label="列表视图" :size="28" :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" />
@@ -48,6 +48,12 @@
         </article>
       </div>
 
+      <div v-if="offset > 0 || hasNext" class="pcl-resource-download-window__pager">
+        <PclButton size="sm" variant="ghost" icon="arrow-left" :disabled="offset === 0 || searching" @click="previousPage">上一页</PclButton>
+        <span>第 {{ pageNumber }} 页</span>
+        <PclButton size="sm" variant="ghost" icon="arrow-right" :disabled="!hasNext || searching" @click="nextPage">下一页</PclButton>
+      </div>
+
       <div class="pcl-resource-download-window__footer">
         <PclCheckbox v-if="kind === 'mods'" v-model="includeOptional" label="安装可选依赖" />
         <span class="pcl-resource-download-window__count">已选择 {{ selectedList.length }} 项</span>
@@ -82,6 +88,10 @@ const downloading = ref(false);
 const includeOptional = ref(true);
 const error = ref('');
 const projects = ref<any[]>([]);
+const offset = ref(0);
+const nextOffset = ref(0);
+const hasNext = ref(false);
+const pageNumber = computed(() => Math.floor(offset.value / 25) + 1);
 const viewMode = ref<'grid' | 'list'>((() => { try { return localStorage.getItem('pcl-resource-download-view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } })());
 function setViewMode(mode: 'grid' | 'list') { viewMode.value = mode; try { localStorage.setItem('pcl-resource-download-view', mode); } catch { /* Storage may be unavailable. */ } }
 const selected = reactive<Record<string, any>>({});
@@ -132,11 +142,12 @@ async function execute(operation: string, parameters: Record<string, unknown> = 
   return result?.data ?? result;
 }
 
-async function search() {
+async function search(reset = true) {
+  if (reset) offset.value = 0;
   searching.value = true;
   error.value = '';
   try {
-    const result: any = await execute('resource.search', { ...requestParams(), query: query.value.trim(), offset: 0 });
+    const result: any = await execute('resource.search', { ...requestParams(), query: query.value.trim(), offset: offset.value });
     const list = Array.isArray(result) ? result : result?.results || result?.projects || [];
     projects.value = list.map((project: any) => ({
       projectId: String(project.projectId || project.id || project.slug || ''),
@@ -144,6 +155,8 @@ async function search() {
       description: String(project.description || project.synopsis || ''),
       iconUrl: String(project.iconUrl || project.icon || project.logoUrl || ''),
     })).filter((project: any) => project.projectId);
+    nextOffset.value = Number(result?.nextOffset ?? (offset.value + projects.value.length)) || 0;
+    hasNext.value = projects.value.length >= 25 && nextOffset.value > offset.value;
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
@@ -151,6 +164,16 @@ async function search() {
   }
 }
 
+async function nextPage() {
+  if (!hasNext.value) return;
+  offset.value = nextOffset.value;
+  await search(false);
+}
+async function previousPage() {
+  if (offset.value === 0) return;
+  offset.value = Math.max(0, offset.value - 25);
+  await search(false);
+}
 async function toggleProject(project: any, enabled: boolean) {
   if (!enabled) {
     delete selected[project.projectId];
@@ -278,6 +301,9 @@ onMounted(async () => {
 .pcl-resource-download-card__state { flex: 0 0 auto; max-width: 110px; overflow: hidden; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); text-overflow: ellipsis; white-space: nowrap; }
 .pcl-resource-download-card__state.succeeded { color: #34d399; }
 .pcl-resource-download-card__state.failed { color: #fb7185; }
+.pcl-resource-download-window__pager { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-resource-download-window__pager > span { min-width: 58px; text-align: center; }
+
 .pcl-resource-download-window__footer { display: flex; align-items: center; gap: 12px; padding-top: 4px; border-top: 1px solid var(--pcl-border); }
 .pcl-resource-download-window__count { margin-left: auto; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
 @media (max-width: 760px) { .pcl-resource-download-window__list { grid-template-columns: 1fr; } }

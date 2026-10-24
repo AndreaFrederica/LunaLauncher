@@ -12,6 +12,13 @@
         </div>
       </div>
 
+      <div class="pcl-resource-download-window__constraints">
+        <PclIcon name="gauge" :size="13" />
+        <span v-if="instanceVersion">Minecraft {{ instanceVersion }}</span>
+        <span v-if="instanceLoaderLabel" class="pcl-resource-download-window__loader">{{ instanceLoaderLabel }}</span>
+        <span class="pcl-resource-download-window__constraint-hint">已按当前实例筛选</span>
+      </div>
+
       <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
       <div v-if="!projects.length && !searching" class="pcl-empty">
@@ -78,9 +85,46 @@ const projects = ref<any[]>([]);
 const viewMode = ref<'grid' | 'list'>((() => { try { return localStorage.getItem('pcl-resource-download-view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } })());
 function setViewMode(mode: 'grid' | 'list') { viewMode.value = mode; try { localStorage.setItem('pcl-resource-download-view', mode); } catch { /* Storage may be unavailable. */ } }
 const selected = reactive<Record<string, any>>({});
+const instanceVersion = ref('');
+const instanceLoaders = ref<string[]>([]);
+const instanceLoaderLabel = ref('');
 
 const kindLabel = computed(() => ({ mods: '模组', resourcepacks: '资源包', shaderpacks: '光影包', datapacks: '数据包', worlds: '世界', texturepacks: '材质包' } as Record<string, string>)[props.kind] || props.kind);
 const selectedList = computed(() => Object.values(selected));
+
+function requestParams() {
+  const params: Record<string, unknown> = { provider: provider.value, kind: props.kind };
+  if (instanceVersion.value) params.minecraftVersion = instanceVersion.value;
+  if (props.kind === 'mods' && instanceLoaders.value.length) params.loaders = instanceLoaders.value;
+  return params;
+}
+
+async function loadInstanceConstraints() {
+  try {
+    const info: any = await execute('instance.info', { instance: props.instanceId });
+    const componentResult: any = await execute('instance.components.list', { instance: props.instanceId }).catch(() => null);
+    const components = Array.isArray(componentResult?.components) ? componentResult.components : [];
+    const minecraftComponent = components.find((component: any) => String(component?.id || component?.uid || '').toLowerCase() === 'net.minecraft');
+    instanceVersion.value = String(info?.runtime?.minecraftVersion || minecraftComponent?.version || '');
+    const map: Record<string, string> = {
+      'net.fabricmc.fabric-loader': 'fabric',
+      'org.quiltmc.quilt-loader': 'quilt',
+      'net.minecraftforge': 'forge',
+      'net.neoforged': 'neoforge',
+      'com.cleanroommc.cleanroom': 'forge',
+    };
+    const loaders = new Set<string>();
+    for (const component of components) {
+      const id = String(component?.id || component?.uid || '').toLowerCase();
+      const mapped = map[id];
+      if (mapped) loaders.add(mapped);
+    }
+    instanceLoaders.value = [...loaders];
+    instanceLoaderLabel.value = instanceLoaders.value.map(loader => loader[0].toUpperCase() + loader.slice(1)).join(' + ');
+  } catch {
+    // Keep the catalog usable if instance metadata is unavailable.
+  }
+}
 
 async function execute(operation: string, parameters: Record<string, unknown> = {}) {
   const result = await launcher.execute(operation, parameters);
@@ -92,7 +136,7 @@ async function search() {
   searching.value = true;
   error.value = '';
   try {
-    const result: any = await execute('resource.search', { provider: provider.value, kind: props.kind, query: query.value.trim(), offset: 0 });
+    const result: any = await execute('resource.search', { ...requestParams(), query: query.value.trim(), offset: 0 });
     const list = Array.isArray(result) ? result : result?.results || result?.projects || [];
     projects.value = list.map((project: any) => ({
       projectId: String(project.projectId || project.id || project.slug || ''),
@@ -124,7 +168,7 @@ async function toggleProject(project: any, enabled: boolean) {
     progress: 0,
   };
   try {
-    const result: any = await execute('resource.versions', { provider: provider.value, kind: props.kind, projectId: project.projectId });
+    const result: any = await execute('resource.versions', { ...requestParams(), projectId: project.projectId });
     const versions = Array.isArray(result) ? result : result?.versions || [];
     const entry = selected[project.projectId];
     if (!entry) return;
@@ -160,6 +204,8 @@ async function download() {
           projectId: entry.projectId,
           versionId: entry.versionId,
           includeOptional: props.kind === 'mods' ? includeOptional.value : false,
+          minecraftVersion: instanceVersion.value,
+          loaders: props.kind === 'mods' ? instanceLoaders.value : [],
         },
       });
       entry.taskId = String(task?.taskId || '');
@@ -202,9 +248,10 @@ async function closeWindow() {
   try { await getCurrentWindow().close(); } catch { window.close(); }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.documentElement.dataset.neoShell = 'pcl';
   document.documentElement.dataset.neoTheme = 'dark';
+  await loadInstanceConstraints();
   void search();
 });
 </script>
@@ -215,6 +262,10 @@ onMounted(() => {
 .pcl-resource-download-window__toolbar { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 .pcl-resource-download-window__view { display: flex; gap: 2px; align-items: center; }
 .pcl-icon-btn.active { color: var(--pcl-c3); background: var(--pcl-c6); }
+.pcl-resource-download-window__constraints { display: flex; align-items: center; gap: 7px; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-resource-download-window__loader { padding: 2px 6px; border: 1px solid var(--pcl-border); border-radius: 3px; color: var(--pcl-c3); }
+.pcl-resource-download-window__constraint-hint { margin-left: auto; opacity: .7; }
+
 .pcl-resource-download-window__list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-y: auto; min-height: 0; padding-right: 2px; }
 .pcl-resource-download-window__list.is-list { grid-template-columns: minmax(0, 1fr); }
 .pcl-resource-download-card { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--pcl-border); border-radius: 4px; background: var(--pcl-card); }

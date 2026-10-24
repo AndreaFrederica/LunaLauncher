@@ -579,6 +579,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { launcher } from '../../../boot/launcher-api';
 import PclPageNav from '../../components/PclPageNav.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
@@ -729,7 +730,8 @@ const memoryAllocPercent = computed(() => memoryStats.value.totalMiB > 0
   ? Math.max(0, Math.min(100, maxMem.value * 100 / memoryStats.value.totalMiB))
   : 0);
 const memoryAllocAfterPercent = computed(() => Math.max(0, Math.min(100 - memoryUsedPercent.value, memoryAllocPercent.value)));
-let memoryTimer: ReturnType<typeof setInterval> | undefined;
+let memorySubscription = '';
+let unlistenMemory: (() => void) | undefined;
 async function refreshMemory() {
   try {
     const result = await props.execute('runtime.memory', {});
@@ -740,12 +742,34 @@ async function refreshMemory() {
     // Older backends may not expose runtime.memory.
   }
 }
+async function subscribeMemory() {
+  try {
+    const result: any = await props.execute('runtime.memory.subscribe');
+    memorySubscription = String(result?.subscriptionId || '');
+    if (!memorySubscription) return;
+    unlistenMemory = await launcher.onStream((batch: any) => {
+      if (!batch || batch.subscriptionId !== memorySubscription) return;
+      for (const event of batch.events || []) {
+        if (event.kind !== 'memory.sample') continue;
+        const total = Number(event.totalMiB || 0);
+        if (total > 0) memoryStats.value = { totalMiB: total, usedMiB: Math.max(0, Math.min(total, Number(event.usedMiB || 0))) };
+      }
+    });
+  } catch {
+    // Older backends may not expose the memory stream; the one-shot read remains.
+  }
+}
 onMounted(() => {
   void refreshMemory();
-  memoryTimer = setInterval(refreshMemory, 2000);
+  void subscribeMemory();
 });
 onBeforeUnmount(() => {
-  if (memoryTimer) clearInterval(memoryTimer);
+  unlistenMemory?.();
+  if (memorySubscription) {
+    const subscriptionId = memorySubscription;
+    memorySubscription = '';
+    void props.execute('event.unsubscribe', { subscriptionId }).catch(() => {});
+  }
 });
 const windowMode = ref<'default' | 'maximized' | 'custom'>('default');
 

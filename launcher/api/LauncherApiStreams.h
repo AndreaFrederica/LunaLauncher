@@ -25,6 +25,7 @@ class LauncherApiStreams {
     QJsonObject subscribeConsole(const QJsonObject& p);
     QJsonObject subscribeFile(const QJsonObject& p);
     QJsonObject subscribeResources(const QJsonObject& p);
+    QJsonObject subscribeMemory(const QJsonObject& p);
     QJsonObject poll(const std::shared_ptr<Subscription>& sub, qint64 after, int limit) const;
     QHash<QString, std::shared_ptr<Subscription>> m_subscriptions;
 };

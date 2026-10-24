@@ -68,6 +68,7 @@ import PclCard from '../../components/PclCard.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclRadio from '../../components/PclRadio.vue';
 import PclSlider from '../../components/PclSlider.vue';
+import { launcher } from '../../../boot/launcher-api';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ settings: any[]; busy: boolean; execute: Execute }>();
@@ -79,7 +80,8 @@ const maxMemory = ref(4096);
 const totalMiB = ref(0);
 const usedMiB = ref(0);
 const availableMiB = ref(0);
-let timer: ReturnType<typeof setInterval> | undefined;
+let memorySubscription = '';
+let unlistenMemory: (() => void) | undefined;
 
 const totalGiB = computed(() => formatGiB(totalMiB.value));
 const usedGiB = computed(() => formatGiB(usedMiB.value));
@@ -128,6 +130,28 @@ async function refreshMemory() {
   }
 }
 
+async function subscribeMemory() {
+  try {
+    const result: any = await props.execute('runtime.memory.subscribe');
+    memorySubscription = String(result?.subscriptionId || '');
+    if (!memorySubscription) return;
+    unlistenMemory = await launcher.onStream((batch: any) => {
+      if (!batch || batch.subscriptionId !== memorySubscription) return;
+      for (const event of batch.events || []) {
+        if (event.kind !== 'memory.sample') continue;
+        const total = Number(event.totalMiB || 0);
+        if (total > 0) {
+          totalMiB.value = total;
+          usedMiB.value = Math.max(0, Math.min(total, Number(event.usedMiB || 0)));
+          availableMiB.value = Number(event.availableMiB || 0);
+        }
+      }
+    });
+  } catch {
+    // Older backends may not expose the memory stream; the one-shot read remains.
+  }
+}
+
 function save(key: string, value: number) {
   if (key === 'MinMemAlloc') minMemory.value = value;
   if (key === 'MaxMemAlloc') maxMemory.value = value;
@@ -146,10 +170,15 @@ watch(mode, value => {
 
 onMounted(() => {
   void refreshMemory();
-  timer = setInterval(refreshMemory, 2000);
+  void subscribeMemory();
 });
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
+  unlistenMemory?.();
+  if (memorySubscription) {
+    const subscriptionId = memorySubscription;
+    memorySubscription = '';
+    void props.execute('event.unsubscribe', { subscriptionId }).catch(() => {});
+  }
 });
 </script>
 

@@ -12,6 +12,7 @@
 #include <QUuid>
 
 #include "Application.h"
+#include "HardwareInfo.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
 #include "api/LauncherApiDomains.h"
@@ -127,6 +128,29 @@ QJsonObject LauncherApiStreams::subscribeConsole(const QJsonObject& p)
         if (const auto sub = weak.lock()) append(sub, { { "kind", "instance.removed" } });
     });
     attachConsole(sub, instance->getLaunchTask());
+    return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
+}
+
+QJsonObject LauncherApiStreams::subscribeMemory(const QJsonObject&)
+{
+    auto sub = create("memory", QString());
+    if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+    auto send = [this, weak = std::weak_ptr<Subscription>(sub)]() {
+        const auto sub = weak.lock();
+        if (!sub) return;
+        const auto total = HardwareInfo::totalRamMiB();
+        const auto available = HardwareInfo::availableRamMiB();
+        const auto used = total > available ? total - available : 0;
+        append(sub, { { "kind", "memory.sample" },
+                      { "totalMiB", static_cast<double>(total) },
+                      { "availableMiB", static_cast<double>(available) },
+                      { "usedMiB", static_cast<double>(used) },
+                      { "usedPercent", total ? (static_cast<double>(used) * 100.0 / static_cast<double>(total)) : 0.0 } });
+    };
+    auto timer = new QTimer(&sub->context);
+    QObject::connect(timer, &QTimer::timeout, &sub->context, send);
+    timer->start(2000);
+    send();
     return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
 }
 
@@ -266,6 +290,9 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
     api.registerOperation({ "instance.console.subscribe", "Subscribe to launch state and console output, including future launches.",
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeConsole(p); });
+    api.registerOperation({ "runtime.memory.subscribe", "Push current physical memory usage in MiB.",
+        schema({}), "streams" },
+        [this](const QJsonObject&, UserInteraction&) { return subscribeMemory({}); });
     api.registerOperation({ "instance.resources.subscribe", "Watch an instance's resource directories and push change events.", 
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeResources(p); });

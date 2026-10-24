@@ -28,6 +28,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import { launcher } from '../../../boot/launcher-api';
+import { waitForTask } from '../../composables/useTaskEvents';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: any; execute: Execute }>();
@@ -43,7 +44,6 @@ const stage = ref('');
 const logElement = ref<HTMLElement | null>(null);
 let subscriptionId = '';
 let unlistenStream: (() => void) | undefined;
-let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const text = computed(() => lines.value.join(''));
 const stateText = computed(() => running.value ? '客户端运行中' : state.value);
@@ -93,27 +93,20 @@ async function launch() {
       parameters: { instance: props.instance.id },
     });
     currentTaskId = String(task?.taskId || '');
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(async () => {
-      if (!task?.taskId) return;
-      try {
-        task = await props.execute('neo.task.status', { taskId: task.taskId });
-        stage.value = task?.status || task?.details || stage.value;
-        const total = Number(task?.totalProgress || task?.total || 0);
-        const current = Number(task?.progress || 0);
-        if (total > 0) progress.value = Math.max(0, Math.min(1, current / total));
-        if (task?.finished) {
-          launching.value = false;
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
-          if (task.state === 'succeeded') { progress.value = 1; stage.value = '游戏进程已启动'; running.value = true; }
-          else state.value = task.error || '启动失败';
-        }
-      } catch (exception) {
-        launching.value = false;
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
-        state.value = exception instanceof Error ? exception.message : String(exception);
-      }
-    }, 400);
+    const finished = await waitForTask(currentTaskId, snapshot => {
+      stage.value = snapshot?.status || snapshot?.details || stage.value;
+      const total = Number(snapshot?.totalProgress || snapshot?.total || 0);
+      const current = Number(snapshot?.progress || 0);
+      if (total > 0) progress.value = Math.max(0, Math.min(1, current / total));
+    });
+    launching.value = false;
+    if (finished?.state === 'succeeded') {
+      progress.value = 1;
+      stage.value = '游戏进程已启动';
+      running.value = true;
+    } else {
+      state.value = finished?.error || '启动失败';
+    }
   } catch (exception) {
     launching.value = false;
     state.value = exception instanceof Error ? exception.message : String(exception);
@@ -122,7 +115,6 @@ async function launch() {
 
 async function cancelLaunch() {
   launching.value = false;
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
   if (currentTaskId) {
     try { await props.execute('neo.task.cancel', { taskId: currentTaskId }); } catch { /* Task may already be terminal. */ }
   }
@@ -143,7 +135,6 @@ async function forceStop() {
 
 onMounted(() => { void connect(); });
 onBeforeUnmount(async () => {
-  if (pollTimer) clearInterval(pollTimer);
   unlistenStream?.();
   if (subscriptionId) {
     try { await props.execute('event.unsubscribe', { subscriptionId }); } catch { /* Already gone. */ }

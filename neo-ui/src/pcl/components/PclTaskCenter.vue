@@ -41,9 +41,10 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import PclButton from './PclButton.vue';
 import PclIcon from './PclIcon.vue';
+import { launcher } from '../../boot/launcher-api';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -52,7 +53,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
 const tasks = ref<any[]>([]);
 const loading = ref(false);
-let timer: ReturnType<typeof setInterval> | undefined;
+let unlistenTaskEvents: (() => void) | undefined;
 
 async function load() {
   if (!props.modelValue) return;
@@ -66,6 +67,13 @@ async function load() {
     loading.value = false;
   }
 }
+function applyTaskEvent(task: any) {
+  if (!task?.taskId) return;
+  const index = tasks.value.findIndex(entry => entry.taskId === task.taskId);
+  if (index >= 0) tasks.value[index] = { ...tasks.value[index], ...task };
+  else tasks.value.unshift(task);
+}
+
 async function cancel(task: any) {
   try {
     await props.execute('neo.task.cancel', { taskId: task.taskId });
@@ -115,13 +123,18 @@ function stateLabel(state: string) {
 }
 
 watch(() => props.modelValue, value => {
-  if (timer) clearInterval(timer);
-  timer = undefined;
-  if (!value) return;
-  void load();
-  timer = setInterval(() => { void load(); }, 1000);
+  if (value) void load();
 }, { immediate: true });
-onUnmounted(() => { if (timer) clearInterval(timer); });
+onMounted(async () => {
+  try {
+    unlistenTaskEvents = await launcher.onEvent((event: any) => {
+      if (event?.kind === 'task' && props.modelValue) applyTaskEvent(event.data || event);
+    });
+  } catch {
+    // The manual refresh button remains available.
+  }
+});
+onUnmounted(() => unlistenTaskEvents?.());
 </script>
 
 <style scoped>

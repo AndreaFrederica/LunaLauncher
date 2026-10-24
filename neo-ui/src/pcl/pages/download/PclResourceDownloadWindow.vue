@@ -114,6 +114,7 @@ import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
 import PclWindowTitleBar from '../../components/PclWindowTitleBar.vue';
 import { launcher } from '../../../boot/launcher-api';
+import { waitForTask } from '../../composables/useTaskEvents';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const props = defineProps<{ instanceId: string; instanceName?: string; kind: string }>();
@@ -339,6 +340,7 @@ async function confirmDownload() {
   const entries = confirmEntries.value.filter(entry => entry.checked && entry.versionId);
   confirmOpen.value = false;
   downloading.value = true;
+  const waits: Promise<void>[] = [];
   for (const entry of entries) {
     entry.state = 'queued';
     entry.status = '等待下载';
@@ -361,12 +363,26 @@ async function confirmDownload() {
       entry.state = task?.state || 'running';
       const selectedEntry = selected[entry.projectId];
       if (selectedEntry) { selectedEntry.taskId = entry.taskId; selectedEntry.state = entry.state; }
+      if (entry.taskId) {
+        waits.push(waitForTask(entry.taskId, snapshot => {
+          entry.state = String(snapshot?.state || entry.state);
+          entry.status = String(snapshot?.status || entry.status);
+          const total = Number(snapshot?.totalProgress || snapshot?.total || 0), current = Number(snapshot?.progress || 0);
+          entry.progress = total > 0 ? current / total : entry.progress;
+        }).then(snapshot => {
+          entry.state = String(snapshot?.state || entry.state);
+          entry.status = snapshot?.state === 'succeeded' ? '下载完成' : (snapshot?.error || '下载失败');
+        }).catch(exception => {
+          entry.state = 'failed';
+          entry.status = exception instanceof Error ? exception.message : String(exception);
+        }));
+      }
     } catch (exception) {
       entry.state = 'failed';
       entry.status = exception instanceof Error ? exception.message : String(exception);
     }
   }
-  await poll();
+  await Promise.all(waits);
   downloading.value = false;
 }
 
@@ -386,32 +402,6 @@ async function openDetails(project: any) {
 
 function openExternal(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-async function poll() {
-  let pending = true;
-  while (pending) {
-    pending = false;
-    for (const entry of selectedList.value) {
-      if (!entry.taskId || ['succeeded', 'failed', 'cancelled'].includes(entry.state)) continue;
-      try {
-        const task: any = await execute('neo.task.status', { taskId: entry.taskId });
-        entry.state = String(task?.state || entry.state);
-        entry.status = String(task?.status || entry.status);
-        const total = Number(task?.totalProgress || task?.total || 0), current = Number(task?.progress || 0);
-        entry.progress = total > 0 ? current / total : entry.progress;
-        if (task?.finished) {
-          if (task.state === 'succeeded') entry.status = '下载完成';
-          else entry.status = task.error || '下载失败';
-        } else pending = true;
-      } catch (exception) {
-        entry.state = 'failed';
-        entry.status = exception instanceof Error ? exception.message : String(exception);
-      }
-    }
-    if (pending) await new Promise(resolve => setTimeout(resolve, 450));
-  }
-  downloading.value = false;
 }
 
 async function closeWindow() {

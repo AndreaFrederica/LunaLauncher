@@ -328,7 +328,6 @@ const backendMode = ref<'host' | 'guest'>('host');
 const playerName = ref('Player');
 const roomCode = ref('');
 const backendLog = ref('');
-let backendTimer: ReturnType<typeof setInterval> | undefined;
 const current = computed(() => items.find(item => item.id === section.value) || items[0]);
 const selectedBackend = computed(() => backends.value.find(item => item.id === backend.value) || null);
 const backendState = computed(() => backendStatus.value?.state || null);
@@ -558,13 +557,7 @@ onMounted(() => {
   playerName.value = readPreference('luna-multiplayer-player', 'Player') || 'Player';
   void loadTasks();
   void loadBackends();
-  backendTimer = setInterval(() => {
-    if (section.value === 'multiplayer' && !backendBusy.value) void refreshBackend();
-  }, 5000);
-});
-
-onUnmounted(() => {
-  if (backendTimer) clearInterval(backendTimer);
+  void refreshBackend();
 });
 </script>
 

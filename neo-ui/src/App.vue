@@ -218,7 +218,7 @@ async function launch(i:any, accountId?:string, serverAddress?:string, restoreSe
  if(launchUiResetTimer)clearTimeout(launchUiResetTimer);
   launchProgress.value=0;launchTargetProgress.value=0;launchStage.value='初始化';launchSpeed.value=0;launchError.value='';launchDetails.value='';launchChildren.value=[];setLaunchState('launching');
  busy.value=true;launchingId=i.id;preparingLaunch=true;
- await openInstance(i,true);if(isPclShell.value)page.value='instances';logMode.value='live';await connectConsole(i);preparingLaunch=false;
+ await openInstance(i,true,true);if(isPclShell.value)page.value='instances';logMode.value='live';await connectConsole(i);preparingLaunch=false;
  if(!consoleSubscription){busy.value=false;launchingId='';setLaunchState('failed');launchError.value='无法连接实例控制台';resetLaunchUiSoon();return;}
  busy.value=true;launchInFlight=true;error.value='';notice.value='';
  try{
@@ -391,7 +391,7 @@ async function selectPclInstance(i:any){
   if(selected.value?.id===i.id){instanceDetails.value=info;notes.value=info.notes || '';}
  }).catch(()=>{/* The launch page can render from instance.list alone. */});
 }
-async function openInstance(i:any,forceRead=false){
+async function openInstance(i:any,forceRead=false,forLaunch=false){
  if(preparingLaunch&&!forceRead)return;
  if(busy.value&&!forceRead)return;
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});
@@ -399,9 +399,9 @@ async function openInstance(i:any,forceRead=false){
   const old=sessions.get(selected.value?.id);if(old){old.lines=consoleLines.value;old.state=consoleState.value;}
   const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||'未连接';logFile.value='';fileLog.value='';logFiles.value=[];
  }
-selected.value=i;rememberInstance(i);page.value='manage';if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState('launch');notes.value='';error.value='';instanceDetails.value=null;
+selected.value=i;rememberInstance(i);if(!forLaunch){page.value='manage';if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState('launch');}notes.value='';error.value='';instanceDetails.value=null;
  try{const info=await call('instance.info',{instance:i.id});instanceDetails.value=info;notes.value=info.notes || '';}catch(e){error.value=message(e);}
- await loadResources();await loadComponents();await loadLogFiles();
+ if(!forLaunch){await loadResources();await loadComponents();await loadLogFiles();}
 }
 async function changeIcon(){const path=await ask('图标文件完整路径（PNG / ICO 等）');if(path===null||!path.trim())return;await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});icons.value[selected.value.id]=icon.dataUrl;}}
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}

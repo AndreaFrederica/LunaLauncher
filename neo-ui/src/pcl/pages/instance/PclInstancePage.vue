@@ -45,8 +45,14 @@
             </div>
           </div>
 
+          <PclInstanceLiveLog
+            v-if="section === 'live'"
+            :instance="instance"
+            :execute="execute"
+          />
+
           <PclInstanceOverview
-            v-if="section === 'overall'"
+            v-else-if="section === 'overall'"
             :instance="instance"
             :details="details"
             :icon="icon"
@@ -175,6 +181,7 @@ import PclInstanceServers from './PclInstanceServers.vue';
 import PclInstanceCustomUi from './PclInstanceCustomUi.vue';
 import PclServerPanel from './PclServerPanel.vue';
 import PclInstanceExtras from './PclInstanceExtras.vue';
+import PclInstanceLiveLog from './PclInstanceLiveLog.vue';
 import PclSetupPage from '../settings/PclSetupPage.vue';
 import fallback from '../../../xmcl-port/assets/minecraft.webp';
 
@@ -192,6 +199,7 @@ const navGroups = [
     label: '游戏本体',
     items: [
       { id: 'overall', label: '概览', icon: 'layout-dashboard', description: '查看实例信息、备注和常用操作。' },
+      { id: 'live', label: '启动日志', icon: 'scroll-text', description: '启动游戏并查看实时控制台日志。' },
       { id: 'memory', label: '内存', icon: 'gauge', description: '查看系统内存并调整此实例的内存分配。' },
       { id: 'install', label: '修改', icon: 'download', description: '安装或更新 Minecraft 与加载器组件。' },
       { id: 'export', label: '导出', icon: 'file-archive', description: '导出实例或制作整合包。' },

@@ -705,8 +705,10 @@ bool LaunchController::canAbort() const
 
 QList<Task*> LaunchController::getSubTasks() const
 {
-    if (m_launcher) return { m_launcher };
-    return {};
+    QList<Task*> tasks;
+    if (m_authTask) tasks.append(m_authTask);
+    if (m_launcher) tasks.append(m_launcher);
+    return tasks;
 }
 
 bool LaunchController::abort()

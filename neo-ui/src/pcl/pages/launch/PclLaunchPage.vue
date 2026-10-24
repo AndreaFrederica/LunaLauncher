@@ -230,7 +230,6 @@
     </Transition>
 
     <PclLaunchProgressDialog
-      v-if="preferences.pclNavLayout === 'mmc-classic'"
       v-model="launchDialogOpen"
       :state="launchState"
       :progress="launchProgress"

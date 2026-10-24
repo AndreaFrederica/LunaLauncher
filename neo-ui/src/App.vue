@@ -340,7 +340,7 @@ const readOnlyOperations=new Set([
  'language.list','launcher.update.status','component.catalog','component.versions'
 ]);
 async function catalogExecute(op:string,p:Record<string,unknown>){
- if(busy.value && !readOnlyOperations.has(op)){taskCenterOpen.value=true;throw new Error('当前任务仍在执行，请先在任务中心查看或取消任务。');}
+ if(busy.value && !readOnlyOperations.has(op)){throw new Error('当前任务仍在执行，请等待它完成。');}
  if(readOnlyOperations.has(op))return call(op,p);
  busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;if(op==='account.login'){deviceShown.value=false;device.value=null;}}
 }
@@ -365,7 +365,7 @@ async function navigate(id:string){
 function openPclCreate(uid?:string,version?:string){createMode.value='vanilla';creation.value={...creation.value,name:creation.value.name || '新建实例',version:uid==='net.minecraft'?(version || ''):creation.value.version,loader:uid==='net.fabricmc.fabric-loader'?'fabric':uid==='net.minecraftforge'?'forge':uid==='net.neoforged'?'neoforge':uid==='org.quiltmc.quilt-loader'?'quilt':creation.value.loader,loaderVersion:uid && uid!=='net.minecraft'?(version || ''):creation.value.loaderVersion};page.value='create';}
 function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
 function openSearchResult(instance:any){searchShown.value=false;void openInstance(instance);}
-function xmclTab(tab:string){if(busy.value){taskCenterOpen.value=true;return;}if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
+function xmclTab(tab:string){if(busy.value)return;if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
 async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function onPclInstalled(result:any){

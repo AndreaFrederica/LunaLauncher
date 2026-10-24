@@ -3,20 +3,13 @@
     <PclCard title="启动与实时日志">
       <template #actions>
         <PclButton size="sm" icon="trash-2" variant="ghost" :disabled="!lines.length" @click="lines = []">清空</PclButton>
-        <PclButton
-          v-if="launching"
-          size="sm"
-          variant="red"
-          icon="x"
-          @click="cancelLaunch"
-        >取消启动</PclButton>
-        <PclButton v-else size="sm" variant="highlight" icon="play" :disabled="instance?.running" @click="launch">
-          {{ instance?.running ? '正在运行' : '启动游戏' }}
-        </PclButton>
+        <PclButton v-if="running" size="sm" variant="red" icon="power" @click="forceStop">强制停止</PclButton>
+        <PclButton v-else-if="launching" size="sm" variant="red" icon="x" @click="cancelLaunch">取消启动</PclButton>
+        <PclButton v-else size="sm" variant="highlight" icon="play" @click="launch">启动游戏</PclButton>
       </template>
 
       <div class="pcl-live-log__status">
-        <span class="pcl-live-log__dot" :class="{ connected, running: instance?.running, busy: launching }" />
+        <span class="pcl-live-log__dot" :class="{ connected, running, busy: launching }" />
         <strong>{{ stateText }}</strong>
         <span v-if="stage">{{ stage }}</span>
         <span v-if="progress > 0" class="pcl-live-log__progress-text">{{ Math.round(progress * 100) }}%</span>
@@ -26,7 +19,6 @@
       </div>
 
       <pre ref="logElement" class="pcl-live-log__console" aria-live="polite">{{ text || '连接实例控制台后，启动日志会显示在这里。' }}</pre>
-      <PclHint theme="blue">此页面会订阅实例控制台，启动和运行期间的输出会实时追加；关闭窗口后订阅会自动释放。</PclHint>
     </PclCard>
   </div>
 </template>
@@ -35,7 +27,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
-import PclHint from '../../components/PclHint.vue';
 import { launcher } from '../../../boot/launcher-api';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
@@ -45,6 +36,8 @@ const lines = ref<string[]>([]);
 const state = ref('正在连接控制台…');
 const connected = ref(false);
 const launching = ref(false);
+const running = ref(Boolean(props.instance?.running));
+let currentTaskId = '';
 const progress = ref(0);
 const stage = ref('');
 const logElement = ref<HTMLElement | null>(null);
@@ -53,7 +46,7 @@ let unlistenStream: (() => void) | undefined;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const text = computed(() => lines.value.join(''));
-const stateText = computed(() => props.instance?.running ? '客户端运行中' : state.value);
+const stateText = computed(() => running.value ? '客户端运行中' : state.value);
 
 async function append(value: string) {
   lines.value.push(value);
@@ -76,6 +69,7 @@ async function connect() {
         else if (event.kind === 'console.data') void append(new TextDecoder().decode(Uint8Array.from(atob(event.data), c => c.charCodeAt(0))));
         else if (event.kind === 'instance.state') {
           state.value = event.running ? '客户端运行中' : '客户端已停止';
+          running.value = Boolean(event.running);
           if (!event.running) launching.value = false;
         } else if (event.kind === 'console.reset') {
           state.value = event.available ? '控制台已连接' : '等待启动';
@@ -98,6 +92,7 @@ async function launch() {
       priority: 'high',
       parameters: { instance: props.instance.id },
     });
+    currentTaskId = String(task?.taskId || '');
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       if (!task?.taskId) return;
@@ -110,7 +105,7 @@ async function launch() {
         if (task?.finished) {
           launching.value = false;
           if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
-          if (task.state === 'succeeded') { progress.value = 1; stage.value = '游戏进程已启动'; }
+          if (task.state === 'succeeded') { progress.value = 1; stage.value = '游戏进程已启动'; running.value = true; }
           else state.value = task.error || '启动失败';
         }
       } catch (exception) {
@@ -128,7 +123,22 @@ async function launch() {
 async function cancelLaunch() {
   launching.value = false;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
+  if (currentTaskId) {
+    try { await props.execute('neo.task.cancel', { taskId: currentTaskId }); } catch { /* Task may already be terminal. */ }
+  }
   stage.value = '已取消启动';
+}
+
+async function forceStop() {
+  if (!window.confirm('强制停止会立即结束游戏进程，未保存的游戏进度可能丢失。继续吗？')) return;
+  try {
+    await props.execute('instance.kill', { instance: props.instance.id });
+    running.value = false;
+    launching.value = false;
+    state.value = '客户端已强制停止';
+  } catch (exception) {
+    state.value = exception instanceof Error ? exception.message : String(exception);
+  }
 }
 
 onMounted(() => { void connect(); });
@@ -150,6 +160,6 @@ onBeforeUnmount(async () => {
 .pcl-live-log__dot.busy { background: var(--pcl-c2); animation: pcl-live-pulse 1s infinite; }
 .pcl-live-log__progress-text { margin-left: auto; color: var(--pcl-c3); font-size: calc(11px * var(--pcl-font-scale, 1)); }
 .pcl-live-log__progress { margin: 9px 0; }
-.pcl-live-log__console { min-height: 340px; max-height: 54vh; margin: 10px 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--pcl-border); border-radius: 4px; background: var(--pcl-c8); color: var(--pcl-text); font: 11px/1.55 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pcl-live-log__console { height: calc(100vh - 265px); min-height: 180px; margin: 8px 0 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--pcl-border); border-radius: 4px; background: var(--pcl-c8); color: var(--pcl-text); font: 11px/1.55 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 @keyframes pcl-live-pulse { 50% { opacity: .35; } }
 </style>

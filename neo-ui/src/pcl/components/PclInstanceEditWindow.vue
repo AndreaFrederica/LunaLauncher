@@ -12,7 +12,7 @@
 
     <div class="pcl-edit-window__body">
       <PclSetupPage
-        :settings="[]"
+        :settings="settings"
         :busy="false"
         :scope="{ scope: 'instance', instance: instance.id }"
         :execute="execute"
@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, reactive } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import PclIcon from './PclIcon.vue';
 import PclSetupPage from '../pages/settings/PclSetupPage.vue';
 
@@ -39,6 +39,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ close: []; changed: [] }>();
+const settings = ref<any[]>([]);
 
 const position = reactive({ x: 150 + Math.max(0, props.index) * 34, y: 82 + Math.max(0, props.index) * 28 });
 
@@ -64,6 +65,14 @@ function stopDrag() {
   window.removeEventListener('pointerup', stopDrag);
 }
 onBeforeUnmount(stopDrag);
+onMounted(async () => {
+  try {
+    const result = await props.execute('settings.list', { scope: 'instance', instance: props.instance.id });
+    settings.value = Array.isArray(result) ? result : [];
+  } catch {
+    settings.value = [];
+  }
+});
 </script>
 
 <style scoped>

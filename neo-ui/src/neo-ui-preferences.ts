@@ -6,6 +6,7 @@ export type NeoBackground = 'solid' | 'gradient';
 export type NeoShell = 'neo' | 'pcl';
 export type PclFont = 'system' | 'yahei' | 'dengxian' | 'simsun';
 export type PclStylePreset = 'luna-neo' | 'pcl';
+export type PclLoadingAnimation = 'luna-spinner' | 'pcl-pickaxe' | 'pcl-bar';
 
 export interface PclHomeCard {
   id: string;
@@ -27,6 +28,10 @@ export interface NeoUiPreferences {
   pclStylePreset: PclStylePreset;
   /** Base font size in px for the PCL shell. */
   pclBaseFontSize: number;
+  /** Loading indicator used by PCL Style pages and dialogs. */
+  pclLoadingAnimation: PclLoadingAnimation;
+  /** Refresh remote resource catalogs when their page is opened. */
+  pclAutoRefreshOnPageOpen: boolean;
   /** PCL launch-page navigation layout. */
   pclNavLayout: 'pcl' | 'mmc-classic';
   pclClassicSide: 'left' | 'right';
@@ -42,6 +47,8 @@ export interface NeoUiPreferences {
   pclEditCurrentInWindow: boolean;
   /** Clear accumulated launch console output when a new launch starts. */
   pclClearLaunchLogOnStart: boolean;
+  /** Keep startup log views pinned to the newest output. */
+  pclLaunchLogAutoScroll: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -77,30 +84,32 @@ export interface NeoUiPreferences {
 
 const storageKey = 'luna-neo-ui.preferences';
 const defaults: NeoUiPreferences = {
-  // Keep the established Neo UI shell as the default. The PCL-CE inspired
-  // shell is an additional opt-in appearance from the settings panel.
-  shell: 'neo',
+  // The PCL-CE inspired shell is now the default appearance.
+  shell: 'pcl',
   theme: 'dark',
   accent: '#818cf8',
   density: 'comfortable',
   background: 'gradient',
   animations: true,
   pclFont: 'system',
-  pclStylePreset: 'luna-neo',
-  pclBaseFontSize: 14,
-  pclNavLayout: 'mmc-classic',
+  pclStylePreset: 'pcl',
+  pclLoadingAnimation: 'pcl-pickaxe',
+  pclAutoRefreshOnPageOpen: true,
+  pclBaseFontSize: 13,
+  pclNavLayout: 'pcl',
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
-  pclLaunchAnimation: false,
-  pclFloatTasks: false,
-  pclFloatLog: false,
-  pclFloatRefresh: false,
-  pclFloatMusic: false,
+  pclLaunchAnimation: true,
+  pclFloatTasks: true,
+  pclFloatLog: true,
+  pclFloatRefresh: true,
+  pclFloatMusic: true,
   pclEditCurrentInWindow: true,
   pclClearLaunchLogOnStart: true,
+  pclLaunchLogAutoScroll: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
-  pclAccentColor: '#d65c9a',
+  pclAccentColor: '#2a80e3',
   pclBackgroundImage: '',
   pclBackgroundImageName: '',
   pclBackgroundOpacity: 0.45,
@@ -110,19 +119,19 @@ const defaults: NeoUiPreferences = {
   pclHomeCards: [
     { id: 'welcome', title: '欢迎回来', content: '在 设置 → 个性化 → 主页卡片 中编辑这张卡片。' },
   ],
-  pclHomeShowInstances: true,
-  pclHomeShowServers: true,
+  pclHomeShowInstances: false,
+  pclHomeShowServers: false,
   pclHomeSwitchOnQuickLaunch: false,
   pclHomeInstanceLayout: 'grid',
-  pclHomeInstanceColumns: 'auto',
+  pclHomeInstanceColumns: 2,
   pclHomeInstanceRows: 4,
   pclHomeInstanceWidth: 100,
-  pclHomeInstanceFontSize: 14,
-  pclHomeInstanceTextPosition: 'below',
-  pclHomeInstanceGrouping: 'grouped',
-  pclHomeInstanceSort: 'name',
+  pclHomeInstanceFontSize: 13,
+  pclHomeInstanceTextPosition: 'beside',
+  pclHomeInstanceGrouping: 'flat',
+  pclHomeInstanceSort: 'manual',
   pclHomeInstanceOrder: [],
-  pclHomeCardOrder: ['instances', 'log', 'hint', 'custom:welcome', 'servers'],
+  pclHomeCardOrder: ['hint', 'custom:welcome', 'log', 'instances', 'servers'],
   selectedInstanceId: '',
 };
 
@@ -133,12 +142,15 @@ export const pclStylePresetLabels: Record<PclStylePreset, string> = {
 
 const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
   'luna-neo': {
+    pclLoadingAnimation: 'luna-spinner',
+    pclAutoRefreshOnPageOpen: true,
     pclFont: 'system',
     pclBaseFontSize: 14,
     pclNavLayout: 'mmc-classic',
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
+    pclLaunchLogAutoScroll: true,
       pclFloatTasks: false,
     pclFloatLog: false,
     pclFloatRefresh: false,
@@ -160,12 +172,15 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclHomeCardOrder: ['instances', 'log', 'hint', 'custom:welcome', 'servers'],
   },
   pcl: {
+    pclLoadingAnimation: 'pcl-pickaxe',
+    pclAutoRefreshOnPageOpen: true,
     pclFont: 'system',
     pclBaseFontSize: 13,
     pclNavLayout: 'pcl',
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: true,
+    pclLaunchLogAutoScroll: true,
     pclFloatTasks: true,
     pclFloatLog: true,
     pclFloatRefresh: true,
@@ -207,6 +222,15 @@ function load(): NeoUiPreferences {
   try {
     const value = JSON.parse(localStorage.getItem(storageKey) || '{}');
     const merged = { ...defaults, ...value };
+    if (!['luna-spinner', 'pcl-pickaxe', 'pcl-bar'].includes(merged.pclLoadingAnimation)) {
+      merged.pclLoadingAnimation = defaults.pclLoadingAnimation;
+    }
+    if (typeof merged.pclAutoRefreshOnPageOpen !== 'boolean') {
+      merged.pclAutoRefreshOnPageOpen = defaults.pclAutoRefreshOnPageOpen;
+    }
+    if (typeof merged.pclLaunchLogAutoScroll !== 'boolean') {
+      merged.pclLaunchLogAutoScroll = defaults.pclLaunchLogAutoScroll;
+    }
 
     merged.pclHomeCardOrder = Array.isArray(merged.pclHomeCardOrder)
       ? merged.pclHomeCardOrder.map(String).filter(Boolean)

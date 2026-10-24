@@ -68,6 +68,20 @@
         </div>
         <span class="pcl-form-row__hint">关闭后立即切换</span>
       </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">加载动画</span>
+        <div class="pcl-form-row__control">
+          <PclSelect v-model="preferences.pclLoadingAnimation" :options="loadingAnimationOptions" />
+        </div>
+        <span class="pcl-form-row__hint">版本列表、资源列表、Java 扫描和任务加载都会使用</span>
+      </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">页面进入时刷新</span>
+        <div class="pcl-form-row__control">
+          <PclCheckbox v-model="preferences.pclAutoRefreshOnPageOpen" label="自动加载资源目录最新数据" />
+        </div>
+        <span class="pcl-form-row__hint">打开模组、整合包、数据包、资源包和光影包页面时生效</span>
+      </div>
 
       <div class="pcl-appearance-preview" :class="{ light: preferences.theme === 'light' }">
         <div class="pcl-appearance-preview__bar">
@@ -262,6 +276,7 @@
         <PclCheckbox v-model="preferences.pclTitleBadge" label="显示 NEOUI 副标题" />
         <PclCheckbox v-model="preferences.pclLaunchAnimation" label="启用 PCL 启动过渡动画" />
         <PclCheckbox v-model="preferences.pclClearLaunchLogOnStart" label="每次启动时清除历史启动日志" />
+        <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" label="启动日志自动滚动到底部" />
         <PclCheckbox v-model="preferences.pclEditCurrentInWindow" label="当前实例也用独立编辑窗口" />
       </div>
       <PclHint theme="blue">只修改 PCL 外观顶部标题栏，不影响窗口按钮、导航和内容区。</PclHint>
@@ -463,6 +478,11 @@ const backgroundOptions = [
   { label: '渐变背景', value: 'gradient' },
   { label: '纯色背景', value: 'solid' },
 ];
+const loadingAnimationOptions = [
+  { label: 'Luna 转圈', value: 'luna-spinner' },
+  { label: 'PCL 镐子', value: 'pcl-pickaxe' },
+  { label: '横向加载条', value: 'pcl-bar' },
+];
 const instanceWidthOptions = [
   { label: '60%', value: 60 },
   { label: '70%', value: 70 },
@@ -550,12 +570,15 @@ function reset() {
     animations: true,
     pclFont: 'system',
     pclStylePreset: 'luna-neo',
+    pclLoadingAnimation: 'luna-spinner',
+    pclAutoRefreshOnPageOpen: true,
     pclBaseFontSize: 14,
     pclNavLayout: 'mmc-classic',
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
     pclClearLaunchLogOnStart: true,
+    pclLaunchLogAutoScroll: true,
     pclEditCurrentInWindow: true,
     pclFloatTasks: false,
     pclFloatLog: false,

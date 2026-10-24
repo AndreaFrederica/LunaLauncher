@@ -6,7 +6,7 @@
           <PclAccountAvatar v-if="account?.profile?.skin?.url" :src="account.profile.skin.url" :name="account.profileName || account.displayName" />
           <PclIcon v-else name="user" :size="18" />
         </span>
-        <span class="pcl-classic-nav__account-copy"><strong>{{ account?.profileName || account?.displayName || '未选择账户' }}</strong><small>{{ account?.type || '点击选择账户' }}</small></span>
+        <span class="pcl-classic-nav__account-copy"><strong>{{ account?.profileName || account?.displayName || '未选择账户' }}</strong><small>{{ accountServiceLabel(account) }}</small></span>
         <PclIcon name="chevron-left" :size="12" class="pcl-classic-nav__account-chevron" :class="{ open: accountMenu }" />
       </button>
       <div v-if="accountMenu" class="pcl-classic-nav__account-menu">
@@ -15,7 +15,7 @@
             <PclAccountAvatar v-if="item.profile?.skin?.url" :src="item.profile.skin.url" :name="item.profileName || item.displayName" />
             <PclIcon v-else name="user" :size="14" />
           </span>
-          <span><strong>{{ item.profileName || item.displayName || '未命名账户' }}</strong><small>{{ item.type || '账户' }}</small></span>
+          <span><strong>{{ item.profileName || item.displayName || '未命名账户' }}</strong><small>{{ accountServiceLabel(item) }}</small></span>
           <PclIcon v-if="accountKey(item) === accountId" name="circle-check" :size="14" />
         </button>
         <div v-if="!accounts.length" class="pcl-classic-nav__empty">没有可用账户</div>
@@ -108,6 +108,19 @@ function accountKey(value: any) {
 function chooseAccount(value: any) {
   accountMenu.value = false;
   emit('account-change', accountKey(value));
+}
+
+function accountServiceLabel(account: any) {
+  if (!account) return '点击选择账户';
+  const type = String(account.type || '').toLowerCase();
+  if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft';
+  if (type.includes('ygg')) {
+    return String(account.yggdrasil?.displayName || account.yggdrasil?.sourceName || account.authServer?.displayName || account.authServerName || 'Yggdrasil');
+  }
+  if (type.includes('unified')) {
+    return String(account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServer?.displayName || 'UnifiedPass');
+  }
+  return String(account.type || '离线账户');
 }
 
 const version = computed(() => props.instance?.runtime?.minecraftVersion || props.instance?.runtime?.minecraft || props.instance?.minecraftVersion || 'Minecraft');

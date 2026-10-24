@@ -1,8 +1,9 @@
 <template>
-  <div class="pcl-catalog">
+  <div ref="catalogRoot" class="pcl-catalog">
     <div class="pcl-catalog-toolbar">
-      <PclSelect v-model="provider" :options="providerOptions" :disabled="busy" @update:model-value="reset" />
+      <PclSelect v-model="provider" :options="providerOptions" :disabled="busy" @update:model-value="changeProvider" />
       <PclInput v-model="query" placeholder="搜索项目" @enter="search(0)" />
+      <PclInput v-if="packs && provider === 'legacy-ftb'" v-model="privateCode" placeholder="Legacy FTB 私有码（可选）" @enter="search(0)" />
       <PclButton variant="highlight" icon="search" :disabled="busy" @click="search(0)">搜索</PclButton>
     </div>
     <div v-if="!packs" class="pcl-catalog-filters">
@@ -17,7 +18,7 @@
       <span>{{ error }}</span>
       <button type="button" @click="error = ''">关闭</button>
     </div>
-    <div v-if="busy || detailLoading || installing" class="pcl-catalog-loading"><span /></div>
+    <div v-if="busy || detailLoading || installing" class="pcl-catalog-loading"><PclLoading inline /></div>
 
     <template v-if="project">
       <button class="pcl-catalog-back" type="button" @click="project = null">
@@ -106,38 +107,70 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
+import PclLoading from '../../components/PclLoading.vue';
 type Execute=(op:string,p?:Record<string,unknown>)=>Promise<any>;
-const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftVersion?:string;loader?:string;busy:boolean;execute:Execute;defaultProvider?:string;tag?:string}>();
-const emit=defineEmits<{installed:[]; 'install-start':[info:any]; 'install-progress':[task:any]; 'install-done':[info:any]}>();
+const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftVersion?:string;loader?:string;busy:boolean;execute:Execute;defaultProvider?:string;tag?:string;autoRefresh?:boolean}>();
+const emit=defineEmits<{installed:[result:any]; 'install-start':[info:any]; 'install-progress':[task:any]; 'install-done':[info:any]}>();
 const providers = ref<string[]>(props.packs ? ['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb'] : ['modrinth','curseforge']);
-const provider=ref(props.defaultProvider||'modrinth'),query=ref(''),results=ref<any[]>([]),project=ref<any>(null),versions=ref<any[]>([]),version=ref(''),error=ref(''),gameVersion=ref(props.minecraftVersion||''),loader=ref(props.loader||''),sort=ref('relevance'),optional=ref(false),instanceName=ref(''),offset=ref(0),searched=ref(false),detailLoading=ref(false),installing=ref(false),projectTab=ref<'overview'|'versions'>('overview'),favorite=ref(false);
+const providerCatalog = ref<any[]>([]);
+const catalogRoot = ref<HTMLElement | null>(null);
+const provider=ref(props.defaultProvider||'modrinth'),query=ref(''),privateCode=ref(''),results=ref<any[]>([]),project=ref<any>(null),versions=ref<any[]>([]),version=ref(''),error=ref(''),gameVersion=ref(props.minecraftVersion||''),loader=ref(props.loader||''),sort=ref('relevance'),optional=ref(false),instanceName=ref(''),offset=ref(0),searched=ref(false),detailLoading=ref(false),installing=ref(false),projectTab=ref<'overview'|'versions'>('overview'),favorite=ref(false);
 watch(()=>[props.instance,props.kind,props.packs],reset);watch(()=>props.defaultProvider,v=>{if(v){provider.value=v;reset();}});watch(()=>[props.minecraftVersion,props.loader],()=>{gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';});
 function providerLabel(v:string){return ({modrinth:'Modrinth',curseforge:'CurseForge',atlauncher:'ATLauncher',ftb:'FTB',technic:'Technic','legacy-ftb':'Legacy FTB',hangar:'Hangar'} as Record<string,string>)[v]||(v.startsWith('js:')?`JS · ${v.slice(3)}`:v);}
 function reset(){results.value=[];project.value=null;versions.value=[];version.value='';searched.value=false;error.value='';offset.value=0;detailLoading.value=false;projectTab.value='overview';gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';}
-function resetFilters(){query.value='';gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';sort.value='relevance';reset();}
+function resetFilters(){query.value='';gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';sort.value=sortOptions.value[0]?.value || '';reset();}
 const providerOptions = computed(() => providers.value.map(value => ({ label: providerLabel(value), value })));
+const sortOptions = computed(() => {
+  if (props.packs) return [];
+  const methods = providerCatalog.value.find(entry => String(entry?.id) === provider.value)?.sorts;
+  if (Array.isArray(methods) && methods.length) return methods.map((entry: any) => ({ label: String(entry.name || entry.id), value: String(entry.id) }));
+  return [
+    { label: '相关度', value: 'relevance' },
+    { label: '下载量', value: 'downloads' },
+    { label: '最新', value: 'newest' },
+    { label: '最近更新', value: 'updated' },
+  ];
+});
+function changeProvider() {
+  if (!sortOptions.value.some(option => option.value === sort.value)) sort.value = sortOptions.value[0]?.value || '';
+  reset();
+}
 async function loadProviders() {
-  if (props.packs) return;
   try {
     const result: any = await props.execute('resource.providers');
     const list = Array.isArray(result) ? result : [];
-    const ids = list.filter((entry: any) => Array.isArray(entry.kinds) && entry.kinds.includes(props.kind || 'mods')).map((entry: any) => String(entry.id));
-    if (ids.length) {
-      providers.value = ids;
-      if (!ids.includes(provider.value)) provider.value = ids[0];
+    providerCatalog.value = list;
+    const ids = list
+      .filter((entry: any) => Array.isArray(entry.kinds) && entry.kinds.includes(props.packs ? 'modpacks' : (props.kind || 'mods')))
+      .map((entry: any) => String(entry.id));
+    const staticIds = props.packs ? ['modrinth', 'curseforge', 'atlauncher', 'ftb', 'technic', 'legacy-ftb'] : ['modrinth', 'curseforge'];
+    const availableIds = [...new Set([...staticIds, ...ids])];
+    if (availableIds.length) {
+      providers.value = availableIds;
+      if (!availableIds.includes(provider.value)) provider.value = availableIds[0];
+      if (!sortOptions.value.some(option => option.value === sort.value)) sort.value = sortOptions.value[0]?.value || '';
     }
   } catch {
     // Static providers remain available if dynamic discovery fails.
   }
 }
-onMounted(() => { void loadProviders(); });
+onMounted(async () => {
+  await loadProviders();
+  if (props.autoRefresh !== false && !props.busy) void search(0);
+});
+watch(() => props.busy, (busy, previous) => {
+  if (!busy && previous && props.autoRefresh !== false && !searched.value) void search(0);
+});
+watch(() => props.autoRefresh, enabled => {
+  if (enabled && !searched.value && !props.busy) void search(0);
+});
 watch(() => props.kind, () => { void loadProviders(); });
 
 const loaderOptions = [
@@ -147,14 +180,9 @@ const loaderOptions = [
   { label: 'Fabric', value: 'fabric' },
   { label: 'Quilt', value: 'quilt' },
 ];
-const sortOptions = [
-  { label: '相关度', value: 'relevance' },
-  { label: '下载量', value: 'downloads' },
-  { label: '最新', value: 'newest' },
-  { label: '最近更新', value: 'updated' },
-];
 const versionOptions = computed(() => versions.value.map(v => ({ label: versionLabel(v), value: v.versionId })));
 const renderedBody = computed(() => renderMarkdown(String(project.value?.body || project.value?.description || '暂无项目说明。')));
+const providerMeta = computed(() => providerCatalog.value.find(entry => String(entry?.id) === provider.value) || null);
 
 const allowedTags = new Set(['a', 'p', 'br', 'strong', 'em', 'del', 'code', 'pre', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'div', 'span']);
 const allowedAttributes: Record<string, string[]> = {
@@ -319,26 +347,41 @@ function sanitizeHtml(value: string) {
   return root.innerHTML;
 }
 
-function normalize(v:any){const id=String(v?.projectId||v?.slug||v?.id||'');const icon=v?.iconUrl||v?.icon||v?.logoUrl||'';return {...v,projectId:id,provider:provider.value,name:v?.displayName||v?.name||v?.title||id,description:v?.description||v?.synopsis||v?.summary||'',iconUrl:icon};}
-function params(){const p:any={provider:provider.value};if(!props.packs){p.kind=props.kind||'mods';if(gameVersion.value)p.minecraftVersion=gameVersion.value;if(loader.value)p.loaders=[loader.value];if(sort.value!=='relevance')p.sort=sort.value;}return p;}
+function normalize(v:any){const id=String(v?.projectId||v?.slug||v?.id||v?.url||'');const icon=v?.iconUrl||v?.icon||v?.logoUrl||v?.logo?.url||'';return {...v,projectId:id,provider:provider.value,name:v?.displayName||v?.name||v?.title||v?.display_name||id,description:v?.description||v?.synopsis||v?.summary||'',iconUrl:icon};}
+function params(){const p:any={provider:provider.value};if(props.packs){if(privateCode.value.trim())p.privateCode=privateCode.value.trim();}else{p.kind=props.kind||'mods';if(gameVersion.value)p.minecraftVersion=gameVersion.value;if(loader.value)p.loaders=[loader.value];if(sort.value!=='relevance')p.sort=sort.value;}return p;}
 function versionLabel(v:any){const game=Array.isArray(v.minecraftVersions)?v.minecraftVersions.slice(0,2).join(', '):(v.minecraftVersion||'');return `${v.name||v.version||v.versionId}${game?' · '+game:''}`;}
-async function search(start:number){if(props.busy)return;error.value='';project.value=null;try{const text=[query.value,props.tag&&props.tag!=='全部'?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:text,offset:start});const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;}catch(e){error.value=String(e);}}
+function scrollCatalogToTop() {
+  void nextTick(() => {
+    let node = catalogRoot.value?.parentElement as HTMLElement | null;
+    while (node && node !== document.body) {
+      const style = getComputedStyle(node);
+      if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+        node.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      node = node.parentElement;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+async function search(start:number){if(props.busy)return;error.value='';project.value=null;try{const text=[query.value,props.tag&&props.tag!=='全部'?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:text,offset:start});const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;scrollCatalogToTop();}catch(e){error.value=String(e);}}
 function favoriteKey(item:any){return `${provider.value}:${props.kind || 'modpack'}:${item.projectId}`;}
 function readFavorites():any[]{try{return JSON.parse(localStorage.getItem('luna-pcl-favorites') || '[]');}catch{return [];}}
 function writeFavorites(value:any[]){try{localStorage.setItem('luna-pcl-favorites',JSON.stringify(value.slice(-200)));}catch{/* storage unavailable in native webview */}}
 function toggleFavorite(){if(!project.value)return;const key=favoriteKey(project.value),all=readFavorites();if(favorite.value){writeFavorites(all.filter(item=>item.key!==key));favorite.value=false;}else{writeFavorites([...all.filter(item=>item.key!==key),{key,provider:provider.value,kind:props.kind,name:project.value.name,description:project.value.description,projectId:project.value.projectId,iconUrl:project.value.iconUrl}]);favorite.value=true;}}
-async function select(item:any){if(props.busy)return;error.value='';project.value=normalize(item);favorite.value=readFavorites().some(entry=>entry.key===favoriteKey(project.value));detailLoading.value=true;projectTab.value='overview';try{const detail=await props.execute(props.packs?'modpack.project':'resource.project',{...params(),projectId:item.projectId});project.value={...project.value,...normalize(detail)};const r=await props.execute(props.packs?'modpack.versions':'resource.versions',{...params(),projectId:item.projectId});versions.value=(Array.isArray(r)?r:(r?.versions||[])).sort((a:any,b:any)=>String(b.datePublished||b.created||'').localeCompare(String(a.datePublished||a.created||'')));version.value=versions.value[0]?.versionId||'';instanceName.value=item.name;}catch(e){error.value=String(e);}finally{detailLoading.value=false;}}
+async function select(item:any){if(props.busy)return;error.value='';versions.value=[];version.value='';project.value=normalize(item);favorite.value=readFavorites().some(entry=>entry.key===favoriteKey(project.value));detailLoading.value=true;projectTab.value='overview';try{const detail=await props.execute(props.packs?'modpack.project':'resource.project',{...params(),projectId:item.projectId});project.value={...project.value,...normalize(detail)};const r=await props.execute(props.packs?'modpack.versions':'resource.versions',{...params(),projectId:item.projectId});versions.value=(Array.isArray(r)?r:(r?.versions||[])).map((entry:any)=>({ ...entry, versionId:String(entry?.versionId||entry?.id||entry?.version||'') })).filter((entry:any)=>entry.versionId).sort((a:any,b:any)=>String(b.datePublished||b.created||b.date||'').localeCompare(String(a.datePublished||a.created||a.date||'')));version.value=versions.value[0]?.versionId||'';instanceName.value=item.name;}catch(e){error.value=String(e);}finally{detailLoading.value=false;}}
 async function install(){
   if(!project.value||!version.value)return;
   installing.value=true;error.value='';
   const info={title:props.packs?'正在安装整合包':'正在安装资源',name:props.packs?instanceName.value:project.value.name,kind:props.packs?'modpack':'resource'};
   emit('install-start',info);
   try{
+    let completedResult: any = null;
     if(props.packs){
       let task:any=await props.execute('neo.task.start',{
         operation:'modpack.install',
         priority:'high',
-        parameters:{provider:provider.value,projectId:project.value.projectId,versionId:version.value,name:instanceName.value,iconUrl:project.value.iconUrl},
+        parameters:{provider:provider.value,projectId:project.value.projectId,versionId:version.value,name:instanceName.value,...(privateCode.value.trim() ? { privateCode: privateCode.value.trim() } : {})},
       });
       while(task && !task.finished){
         emit('install-progress',task);
@@ -347,11 +390,16 @@ async function install(){
       }
       emit('install-progress',task);
       if(!task || task.state!=='succeeded')throw new Error(task?.error || '整合包安装失败');
+      completedResult = { id: task.createdInstanceId || '', name: instanceName.value };
     }else{
+      // The recursive task is only implemented by the built-in providers.
+      // Other providers still support direct version installation and must not
+      // be rejected just because the optional-dependency checkbox is enabled.
+      const recursive = ['modrinth', 'curseforge'].includes(provider.value) && providerMeta.value?.dependencyResolution !== false;
       let task:any=await props.execute('neo.task.start',{
-        operation:'resource.install-with-dependencies',
+        operation:recursive ? 'resource.install-with-dependencies' : 'resource.install-version',
         priority:'high',
-        parameters:{...params(),instance:props.instance,projectId:project.value.projectId,versionId:version.value,includeOptional:optional.value},
+        parameters:{...params(),instance:props.instance,projectId:project.value.projectId,versionId:version.value,...(recursive ? { includeOptional: optional.value } : {})},
       });
       while(task && !task.finished){
         emit('install-progress',task);
@@ -361,7 +409,7 @@ async function install(){
       emit('install-progress',task);
       if(!task || task.state!=='succeeded')throw new Error(task?.error || '资源及依赖安装失败');
     }
-    emit('installed');
+    emit('installed', completedResult);
   }catch(e){error.value=String(e);}
   finally{installing.value=false;emit('install-done',info);}
 }
@@ -396,24 +444,11 @@ async function install(){
 }
 
 .pcl-catalog-loading {
-  height: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
   margin: 8px 0 12px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--pcl-c6);
-}
-
-.pcl-catalog-loading span {
-  display: block;
-  width: 38%;
-  height: 100%;
-  background: var(--pcl-c3);
-  animation: pcl-catalog-load 1.15s ease-in-out infinite;
-}
-
-@keyframes pcl-catalog-load {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(300%); }
 }
 
 .pcl-catalog-error {

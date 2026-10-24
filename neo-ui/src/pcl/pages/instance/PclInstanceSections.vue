@@ -7,30 +7,31 @@
           <h2>安装</h2>
           <p>按 Luna 的组件顺序查看和调整当前实例的 Minecraft 与加载器。</p>
         </div>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">刷新</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">刷新当前页</PclButton>
       </div>
+      <PclHint v-if="componentError" theme="red" :closable="false">组件数据读取失败：{{ componentError }}</PclHint>
       <div class="pcl-install-list">
         <article v-for="item in installItems" :key="item.id" class="pcl-install-item" :class="{ expanded: expanded === item.id }">
           <button class="pcl-install-item__head" type="button" @click="expanded = expanded === item.id ? '' : item.id">
             <PclIcon :name="item.icon" :size="18" />
             <span class="pcl-install-item__name">{{ item.label }}</span>
-            <span class="pcl-install-item__version">{{ componentFor(item.id)?.version || '未安装' }}</span>
+            <span class="pcl-install-item__version">{{ componentFor(item.uid)?.version || '未安装' }}</span>
             <PclIcon :name="expanded === item.id ? 'chevron-up' : 'chevron-down'" :size="15" />
           </button>
           <div v-if="expanded === item.id" class="pcl-install-item__body">
             <p>{{ item.description }}</p>
-            <div v-if="componentFor(item.id)" class="pcl-install-current">
-              <span>当前版本：{{ componentFor(item.id)?.version || '未知' }}</span>
+            <div v-if="componentFor(item.uid)" class="pcl-install-current">
+              <span>当前版本：{{ componentFor(item.uid)?.version || '未知' }}</span>
               <PclCheckbox
-                :model-value="componentFor(item.id)?.enabled !== false"
+                :model-value="componentFor(item.uid)?.enabled !== false"
                 label="启用"
-                :disabled="busy || !componentFor(item.id)?.canDisable"
-                @update:model-value="emit('component-enabled', componentFor(item.id), $event)"
+                :disabled="busy || !componentFor(item.uid)?.canDisable"
+                @update:model-value="emit('component-enabled', componentFor(item.uid), $event)"
               />
             </div>
             <div class="pcl-install-actions">
               <PclInput v-model="versions[item.id]" placeholder="输入版本号" />
-              <PclButton variant="highlight" :disabled="busy || !versions[item.id]?.trim() || !componentFor(item.id)" @click="componentFor(item.id) && emit('component-version', componentFor(item.id), versions[item.id].trim())">应用版本</PclButton>
+              <PclButton variant="highlight" :disabled="busy || !versions[item.id]?.trim() || (componentFor(item.uid) && componentFor(item.uid)?.canChangeVersion === false)" @click="emit('component-version', componentFor(item.uid) || { id: item.uid, name: item.label }, versions[item.id].trim())">应用版本</PclButton>
               <PclButton variant="ghost" icon="search" @click="emit('browse', item.uid)">浏览可用版本</PclButton>
             </div>
           </div>
@@ -130,10 +131,10 @@ import PclIconButton from '../../components/PclIconButton.vue';
 import { pickPclDirectory, pickPclSavePath } from '../../composables/usePclFileDialog';
 import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
-const props=defineProps<{section:string;components:any[];settings?:any[];busy:boolean;instance?:string;execute?:Execute}>();
+const props=defineProps<{section:string;components:any[];componentError?:string;settings?:any[];busy:boolean;instance?:string;execute?:Execute}>();
 const emit=defineEmits<{refresh:[];browse:[uid:string];'component-enabled':[component:any,enabled:boolean];'component-version':[component:any,version:string];export:[payload:any];save:[payload:{key:string;value:any}];console:[]}>();
 const expanded=ref('minecraft'), versions=reactive<Record<string,string>>({}), exportName=ref(''), exportVersion=ref('1.0'), exportOutput=ref(''), exportFormat=ref('zip'), exportSummary=ref(''), exportAuthor=ref(''), exportOptionalFiles=ref(false), exportOverwrite=ref(true), exportError=ref(''), exporting=ref(false), selectedExport=ref(['game','gameSettings','gameProfile','mod','resourcepacks','shaderpacks','saves','screenshots']);
-const exportFormats=[{label:'ZIP 实例包（.zip）',value:'zip'},{label:'Modrinth 整合包（.mrpack）',value:'modrinth'},{label:'CurseForge 整合包（.zip）',value:'curseforge'}];
+const exportFormats=[{label:'MMC包（.zip）',value:'zip'},{label:'Modrinth 整合包（.mrpack）',value:'modrinth'},{label:'CurseForge 整合包（.zip）',value:'curseforge'}];
 const exportOutputPlaceholder=computed(()=>exportFormat.value==='modrinth'?'例如：D:/Export/pack.mrpack':'例如：D:/Export/pack.zip');
 const canExport=computed(()=>Boolean(exportName.value.trim() && exportOutput.value.trim() && (exportFormat.value==='zip' || exportVersion.value.trim())));
 function toggleExport(key:string, enabled:boolean){selectedExport.value=enabled?[...selectedExport.value,key]:selectedExport.value.filter(item=>item!==key);}
@@ -158,11 +159,35 @@ function startExport(){
   window.setTimeout(()=>{exporting.value=false;},800);
 }
 const serverLoading=ref(false), serverError=ref(''), eulaAgreed=ref(false), serverPort=ref(25565), serverMaxPlayers=ref(20), serverGamemode=ref('survival'), serverWhitelist=ref('false'), serverCommand=ref(''), consoleText=ref('');
-const installItems=[{id:'minecraft',label:'Minecraft',icon:'box',uid:'net.minecraft',description:'选择实例使用的 Minecraft 客户端版本。'},{id:'forge',label:'Forge',icon:'anvil',uid:'net.minecraftforge',description:'安装 Forge 加载器及其依赖。'},{id:'neoforge',label:'NeoForge',icon:'cat',uid:'net.neoforged',description:'安装 NeoForge 加载器。'},{id:'cleanroom',label:'Cleanroom',icon:'flask-conical',uid:'com.cleanroommc.cleanroom',description:'安装 Cleanroom 加载器。'},{id:'fabric',label:'Fabric',icon:'scroll',uid:'net.fabricmc.fabric-loader',description:'安装 Fabric 加载器。'},{id:'legacy-fabric',label:'Legacy Fabric',icon:'scroll',uid:'net.legacyfabric.loader',description:'安装旧版 Fabric 加载器。'},{id:'fabric-api',label:'Fabric API',icon:'puzzle',uid:'net.fabricmc.fabric-api',description:'安装 Fabric API。'},{id:'optifine',label:'OptiFine',icon:'gauge',uid:'optifine',description:'安装 OptiFine 或 OptiFabric。'},{id:'liteloader',label:'LiteLoader',icon:'egg',uid:'com.mumfrey.liteloader',description:'安装 LiteLoader。'}];
+const installItems=[
+  {id:'minecraft',label:'Minecraft',icon:'box',uid:'net.minecraft',description:'选择实例使用的 Minecraft 客户端版本。'},
+  {id:'forge',label:'Forge',icon:'anvil',uid:'net.minecraftforge',description:'安装 Forge 加载器及其依赖。'},
+  {id:'neoforge',label:'NeoForge',icon:'cat',uid:'net.neoforged',description:'安装 NeoForge 加载器。'},
+  {id:'cleanroom',label:'Cleanroom',icon:'flask-conical',uid:'com.cleanroommc.cleanroom',description:'安装或更新 Cleanroom 加载器及其配套文件。'},
+  {id:'fabric',label:'Fabric',icon:'scroll',uid:'net.fabricmc.fabric-loader',description:'安装 Fabric 加载器。'},
+  {id:'quilt',label:'Quilt',icon:'layers',uid:'org.quiltmc.quilt-loader',description:'安装 Quilt 加载器。'},
+  {id:'liteloader',label:'LiteLoader',icon:'egg',uid:'com.mumfrey.liteloader',description:'安装 LiteLoader。'},
+];
 const exportItems=[{key:'game',label:'游戏核心',description:'Minecraft 客户端与加载器'},{key:'gameSettings',label:'游戏设置',description:'options.txt 等设置文件'},{key:'gameProfile',label:'游戏配置',description:'实例组件配置'},{key:'mod',label:'模组',description:'mods 文件夹和禁用模组'},{key:'resourcepacks',label:'资源包',description:'resourcepacks 文件夹'},{key:'shaderpacks',label:'光影',description:'shaderpacks 文件夹'},{key:'saves',label:'存档',description:'saves 文件夹'},{key:'screenshots',label:'截图',description:'screenshots 文件夹'},{key:'servers',label:'服务器列表',description:'servers.dat'}];
 const instanceSettings=[{key:'InstanceAccountId',label:'登录账户',description:'此实例使用的账户',type:'string'},{key:'InstanceWindowWidth',label:'窗口宽度',description:'启动时的窗口宽度',type:'string'},{key:'InstanceWindowHeight',label:'窗口高度',description:'启动时的窗口高度',type:'string'},{key:'OverrideJavaArgs',label:'自定义 Java 参数',description:'覆盖默认 JVM 参数',type:'boolean'},{key:'Fullscreen',label:'全屏启动',description:'启动后进入全屏模式',type:'boolean'}];
 const javaSettings=[{key:'JavaPath',label:'Java 路径',description:'留空时自动选择兼容版本'},{key:'JavaArguments',label:'Java 参数',description:'实例专用 JVM 参数'}];
-function componentFor(id:string){return props.components.find(c=>{const x=String(c.id||'').toLowerCase();return id==='minecraft'?x.includes('minecraft'):x.includes(id.replace('-',''));});}
+function componentFor(uid:string){
+  const target=String(uid||'').trim().toLowerCase();
+  const aliases:Record<string,string[]>={
+    'net.minecraft':['net.minecraft','minecraft'],
+    'net.minecraftforge':['net.minecraftforge','forge','net.minecraftforge:forge'],
+    'net.neoforged':['net.neoforged','neoforge','net.neoforged:neoforge'],
+    'com.cleanroommc.cleanroom':['com.cleanroommc.cleanroom','cleanroom'],
+    'net.fabricmc.fabric-loader':['net.fabricmc.fabric-loader','fabric','fabric-loader'],
+    'org.quiltmc.quilt-loader':['org.quiltmc.quilt-loader','quilt','quilt-loader'],
+    'com.mumfrey.liteloader':['com.mumfrey.liteloader','liteloader','lite-loader'],
+  };
+  const accepted=aliases[target] || [target];
+  return props.components.find(c=>{
+    const ids=[c?.id,c?.uid,c?.component,c?.name].map(value=>String(value||'').trim().toLowerCase());
+    return ids.some(id=>accepted.includes(id) || accepted.some(alias=>id.startsWith(`${alias}:`)));
+  });
+}
 function settingValue(key:string){return props.settings?.find(s=>s.key===key)?.value ?? (key==='Fullscreen'||key==='OverrideJavaArgs'?false:'');}
 function save(key:string,value:any){emit('save',{key,value});}
 async function loadServer(){

@@ -17,7 +17,7 @@
       <template v-if="section === 'profile'">
         <PclCard title="账户">
           <template #actions>
-            <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('offline')">添加账户</PclButton>
+            <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin(offlineAccountAllowed ? 'offline' : 'microsoft')">添加账户</PclButton>
             <PclIconButton icon="refresh-cw" label="刷新账户" :size="24" :disabled="busy || refreshing" @click="refreshAll" />
           </template>
           <PclAccountPanel v-if="accounts.length" :accounts="accounts" :busy="busy" :execute="execute" @changed="emit('changed')" />
@@ -26,7 +26,7 @@
             <strong>还没有账户</strong>
             <span>添加 Microsoft、离线或第三方认证账户后即可启动游戏。</span>
             <div class="pcl-actions">
-              <PclButton variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('offline')">添加离线账户</PclButton>
+              <PclButton v-if="offlineAccountAllowed" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('offline')">添加离线账户</PclButton>
               <PclButton icon="cloud" :disabled="busy" @click="openLogin('microsoft')">Microsoft 登录</PclButton>
             </div>
           </div>
@@ -271,7 +271,7 @@ type Execute = (operation: string, parameters?: Record<string, unknown>) => Prom
 const props = defineProps<{ accounts: any[]; busy: boolean; execute: Execute; embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; 'cancel-login': [] }>();
 const items = [{ id: 'profile', label: '账户与皮肤', icon: 'user', description: '管理账户缓存、头像、皮肤和披风。' }, { id: 'services', label: '认证服务', icon: 'shield-check', description: '管理 Microsoft、Luna 本地验证和第三方认证服务。' }, { id: 'tools', label: '账户工具', icon: 'tool-case', description: '刷新账户状态并检查认证组件。' }];
-const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('offline');
+const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), runtimeInfo = ref<any>({}), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('microsoft');
 const presetTest = ref<any>(null), testingPreset = ref('');
 const loginBusy = ref(false), loginError = ref('');
 const loginTaskId = ref(''), loginDeviceUrl = ref(''), loginDeviceCode = ref('');
@@ -281,12 +281,13 @@ const localExternal = ref(false), localPort = ref('25585'), localPublicUrl = ref
 const localUserShown = ref(false), localUserForm = reactive({ username: '', password: '' });
 const refreshing = ref(false);
 const microsoftModes = [{ label: '浏览器授权（无需输入代码）', value: 'oauth' }, { label: '设备代码', value: 'device' }];
-const loginTypes = [
-  { label: '离线账户', value: 'offline' },
+const offlineAccountAllowed = computed(() => Boolean(runtimeInfo.value?.offlineAccountAllowed) || props.accounts.some((account: any) => account?.ownsMinecraft));
+const loginTypes = computed(() => [
+  ...(offlineAccountAllowed.value ? [{ label: '离线账户', value: 'offline' }] : []),
   { label: 'Microsoft 登录', value: 'microsoft' },
   { label: 'Yggdrasil / Authlib Injector', value: 'yggdrasil' },
   { label: '统一通行证', value: 'unified-pass' },
-];
+]);
 const offlineUuidModes = [{label:'按用户名生成（默认）',value:'default'},{label:'每次随机 UUID',value:'random'},{label:'自定义 UUID',value:'custom'}];
 const loginPreset = ref('custom');
 const loginForm = reactive<any>({ username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '', authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '', tokenType: 'Standard', managedLocal: false, serverId: '', baseUrl: '', minecraftProfileName: '', microsoftMode: 'oauth', offlineUuidMode: 'default', offlineUuid: '' });
@@ -297,8 +298,10 @@ const loginPresetOptions = computed(() => [
 ]);
 const presetForm = reactive<any>({ name: '', authUrl: '', sessionUrl: '', tokenType: 'Standard' });
 async function loadPresets() { try { const result = await props.execute('account.preset.list'); presets.value = Array.isArray(result) ? result : []; } catch { presets.value = []; } }
-onMounted(() => { void loadPresets(); });
+async function loadRuntime() { try { runtimeInfo.value = await props.execute('runtime.info', {}); } catch { runtimeInfo.value = {}; } }
+onMounted(() => { void loadPresets(); void loadRuntime(); });
 async function openLogin(type: string, managedLocal = false) {
+  if (type === 'offline' && !offlineAccountAllowed.value) type = 'microsoft';
   loginType.value = type;
   loginError.value = '';
   loginPreset.value = managedLocal ? '__local__' : 'custom';

@@ -2,6 +2,8 @@
   <div class="pcl-live-log">
     <PclCard title="启动与实时日志">
       <template #actions>
+        <PclCheckbox v-model="neoUiPreferences.pclLaunchLogAutoScroll" label="自动滚动" />
+        <LogUploadButton :instance="instance.id" name="实时控制台日志" :content="text" :execute="execute" :disabled="!text" pcl />
         <PclButton size="sm" icon="trash-2" variant="ghost" :disabled="!lines.length" @click="lines = []">清空</PclButton>
         <PclButton v-if="running" size="sm" variant="red" icon="power" @click="forceStop">强制停止</PclButton>
         <PclButton v-else-if="launching" size="sm" variant="red" icon="x" @click="cancelLaunch">取消启动</PclButton>
@@ -40,9 +42,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
+import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclCard from '../../components/PclCard.vue';
+import LogUploadButton from '../../../components/LogUploadButton.vue';
 import { launcher } from '../../../boot/launcher-api';
 import { waitForTask } from '../../composables/useTaskEvents';
+import { neoUiPreferences } from '../../../neo-ui-preferences';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: any; execute: Execute }>();
@@ -79,7 +84,7 @@ async function append(value: string) {
   lines.value.push(value);
   if (lines.value.length > 3000) lines.value.splice(0, lines.value.length - 3000);
   await nextTick();
-  if (logElement.value) logElement.value.scrollTop = logElement.value.scrollHeight;
+  if (neoUiPreferences.pclLaunchLogAutoScroll && logElement.value) logElement.value.scrollTop = logElement.value.scrollHeight;
 }
 
 async function connect() {

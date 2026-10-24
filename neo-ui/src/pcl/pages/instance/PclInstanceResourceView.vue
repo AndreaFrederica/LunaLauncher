@@ -196,12 +196,16 @@ const folderKind = computed(() => ({
   datapacks: 'datapacks', yesstevemodels: 'yesstevemodels',
   customplayermodels: 'customplayermodels', schematics: 'schematics', screenshots: 'screenshots',
 } as Record<string, string>)[props.kind] || 'root');
-const catalogKinds = new Set(['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'worlds', 'texturepacks']);
-const catalogKind = computed(() => catalogKinds.has(props.kind) ? ({ texturepacks: 'resourcepacks', worlds: 'worlds' } as Record<string, string>)[props.kind] || props.kind : '');
+// The catalog API installs resource files into an instance resource folder.
+// World saves use a separate folder layout and are intentionally handled by
+// the file manager instead of being sent as a normal resource kind.
+const catalogKinds = new Set(['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'texturepacks']);
+const catalogKind = computed(() => catalogKinds.has(props.kind) ? ({ texturepacks: 'resourcepacks' } as Record<string, string>)[props.kind] || props.kind : '');
 const downloadOpen = ref(false);
 let resourceSubscription = '';
 let unlistenResourceStream: (() => void) | undefined;
 let resourceReloadTimer: ReturnType<typeof setTimeout> | undefined;
+let resourceRequestToken = 0;
 async function openDownload() {
   try {
     await launcher.openResourceDownload(props.instance, catalogKind.value, kindLabel.value);
@@ -296,6 +300,41 @@ const detailEntries = computed(() => {
 function resourceRef(item: any) {
   return String(item.id || item.path || item.fileName || item.name || '');
 }
+
+async function loadResourceIcons(requestToken: number) {
+  // Only mods carry an embedded icon in the current resource model. Keep the
+  // list request cheap and hydrate those icons after the rows are visible.
+  if (props.kind !== 'mods') return;
+  const items = resources.value.slice();
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const result = await props.execute('resource.icon', {
+            instance: props.instance,
+            kind: props.kind,
+            resource: resourceRef(item),
+          });
+          if (requestToken !== resourceRequestToken) return;
+          if (result?.icon) {
+            const current = resources.value.find(candidate => resourceRef(candidate) === resourceRef(item));
+            if (current) current.icon = result.icon;
+            break;
+          }
+          if (!result?.pending) break;
+          await new Promise(resolve => setTimeout(resolve, 650));
+        } catch {
+          // An icon is optional. Keep the type placeholder when an archive has
+          // no readable icon or the individual request fails.
+          break;
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, items.length) }, worker));
+}
 function statusLabel(item: any) {
   if (item.status === 'no-metadata') return '没有元数据';
   if (item.status === 'installed') return '已安装';
@@ -308,17 +347,20 @@ function formatSize(value: unknown) {
   return `${(size / 1048576).toFixed(1)} MiB`;
 }
 async function load() {
+  const requestToken = ++resourceRequestToken;
   loading.value = true;
   error.value = '';
   try {
-    const result = await props.execute('resource.list', { instance: props.instance, kind: props.kind });
+    const result = await props.execute('resource.list', { instance: props.instance, kind: props.kind, includeIcons: false });
     const list = Array.isArray(result) ? result : (result?.resources || result?.items || result?.data || []);
+    if (requestToken !== resourceRequestToken) return;
     resources.value = list.map((item: any) => ({ ...item, enabled: item.enabled !== false }));
     selected.value.clear();
+    void loadResourceIcons(requestToken);
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : String(exception);
+    if (requestToken === resourceRequestToken) error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
-    loading.value = false;
+    if (requestToken === resourceRequestToken) loading.value = false;
   }
 }
 async function update() {
@@ -441,6 +483,7 @@ watch(() => [props.instance, props.kind], load);
 watch(() => props.instance, () => { void unsubscribeResources().then(subscribeResources); });
 onMounted(() => { void load(); void subscribeResources(); });
 onBeforeUnmount(() => {
+  resourceRequestToken++;
   if (resourceReloadTimer) clearTimeout(resourceReloadTimer);
   void unsubscribeResources();
 });

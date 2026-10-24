@@ -1008,6 +1008,13 @@
   max-width: 360px;
 }
 
+:root[data-neo-shell="pcl"] .pcl-form-row > .pcl-btn,
+:root[data-neo-shell="pcl"] .pcl-form-row > .pcl-icon-btn {
+  align-self: center;
+  justify-self: start;
+  margin: 0;
+}
+
 :root[data-neo-shell="pcl"] .pcl-form-row__control.pcl-check-row,
 :root[data-neo-shell="pcl"] .pcl-form-row__control--column,
 :root[data-neo-shell="pcl"] .pcl-form-row__control--wide {

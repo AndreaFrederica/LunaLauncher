@@ -141,6 +141,7 @@
 
           <PclCard title="启动日志" :style="{ order: homeCardOrder('log') }">
             <template #actions>
+              <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" label="自动滚动" />
               <PclIconButton icon="copy" label="复制日志" :size="24" :disabled="!logLines.length" @click="copyLog" />
               <PclIconButton icon="trash-2" label="清空日志" :size="24" :disabled="!logLines.length" @click="emit('clear-log')" />
               <PclIconButton icon="refresh-cw" label="刷新" :size="24" :disabled="busy" @click="emit('refresh')" />
@@ -305,6 +306,7 @@ import PclHint from '../../components/PclHint.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
+import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclListItem from '../../components/PclListItem.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclExtraButton from '../../components/PclExtraButton.vue';
@@ -518,13 +520,18 @@ watch(() => props.logLines?.length, async () => {
   await nextTick();
   const element = logElement.value;
   if (!element) return;
-  const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
-  if (nearBottom) element.scrollTop = element.scrollHeight;
+  if (!preferences.pclLaunchLogAutoScroll) return;
+  element.scrollTop = element.scrollHeight;
+});
+watch(() => preferences.pclLaunchLogAutoScroll, async (enabled) => {
+  if (!enabled) return;
+  await nextTick();
+  if (logElement.value) logElement.value.scrollTop = logElement.value.scrollHeight;
 });
 const hintVisible = ref(loadHintVisibility());
 function loadHintVisibility() { try { return localStorage.getItem('pcl-ce-community-hint-hidden') !== '1'; } catch { return true; } }
 function accountKey(account: any) { return String(account?.internalId || account?.id || account?.profileName || ''); }
-function accountTypeLabel(account: any) { if (!account) return '请先添加启动账户'; const type = String(account.type || '').toLowerCase(); if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户'; if (type.includes('ygg')) { const server = account.yggdrasil?.displayName || account.yggdrasil?.sourceName || account.authServerName || '第三方认证'; return `第三方认证 · ${server}`; } if (type.includes('unified')) { const server = account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServerName || 'UnifiedPass'; return `UnifiedPass · ${server}`; } return '离线账户'; }
+function accountTypeLabel(account: any) { if (!account) return '请先添加启动账户'; const type = String(account.type || '').toLowerCase(); if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户'; if (type.includes('ygg')) { const server = account.yggdrasil?.displayName || account.yggdrasil?.sourceName || account.authServer?.displayName || account.authServerName || '第三方认证'; return `第三方认证 · ${server}`; } if (type.includes('unified')) { const server = account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServer?.displayName || account.authServerName || 'UnifiedPass'; return `UnifiedPass · ${server}`; } return '离线账户'; }
 function chooseAccount(account: any) { accountMenu.value = false; emit('account-change', accountKey(account)); }
 function openAccountPage(mode: 'add' | 'manage') { accountMenu.value = false; emit('account-page', mode); }
 function selectInstance(instance: any) { selectionOpen.value = false; emit('select', instance); }

@@ -5,17 +5,17 @@
 <div v-else class="xmcl-app text-white">
 <NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
- <Transition name="pcl-route" mode="out-in"><div v-if="isPclShell" :key="page" class="pcl-route-shell">
- <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed"
+ <div v-if="isPclShell" class="pcl-route-shell">
+ <PclLaunchPage v-if="isPclShell" v-show="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed"
  :launch-details="launchDetails"
  :launch-children="launchChildren" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
 
- <PclDownloadPage v-if="isPclShell && page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" />
- <PclToolsPage v-if="isPclShell && page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
- <PclSetupPage v-if="isPclShell && page==='pcl-settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" :accounts="accounts" @changed="refresh" />
+ <PclDownloadPage v-if="isPclShell" v-show="page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" :initial-component-uid="downloadComponentUid" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" />
+ <PclToolsPage v-if="isPclShell" v-show="page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
+ <PclSetupPage v-if="isPclShell" v-show="page==='pcl-settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" :accounts="accounts" @changed="refresh" />
  <PclAccountPage v-if="page==='accounts' && isPclShell" :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" @cancel-login="cancelDeviceLogin" />
- <PclInstancePage v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='pcl-settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="installComponentVersion" @browse="page='pcl-download';refresh()" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @action="workspaceAction" />
- </div></Transition>
+ <PclInstancePage v-if="page==='manage' && selected" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='pcl-settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="installComponentVersion" @browse="openComponentDownload" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @action="workspaceAction" />
+  </div>
  <XmclDashboard v-if="!isPclShell && page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
  <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
  <XmclInstanceWorkspace v-if="page==='manage' && selected && !isPclShell" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
@@ -73,6 +73,7 @@
 <PclTaskCenter v-if="isPclShell" v-model="taskCenterOpen" :execute="call" />
 <PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" />
 <PclToastHost />
+<TaskInteractionDialog v-if="!editorInstanceId && !resourceDownloadInstance" :execute="call" :pcl="isPclShell" :legacy="legacyTaskInteraction" @legacy-finished="legacyTaskInteraction = null" />
 <NeoUiOverlays :add-dialog="addDialog" :busy="busy" :execute="catalogExecute" :call="call" :is-pcl-shell="isPclShell" :status="status" :task-snapshot="taskSnapshot" :task-center-open="taskCenterOpen" :search-shown="searchShown" :global-search="globalSearch" :search-results="searchResults" :icons="icons" :dialog="dialog" :prompt="prompt" :answer="answer" :choices="choices" :confirmation="confirmation" :secret="secret" @update:add-dialog="addDialog=$event" @created="refresh" @cancel="cancel" @task-updated="handleTaskUpdate" @update:task-center-open="taskCenterOpen=$event" @update:search-shown="searchShown=$event" @update:global-search="globalSearch=$event" @search-result="openSearchResult" @dialog-finish="finishDialog" @update:answer="answer=$event" />
 </div>
 </template>
@@ -109,6 +110,7 @@ import PclToastHost from './pcl/components/PclToastHost.vue';
 import { showPclToast } from './pcl/composables/usePclToast';
 import { initPclMusic } from './pcl/composables/usePclMusic';
 import NeoUiChrome from './xmcl-port/NeoUiChrome.vue';
+import TaskInteractionDialog from './components/TaskInteractionDialog.vue';
 import NeoUiOverlays from './xmcl-port/NeoUiOverlays.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
@@ -121,6 +123,7 @@ const resourceDownloadInstance = launchQuery.get('resourceDownload') || '';
 const resourceDownloadKind = launchQuery.get('kind') || 'mods';
 const resourceDownloadName = launchQuery.get('name') || '';
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
+const downloadComponentUid = ref('');
 const quasar=useQuasar(),connected=ref(false),icons=ref<Record<string,string>>({});
 function closeMobileNav(){if(quasar.screen.lt.md)drawerOpen.value=false;}
 async function loadIcons(){
@@ -335,10 +338,11 @@ async function loadVersions(loader:boolean){
 }
 const actions=[{op:'rename',field:'name',label:'重命名'},{op:'copy',field:'name',label:'复制实例'},{op:'group',field:'group',label:'修改分组'},{op:'update',label:'更新组件'},{op:'verify',label:'校验文件'},{op:'stop',label:'停止运行'}];
 const { dialog, prompt, answer, choices, secret, confirmation, ask, finishDialog, message } = useNeoDialogs();
+const legacyTaskInteraction = ref<any>(null);
 const readOnlyOperations=new Set([
  'task.status','task.list','task.cancel','neo.task.status','neo.task.list','neo.task.cancel','api.describe','scheduler.status','aria2.downloads','aria2.cancel','aria2.clear-finished','instance.open-folder','instance.folder-path',
- 'settings.list','runtime.info','runtime.memory','account.preset.list','authentication.helper.status',
- 'language.list','launcher.update.status','component.catalog','component.versions'
+ 'settings.list','resource.icon','runtime.info','runtime.memory','account.preset.list','authentication.helper.status',
+   'language.list','launcher.update.status','component.catalog','component.versions','special.loader.versions'
 ]);
 async function catalogExecute(op:string,p:Record<string,unknown>){
  if(busy.value && !readOnlyOperations.has(op)){throw new Error('当前任务仍在执行，请等待它完成。');}
@@ -348,11 +352,14 @@ async function catalogExecute(op:string,p:Record<string,unknown>){
 async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||'操作失败');connected.value=true;return r.data;}
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
 let resourceRequest=0;
-async function loadResources(){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind});if(request===resourceRequest){if(!Array.isArray(data))throw new Error('资源接口返回格式错误');resources.value=data;}}catch(e){if(request===resourceRequest)resourceError.value=message(e);}finally{if(request===resourceRequest)resourcesLoading.value=false;}}
-async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings' || page.value==='pcl-settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage'){await loadResources();await loadComponents();await loadLogFiles();}else {instances.value=await call('instance.list');await loadIcons();if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value || !instances.value.some((item:any)=>item.id===selected.value.id))selected.value=rememberedInstance || instances.value[0] || null;if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();accounts.value=await call('account.list');const rememberedAccount=rememberedAccountId();const defaultAccount=accounts.value.find((account:any)=>account.default);const accountKeyOf=(account:any)=>String(account?.internalId || account?.id || account?.profileName || '');const currentAccountExists=accounts.value.some((account:any)=>accountKeyOf(account)===launchAccountId.value);if(!launchAccountId.value || !currentAccountExists){const saved=accounts.value.find((account:any)=>accountKeyOf(account)===rememberedAccount);launchAccountId.value=accountKeyOf(saved) || accountKeyOf(defaultAccount) || accountKeyOf(accounts.value[0]);}}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}}catch(e){error.value=message(e);}}
+async function loadResources(){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind,includeIcons:false});if(request===resourceRequest){if(!Array.isArray(data))throw new Error('资源接口返回格式错误');resources.value=data;}}catch(e){if(request===resourceRequest)resourceError.value=message(e);}finally{if(request===resourceRequest)resourcesLoading.value=false;}}
+async function refresh(){error.value='';try{if(page.value==='accounts')accounts.value=await call('account.list');else if(page.value==='settings' || page.value==='pcl-settings')settings.value=await call('settings.list',settingScope());else if(page.value==='manage'){await loadResources();await loadComponents();await loadLogFiles();if(selected.value)settings.value=await call('settings.list',{scope:'instance',instance:selected.value.id});}else {instances.value=await call('instance.list');await loadIcons();if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value || !instances.value.some((item:any)=>item.id===selected.value.id))selected.value=rememberedInstance || instances.value[0] || null;if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();accounts.value=await call('account.list');const rememberedAccount=rememberedAccountId();const defaultAccount=accounts.value.find((account:any)=>account.default);const accountKeyOf=(account:any)=>String(account?.internalId || account?.id || account?.profileName || '');const currentAccountExists=accounts.value.some((account:any)=>accountKeyOf(account)===launchAccountId.value);if(!launchAccountId.value || !currentAccountExists){const saved=accounts.value.find((account:any)=>accountKeyOf(account)===rememberedAccount);launchAccountId.value=accountKeyOf(saved) || accountKeyOf(defaultAccount) || accountKeyOf(accounts.value[0]);}}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}}catch(e){error.value=message(e);}}
 async function navigate(id:string){
  if(preparingLaunch)return;
+ if(id==='pcl-download')downloadComponentUid.value='';
  const target=!isPclShell.value && id==='pcl-download'?'store':!isPclShell.value && id==='pcl-tools'?'accounts':!isPclShell.value && id==='pcl-settings'?'settings':id;
+ const persistentPclTabs = new Set(['instances','pcl-download','pcl-settings','pcl-tools']);
+ const keepPclTabsAlive = isPclShell.value && persistentPclTabs.has(target);
  page.value=target;
  error.value='';
  notice.value='';
@@ -360,8 +367,16 @@ async function navigate(id:string){
  // A background download/install must not lock the whole UI. Render the
  // target page immediately; its own refresh will queue behind the task and
  // fill in when the backend becomes free.
+ if(keepPclTabsAlive)return;
  if(busy.value)return;
  await refresh();
+}
+function openComponentDownload(uid:string){
+ downloadComponentUid.value=String(uid || '');
+ page.value='pcl-download';
+ error.value='';
+ notice.value='';
+ if(!busy.value)void refresh();
 }
 function openPclCreate(uid?:string,version?:string){createMode.value='vanilla';creation.value={...creation.value,name:creation.value.name || '新建实例',version:uid==='net.minecraft'?(version || ''):creation.value.version,loader:uid==='net.fabricmc.fabric-loader'?'fabric':uid==='net.minecraftforge'?'forge':uid==='net.neoforged'?'neoforge':uid==='org.quiltmc.quilt-loader'?'quilt':creation.value.loader,loaderVersion:uid && uid!=='net.minecraft'?(version || ''):creation.value.loaderVersion};page.value='create';}
 function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
@@ -402,6 +417,7 @@ async function openInstance(i:any,forceRead=false,forLaunch=false){
  }
 selected.value=i;rememberInstance(i);if(!forLaunch){page.value='manage';if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState('launch');}notes.value='';error.value='';instanceDetails.value=null;
  try{const info=await call('instance.info',{instance:i.id});instanceDetails.value=info;notes.value=info.notes || '';}catch(e){error.value=message(e);}
+ try{settings.value=await call('settings.list',{scope:'instance',instance:i.id});}catch{/* Older backends may not expose instance settings yet. */}
  if(!forLaunch){await loadResources();await loadComponents();await loadLogFiles();}
 }
 async function changeIcon(){const path=await ask('图标文件完整路径（PNG / ICO 等）');if(path===null||!path.trim())return;await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});icons.value[selected.value.id]=icon.dataUrl;}}
@@ -431,7 +447,7 @@ async function installComponentVersion(component:any,version:string){
  if(!selected.value)return;
  beginInstallProgress({ title: `正在安装 ${component?.name || component?.id || '组件'}`, name: version });
  try {
-  let task:any=await catalogExecute('neo.task.start',{operation:'instance.component.set-version',priority:'high',parameters:{instance:selected.value.id,component:component.id,version}});
+  let task:any=await catalogExecute('neo.task.start',{operation:'instance.component.set-version',priority:'high',parameters:{instance:selected.value.id,component:component.id,version,important:component.id==='net.minecraft'}});
   while(task && !task.finished){
    installTask.value=task;
    await new Promise(resolve=>setTimeout(resolve,300));
@@ -489,7 +505,7 @@ async function cancelDeviceLogin(){
 async function openDeviceBrowser(){const url=String(device.value?.url || '');if(!url)return;try{await call('desktop.open-url',{url});}catch(e){error.value=message(e);}}
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
-onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
+onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
 onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>

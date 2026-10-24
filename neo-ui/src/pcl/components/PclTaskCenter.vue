@@ -122,7 +122,9 @@ function operationLabel(operation: string) {
     'instance.import': '实例导入',
     'instance.create': '创建实例',
     'instance.update': '实例更新',
+    'instance.special-loader.install': '特殊加载器安装',
     'resource.install': '资源安装',
+    'resource.install-version': '资源安装',
     'resource.install-with-dependencies': '资源及依赖安装',
     'instance.component.set-version': '组件安装',
     'java.install': 'Java 安装',
@@ -135,7 +137,7 @@ function operationLabel(operation: string) {
   return labels[operation] || operation;
 }
 function stateLabel(state: string) {
-  return (({ queued: '排队中', running: '进行中', succeeded: '已完成', failed: '失败', cancelled: '已取消', interrupted: '已中断' } as Record<string, string>)[state] || state || '未知');
+  return (({ queued: '排队中', running: '进行中', succeeded: '已完成', failed: '失败', cancelled: '已取消', canceled: '已取消', aborted: '已中止', completed: '已完成', interrupted: '已中断' } as Record<string, string>)[state] || state || '未知');
 }
 
 watch(() => props.modelValue, value => {

@@ -153,11 +153,11 @@ function accountTypeLabel(account: any) {
   const type = String(account?.type || '').toLowerCase();
   if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户';
   if (type.includes('ygg')) {
-    const server = account?.yggdrasil?.displayName || account?.yggdrasil?.sourceName || account?.authServerName || '第三方认证';
+    const server = account?.yggdrasil?.displayName || account?.yggdrasil?.sourceName || account?.authServer?.displayName || account?.authServerName || '第三方认证';
     return `第三方认证账户 · ${server}`;
   }
   if (type.includes('unified')) {
-    const server = account?.unifiedPass?.displayName || account?.unifiedPass?.serverName || account?.unifiedPass?.serverId || account?.authServerName || 'UnifiedPass';
+    const server = account?.unifiedPass?.displayName || account?.unifiedPass?.serverName || account?.unifiedPass?.serverId || account?.authServer?.displayName || account?.authServerName || 'UnifiedPass';
     return `UnifiedPass 账户 · ${server}`;
   }
   return '离线账户';

@@ -95,6 +95,7 @@ export class LauncherApiClient {
       'neo.task.status',
       'neo.task.list',
       'neo.task.cancel',
+      'neo.task.respond',
       'neo.task.capabilities',
       'api.describe',
       'event.poll',

@@ -3,7 +3,7 @@
     <PclWindowTitleBar :title="`下载${kindLabel}`" :subtitle="instanceName || instanceId" />
     <div class="pcl-resource-download-window__body">
       <div class="pcl-resource-download-window__toolbar">
-        <PclSelect v-model="provider" :options="providerOptions" @update:model-value="() => search(true)" />
+        <PclSelect v-model="provider" :options="providerOptions" @update:model-value="changeProvider" />
         <PclInput v-model="query" :placeholder="`搜索${kindLabel}`" @enter="search(true)" />
         <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? '搜索中…' : '搜索' }}</PclButton>
         <div class="pcl-resource-download-window__view">
@@ -27,7 +27,7 @@
         <span>勾选多个项目，选择版本后一起下载。</span>
       </div>
 
-      <div class="pcl-resource-download-window__list" :class="`is-${viewMode}`">
+      <div ref="resultsList" class="pcl-resource-download-window__list" :class="`is-${viewMode}`">
         <article v-for="project in projects" :key="project.projectId" class="pcl-resource-download-card" :class="{ selected: selected[project.projectId] }">
           <PclCheckbox :model-value="Boolean(selected[project.projectId])" @update:model-value="toggleProject(project, $event)" />
           <img v-if="project.iconUrl" :src="project.iconUrl" alt="" @click="openDetails(project)" />
@@ -90,13 +90,13 @@
           <div class="pcl-resource-confirm__list">
             <label v-for="entry in confirmEntries" :key="entry.projectId" class="pcl-resource-confirm__row">
               <PclCheckbox v-model="entry.checked" />
-              <span><strong>{{ entry.name }}</strong><small>{{ entry.dependency ? `依赖 · 由 ${entry.requiredBy || '所选资源'} 需要` : '已选择' }}</small></span>
+              <span><strong>{{ entry.name }}</strong><small>{{ entry.dependency ? `${entry.dependencyType === 'optional' ? '可选依赖' : '必需依赖'} · 由 ${entry.requiredBy || '所选资源'} 需要` : '已选择' }}</small></span>
             </label>
           </div>
         </q-card-section>
         <q-card-actions align="right">
           <PclButton variant="ghost" @click="confirmOpen = false">取消</PclButton>
-          <PclButton variant="highlight" icon="download" :disabled="!confirmEntries.some((entry:any) => entry.checked)" @click="confirmDownload">开始下载</PclButton>
+          <PclButton variant="highlight" icon="download" :disabled="!confirmEntries.some((entry:any) => entry.checked && entry.versionId)" @click="confirmDownload">开始下载</PclButton>
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -113,6 +113,7 @@ import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
 import PclWindowTitleBar from '../../components/PclWindowTitleBar.vue';
+import { neoUiPreferences } from '../../../neo-ui-preferences';
 import { launcher } from '../../../boot/launcher-api';
 import { waitForTask } from '../../composables/useTaskEvents';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -130,6 +131,7 @@ const includeOptional = ref(true);
 const error = ref('');
 const projects = ref<any[]>([]);
 const offset = ref(0);
+const resultsList = ref<HTMLElement | null>(null);
 const nextOffset = ref(0);
 const hasNext = ref(false);
 const pageNumber = computed(() => Math.floor(offset.value / 25) + 1);
@@ -144,6 +146,24 @@ const instanceLoaderLabel = ref('');
 
 const kindLabel = computed(() => ({ mods: '模组', resourcepacks: '资源包', shaderpacks: '光影包', datapacks: '数据包', worlds: '世界', texturepacks: '材质包' } as Record<string, string>)[props.kind] || props.kind);
 const selectedList = computed(() => Object.values(selected));
+
+function scrollResultsToTop() {
+  void nextTick(() => resultsList.value?.scrollTo({ top: 0, behavior: 'smooth' }));
+}
+
+function clearSelected() {
+  for (const key of Object.keys(selected)) delete selected[key];
+  confirmEntries.value = [];
+  confirmOpen.value = false;
+}
+
+async function changeProvider() {
+  // Project and version IDs are provider-scoped. Carrying selections across a
+  // provider switch would send the old IDs to the new provider and install a
+  // different resource or fail with a misleading version error.
+  clearSelected();
+  await search(true);
+}
 
 function providerLabel(id: string) {
   if (id === 'modrinth') return 'Modrinth';
@@ -168,7 +188,10 @@ function requestParams() {
 async function loadProviders() {
   try {
     const result: any = await execute('resource.providers');
-    providerCatalog.value = Array.isArray(result) ? result : [];
+    providerCatalog.value = Array.isArray(result) && result.length ? result : [
+      { id: 'modrinth', kinds: ['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'modpacks'] },
+      { id: 'curseforge', kinds: ['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'modpacks'] },
+    ];
   } catch {
     providerCatalog.value = [
       { id: 'modrinth', kinds: ['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'modpacks'] },
@@ -193,7 +216,8 @@ async function loadInstanceConstraints() {
       'org.quiltmc.quilt-loader': 'quilt',
       'net.minecraftforge': 'forge',
       'net.neoforged': 'neoforge',
-      'com.cleanroommc.cleanroom': 'forge',
+      'com.cleanroommc.cleanroom': 'cleanroom',
+      'com.mumfrey.liteloader': 'liteloader',
     };
     const loaders = new Set<string>();
     for (const component of components) {
@@ -215,7 +239,10 @@ async function execute(operation: string, parameters: Record<string, unknown> = 
 }
 
 async function search(reset = true) {
-  if (reset) offset.value = 0;
+  if (reset) {
+    offset.value = 0;
+    clearSelected();
+  }
   searching.value = true;
   error.value = '';
   try {
@@ -229,6 +256,7 @@ async function search(reset = true) {
     })).filter((project: any) => project.projectId);
     nextOffset.value = Number(result?.nextOffset ?? (offset.value + projects.value.length)) || 0;
     hasNext.value = projects.value.length >= 25 && nextOffset.value > offset.value;
+    scrollResultsToTop();
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
@@ -288,21 +316,30 @@ async function prepareDownload() {
   try {
     const entries = selectedList.value.map(entry => ({ ...entry, dependency: false, requiredBy: '', checked: true }));
     const seen = new Set(entries.map(entry => entry.projectId));
-    if (props.kind === 'mods') {
+    if (props.kind !== 'worlds') {
       for (let index = 0; index < entries.length && entries.length < 48; index++) {
         const entry = entries[index];
         const rawVersions = entry.rawVersions || [];
         const selectedVersion = rawVersions.find((version: any) => String(version.versionId || version.id) === String(entry.versionId)) || rawVersions[0];
         for (const dependency of selectedVersion?.dependencies || []) {
           const type = String(dependency.type || '').toLowerCase();
-          if (type !== 'required' && !(type === 'optional' && includeOptional.value)) continue;
-          const projectId = String(dependency.projectId || '');
+          if (type !== 'required' && !(type === 'optional' && props.kind === 'mods' && includeOptional.value)) continue;
+          const projectId = String(dependency.projectId || dependency.addonId || dependency.id || '');
           if (!projectId || seen.has(projectId)) continue;
           try {
             const versions: any = await execute('resource.versions', { ...requestParams(), projectId });
             const list = Array.isArray(versions) ? versions : versions?.versions || [];
             const wanted = String(dependency.versionId || '');
-            const depVersion = list.find((version: any) => String(version.versionId || version.id) === wanted) || list[0];
+            let depVersion = wanted ? list.find((version: any) => String(version.versionId || version.id) === wanted) : undefined;
+            if (!depVersion && !wanted && instanceVersion.value) {
+              const resolved: any = await execute('resource.resolve-dependency', {
+                ...requestParams(),
+                projectId,
+                minecraftVersion: instanceVersion.value,
+              });
+              depVersion = resolved;
+            }
+            depVersion ||= list[0];
             if (!depVersion) continue;
             let name = projectId;
             try {
@@ -317,6 +354,7 @@ async function prepareDownload() {
               rawVersions: list,
               dependency: true,
               requiredBy: entry.name,
+              dependencyType: type,
               state: '',
               status: '',
               taskId: '',
@@ -346,7 +384,10 @@ async function confirmDownload() {
     entry.status = '等待下载';
     try {
       const task: any = await execute('neo.task.start', {
-        operation: 'resource.install-with-dependencies',
+        // Dependencies are represented as separate checked entries above. A
+        // recursive install here would ignore the user's choices and install
+        // unchecked dependencies again.
+        operation: 'resource.install-version',
         priority: 'normal',
         parameters: {
           instance: props.instanceId,
@@ -354,7 +395,6 @@ async function confirmDownload() {
           provider: provider.value,
           projectId: entry.projectId,
           versionId: entry.versionId,
-          includeOptional: props.kind === 'mods' ? includeOptional.value : false,
           minecraftVersion: instanceVersion.value,
           loaders: props.kind === 'mods' ? instanceLoaders.value : [],
         },
@@ -412,7 +452,7 @@ onMounted(async () => {
   document.documentElement.dataset.neoShell = 'pcl';
   document.documentElement.dataset.neoTheme = 'dark';
   await Promise.all([loadProviders(), loadInstanceConstraints()]);
-  void search();
+  if (neoUiPreferences.pclAutoRefreshOnPageOpen) void search();
 });
 </script>
 

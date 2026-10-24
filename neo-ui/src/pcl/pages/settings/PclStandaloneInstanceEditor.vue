@@ -12,7 +12,7 @@
       :settings="settings"
       :component-error="componentError"
       :notes="notes"
-      :busy="false"
+      :busy="refreshing"
       :execute="execute"
       :console-lines="[]"
       :console-state="'未连接'"
@@ -24,12 +24,12 @@
       @delete="removeInstance"
       @change-icon="changeIcon"
       @save-notes="saveNotes"
-      @refresh="load"
+      @refresh="refresh"
       @connect-console="() => {}"
       @clear-console="() => {}"
       @read-log="readLog"
-      @component-enabled="(component, enabled) => execute('instance.component.set-enabled', { instance: instanceId, component: component.id, enabled })"
-      @component-version="(component, version) => execute('instance.component.set-version', { instance: instanceId, component: component.id, version })"
+      @component-enabled="updateComponentEnabled"
+      @component-version="updateComponentVersion"
       @action="(operation) => execute('instance.' + operation, { instance: instanceId })"
       @browse="() => {}"
       @export="() => {}"
@@ -55,6 +55,7 @@ import { pickPclFile } from '../../composables/usePclFileDialog';
 const props = defineProps<{ instanceId: string }>();
 
 const loading = ref(true);
+const refreshing = ref(false);
 const error = ref('');
 const instance = ref<any>(null);
 const details = ref<any>(null);
@@ -72,9 +73,37 @@ async function execute(operation: string, parameters: Record<string, unknown> = 
   return result?.data ?? result;
 }
 
+async function updateComponentEnabled(component: any, enabled: boolean) {
+  try {
+    await execute('instance.component.set-enabled', { instance: props.instanceId, component: component.id, enabled });
+    await refresh();
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  }
+}
+
+async function updateComponentVersion(component: any, version: string) {
+  try {
+    let task: any = await execute('neo.task.start', {
+      operation: 'instance.component.set-version',
+      priority: 'high',
+      parameters: { instance: props.instanceId, component: component.id, version, important: component.id === 'net.minecraft' },
+    });
+    while (task && !task.finished) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      task = await execute('neo.task.status', { taskId: task.taskId });
+    }
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '组件安装失败');
+    await refresh();
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  }
+}
+
 async function load() {
   loading.value = true;
   error.value = '';
+  componentError.value = '';
   try {
     const info: any = await execute('instance.info', { instance: props.instanceId });
     instance.value = { ...info, id: info?.id || props.instanceId };
@@ -97,6 +126,39 @@ async function load() {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     loading.value = false;
+  }
+}
+
+// Refresh the data for the open editor window in place.  Re-running load()
+// toggles the top-level loading branch, unmounts PclInstancePage, resets its
+// selected section and makes the whole editor visibly flash.  A refresh only
+// needs the instance summary, component profile, settings and log index; the
+// window and the current section stay mounted while those requests complete.
+async function refresh() {
+  if (loading.value || refreshing.value) return;
+  refreshing.value = true;
+  error.value = '';
+  componentError.value = '';
+  try {
+    const [info, componentResult, settingResult, logs]: any[] = await Promise.all([
+      execute('instance.info', { instance: props.instanceId }),
+      execute('instance.components.list', { instance: props.instanceId }).catch((exception: any) => {
+        componentError.value = exception instanceof Error ? exception.message : String(exception);
+        return { components: [] };
+      }),
+      execute('settings.list', { scope: 'instance', instance: props.instanceId }).catch(() => []),
+      execute('instance.log.list', { instance: props.instanceId }).catch(() => []),
+    ]);
+    instance.value = { ...instance.value, ...info, id: info?.id || props.instanceId };
+    details.value = info;
+    notes.value = String(info?.notes || '');
+    components.value = Array.isArray(componentResult?.components) ? componentResult.components : [];
+    settings.value = Array.isArray(settingResult) ? settingResult : [];
+    logFiles.value = Array.isArray(logs) ? logs : [];
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  } finally {
+    refreshing.value = false;
   }
 }
 

@@ -88,7 +88,7 @@
           />
 
           <PclSetupPage
-            v-else-if="['launch', 'java', 'network', 'advanced'].includes(section)"
+            v-else-if="['launch', 'java', 'network', 'advanced', 'advanced-settings'].includes(section)"
             :settings="settings || []"
             :busy="busy"
             :scope="{ scope: 'instance', instance: instance.id }"
@@ -102,6 +102,7 @@
             v-else-if="['install', 'export'].includes(section)"
             :section="section"
             :components="components"
+            :component-error="componentError"
             :settings="settings"
             :busy="busy"
             :instance="instance.id"
@@ -129,27 +130,7 @@
             </div>
           </PclCard>
 
-          <div v-else-if="section === 'logs'" class="pcl-instance-logs">
-            <PclCard title="日志文件">
-              <div v-if="logFiles.length" class="pcl-instance-log-list">
-                <button
-                  v-for="file in logFiles"
-                  :key="file.name || file.path || file"
-                  type="button"
-                  class="pcl-instance-log-item"
-                  :class="{ active: activeLog === (file.name || file.path || file) }"
-                  @click="readLog(file)"
-                >
-                  <PclIcon name="scroll-text" :size="15" />
-                  <span>{{ file.name || file.path || file }}</span>
-                </button>
-              </div>
-              <div v-else class="pcl-empty pcl-empty--compact">没有可读取的日志。</div>
-            </PclCard>
-            <PclCard title="日志内容">
-              <pre class="pcl-instance-log-view">{{ fileLog || '选择左侧日志文件后在这里查看内容。' }}</pre>
-            </PclCard>
-          </div>
+          <InstanceLogViewer v-else-if="section === 'logs'" :instance="instance.id" :log-files="logFiles" :execute="execute" pcl />
 
           <PclInstanceCustomUi v-else-if="section === 'customui'" :instance="instance" :busy="busy" :execute="execute" />
 
@@ -182,6 +163,7 @@ import PclInstanceCustomUi from './PclInstanceCustomUi.vue';
 import PclServerPanel from './PclServerPanel.vue';
 import PclInstanceExtras from './PclInstanceExtras.vue';
 import PclInstanceLiveLog from './PclInstanceLiveLog.vue';
+import InstanceLogViewer from '../../../components/InstanceLogViewer.vue';
 import PclSetupPage from '../settings/PclSetupPage.vue';
 import fallback from '../../../xmcl-port/assets/minecraft.webp';
 
@@ -212,6 +194,7 @@ const navGroups = [
       { id: 'java', label: 'Java', icon: 'coffee', description: '选择此实例使用的 Java 和 JVM 参数。' },
       { id: 'network', label: '网络代理', icon: 'server', description: '配置此实例使用的代理和联机设置。' },
       { id: 'advanced', label: '高级', icon: 'tool-case', description: '渲染器、JVM 参数、游戏参数和启动前命令。' },
+      { id: 'advanced-settings', label: '其他设置', icon: 'settings', description: '查看此实例尚未单独布局的兼容性和高级设置。' },
     ],
   },
   {
@@ -255,18 +238,10 @@ const resourceKind = computed(() => ({
   yesstevemodels: 'yesstevemodels', customplayermodels: 'customplayermodels', schematics: 'schematics',
 } as Record<string, string>)[section.value] || '');
 const localNotes = ref(props.notes);
-const activeLog = ref('');
 watch(() => props.notes, value => { localNotes.value = value; });
-watch(() => props.fileLog, () => { /* fileLog is rendered directly */ });
 
 function select(id: string) {
   section.value = id;
-  if (id === 'logs' && !activeLog.value && props.logFiles.length) readLog(props.logFiles[0]);
-}
-function readLog(file: any) {
-  const name = String(file?.name || file?.path || file || '');
-  activeLog.value = name;
-  emit('read-log', name);
 }
 </script>
 
@@ -367,53 +342,4 @@ function readLog(file: any) {
   font-size: calc(11px * var(--pcl-font-scale, 1));
 }
 
-.pcl-instance-logs {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 12px;
-}
-
-.pcl-instance-log-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.pcl-instance-log-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  overflow: hidden;
-  border: 0;
-  border-bottom: 1px solid var(--pcl-border);
-  background: transparent;
-  color: var(--pcl-text);
-  font: 400 calc(12px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.pcl-instance-log-item:hover,
-.pcl-instance-log-item.active {
-  background: var(--pcl-c7);
-  color: var(--pcl-c2);
-}
-
-.pcl-instance-log-view {
-  min-height: 360px;
-  max-height: 60vh;
-  margin: 0;
-  overflow: auto;
-  padding: 10px;
-  border: 1px solid var(--pcl-card-border);
-  border-radius: 4px;
-  background: var(--pcl-c8);
-  color: var(--pcl-text);
-  white-space: pre-wrap;
-  font: calc(11px * var(--pcl-font-scale, 1))/1.6 ui-monospace, Consolas, monospace;
-}
 </style>

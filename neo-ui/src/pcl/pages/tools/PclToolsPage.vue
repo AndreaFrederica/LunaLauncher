@@ -26,8 +26,7 @@
     </aside>
 
     <main class="pcl-page-main">
-      <Transition name="pcl-page" mode="out-in">
-        <div :key="section" class="pcl-page-view">
+      <div class="pcl-page-view">
           <div class="pcl-tools-toolbar">
             <div>
               <h1>{{ current.label }}</h1>
@@ -38,7 +37,7 @@
 
           <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
-          <div v-if="isMultiplayerSection" class="pcl-tools-stack">
+          <div v-show="isMultiplayerSection" class="pcl-tools-stack">
             <PclCard title="P2P 联机">
               <template #actions>
                 <PclButton size="sm" icon="refresh-cw" :disabled="backendBusy" @click="refreshBackend">刷新</PclButton>
@@ -125,7 +124,7 @@
             </PclCard>
           </div>
 
-          <div v-else-if="section === 'tasks'" class="pcl-tools-grid">
+          <div v-show="section === 'tasks'" class="pcl-tools-grid">
             <PclCard title="任务管理">
               <template #actions>
                 <PclIconButton icon="refresh-cw" label="刷新任务" :size="24" :disabled="busy" @click="loadTasks" />
@@ -168,7 +167,7 @@
             </PclCard>
           </div>
 
-          <PclCard v-else-if="section === 'logs'" title="运行日志">
+          <PclCard v-show="section === 'logs'" title="运行日志">
             <template #actions>
               <span class="pcl-tools-muted">选择实例后进入控制台</span>
             </template>
@@ -187,7 +186,7 @@
             </div>
           </PclCard>
 
-          <PclCard v-else-if="section === 'scheduler'" title="API 调度分析">
+          <PclCard v-show="section === 'scheduler'" title="API 调度分析">
             <template #actions>
               <PclButton size="sm" icon="refresh-cw" @click="loadStats">刷新</PclButton>
             </template>
@@ -217,7 +216,7 @@
             </PclHint>
           </PclCard>
 
-          <div v-else-if="section === 'authlib' || section === 'nide8auth'" class="pcl-tools-stack">
+          <div v-show="section === 'authlib' || section === 'nide8auth'" class="pcl-tools-stack">
             <PclCard :title="section === 'authlib' ? 'authlib-injector' : 'Nide8Auth'">
               <template #actions>
                 <PclButton size="sm" icon="refresh-cw" :disabled="helperBusy" @click="loadHelper(helperKey(section))">刷新状态</PclButton>
@@ -239,7 +238,7 @@
             </PclCard>
           </div>
 
-          <div v-else class="pcl-tools-grid">
+          <div v-show="section === 'test'" class="pcl-tools-grid">
             <PclCard title="API 测试">
               <template #actions>
                 <PclButton size="sm" variant="highlight" :disabled="busy" @click="loadApi">检查能力</PclButton>
@@ -301,8 +300,7 @@
               </div>
             </PclCard>
           </div>
-        </div>
-      </Transition>
+      </div>
     </main>
   </section>
 </template>
@@ -363,6 +361,8 @@ const roomCode = ref('');
 const backendLog = ref('');
 const helperStatus = ref<Record<string, any>>({});
 const helperBusy = ref(false);
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
+let refreshInFlight = false;
 const current = computed(() => items.find(item => item.id === section.value) || items[0]);
 const isMultiplayerSection = computed(() => ['multiplayer', 'yukari', 'terracotta'].includes(section.value));
 const selectedBackend = computed(() => backends.value.find(item => item.id === backend.value) || null);
@@ -495,6 +495,22 @@ async function loadBackendLog() {
     backendBusy.value = false;
   }
 }
+async function refreshVisibleData() {
+  if (refreshInFlight || props.busy || backendBusy.value || helperBusy.value) return;
+  refreshInFlight = true;
+  try {
+    if (isMultiplayerSection.value) {
+      await refreshBackend();
+      if (backendLog.value || backendState.value) await loadBackendLog();
+    } else if (section.value === 'tasks') {
+      await loadTasks();
+    } else if (section.value === 'scheduler') {
+      await loadStats();
+    }
+  } finally {
+    refreshInFlight = false;
+  }
+}
 async function loadTasks() {
   loading.value = true;
   error.value = '';
@@ -513,8 +529,10 @@ async function loadTasks() {
   }
 }
 async function reload() {
-  if (section.value === 'tasks') await loadTasks();
-  emit('refresh');
+  if (isMultiplayerSection.value) await refreshVisibleData();
+  else if (section.value === 'tasks') await loadTasks();
+  else if (section.value === 'scheduler') await loadStats();
+  else emit('refresh');
 }
 async function cancelTask(task: any) {
   try { await props.execute('task.cancel', task.id ? { taskId: task.id } : {}); await loadTasks(); }
@@ -624,7 +642,9 @@ onMounted(() => {
   void loadTasks();
   void loadBackends();
   void refreshBackend();
+  refreshTimer = setInterval(() => { void refreshVisibleData(); }, 3000);
 });
+onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 </script>
 
 <style scoped>
@@ -697,6 +717,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr);
   gap: 12px;
+  align-items: start;
 }
 
 .pcl-tools-grid {
@@ -744,6 +765,9 @@ onMounted(() => {
   white-space: pre-wrap;
   font: calc(11px * var(--pcl-font-scale, 1))/1.55 ui-monospace, Consolas, monospace;
 }
+
+.pcl-tools-stack > :deep(.pcl-card) { min-width: 0; }
+.pcl-tools-stack > :deep(.pcl-card) .pcl-tools-pre { max-height: calc(100vh - 300px); min-height: 220px; }
 
 .pcl-tools-hash {
   margin-top: 8px;

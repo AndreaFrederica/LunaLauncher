@@ -86,7 +86,7 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
-const finished = computed(() => Boolean(props.task?.finished) || ['succeeded', 'failed', 'cancelled', 'aborted', 'finished', 'completed'].includes(String(props.task?.state || '').toLowerCase()));
+const finished = computed(() => Boolean(props.task?.finished) || ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted', 'finished', 'completed'].includes(String(props.task?.state || '').toLowerCase()));
 const targetPercent = computed<number | null>(() => {
   const total = Number(props.task?.totalProgress || props.task?.total || 0);
   const progress = Number(props.task?.progress || 0);
@@ -121,7 +121,7 @@ const children = computed<any[]>(() => {
     return true;
   }).slice(0, 64);
 });
-const childDone = computed(() => children.value.filter(child => ['succeeded', 'failed', 'cancelled'].includes(String(child.state || '').toLowerCase())).length);
+const childDone = computed(() => children.value.filter(child => ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted', 'completed'].includes(String(child.state || '').toLowerCase())).length);
 const activeFiles = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'running').slice(0, 8));
 const activeCount = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'running').length);
 const pendingCount = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'waiting').length);
@@ -142,7 +142,7 @@ function childPercent(child: any): number | null {
   const total = Number(child?.total || 0);
   const current = Number(child?.current || 0);
   if (total > 0) return Math.max(0, Math.min(100, Math.round(current / total * 100)));
-  if (['succeeded', 'failed', 'cancelled'].includes(String(child?.state || '').toLowerCase())) return 100;
+  if (['succeeded', 'failed', 'cancelled', 'canceled', 'aborted', 'completed'].includes(String(child?.state || '').toLowerCase())) return 100;
   return null;
 }
 function childProgressText(child: any): string {

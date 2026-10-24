@@ -6,6 +6,7 @@
         <PclIconButton icon="grid-2x2" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
         <PclIconButton icon="layout-list" label="列表视图" :size="28" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
       </div>
+      <PclButton v-if="catalogKind" size="sm" variant="highlight" icon="download" :disabled="busy" @click="downloadOpen = true">下载{{ kindLabel }}</PclButton>
       <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">刷新</PclButton>
       <PclButton size="sm" icon="rotate-ccw" :disabled="busy || loading" @click="update">重新扫描</PclButton>
       <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder">打开目录</PclButton>
@@ -143,6 +144,30 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
+  <q-dialog v-model="downloadOpen">
+    <q-card class="pcl-dialog pcl-resource-download">
+      <q-card-section class="pcl-resource-download__head">
+        <div>
+          <div class="pcl-kicker">资源下载</div>
+          <h3>下载{{ kindLabel }}</h3>
+        </div>
+        <PclIconButton icon="x" label="关闭" :size="28" @click="downloadOpen = false" />
+      </q-card-section>
+      <q-card-section class="pcl-resource-download__body">
+        <PclCatalogBrowser
+          :instance="instance"
+          :kind="catalogKind"
+          :busy="busy"
+          :execute="execute"
+          @installed="onDownloadInstalled"
+          @install-start="emit('install-start', $event)"
+          @install-progress="emit('install-progress', $event)"
+          @install-done="emit('install-done', $event)"
+        />
+      </q-card-section>
+    </q-card>
+  </q-dialog>
+
 </template>
 
 <script setup lang="ts">
@@ -155,6 +180,7 @@ import PclIcon from '../../components/PclIcon.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclLoading from '../../components/PclLoading.vue';
+import PclCatalogBrowser from '../download/PclCatalogBrowser.vue';
 import { launcher } from '../../../boot/launcher-api';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
@@ -169,6 +195,14 @@ const folderKind = computed(() => ({
   datapacks: 'datapacks', yesstevemodels: 'yesstevemodels',
   customplayermodels: 'customplayermodels', schematics: 'schematics', screenshots: 'screenshots',
 } as Record<string, string>)[props.kind] || 'root');
+const catalogKinds = new Set(['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'worlds', 'texturepacks']);
+const catalogKind = computed(() => catalogKinds.has(props.kind) ? ({ texturepacks: 'resourcepacks', worlds: 'worlds' } as Record<string, string>)[props.kind] || props.kind : '');
+const downloadOpen = ref(false);
+function onDownloadInstalled() {
+  downloadOpen.value = false;
+  void load();
+}
+
 
 async function openFolder() {
   try {
@@ -700,5 +734,33 @@ onMounted(load);
   .pcl-resource-row__status {
     display: none;
   }
+}
+
+.pcl-resource-download {
+  width: 900px;
+  max-width: 96vw;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.pcl-resource-download__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.pcl-resource-download__head h3 {
+  margin: 3px 0;
+  color: var(--pcl-text);
+  font-size: calc(17px * var(--pcl-font-scale, 1));
+  font-weight: 500;
+}
+
+.pcl-resource-download__body {
+  max-height: calc(90vh - 85px);
+  overflow-y: auto;
+  padding-top: 0;
 }
 </style>

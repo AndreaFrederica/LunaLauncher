@@ -23,6 +23,20 @@ export async function waitForTask(
       else resolve(snapshot);
     };
     try {
+      // Hybrid start: one authoritative snapshot avoids missing a task that
+      // completed before the event listener was attached.
+      try {
+        const current: any = await launcher.execute('neo.task.status', { taskId });
+        if (current) {
+          onUpdate?.(current);
+          if (current.finished || ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(current.state || '').toLowerCase())) {
+            finish(current);
+            return;
+          }
+        }
+      } catch {
+        // The task may be queued and not visible through the legacy status API.
+      }
       unlisten = await launcher.onEvent((event: any) => {
         if (event?.kind !== 'task' || !event.data) return;
         const snapshot = event.data;
@@ -38,4 +52,25 @@ export async function waitForTask(
     }
     timer = setTimeout(() => finish(null, new Error('等待任务超时。')), timeoutMs);
   });
+}
+
+
+/** Replay the current task list and then receive pushed snapshots. */
+export async function subscribeTaskSnapshots(
+  onSnapshot: (snapshot: any) => void,
+  taskId = '',
+): Promise<() => void> {
+  const result: any = await launcher.execute('neo.task.subscribe', taskId ? { taskId } : {});
+  const subscriptionId = String(result?.subscriptionId || '');
+  if (!subscriptionId) return () => {};
+  const unlisten = await launcher.onStream((batch: any) => {
+    if (!batch || batch.subscriptionId !== subscriptionId) return;
+    for (const event of batch.events || []) {
+      if (event.kind === 'task.snapshot' && event.task) onSnapshot(event.task);
+    }
+  });
+  return () => {
+    unlisten();
+    void launcher.execute('event.unsubscribe', { subscriptionId }).catch(() => {});
+  };
 }

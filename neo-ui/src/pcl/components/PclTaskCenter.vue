@@ -44,7 +44,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import PclButton from './PclButton.vue';
 import PclIcon from './PclIcon.vue';
-import { launcher } from '../../boot/launcher-api';
+import { subscribeTaskSnapshots } from '../composables/useTaskEvents';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -53,7 +53,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
 const tasks = ref<any[]>([]);
 const loading = ref(false);
-let unlistenTaskEvents: (() => void) | undefined;
+let unsubscribeTaskSnapshots: (() => void) | undefined;
 
 async function load() {
   if (!props.modelValue) return;
@@ -127,14 +127,14 @@ watch(() => props.modelValue, value => {
 }, { immediate: true });
 onMounted(async () => {
   try {
-    unlistenTaskEvents = await launcher.onEvent((event: any) => {
-      if (event?.kind === 'task' && props.modelValue) applyTaskEvent(event.data || event);
+    unsubscribeTaskSnapshots = await subscribeTaskSnapshots((snapshot: any) => {
+      if (props.modelValue) applyTaskEvent(snapshot);
     });
   } catch {
     // The manual refresh button remains available.
   }
 });
-onUnmounted(() => unlistenTaskEvents?.());
+onUnmounted(() => unsubscribeTaskSnapshots?.());
 </script>
 
 <style scoped>

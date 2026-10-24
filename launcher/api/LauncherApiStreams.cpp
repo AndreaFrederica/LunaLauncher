@@ -13,6 +13,7 @@
 
 #include "Application.h"
 #include "HardwareInfo.h"
+#include "api/AsyncTaskRuntime.h"
 #include "InstanceList.h"
 #include "api/LauncherApiSupport.h"
 #include "api/LauncherApiDomains.h"
@@ -128,6 +129,28 @@ QJsonObject LauncherApiStreams::subscribeConsole(const QJsonObject& p)
         if (const auto sub = weak.lock()) append(sub, { { "kind", "instance.removed" } });
     });
     attachConsole(sub, instance->getLaunchTask());
+    return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
+}
+
+QJsonObject LauncherApiStreams::subscribeTasks(const QJsonObject& p)
+{
+    auto sub = create("neo-tasks", QString());
+    if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+    const auto wanted = p.value("taskId").toString().trimmed();
+    const auto runtime = &AsyncTaskRuntime::instance();
+    auto forward = [this, weak = std::weak_ptr<Subscription>(sub), wanted](const QJsonObject& snapshot) {
+        const auto sub = weak.lock();
+        if (!sub) return;
+        if (!wanted.isEmpty() && snapshot.value("taskId").toString() != wanted) return;
+        append(sub, { { "kind", "task.snapshot" }, { "task", snapshot } });
+    };
+    QObject::connect(runtime, &AsyncTaskRuntime::taskChanged, &sub->context, forward);
+    const auto tasks = runtime->list().value("tasks").toArray();
+    for (const auto& task : tasks) {
+        if (wanted.isEmpty() || task.toObject().value("taskId").toString() == wanted) {
+            append(sub, { { "kind", "task.snapshot" }, { "task", task } });
+        }
+    }
     return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
 }
 
@@ -290,6 +313,9 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
     api.registerOperation({ "instance.console.subscribe", "Subscribe to launch state and console output, including future launches.",
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeConsole(p); });
+    api.registerOperation({ "neo.task.subscribe", "Replay current task snapshots and push later Neo task updates.",
+        schema({ { "taskId", string("Optional task UUID to watch; omit for all tasks.") } }), "streams" },
+        [this](const QJsonObject& p, UserInteraction&) { return subscribeTasks(p); });
     api.registerOperation({ "runtime.memory.subscribe", "Push current physical memory usage in MiB.",
         schema({}), "streams" },
         [this](const QJsonObject&, UserInteraction&) { return subscribeMemory({}); });

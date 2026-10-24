@@ -46,7 +46,7 @@
         </button>
         <div class="pcl-resource-copy" @click="inspect(item)">
           <strong>{{ item.name || item.fileName || item.path || '未命名资源' }}</strong>
-          <small>{{ item.version || item.metadata?.version || item.path || '当前实例资源' }}</small>
+          <small v-if="item.version || item.metadata?.version">{{ item.version || item.metadata?.version }}</small>
           <small>{{ item.enabled === false ? '已禁用' : item.size ? formatSize(item.size) : statusLabel(item) }}</small>
         </div>
         <div class="pcl-resource-actions">
@@ -91,7 +91,6 @@
           </span>
           <span class="pcl-resource-row__copy">
             <strong>{{ item.name || item.fileName || item.path || '未命名资源' }}</strong>
-            <small>{{ item.path || '当前实例资源' }}</small>
           </span>
         </button>
         <span class="pcl-resource-row__meta">{{ item.version || item.metadata?.version || '—' }}</span>

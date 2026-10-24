@@ -40,6 +40,8 @@ export interface NeoUiPreferences {
   pclFloatMusic: boolean;
   /** Open an independent editor window even for the currently selected instance. */
   pclEditCurrentInWindow: boolean;
+  /** Clear accumulated launch console output when a new launch starts. */
+  pclClearLaunchLogOnStart: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
@@ -95,6 +97,7 @@ const defaults: NeoUiPreferences = {
   pclFloatRefresh: false,
   pclFloatMusic: false,
   pclEditCurrentInWindow: true,
+  pclClearLaunchLogOnStart: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclAccentColor: '#d65c9a',

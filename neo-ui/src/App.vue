@@ -218,7 +218,7 @@ async function launch(i:any, accountId?:string, serverAddress?:string, restoreSe
  if(launchUiResetTimer)clearTimeout(launchUiResetTimer);
   launchProgress.value=0;launchTargetProgress.value=0;launchStage.value='初始化';launchSpeed.value=0;launchError.value='';launchDetails.value='';launchChildren.value=[];setLaunchState('launching');
  busy.value=true;launchingId=i.id;preparingLaunch=true;
- await openInstance(i,true,true);if(isPclShell.value)page.value='instances';logMode.value='live';await connectConsole(i);preparingLaunch=false;
+ await openInstance(i,true,true);if(neoUiPreferences.pclClearLaunchLogOnStart)clearConsole();if(isPclShell.value)page.value='instances';logMode.value='live';await connectConsole(i);preparingLaunch=false;
  if(!consoleSubscription){busy.value=false;launchingId='';setLaunchState('failed');launchError.value='无法连接实例控制台';resetLaunchUiSoon();return;}
  busy.value=true;launchInFlight=true;error.value='';notice.value='';
  try{

@@ -261,6 +261,7 @@
         <PclCheckbox v-model="preferences.pclTitleLogo" label="显示 LunaLauncher 文字" />
         <PclCheckbox v-model="preferences.pclTitleBadge" label="显示 NEOUI 副标题" />
         <PclCheckbox v-model="preferences.pclLaunchAnimation" label="启用 PCL 启动过渡动画" />
+        <PclCheckbox v-model="preferences.pclClearLaunchLogOnStart" label="每次启动时清除历史启动日志" />
         <PclCheckbox v-model="preferences.pclEditCurrentInWindow" label="当前实例也用独立编辑窗口" />
       </div>
       <PclHint theme="blue">只修改 PCL 外观顶部标题栏，不影响窗口按钮、导航和内容区。</PclHint>
@@ -554,6 +555,7 @@ function reset() {
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
+    pclClearLaunchLogOnStart: true,
     pclEditCurrentInWindow: true,
     pclFloatTasks: false,
     pclFloatLog: false,

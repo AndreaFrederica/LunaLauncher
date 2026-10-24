@@ -30,9 +30,9 @@
       <div class="pcl-resource-download-window__list" :class="`is-${viewMode}`">
         <article v-for="project in projects" :key="project.projectId" class="pcl-resource-download-card" :class="{ selected: selected[project.projectId] }">
           <PclCheckbox :model-value="Boolean(selected[project.projectId])" @update:model-value="toggleProject(project, $event)" />
-          <img v-if="project.iconUrl" :src="project.iconUrl" alt="" />
+          <img v-if="project.iconUrl" :src="project.iconUrl" alt="" @click="openDetails(project)" />
           <span v-else class="pcl-resource-download-card__fallback"><PclIcon name="box" :size="20" /></span>
-          <div class="pcl-resource-download-card__copy">
+          <div class="pcl-resource-download-card__copy" @click="openDetails(project)">
             <strong>{{ project.name }}</strong>
             <small>{{ project.description }}</small>
             <PclSelect
@@ -57,12 +57,49 @@
       <div class="pcl-resource-download-window__footer">
         <PclCheckbox v-if="kind === 'mods'" v-model="includeOptional" label="安装可选依赖" />
         <span class="pcl-resource-download-window__count">已选择 {{ selectedList.length }} 项</span>
-        <PclButton variant="highlight" icon="download" :disabled="!selectedList.length || downloading" @click="download">
-          {{ downloading ? '下载中…' : `下载 ${selectedList.length || ''}` }}
+        <PclButton variant="highlight" icon="download" :disabled="!selectedList.length || downloading" @click="prepareDownload">
+          {{ downloading ? '下载中…' : '检查依赖并下载' }}
         </PclButton>
         <PclButton variant="ghost" icon="x" @click="closeWindow">关闭</PclButton>
       </div>
     </div>
+
+    <q-dialog v-model="detailOpen">
+      <q-card class="pcl-dialog pcl-resource-detail">
+        <q-card-section class="pcl-resource-detail__head">
+          <img v-if="detail?.iconUrl" :src="detail.iconUrl" alt="" />
+          <div><div class="pcl-kicker">资源详情</div><h3>{{ detail?.name || '加载中…' }}</h3><p>{{ detail?.authors?.map((a:any) => a.name).join(', ') || providerLabel(provider) }}</p></div>
+          <PclIconButton icon="x" label="关闭" :size="28" @click="detailOpen = false" />
+        </q-card-section>
+        <q-card-section class="pcl-resource-detail__body">
+          <div v-if="detailLoading" class="pcl-resource-detail__loading">正在读取项目详情…</div>
+          <p v-else>{{ detail?.description || '没有项目说明。' }}</p>
+          <a v-if="detail?.websiteUrl" :href="detail.websiteUrl" target="_blank" rel="noreferrer" @click.prevent="openExternal(detail.websiteUrl)">打开项目页面</a>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="confirmOpen">
+      <q-card class="pcl-dialog pcl-resource-confirm">
+        <q-card-section class="pcl-resource-detail__head">
+          <div><div class="pcl-kicker">下载确认</div><h3>确认下载 {{ confirmEntries.filter((entry:any) => entry.checked).length }} 项</h3><p>包含自动解析的必需依赖</p></div>
+          <PclIconButton icon="x" label="关闭" :size="28" @click="confirmOpen = false" />
+        </q-card-section>
+        <q-card-section class="pcl-resource-confirm__body">
+          <PclHint theme="blue">下载前可以取消不想安装的项目。依赖项由当前资源版本递归解析。</PclHint>
+          <div class="pcl-resource-confirm__list">
+            <label v-for="entry in confirmEntries" :key="entry.projectId" class="pcl-resource-confirm__row">
+              <PclCheckbox v-model="entry.checked" />
+              <span><strong>{{ entry.name }}</strong><small>{{ entry.dependency ? `依赖 · 由 ${entry.requiredBy || '所选资源'} 需要` : '已选择' }}</small></span>
+            </label>
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <PclButton variant="ghost" @click="confirmOpen = false">取消</PclButton>
+          <PclButton variant="highlight" icon="download" :disabled="!confirmEntries.some((entry:any) => entry.checked)" @click="confirmDownload">开始下载</PclButton>
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
@@ -98,6 +135,8 @@ const pageNumber = computed(() => Math.floor(offset.value / 25) + 1);
 const viewMode = ref<'grid' | 'list'>((() => { try { return localStorage.getItem('pcl-resource-download-view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } })());
 function setViewMode(mode: 'grid' | 'list') { viewMode.value = mode; try { localStorage.setItem('pcl-resource-download-view', mode); } catch { /* Storage may be unavailable. */ } }
 const selected = reactive<Record<string, any>>({});
+const detailOpen = ref(false), detail = ref<any>(null), detailLoading = ref(false);
+const confirmOpen = ref(false), confirmEntries = ref<any[]>([]);
 const instanceVersion = ref('');
 const instanceLoaders = ref<string[]>([]);
 const instanceLoaderLabel = ref('');
@@ -231,6 +270,7 @@ async function toggleProject(project: any, enabled: boolean) {
       label: `${version.versionNumber || version.name || version.versionId || '版本'} ${version.releaseType ? `· ${version.releaseType}` : ''}`,
       value: String(version.versionId || version.id || ''),
     }));
+    entry.rawVersions = versions;
     entry.versionId = String(versions[0]?.versionId || versions[0]?.id || '');
   } catch (exception) {
     const entry = selected[project.projectId];
@@ -241,11 +281,65 @@ async function toggleProject(project: any, enabled: boolean) {
   }
 }
 
-async function download() {
-  downloading.value = true;
+async function prepareDownload() {
+  if (!selectedList.value.length) return;
   error.value = '';
-  const active = selectedList.value.filter(entry => entry.versionId);
-  for (const entry of active) {
+  try {
+    const entries = selectedList.value.map(entry => ({ ...entry, dependency: false, requiredBy: '', checked: true }));
+    const seen = new Set(entries.map(entry => entry.projectId));
+    if (props.kind === 'mods') {
+      for (let index = 0; index < entries.length && entries.length < 48; index++) {
+        const entry = entries[index];
+        const rawVersions = entry.rawVersions || [];
+        const selectedVersion = rawVersions.find((version: any) => String(version.versionId || version.id) === String(entry.versionId)) || rawVersions[0];
+        for (const dependency of selectedVersion?.dependencies || []) {
+          const type = String(dependency.type || '').toLowerCase();
+          if (type !== 'required' && !(type === 'optional' && includeOptional.value)) continue;
+          const projectId = String(dependency.projectId || '');
+          if (!projectId || seen.has(projectId)) continue;
+          try {
+            const versions: any = await execute('resource.versions', { ...requestParams(), projectId });
+            const list = Array.isArray(versions) ? versions : versions?.versions || [];
+            const wanted = String(dependency.versionId || '');
+            const depVersion = list.find((version: any) => String(version.versionId || version.id) === wanted) || list[0];
+            if (!depVersion) continue;
+            let name = projectId;
+            try {
+              const project: any = await execute('resource.project', { ...requestParams(), projectId });
+              name = String(project?.name || projectId);
+            } catch { /* Keep project ID as the dependency name. */ }
+            entries.push({
+              projectId,
+              name,
+              versionId: String(depVersion.versionId || depVersion.id || ''),
+              versionOptions: [],
+              rawVersions: list,
+              dependency: true,
+              requiredBy: entry.name,
+              state: '',
+              status: '',
+              taskId: '',
+              checked: true,
+            });
+            seen.add(projectId);
+          } catch {
+            // A dependency that cannot be resolved is left to the installer's warning path.
+          }
+        }
+      }
+    }
+    confirmEntries.value = entries;
+    confirmOpen.value = true;
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  }
+}
+
+async function confirmDownload() {
+  const entries = confirmEntries.value.filter(entry => entry.checked && entry.versionId);
+  confirmOpen.value = false;
+  downloading.value = true;
+  for (const entry of entries) {
     entry.state = 'queued';
     entry.status = '等待下载';
     try {
@@ -265,12 +359,33 @@ async function download() {
       });
       entry.taskId = String(task?.taskId || '');
       entry.state = task?.state || 'running';
+      const selectedEntry = selected[entry.projectId];
+      if (selectedEntry) { selectedEntry.taskId = entry.taskId; selectedEntry.state = entry.state; }
     } catch (exception) {
       entry.state = 'failed';
       entry.status = exception instanceof Error ? exception.message : String(exception);
     }
   }
   await poll();
+  downloading.value = false;
+}
+
+async function openDetails(project: any) {
+  detail.value = { ...project };
+  detailOpen.value = true;
+  detailLoading.value = true;
+  try {
+    const result: any = await execute('resource.project', { ...requestParams(), projectId: project.projectId });
+    detail.value = { ...detail.value, ...result };
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+function openExternal(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 async function poll() {
@@ -339,4 +454,22 @@ onMounted(async () => {
 .pcl-resource-download-window__footer { display: flex; align-items: center; gap: 12px; padding-top: 4px; border-top: 1px solid var(--pcl-border); }
 .pcl-resource-download-window__count { margin-left: auto; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
 @media (max-width: 760px) { .pcl-resource-download-window__list { grid-template-columns: 1fr; } }
+
+.pcl-resource-detail { width: 640px; max-width: 92vw; max-height: 84vh; overflow: hidden; }
+.pcl-resource-detail__head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 8px; }
+.pcl-resource-detail__head img { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 4px; object-fit: cover; }
+.pcl-resource-detail__head > div { flex: 1; min-width: 0; }
+.pcl-resource-detail__head h3 { margin: 3px 0; color: var(--pcl-text); font-size: calc(17px * var(--pcl-font-scale, 1)); }
+.pcl-resource-detail__head p { margin: 0; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
+.pcl-resource-detail__body { max-height: calc(84vh - 100px); overflow-y: auto; color: var(--pcl-text); font-size: calc(11px * var(--pcl-font-scale, 1)); }
+.pcl-resource-detail__body p { white-space: pre-wrap; }
+.pcl-resource-detail__body a { color: var(--pcl-c3); }
+.pcl-resource-detail__loading { color: var(--pcl-muted); }
+.pcl-resource-confirm { width: 620px; max-width: 92vw; max-height: 80vh; overflow: hidden; }
+.pcl-resource-confirm__body { max-height: calc(80vh - 150px); overflow-y: auto; }
+.pcl-resource-confirm__list { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.pcl-resource-confirm__row { display: flex; align-items: flex-start; gap: 7px; padding: 6px; border: 1px solid var(--pcl-border); border-radius: 3px; }
+.pcl-resource-confirm__row > span { display: flex; flex-direction: column; min-width: 0; }
+.pcl-resource-confirm__row strong { overflow: hidden; color: var(--pcl-text); font-size: calc(10px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-resource-confirm__row small { color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
 </style>

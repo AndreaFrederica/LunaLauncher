@@ -38,8 +38,8 @@ export async function waitForTask(
         // The task may be queued and not visible through the legacy status API.
       }
       unlisten = await launcher.onEvent((event: any) => {
-        if (event?.kind !== 'task' || !event.data) return;
-        const snapshot = event.data;
+        if (event?.kind !== 'task' || (!event.task && !event.data)) return;
+        const snapshot = event.task || event.data;
         if (String(snapshot.taskId || '') !== taskId) return;
         onUpdate?.(snapshot);
         if (snapshot.finished || ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(snapshot.state || '').toLowerCase())) {

@@ -55,8 +55,8 @@ watch(() => props.open, (value) => { if (value) { shown.value = true; void poll(
 onMounted(async () => {
   try {
     unlistenTaskEvents = await launcher.onEvent((event: any) => {
-      if (event?.kind !== 'task' || !event.data) return;
-      const value = event.data;
+      if (event?.kind !== 'task' || (!event.task && !event.data)) return;
+      const value = event.task || event.data;
       sample(value);
       if (!isFinished(value)) { polled.value = value; shown.value = true; emit('updated', value); }
       else { polled.value = null; shown.value = false; emit('updated', value); }

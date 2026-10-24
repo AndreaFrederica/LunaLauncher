@@ -1,7 +1,6 @@
 <template>
   <header class="pcl-window-titlebar" data-tauri-drag-region @dblclick="toggleMaximize">
     <div class="pcl-window-titlebar__brand" data-tauri-drag-region>
-      <span class="pcl-window-titlebar__mark" data-tauri-drag-region>{{ mark || 'L' }}</span>
       <div data-tauri-drag-region>
         <strong data-tauri-drag-region>{{ title || 'Luna Launcher' }}</strong>
         <small v-if="subtitle" data-tauri-drag-region>{{ subtitle }}</small>
@@ -9,13 +8,13 @@
     </div>
     <div class="pcl-window-titlebar__actions">
       <button type="button" aria-label="最小化" title="最小化" @click="minimize">
-        <span class="pcl-window-titlebar__glyph">─</span>
+        <span class="material-icons">remove</span>
       </button>
       <button type="button" :aria-label="maximized ? '还原' : '最大化'" :title="maximized ? '还原' : '最大化'" @click="toggleMaximize">
-        <span class="pcl-window-titlebar__glyph">{{ maximized ? '❐' : '□' }}</span>
+        <span class="material-icons">{{ maximized ? 'filter_none' : 'crop_square' }}</span>
       </button>
       <button type="button" class="pcl-window-titlebar__close" aria-label="关闭" title="关闭" @click="close">
-        <span class="pcl-window-titlebar__glyph">×</span>
+        <span class="material-icons">close</span>
       </button>
     </div>
   </header>
@@ -66,9 +65,9 @@ onUnmounted(() => unlisten?.());
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex: 0 0 42px;
-  height: 42px;
-  padding: 0 4px 0 10px;
+  flex: 0 0 38px;
+  height: 38px;
+  padding: 0 4px 0 12px;
   background: var(--pcl-c3);
   color: #fff;
   user-select: none;
@@ -80,18 +79,6 @@ onUnmounted(() => unlisten?.());
   gap: 8px;
   min-width: 0;
   pointer-events: none;
-}
-
-.pcl-window-titlebar__mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, .18);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .pcl-window-titlebar__brand strong {
@@ -127,7 +114,7 @@ onUnmounted(() => unlisten?.());
   align-items: center;
   justify-content: center;
   width: 38px;
-  height: 32px;
+  height: 38px;
   border: 0;
   border-radius: 3px;
   background: transparent;
@@ -137,5 +124,5 @@ onUnmounted(() => unlisten?.());
 
 .pcl-window-titlebar__actions button:hover { background: rgba(255, 255, 255, .18); }
 .pcl-window-titlebar__actions .pcl-window-titlebar__close:hover { background: #c42b1c; }
-.pcl-window-titlebar__glyph { font-size: 14px; line-height: 1; }
+.material-icons { font-size: 18px; line-height: 1; }
 </style>

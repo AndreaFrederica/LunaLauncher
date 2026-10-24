@@ -1,6 +1,6 @@
 <template>
   <div class="pcl-standalone-editor">
-    <PclWindowTitleBar title="实例设置" :subtitle="instance?.name || instanceId" mark="L" />
+    <PclWindowTitleBar title="实例设置" :subtitle="instance?.name || instanceId" />
     <div class="pcl-standalone-editor__body">
     <div v-if="loading" class="pcl-standalone-editor__loading"><PclLoading /> 正在读取实例…</div>
     <PclInstancePage

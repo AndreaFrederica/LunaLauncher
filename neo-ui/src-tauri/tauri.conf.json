@@ -26,7 +26,8 @@
           "identifier": "main-events",
           "windows": [
             "main",
-            "webui-manager"
+            "webui-manager",
+            "instance-editor-*"
           ],
           "permissions": [
             "core:event:allow-listen",

@@ -236,6 +236,45 @@ async fn launcher_request(
     })
 }
 
+fn percent_encode(value: &str) -> String {
+    let mut out = String::new();
+    for byte in value.as_bytes() {
+        let ch = *byte as char;
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~') {
+            out.push(ch);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+#[tauri::command]
+async fn open_instance_editor(app: tauri::AppHandle, id: String, name: String) -> Result<(), String> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    id.hash(&mut hasher);
+    let label = format!("instance-editor-{:x}", hasher.finish());
+    if let Some(window) = app.get_webview_window(&label) {
+        window.show().map_err(|e| e.to_string())?;
+        return window.set_focus().map_err(|e| e.to_string());
+    }
+    let path = format!("index.html?instanceEditor={}", percent_encode(&id));
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::External(webui::app_url(&path)),
+    )
+    .title(format!("实例设置 - {name}"))
+    .inner_size(980.0, 760.0)
+    .min_inner_size(720.0, 480.0);
+    if let Some(path) = &app.state::<startup::Startup>().webview_data_dir {
+        builder = builder.data_directory(path.clone());
+    }
+    builder.build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn main() {
     let mut context = tauri::generate_context!();
     let startup = startup::prepare(&mut context);
@@ -277,6 +316,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             launcher_request,
+            open_instance_editor,
             webui::webui_list,
             webui::webui_settings_get,
             webui::webui_settings_update,

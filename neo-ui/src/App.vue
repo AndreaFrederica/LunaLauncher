@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
-<div class="xmcl-app text-white">
+<div v-if="editorInstanceId" class="pcl-standalone-root"><PclStandaloneInstanceEditor :instance-id="editorInstanceId" /></div>
+<div v-else class="xmcl-app text-white">
 <NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
  <Transition name="pcl-route" mode="out-in"><div v-if="isPclShell" :key="page" class="pcl-route-shell">
@@ -93,6 +94,7 @@ import PclDownloadPage from './pcl/pages/download/PclDownloadPage.vue';
 import PclInstallProgressDialog from './pcl/pages/download/PclInstallProgressDialog.vue';
 import PclTaskCenter from './pcl/components/PclTaskCenter.vue';
 import PclInstanceEditWindow from './pcl/components/PclInstanceEditWindow.vue';
+import PclStandaloneInstanceEditor from './pcl/pages/settings/PclStandaloneInstanceEditor.vue';
 import PclToolsPage from './pcl/pages/tools/PclToolsPage.vue';
 import PclSetupPage from './pcl/pages/settings/PclSetupPage.vue';
 import PclInstancePage from './pcl/pages/instance/PclInstancePage.vue';
@@ -109,6 +111,7 @@ import { launcher } from './boot/launcher-api';
 import { neoUiPreferences, persistNeoUiPreferences } from './neo-ui-preferences';
 import { useNeoDialogs } from './composables/useNeoDialogs';
 const buildLabel = '2026-09-20.1';
+const editorInstanceId = new URLSearchParams(window.location.search).get('instanceEditor') || '';
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
 const quasar=useQuasar(),connected=ref(false),icons=ref<Record<string,string>>({});
 function closeMobileNav(){if(quasar.screen.lt.md)drawerOpen.value=false;}
@@ -234,8 +237,14 @@ function quickLaunchHome(instance:any, switchSelected:boolean){
  const previous=selected.value?.id || '';
  void launch(instance, launchAccountId.value, undefined, switchSelected ? '' : previous);
 }
-function openInstanceEditor(instance: any) {
+async function openInstanceEditor(instance: any) {
   if (!instance?.id) return;
+  try {
+    await launcher.openInstanceEditor(instance.id, instance.name || '');
+    return;
+  } catch {
+    // Browser preview and older desktop builds do not expose the native window command.
+  }
   if (editWindows.value.some(window => window.instance.id === instance.id)) return;
   editWindows.value.push({ key: `edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, instance: { ...instance } });
 }
@@ -245,7 +254,7 @@ function editInstance(instance: any) {
     void openInstance(instance);
     return;
   }
-  openInstanceEditor(instance);
+  void openInstanceEditor(instance);
 }
 function menuLaunch(instance: any) {
   if (!instance?.id) return;
@@ -469,7 +478,7 @@ async function cancelDeviceLogin(){
 async function openDeviceBrowser(){const url=String(device.value?.url || '');if(!url)return;try{await call('desktop.open-url',{url});}catch(e){error.value=message(e);}}
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
-onMounted(async()=>{void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
+onMounted(async()=>{if(editorInstanceId)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
 onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>
@@ -480,4 +489,11 @@ onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();u
 .global-search{width:620px;max-width:94vw;background:rgba(29,29,38,.98)!important;border:1px solid rgba(255,255,255,.12);border-radius:16px}.global-search :deep(.q-item){min-height:58px}.global-search :deep(.q-avatar){background:rgba(255,255,255,.08)}
 .pcl-route-enter-active,.pcl-route-leave-active{transition:opacity .18s,transform .35s cubic-bezier(.16,1.3,.3,1)}.pcl-route-enter-from{opacity:0;transform:translateX(20px)}.pcl-route-leave-to{opacity:0;transform:translateX(-20px)}
 @media(max-width:700px){.workspace-heading{display:block}.heading-actions{margin-top:18px}.heading-actions .q-btn{flex:1}.library-toolbar{padding-left:10px}.library-count{display:none}}
+
+.pcl-standalone-root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--pcl-page-bg);
+}
 </style>

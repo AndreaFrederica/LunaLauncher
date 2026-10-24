@@ -213,6 +213,10 @@ export class LauncherApiClient {
     this.requireDesktop();
     await invoke('webui_manager');
   }
+  async openInstanceEditor(id: string, name = ''): Promise<void> {
+    this.requireDesktop();
+    await invoke('open_instance_editor', { id, name });
+  }
   onEvent(handler: (event: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();
     return listen('launcher-event', event => handler(event.payload));

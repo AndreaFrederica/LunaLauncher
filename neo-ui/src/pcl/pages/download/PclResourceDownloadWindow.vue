@@ -3,7 +3,7 @@
     <PclWindowTitleBar :title="`下载${kindLabel}`" :subtitle="instanceName || instanceId" />
     <div class="pcl-resource-download-window__body">
       <div class="pcl-resource-download-window__toolbar">
-        <PclSelect v-model="provider" :options="providers" @update:model-value="() => search(true)" />
+        <PclSelect v-model="provider" :options="providerOptions" @update:model-value="() => search(true)" />
         <PclInput v-model="query" :placeholder="`搜索${kindLabel}`" @enter="search(true)" />
         <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? '搜索中…' : '搜索' }}</PclButton>
         <div class="pcl-resource-download-window__view">
@@ -81,7 +81,10 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const props = defineProps<{ instanceId: string; instanceName?: string; kind: string }>();
 const provider = ref('modrinth');
-const providers = [{ label: 'Modrinth', value: 'modrinth' }, { label: 'CurseForge', value: 'curseforge' }];
+const providerCatalog = ref<any[]>([]);
+const providerOptions = computed(() => providerCatalog.value
+  .filter((entry: any) => Array.isArray(entry.kinds) && entry.kinds.includes(props.kind))
+  .map((entry: any) => ({ label: providerLabel(entry.id), value: String(entry.id) })));
 const query = ref('');
 const searching = ref(false);
 const downloading = ref(false);
@@ -102,11 +105,40 @@ const instanceLoaderLabel = ref('');
 const kindLabel = computed(() => ({ mods: '模组', resourcepacks: '资源包', shaderpacks: '光影包', datapacks: '数据包', worlds: '世界', texturepacks: '材质包' } as Record<string, string>)[props.kind] || props.kind);
 const selectedList = computed(() => Object.values(selected));
 
+function providerLabel(id: string) {
+  if (id === 'modrinth') return 'Modrinth';
+  if (id === 'curseforge') return 'CurseForge';
+  if (id === 'hangar') return 'Hangar';
+  if (id.startsWith('js:')) return `JS · ${id.slice(3)}`;
+  return id;
+}
+function providerMeta() {
+  return providerCatalog.value.find((entry: any) => String(entry.id) === provider.value) || null;
+}
+function providerSupportsMinecraftFilter() {
+  return providerMeta()?.minecraftSearchFilter !== false;
+}
 function requestParams() {
   const params: Record<string, unknown> = { provider: provider.value, kind: props.kind };
-  if (instanceVersion.value) params.minecraftVersion = instanceVersion.value;
-  if (props.kind === 'mods' && instanceLoaders.value.length) params.loaders = instanceLoaders.value;
+  if (instanceVersion.value && providerSupportsMinecraftFilter()) params.minecraftVersion = instanceVersion.value;
+  if (props.kind === 'mods' && instanceLoaders.value.length && providerSupportsMinecraftFilter()) params.loaders = instanceLoaders.value;
   return params;
+}
+
+async function loadProviders() {
+  try {
+    const result: any = await execute('resource.providers');
+    providerCatalog.value = Array.isArray(result) ? result : [];
+  } catch {
+    providerCatalog.value = [
+      { id: 'modrinth', kinds: ['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'modpacks'] },
+      { id: 'curseforge', kinds: ['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'modpacks'] },
+    ];
+  }
+  const available = providerOptions.value;
+  if (available.length && !available.some(option => option.value === provider.value)) {
+    provider.value = String(available[0].value);
+  }
 }
 
 async function loadInstanceConstraints() {
@@ -274,7 +306,7 @@ async function closeWindow() {
 onMounted(async () => {
   document.documentElement.dataset.neoShell = 'pcl';
   document.documentElement.dataset.neoTheme = 'dark';
-  await loadInstanceConstraints();
+  await Promise.all([loadProviders(), loadInstanceConstraints()]);
   void search();
 });
 </script>

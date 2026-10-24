@@ -106,7 +106,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclIcon from '../../components/PclIcon.vue';
@@ -116,13 +116,30 @@ import PclSelect from '../../components/PclSelect.vue';
 type Execute=(op:string,p?:Record<string,unknown>)=>Promise<any>;
 const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftVersion?:string;loader?:string;busy:boolean;execute:Execute;defaultProvider?:string;tag?:string}>();
 const emit=defineEmits<{installed:[]; 'install-start':[info:any]; 'install-progress':[task:any]; 'install-done':[info:any]}>();
-const providers=computed(()=>props.packs?['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb']:['modrinth','curseforge']);
+const providers = ref<string[]>(props.packs ? ['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb'] : ['modrinth','curseforge']);
 const provider=ref(props.defaultProvider||'modrinth'),query=ref(''),results=ref<any[]>([]),project=ref<any>(null),versions=ref<any[]>([]),version=ref(''),error=ref(''),gameVersion=ref(props.minecraftVersion||''),loader=ref(props.loader||''),sort=ref('relevance'),optional=ref(false),instanceName=ref(''),offset=ref(0),searched=ref(false),detailLoading=ref(false),installing=ref(false),projectTab=ref<'overview'|'versions'>('overview'),favorite=ref(false);
 watch(()=>[props.instance,props.kind,props.packs],reset);watch(()=>props.defaultProvider,v=>{if(v){provider.value=v;reset();}});watch(()=>[props.minecraftVersion,props.loader],()=>{gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';});
-function providerLabel(v:string){return ({modrinth:'Modrinth',curseforge:'CurseForge',atlauncher:'ATLauncher',ftb:'FTB',technic:'Technic','legacy-ftb':'Legacy FTB'} as Record<string,string>)[v]||v;}
+function providerLabel(v:string){return ({modrinth:'Modrinth',curseforge:'CurseForge',atlauncher:'ATLauncher',ftb:'FTB',technic:'Technic','legacy-ftb':'Legacy FTB',hangar:'Hangar'} as Record<string,string>)[v]||(v.startsWith('js:')?`JS · ${v.slice(3)}`:v);}
 function reset(){results.value=[];project.value=null;versions.value=[];version.value='';searched.value=false;error.value='';offset.value=0;detailLoading.value=false;projectTab.value='overview';gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';}
 function resetFilters(){query.value='';gameVersion.value=props.minecraftVersion||'';loader.value=props.loader||'';sort.value='relevance';reset();}
 const providerOptions = computed(() => providers.value.map(value => ({ label: providerLabel(value), value })));
+async function loadProviders() {
+  if (props.packs) return;
+  try {
+    const result: any = await props.execute('resource.providers');
+    const list = Array.isArray(result) ? result : [];
+    const ids = list.filter((entry: any) => Array.isArray(entry.kinds) && entry.kinds.includes(props.kind || 'mods')).map((entry: any) => String(entry.id));
+    if (ids.length) {
+      providers.value = ids;
+      if (!ids.includes(provider.value)) provider.value = ids[0];
+    }
+  } catch {
+    // Static providers remain available if dynamic discovery fails.
+  }
+}
+onMounted(() => { void loadProviders(); });
+watch(() => props.kind, () => { void loadProviders(); });
+
 const loaderOptions = [
   { label: '全部加载器', value: '' },
   { label: 'Forge', value: 'forge' },

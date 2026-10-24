@@ -82,6 +82,7 @@ class LaunchController : public Task {
 
     bool abort() override;
     bool canAbort() const override;
+    QList<Task*> getSubTasks() const override;
 
    private:
     void login();

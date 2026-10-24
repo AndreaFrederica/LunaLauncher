@@ -703,6 +703,12 @@ bool LaunchController::canAbort() const
     return Task::canAbort();
 }
 
+QList<Task*> LaunchController::getSubTasks() const
+{
+    if (m_launcher) return { m_launcher };
+    return {};
+}
+
 bool LaunchController::abort()
 {
     if (m_headless && m_authTask) {

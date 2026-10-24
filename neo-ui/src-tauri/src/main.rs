@@ -266,6 +266,7 @@ async fn open_instance_editor(app: tauri::AppHandle, id: String, name: String) -
         tauri::WebviewUrl::External(webui::app_url(&path)),
     )
     .title(format!("实例设置 - {name}"))
+    .decorations(false)
     .inner_size(980.0, 760.0)
     .min_inner_size(720.0, 480.0);
     if let Some(path) = &app.state::<startup::Startup>().webview_data_dir {

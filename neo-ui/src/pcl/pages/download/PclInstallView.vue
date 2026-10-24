@@ -78,8 +78,8 @@
         <PclHint v-if="selectedLoader?.id === 'forge'" theme="yellow">
           OptiFine 与 Forge 的组合需要额外补丁，Luna 暂不支持自动安装。
         </PclHint>
-        <PclHint theme="yellow">
-          Luna 当前支持 Forge、NeoForge、Fabric 与 Cleanroom。OptiFine、LabyMod、LiteLoader、Legacy Fabric 及加载器组合暂未接入。
+        <PclHint theme="blue">
+          加载器版本会按当前 Minecraft 版本从同一套组件元数据读取；Cleanroom、Quilt 与 LiteLoader 的兼容范围由后端版本列表决定。
         </PclHint>
 
         <PclCard
@@ -150,14 +150,15 @@ import PclListItem from '../../components/PclListItem.vue';
 import PclLoading from '../../components/PclLoading.vue';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
-type Version = { version: string; type?: string; time?: string; recommended?: boolean; requires?: any[] };
-type LoaderCard = { id: string; label: string; icon: string; uid: string; alias: string; disabled?: boolean };
+type Version = { version: string; type?: string; time?: string; recommended?: boolean; requires?: any[]; minecraftVersion?: string; loaderVersion?: string; commitRef?: string; channel?: string; runtime?: any };
+type LoaderCard = { id: string; label: string; icon: string; uid?: string; alias: string; special?: string; channel?: string; disabled?: boolean };
 
 const props = defineProps<{
   execute: Execute;
   busy: boolean;
   instances?: any[];
-  preset?: { label: string; version: string; alias: string } | null;
+  preset?: { label: string; version: string; alias: string; special?: string; channel?: string; loaderVersion?: string; commitRef?: string } | null;
+  initialMinecraftVersion?: string;
 }>();
 const emit = defineEmits<{ installed: [result: any]; 'preset-consumed': []; 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
 
@@ -165,7 +166,7 @@ const step = ref<'versions' | 'select'>('versions');
 const loading = ref(false), loadError = ref(''), installing = ref(false), error = ref('');
 const versions = ref<Version[]>([]);
 const selectedVersion = ref<Version | null>(null);
-const selectedLoader = ref<{ id: string; label: string; version: string } | null>(null);
+const selectedLoader = ref<{ id: string; label: string; version: string; special?: string; channel?: string; loaderVersion?: string; commitRef?: string } | null>(null);
 const openLoader = ref('');
 const instanceName = ref('');
 const nameTouched = ref(false);
@@ -177,13 +178,11 @@ const loaderCards: LoaderCard[] = [
   { id: 'cleanroom', label: 'Cleanroom', icon: 'flask-conical', uid: 'com.cleanroommc.cleanroom', alias: 'cleanroom' },
   { id: 'neoforge', label: 'NeoForge', icon: 'cat', uid: 'net.neoforged', alias: 'neoforge' },
   { id: 'fabric', label: 'Fabric', icon: 'scroll', uid: 'net.fabricmc.fabric-loader', alias: 'fabric' },
-  { id: 'legacy-fabric', label: 'Legacy Fabric', icon: 'scroll', uid: 'net.legacyfabric.loader', alias: 'legacyfabric', disabled: true },
-  { id: 'fabric-api', label: 'Fabric API', icon: 'package-plus', uid: '', alias: '', disabled: true },
-  { id: 'legacy-fabric-api', label: 'Legacy Fabric API', icon: 'package-plus', uid: '', alias: '', disabled: true },
-  { id: 'labymod', label: 'LabyMod', icon: 'box', uid: '', alias: '', disabled: true },
-  { id: 'optifine', label: 'OptiFine', icon: 'gauge', uid: '', alias: '', disabled: true },
-  { id: 'optifabric', label: 'OptiFabric', icon: 'sparkles', uid: '', alias: '', disabled: true },
-  { id: 'liteloader', label: 'LiteLoader', icon: 'egg', uid: '', alias: 'liteloader', disabled: true },
+  { id: 'quilt', label: 'Quilt', icon: 'layers', uid: 'org.quiltmc.quilt-loader', alias: 'quilt' },
+  { id: 'liteloader', label: 'LiteLoader', icon: 'egg', uid: 'com.mumfrey.liteloader', alias: 'liteloader' },
+  { id: 'legacyfabric', label: 'Legacy Fabric', icon: 'scroll', alias: 'legacyfabric', special: 'legacyfabric' },
+  { id: 'labymod-production', label: 'LabyMod（正式版）', icon: 'sparkles', alias: 'labymod-production', special: 'labymod-production', channel: 'production' },
+  { id: 'labymod-snapshot', label: 'LabyMod（快照）', icon: 'sparkles', alias: 'labymod-snapshot', special: 'labymod-snapshot', channel: 'snapshot' },
 ];
 
 const sortedVersions = computed(() => [...versions.value].sort((a, b) => dateValue(b.time) - dateValue(a.time)));
@@ -219,6 +218,12 @@ watch(() => props.preset, preset => {
   if (!preset || step.value !== 'versions') return;
   // The preset is applied after the user chooses a Minecraft version.
 });
+watch(() => props.initialMinecraftVersion, initial => {
+  const version = String(initial || '').trim();
+  if (!version || loading.value || !versions.value.length) return;
+  const selected = versions.value.find(entry => entry.version === version);
+  if (selected && selectedVersion.value?.version !== selected.version) selectMinecraft(selected);
+});
 
 function groupOf(version: Version): 'release' | 'snapshot' | 'old' {
   const type = String(version.type || '').toLowerCase();
@@ -239,22 +244,10 @@ function generatedName(): string {
   const base = selectedVersion.value.version;
   return selectedLoader.value ? `${base}-${selectedLoader.value.label}_${selectedLoader.value.version}` : base;
 }
-function compareMinecraft(left: string, right: string): number {
-  const a = left.split(/[^0-9]+/).filter(Boolean).map(Number);
-  const b = right.split(/[^0-9]+/).filter(Boolean).map(Number);
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    const difference = (a[index] || 0) - (b[index] || 0);
-    if (difference) return difference;
-  }
-  return 0;
-}
 function isLoaderCompatible(loader: LoaderCard): boolean {
-  const version = selectedVersion.value?.version || '';
-  if (loader.disabled) return false;
-  if (loader.id === 'cleanroom') return version === '1.12.2';
-  if (loader.id === 'neoforge') return compareMinecraft(version, '1.20.1') >= 0;
-  if (loader.id === 'fabric') return compareMinecraft(version, '1.14') >= 0;
-  return true;
+  // Compatibility is authoritative in component.versions. Hard-coding
+  // ranges here made the Neo UI diverge from the metadata providers.
+  return !loader.disabled && Boolean(selectedVersion.value?.version);
 }
 function isLoaderDisabled(loader: LoaderCard): boolean {
   return !isLoaderCompatible(loader);
@@ -262,6 +255,10 @@ function isLoaderDisabled(loader: LoaderCard): boolean {
 function loaderStateLabel(loader: LoaderCard): string {
   if (loader.disabled) return '暂不支持';
   return '不兼容';
+}
+
+function clearLoaderState() {
+  for (const key of Object.keys(loaderState)) delete loaderState[key];
 }
 
 async function loadMinecraft() {
@@ -277,6 +274,9 @@ async function loadMinecraft() {
       recommended: Boolean(version.recommended),
       requires: version.requires || [],
     })).filter((version: Version) => version.version);
+    const initial = String(props.initialMinecraftVersion || '').trim();
+    const selected = initial ? versions.value.find(version => version.version === initial) : undefined;
+    if (selected) selectMinecraft(selected);
   } catch (exception) {
     loadError.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
@@ -286,10 +286,27 @@ async function loadMinecraft() {
 function selectMinecraft(version: Version) {
   selectedVersion.value = version;
   selectedLoader.value = null;
+  clearLoaderState();
   openLoader.value = '';
   step.value = 'select';
-  if (props.preset) {
-    selectedLoader.value = { id: props.preset.alias, label: props.preset.label, version: props.preset.version };
+  const preset = props.preset;
+  if (preset) {
+    const specialCard = loaderCards.find(loader => loader.alias === preset.alias && loader.special);
+    if (specialCard) {
+      selectedLoader.value = {
+        id: specialCard.id,
+        label: specialCard.label,
+        version: preset.version,
+        special: specialCard.special,
+        channel: preset.channel || specialCard.channel,
+        loaderVersion: preset.loaderVersion || preset.version,
+        commitRef: preset.commitRef,
+      };
+      openLoader.value = specialCard.id;
+      void toggleLoader(specialCard, true);
+    } else {
+      selectedLoader.value = { id: preset.alias, label: preset.label, version: preset.version };
+    }
     emit('preset-consumed');
   }
   if (!nameTouched.value) instanceName.value = generatedName();
@@ -310,15 +327,19 @@ async function toggleLoader(loader: LoaderCard, open: boolean) {
   loaderState[loader.id].loading = true;
   loaderState[loader.id].error = '';
   try {
-    const result = await props.execute('component.versions', {
-      uid: loader.uid,
-      minecraftVersion: selectedVersion.value?.version,
-    });
+    const result = loader.special
+      ? await props.execute('special.loader.versions', { loader: loader.special, minecraftVersion: selectedVersion.value?.version })
+      : await props.execute('component.versions', { uid: loader.uid, minecraftVersion: selectedVersion.value?.version });
     loaderState[loader.id].versions = (result?.versions || []).map((version: any) => ({
       version: String(version.version || ''),
       type: version.type,
       time: version.time,
       recommended: Boolean(version.recommended),
+      minecraftVersion: version.minecraftVersion,
+      loaderVersion: version.loaderVersion,
+      commitRef: version.commitRef,
+      channel: version.channel,
+      runtime: version.runtime,
     })).filter((version: Version) => version.version);
   } catch (exception) {
     loaderState[loader.id].error = exception instanceof Error ? exception.message : String(exception);
@@ -327,7 +348,15 @@ async function toggleLoader(loader: LoaderCard, open: boolean) {
   }
 }
 function selectLoader(loader: LoaderCard, version: Version) {
-  selectedLoader.value = { id: loader.id, label: loader.label, version: version.version };
+  selectedLoader.value = {
+    id: loader.id,
+    label: loader.label,
+    version: version.version,
+    special: loader.special,
+    channel: version.channel || loader.channel,
+    loaderVersion: version.loaderVersion || version.version,
+    commitRef: version.commitRef,
+  };
   openLoader.value = '';
 }
 function clearLoader() {
@@ -345,7 +374,7 @@ async function install() {
       name: instanceName.value.trim(),
       version: selectedVersion.value.version,
     };
-    if (selectedLoader.value) {
+    if (selectedLoader.value && !selectedLoader.value.special) {
       parameters.loader = selectedLoader.value.id;
       parameters.loaderVersion = selectedLoader.value.version;
     }
@@ -361,7 +390,29 @@ async function install() {
     }
     emit('install-progress', task);
     if (!task || task.state !== 'succeeded') throw new Error(task?.error || '实例创建失败');
-    emit('installed', { id: task.createdInstanceId || '', name: instanceName.value.trim() || selectedVersion.value.version });
+    let createdId = task.createdInstanceId || '';
+    if (selectedLoader.value?.special) {
+      if (!createdId) throw new Error('实例创建成功但没有返回实例 ID');
+      task = await props.execute('neo.task.start', {
+        operation: 'instance.special-loader.install',
+        priority: 'high',
+        parameters: {
+          instance: createdId,
+          loader: selectedLoader.value.special,
+          minecraftVersion: selectedVersion.value.version,
+          ...(selectedLoader.value.loaderVersion ? { loaderVersion: selectedLoader.value.loaderVersion } : {}),
+          ...(selectedLoader.value.commitRef ? { commitRef: selectedLoader.value.commitRef } : {}),
+        },
+      });
+      while (task && !task.finished) {
+        emit('install-progress', task);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        task = await props.execute('neo.task.status', { taskId: task.taskId });
+      }
+      emit('install-progress', task);
+      if (!task || task.state !== 'succeeded') throw new Error(task?.error || '特殊加载器安装失败');
+    }
+    emit('installed', { id: createdId, name: instanceName.value.trim() || selectedVersion.value.version });
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {

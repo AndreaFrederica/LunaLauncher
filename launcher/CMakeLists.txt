@@ -225,6 +225,8 @@ set(MINECRAFT_SOURCES
     # Logging
     minecraft/Logging.h
     minecraft/Logging.cpp
+    minecraft/SpecialLoaderInstanceCreationTask.h
+    minecraft/SpecialLoaderInstanceCreationTask.cpp
 
     # Minecraft support
     minecraft/auth/AccountData.cpp
@@ -506,6 +508,10 @@ set(META_SOURCES
     meta/CleanroomMetadataProvider.h
     meta/MetadataProvider.cpp
     meta/MetadataProvider.h
+    meta/SpecialLoaderMetadataProvider.cpp
+    meta/SpecialLoaderMetadataProvider.h
+    ui/widgets/SpecialLoaderVersionList.cpp
+    ui/widgets/SpecialLoaderVersionList.h
     meta/BaseEntity.cpp
     meta/BaseEntity.h
     meta/VersionList.cpp

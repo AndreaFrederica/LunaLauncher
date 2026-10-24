@@ -3,6 +3,7 @@
 #include "MetadataProvider.h"
 
 #include "CleanroomMetadataProvider.h"
+#include "SpecialLoaderMetadataProvider.h"
 #include "Application.h"
 #include "meta/Index.h"
 #include "meta/VersionList.h"
@@ -17,6 +18,7 @@ void registerBuiltinProviders()
     s_activeProviderTasks.clear();
     s_providers.clear();
     s_providers.push_back(std::make_shared<CleanroomMetadataProvider>());
+    s_providers.push_back(std::make_shared<SpecialLoaderMetadataProvider>());
 
     // Pre-register provider UIDs and load their lists so component controls
     // can become available without querying the default Prism metadata API.

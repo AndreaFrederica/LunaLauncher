@@ -62,6 +62,8 @@
 #include "ui/dialogs/NewComponentDialog.h"
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/dialogs/VersionSelectDialog.h"
+#include "api/LauncherApiSpecial.h"
+#include "ui/widgets/SpecialLoaderVersionList.h"
 
 #include "ui/GuiUtil.h"
 
@@ -379,6 +381,29 @@ void VersionPage::on_actionChange_version_triggered()
     }
     auto patch = m_profile->getComponent(versionRow);
     auto name = patch->getName();
+    const auto componentId = patch->getID();
+    if (componentId == "net.legacyfabric" || componentId == "net.labymod") {
+        const auto minecraft = m_profile->getComponentVersion("net.minecraft");
+        auto loader = componentId == "net.legacyfabric" ? QStringLiteral("legacyfabric") : QStringLiteral("labymod-production");
+        if (componentId == "net.labymod" && patch->getVersion().contains("|labymod-snapshot"))
+            loader = QStringLiteral("labymod-snapshot");
+        auto specialList = new SpecialLoaderVersionList(loader, minecraft, this);
+        VersionSelectDialog vselect(specialList, tr("Change %1 version").arg(name), this);
+        vselect.setExactIfPresentFilter(BaseVersionList::ParentVersionRole, minecraft);
+        if (!vselect.exec() || !vselect.selectedVersion())
+            return;
+        const auto selected = std::dynamic_pointer_cast<SpecialLoaderVersion>(vselect.selectedVersion());
+        if (!selected)
+            return;
+        QString error;
+        if (!SpecialLoader::install(m_inst, loader, minecraft, selected->loaderVersion(), selected->commitRef(), &error)) {
+            QMessageBox::critical(this, tr("Error"), error.isEmpty() ? tr("Could not install the loader.") : error);
+            return;
+        }
+        reloadPackProfile();
+        m_container->refreshContainer();
+        return;
+    }
     auto list = patch->getVersionList();
     list->clearExternalRecommends();
     if (!list) {

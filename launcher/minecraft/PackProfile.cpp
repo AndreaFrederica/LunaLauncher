@@ -87,6 +87,11 @@ PackProfile::~PackProfile()
     saveNow();
 }
 
+MinecraftInstance* PackProfile::instance() const
+{
+    return d->m_instance;
+}
+
 // BEGIN: component file format
 
 static const int currentComponentsFileVersion = 1;

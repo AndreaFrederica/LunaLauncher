@@ -230,6 +230,24 @@
             </widget>
            </item>
            <item>
+            <widget class="QRadioButton" name="legacyFabricFilter">
+             <property name="text"><string>Legacy Fabric</string></property>
+             <attribute name="buttonGroup"><string notr="true">loaderBtnGroup</string></attribute>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="labyModProductionFilter">
+             <property name="text"><string>LabyMod (Production)</string></property>
+             <attribute name="buttonGroup"><string notr="true">loaderBtnGroup</string></attribute>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="labyModSnapshotFilter">
+             <property name="text"><string>LabyMod (Snapshot)</string></property>
+             <attribute name="buttonGroup"><string notr="true">loaderBtnGroup</string></attribute>
+            </widget>
+           </item>
+           <item>
             <widget class="QRadioButton" name="quiltFilter">
              <property name="text">
               <string>Quilt</string>

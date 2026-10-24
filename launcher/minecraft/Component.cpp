@@ -59,6 +59,8 @@ const QMap<QString, ModloaderMapEntry> Component::KNOWN_MODLOADERS = {
       { ModPlatform::Cleanroom, { "net.minecraftforge", "net.neoforged", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
     { "net.fabricmc.fabric-loader",
       { ModPlatform::Fabric, { "net.minecraftforge", "net.neoforged", "com.cleanroommc.cleanroom", "org.quiltmc.quilt-loader" } } },
+    { "net.legacyfabric",
+      { ModPlatform::LegacyFabric, { "net.neoforged", "net.minecraftforge", "com.cleanroommc.cleanroom", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
     { "org.quiltmc.quilt-loader",
       { ModPlatform::Quilt, { "net.minecraftforge", "net.neoforged", "com.cleanroommc.cleanroom", "net.fabricmc.fabric-loader" } } },
     { "com.mumfrey.liteloader", { ModPlatform::LiteLoader, {} } }

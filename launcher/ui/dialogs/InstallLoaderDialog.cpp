@@ -19,22 +19,31 @@
 #include "InstallLoaderDialog.h"
 
 #include <QDialogButtonBox>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <utility>
 #include "Application.h"
 #include "BuildConfig.h"
 #include "DesktopServices.h"
 #include "meta/Index.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
+#include "api/LauncherApiSpecial.h"
 #include "ui/widgets/PageContainer.h"
+#include "ui/widgets/SpecialLoaderVersionList.h"
 #include "ui/widgets/VersionSelectWidget.h"
 
 class InstallLoaderPage : public VersionSelectWidget, public BasePage {
     Q_OBJECT
    public:
-    InstallLoaderPage(const QString& id, const QString& iconName, const QString& name, const Version& oldestVersion, PackProfile* profile)
-        : VersionSelectWidget(nullptr), uid(id), iconName(iconName), name(name)
+    InstallLoaderPage(const QString& id,
+                      const QString& iconName,
+                      const QString& name,
+                      const Version& oldestVersion,
+                      PackProfile* profile,
+                      QString specialLoader = {})
+        : VersionSelectWidget(nullptr), uid(id), iconName(iconName), name(name), specialLoader(std::move(specialLoader))
     {
         const QString minecraftVersion = profile->getComponentVersion("net.minecraft");
         setEmptyString(tr("No versions are currently available for Minecraft %1").arg(minecraftVersion));
@@ -43,8 +52,11 @@ class InstallLoaderPage : public VersionSelectWidget, public BasePage {
         if (oldestVersion != Version() && Version(minecraftVersion) < oldestVersion)
             setExactFilter(BaseVersionList::ParentVersionRole, "AAA");
 
-        if (const QString currentVersion = profile->getComponentVersion(id); !currentVersion.isNull())
+        const auto currentUid = !this->specialLoader.isEmpty() && this->specialLoader.startsWith("labymod") ? QStringLiteral("net.labymod") : id;
+        if (const QString currentVersion = profile->getComponentVersion(currentUid); !currentVersion.isNull())
             setCurrentVersion(currentVersion);
+        if (!this->specialLoader.isEmpty())
+            specialList = new SpecialLoaderVersionList(this->specialLoader, minecraftVersion, this);
     }
 
     QString id() const override { return uid; }
@@ -56,12 +68,24 @@ class InstallLoaderPage : public VersionSelectWidget, public BasePage {
         if (loaded)
             return;
 
-        const auto versions = APPLICATION->metadataIndex()->get(uid);
-        if (!versions)
-            return;
-
-        initialize(versions.get());
+        if (specialList)
+            initialize(specialList, true);
+        else {
+            const auto versions = APPLICATION->metadataIndex()->get(uid);
+            if (!versions)
+                return;
+            initialize(versions.get());
+        }
         loaded = true;
+    }
+
+    bool isSpecial() const { return !specialLoader.isEmpty(); }
+    QString specialLoaderId() const { return specialLoader; }
+    SpecialLoaderVersion* selectedSpecialVersion() const
+    {
+        if (!specialList || !selectedVersion())
+            return nullptr;
+        return dynamic_cast<SpecialLoaderVersion*>(selectedVersion().get());
     }
 
     void setParentContainer(BasePageContainer* container) override
@@ -74,6 +98,8 @@ class InstallLoaderPage : public VersionSelectWidget, public BasePage {
     const QString uid;
     const QString iconName;
     const QString name;
+    const QString specialLoader;
+    SpecialLoaderVersionList* specialList = nullptr;
     bool loaded = false;
 };
 
@@ -145,7 +171,12 @@ QList<BasePage*> InstallLoaderDialog::getPages()
              // Quilt
              new InstallLoaderPage("org.quiltmc.quilt-loader", "quiltmc", tr("Quilt"), Version("1.14"), profile),
              // LiteLoader
-             new InstallLoaderPage("com.mumfrey.liteloader", "liteloader", tr("LiteLoader"), {}, profile)
+             new InstallLoaderPage("com.mumfrey.liteloader", "liteloader", tr("LiteLoader"), {}, profile),
+             // Legacy Fabric and LabyMod use their official profile services
+             // instead of the Prism metadata index.
+             new InstallLoaderPage("net.legacyfabric", "fabricmc", tr("Legacy Fabric"), {}, profile, "legacyfabric"),
+             new InstallLoaderPage("net.labymod", "labymod", tr("LabyMod (Production)"), {}, profile, "labymod-production"),
+             new InstallLoaderPage("net.labymod-snapshot", "labymod", tr("LabyMod (Snapshot)"), {}, profile, "labymod-snapshot")
     };
 }
 
@@ -164,8 +195,24 @@ void InstallLoaderDialog::done(int result)
     if (result == Accepted) {
         auto* page = pageCast(container->selectedPage());
         if (page->selectedVersion()) {
-            profile->setComponentVersion(page->id(), page->selectedVersion()->descriptor());
-            profile->resolve(Net::Mode::Online);
+            if (page->isSpecial()) {
+                const auto selected = page->selectedSpecialVersion();
+                QString error;
+                const auto minecraft = profile->getComponentVersion("net.minecraft");
+                if (!selected || !SpecialLoader::install(profile->instance(),
+                                                         page->specialLoaderId(),
+                                                         minecraft,
+                                                         selected->loaderVersion(),
+                                                         selected->commitRef(),
+                                                         &error)) {
+                    QMessageBox::critical(this, tr("Install Loader"), error.isEmpty() ? tr("Could not install the loader.") : error);
+                    QDialog::done(QDialog::Rejected);
+                    return;
+                }
+            } else {
+                profile->setComponentVersion(page->id(), page->selectedVersion()->descriptor());
+                profile->resolve(Net::Mode::Online);
+            }
         }
     }
 

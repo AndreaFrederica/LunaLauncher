@@ -46,6 +46,8 @@
 #include "meta/CleanroomMeta.h"
 #include "meta/VersionList.h"
 #include "minecraft/VanillaInstanceCreationTask.h"
+#include "minecraft/SpecialLoaderInstanceCreationTask.h"
+#include "ui/widgets/SpecialLoaderVersionList.h"
 #include "ui/dialogs/NewInstanceDialog.h"
 
 CustomPage::CustomPage(NewInstanceDialog* dialog, QWidget* parent) : QWidget(parent), dialog(dialog), ui(new Ui::CustomPage)
@@ -65,6 +67,9 @@ CustomPage::CustomPage(NewInstanceDialog* dialog, QWidget* parent) : QWidget(par
     connect(ui->forgeFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->cleanroomFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->fabricFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
+    connect(ui->legacyFabricFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
+    connect(ui->labyModProductionFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
+    connect(ui->labyModSnapshotFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->quiltFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->liteLoaderFilter, &QRadioButton::toggled, this, &CustomPage::loaderFilterChanged);
     connect(ui->loaderRefreshBtn, &QPushButton::clicked, this, &CustomPage::loaderRefresh);
@@ -154,6 +159,18 @@ void CustomPage::loaderFilterChanged()
         m_selectedLoader = "com.mumfrey.liteloader";
     }
 
+    if (ui->legacyFabricFilter->isChecked() || ui->labyModProductionFilter->isChecked() || ui->labyModSnapshotFilter->isChecked()) {
+        const auto loader = ui->legacyFabricFilter->isChecked() ? QStringLiteral("legacyfabric")
+                           : ui->labyModProductionFilter->isChecked() ? QStringLiteral("labymod-production")
+                                                                      : QStringLiteral("labymod-snapshot");
+        m_selectedLoader = loader;
+        auto list = new SpecialLoaderVersionList(loader, minecraftVersion, this);
+        ui->loaderVersionList->initialize(list, true);
+        ui->loaderVersionList->setEmptyString(tr("No %1 versions are currently available for Minecraft %2").arg(loader, minecraftVersion));
+        ui->loaderVersionList->selectRecommended();
+        return;
+    }
+
     auto vlist = APPLICATION->metadataIndex()->get(m_selectedLoader);
     ui->loaderVersionList->initialize(vlist.get());
     ui->loaderVersionList->selectRecommended();
@@ -202,8 +219,21 @@ void CustomPage::suggestCurrent()
     }
 
     // There isn't a selected version if the version list is empty
-    if (ui->loaderVersionList->selectedVersion() == nullptr)
+    if (ui->loaderVersionList->selectedVersion() == nullptr) {
+        if (m_selectedLoader == "legacyfabric" || m_selectedLoader == "labymod-production" || m_selectedLoader == "labymod-snapshot") {
+            dialog->setSuggestedPack();
+            return;
+        }
         dialog->setSuggestedPack(m_selectedVersion->descriptor(), new VanillaCreationTask(m_selectedVersion));
+    } else if (m_selectedLoader == "legacyfabric" || m_selectedLoader == "labymod-production" || m_selectedLoader == "labymod-snapshot") {
+        const auto selected = std::dynamic_pointer_cast<SpecialLoaderVersion>(m_selectedLoaderVersion);
+        if (!selected)
+            return;
+        dialog->setSuggestedPack(selected->name(), new SpecialLoaderInstanceCreationTask(m_selectedVersion,
+                                                                                           selected->loader(),
+                                                                                           selected->loaderVersion(),
+                                                                                           selected->commitRef()));
+    }
     else if (Meta::Cleanroom::isUid(m_selectedLoader)) {
         const auto cleanroomVersion = m_selectedLoaderVersion->descriptor();
         dialog->setSuggestedPack("Cleanroom", cleanroomVersion,

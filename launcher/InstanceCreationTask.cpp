@@ -61,6 +61,13 @@ void InstanceCreationTask::executeTask()
         return;
     }
 
+    // Creation tasks build the component profile in memory.  PackProfile uses
+    // a deferred save timer, but the staging wrapper may commit the directory
+    // as soon as this task succeeds.  Flush the profile before any update task
+    // (and therefore before the staging directory can be committed) so a
+    // second UI/backend can load the instance immediately after installation.
+    m_instance->saveNow();
+
     // If this is set, it means we're updating an instance. So, we now need to remove the
     // files scheduled to, and we'd better not let the user abort in the middle of it, since it'd
     // put the instance in an invalid state.
@@ -96,6 +103,7 @@ void InstanceCreationTask::executeTask()
 
         auto updateTasks = m_instance->createUpdateTask();
         if (updateTasks.isEmpty()) {
+            m_instance->saveNow();
             emitSucceeded();
             return;
         }
@@ -108,6 +116,8 @@ void InstanceCreationTask::executeTask()
         }
         connect(task.get(), &Task::finished, this, [this, task] {
             if (task->wasSuccessful() || m_abort) {
+                if (m_instance)
+                    m_instance->saveNow();
                 emitSucceeded();
             } else {
                 emitFailed(tr("Could not download game files: %1").arg(task->failReason()));

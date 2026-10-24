@@ -12,6 +12,7 @@
             :busy="busy"
             :instances="instances"
             :preset="preset"
+            :initial-minecraft-version="initialMinecraftVersion"
             @installed="onInstalled"
             @preset-consumed="preset = null"
             @install-start="emit('install-start', $event)"
@@ -21,10 +22,10 @@
 
           <template v-else-if="componentItem">
             <PclCard :title="componentItem.label">
-              <PclHint v-if="!componentItem.uid" theme="yellow">
+              <PclHint v-if="!componentItem.uid && !componentItem.special" theme="yellow">
                 {{ componentItem.label }} 暂无 Luna 后端接口，无法在此处读取版本或安装。
               </PclHint>
-              <template v-else>
+              <template v-else-if="componentItem.uid || componentItem.special">
                 <div class="pcl-component-filter">
                   <PclInput v-model="componentMinecraft" placeholder="Minecraft 版本（可选）" @enter="loadComponentVersions" />
                   <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || componentLoading" @click="loadComponentVersions">
@@ -38,7 +39,7 @@
                     v-for="version in componentVersions"
                     :key="version.version"
                     :title="version.version"
-                    :info="version.type || '版本'"
+                    :info="componentItem.special ? `Minecraft ${version.minecraftVersion || version.version} · ${version.type || '版本'}` : (version.type || '版本')"
                     :tags="version.recommended ? ['推荐'] : []"
                     @click="useComponentVersion(version)"
                   >
@@ -57,7 +58,7 @@
 
           <PclCard v-else-if="section === 'import'" title="导入整合包">
             <PclHint theme="blue">
-              支持本地 .zip / .mrpack 文件，以及 PCL、CurseForge、Modrinth 整合包。把文件拖到下方，或直接粘贴完整路径。
+              支持本地 .zip / .mrpack 文件、HTTP(S) 下载地址，以及 CurseForge 安装链接。把文件拖到下方，或直接粘贴路径 / URL。
             </PclHint>
             <div
               class="pcl-import-drop"
@@ -73,7 +74,7 @@
             <div class="pcl-form-row pcl-form-row--top">
               <span class="pcl-form-row__label">本地文件</span>
               <div class="pcl-form-row__control pcl-form-row__control--column">
-                <PclInput v-model="importPath" placeholder="D:\下载\整合包.zip" />
+                <PclInput v-model="importPath" placeholder="D:\下载\整合包.zip 或 https://…/pack.zip" />
                 <PclIconButton icon="folder-open" label="选择整合包文件" :size="28" :disabled="importing" @click="chooseImportFile" />
               </div>
             </div>
@@ -112,6 +113,7 @@
               :execute="execute"
               :default-provider="resourceProvider"
               :tag="resourceTag"
+              :auto-refresh="preferences.pclAutoRefreshOnPageOpen"
               @installed="emit('refresh')"
               @install-start="emit('install-start', $event)"
               @install-progress="emit('install-progress', $event)"
@@ -126,7 +128,8 @@
               :busy="busy"
               :execute="execute"
               default-provider="modrinth"
-              @installed="emit('refresh')"
+              :auto-refresh="preferences.pclAutoRefreshOnPageOpen"
+              @installed="onModpackInstalled"
               @install-start="emit('install-start', $event)"
               @install-progress="emit('install-progress', $event)"
               @install-done="emit('install-done', $event)"
@@ -175,16 +178,27 @@ import PclCatalogBrowser from './PclCatalogBrowser.vue';
 import PclResourceCatalogView from './PclResourceCatalogView.vue';
 import type { PclNavGroup } from '../../types';
 import { hiddenPclFeatures, isPclFeatureHidden } from '../../composables/usePclFeatures';
+import { neoUiPreferences } from '../../../neo-ui-preferences';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
-type ComponentItem = { id: string; label: string; icon: string; uid?: string; alias?: string };
+type ComponentItem = { id: string; label: string; icon: string; uid?: string; alias?: string; special?: string; channel?: string };
 
-const props = defineProps<{ busy: boolean; execute: Execute; selected?: any; instances?: any[] }>();
+const props = defineProps<{ busy: boolean; execute: Execute; selected?: any; instances?: any[]; initialComponentUid?: string }>();
 const emit = defineEmits<{ refresh: []; launch: []; installed: [result: any]; 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
 
 const section = ref('install');
+const preferences = neoUiPreferences;
 const refreshKey = ref(0);
-const preset = ref<{ label: string; version: string; alias: string } | null>(null);
+const preset = ref<{
+  label: string;
+  version: string;
+  alias: string;
+  special?: string;
+  channel?: string;
+  loaderVersion?: string;
+  commitRef?: string;
+} | null>(null);
+const initialMinecraftVersion = ref('');
 
 const componentItems: ComponentItem[] = [
   { id: 'client', label: 'Minecraft', icon: 'package', uid: 'net.minecraft' },
@@ -193,9 +207,11 @@ const componentItems: ComponentItem[] = [
   { id: 'neoforge', label: 'NeoForge', icon: 'cat', uid: 'net.neoforged', alias: 'neoforge' },
   { id: 'cleanroom', label: 'Cleanroom', icon: 'flask-conical', uid: 'com.cleanroommc.cleanroom', alias: 'cleanroom' },
   { id: 'fabric', label: 'Fabric', icon: 'scroll', uid: 'net.fabricmc.fabric-loader', alias: 'fabric' },
-  { id: 'legacy-fabric', label: 'Legacy Fabric', icon: 'scroll' },
-  { id: 'labymod', label: 'LabyMod', icon: 'box' },
-  { id: 'liteloader', label: 'LiteLoader', icon: 'egg' },
+  { id: 'quilt', label: 'Quilt', icon: 'layers', uid: 'org.quiltmc.quilt-loader', alias: 'quilt' },
+  { id: 'liteloader', label: 'LiteLoader', icon: 'egg', uid: 'com.mumfrey.liteloader', alias: 'liteloader' },
+  { id: 'legacyfabric', label: 'Legacy Fabric', icon: 'scroll', alias: 'legacyfabric', special: 'legacyfabric' },
+  { id: 'labymod-production', label: 'LabyMod（正式版）', icon: 'sparkles', alias: 'labymod-production', special: 'labymod-production' },
+  { id: 'labymod-snapshot', label: 'LabyMod（快照）', icon: 'sparkles', alias: 'labymod-snapshot', special: 'labymod-snapshot' },
 ];
 
 const navGroups: PclNavGroup[] = [
@@ -287,14 +303,16 @@ function openFavorite(item: any) {
 }
 async function loadComponentVersions() {
   const item = componentItem.value;
-  if (!item?.uid) return;
+  if (!item?.uid && !item?.special) return;
   componentLoading.value = true;
   componentError.value = '';
   try {
-    const result = await props.execute('component.versions', {
-      uid: item.uid,
-      ...(componentMinecraft.value.trim() ? { minecraftVersion: componentMinecraft.value.trim() } : {}),
-    });
+    const result = item.special
+      ? await props.execute('special.loader.versions', { loader: item.special, ...(componentMinecraft.value.trim() ? { minecraftVersion: componentMinecraft.value.trim() } : {}) })
+      : await props.execute('component.versions', {
+        uid: item.uid,
+        ...(componentMinecraft.value.trim() ? { minecraftVersion: componentMinecraft.value.trim() } : {}),
+      });
     componentVersions.value = result?.versions || [];
   } catch (exception) {
     componentError.value = exception instanceof Error ? exception.message : String(exception);
@@ -307,14 +325,31 @@ function useComponentVersion(version: any) {
   if (!item) return;
   if (item.id === 'client') {
     preset.value = null;
+    initialMinecraftVersion.value = String(version.version || '');
     section.value = 'install';
     return;
   }
+  initialMinecraftVersion.value = '';
   if (!item.alias) {
     componentError.value = `${item.label} 暂未接入 Luna 后端。`;
     return;
   }
-  preset.value = { label: item.label, version: version.version, alias: item.alias };
+  const requiredMinecraft = Array.isArray(version.requires)
+    ? version.requires.find((requirement: any) => String(requirement?.uid || '') === 'net.minecraft')?.equals
+    : '';
+  const minecraftVersion = String(version.minecraftVersion || requiredMinecraft || componentMinecraft.value || '').trim();
+  initialMinecraftVersion.value = minecraftVersion;
+  preset.value = {
+    label: item.label,
+    version: String(version.version || ''),
+    alias: item.alias,
+    ...(item.special ? {
+      special: item.special,
+      channel: version.channel || item.channel,
+      loaderVersion: version.loaderVersion || version.version,
+      commitRef: version.commitRef,
+    } : {}),
+  };
   section.value = 'install';
 }
 function refreshSection(id: string) {
@@ -327,7 +362,16 @@ function refreshSection(id: string) {
   if (id === 'favorites') readFavorites();
   emit('refresh');
 }
+
+function sectionForComponentUid(uid: string): string {
+  const target = String(uid || '').trim().toLowerCase();
+  return componentItems.find(item => String(item.uid || '').toLowerCase() === target)?.id || 'install';
+}
 function onInstalled(result: any) {
+  emit('installed', result);
+  emit('refresh');
+}
+function onModpackInstalled(result: any) {
   emit('installed', result);
   emit('refresh');
 }
@@ -338,24 +382,42 @@ function onImportDrop(event: DragEvent) {
   else if (file?.name) importError.value = '浏览器没有提供本地文件路径，请在下方粘贴完整路径。';
 }
 async function chooseImportFile() {
-  const selected = await pickPclFile({ title: '选择整合包文件', filters: [{ name: '整合包', extensions: ['zip', 'mrpack', 'jar'] }] });
+  const selected = await pickPclFile({ title: '选择整合包文件', filters: [{ name: '整合包', extensions: ['zip', 'mrpack'] }] });
   if (selected) importPath.value = selected;
+}
+
+function parseCurseForgeImport(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol.toLowerCase() !== 'curseforge:') return null;
+    const projectId = url.searchParams.get('addonId') || '';
+    const versionId = url.searchParams.get('fileId') || '';
+    return projectId && versionId ? { projectId, versionId } : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizedImportSource(value: string) {
+  const source = value.trim();
+  return source.replace(/\?client=y$/i, '/file');
 }
 
 async function importInstance() {
   if (!importPath.value.trim()) return;
   importing.value = true;
   importError.value = '';
-  const info = { title: '正在导入整合包', name: importName.value.trim() || importPath.value.split(/[\\/]/).pop() || '导入实例' };
+  const source = normalizedImportSource(importPath.value);
+  const curseForge = parseCurseForgeImport(source);
+  const info = { title: curseForge ? '正在安装 CurseForge 整合包' : '正在导入整合包', name: importName.value.trim() || source.split(/[\\/]/).pop() || '导入实例' };
   emit('install-start', info);
   try {
     let task: any = await props.execute('neo.task.start', {
-      operation: 'instance.import',
+      operation: curseForge ? 'modpack.install' : 'instance.import',
       priority: 'high',
-      parameters: {
-        source: importPath.value.trim(),
-        ...(importName.value.trim() ? { name: importName.value.trim() } : {}),
-      },
+      parameters: curseForge
+        ? { provider: 'curseforge', projectId: curseForge.projectId, versionId: curseForge.versionId, ...(importName.value.trim() ? { name: importName.value.trim() } : {}) }
+        : { source, ...(importName.value.trim() ? { name: importName.value.trim() } : {}) },
     });
     while (task && !task.finished) {
       emit('install-progress', task);
@@ -366,7 +428,7 @@ async function importInstance() {
     if (!task || task.state !== 'succeeded') throw new Error(task?.error || '导入任务失败');
     emit('installed', {
       id: task.createdInstanceId || '',
-      name: importName.value.trim() || importPath.value.split(/[\\/]/).pop() || '导入实例',
+      name: importName.value.trim() || source.split(/[\\/]/).pop() || '导入实例',
     });
   } catch (exception) {
     importError.value = exception instanceof Error ? exception.message : String(exception);
@@ -380,7 +442,8 @@ onMounted(async () => {
   if (tauri?.event?.listen) {
     try {
       unlistenDragDrop = await tauri.event.listen('tauri://drag-drop', (event: any) => {
-        const path = event?.payload?.paths?.[0];
+        const payload = event?.payload;
+        const path = Array.isArray(payload) ? payload[0] : payload?.paths?.[0] || payload?.path;
         if (path) importPath.value = String(path);
       });
     } catch {
@@ -390,6 +453,9 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => unlistenDragDrop?.());
 watch(() => props.selected?.id, () => { void loadSelectedContext(); }, { immediate: true });
+watch(() => props.initialComponentUid, uid => {
+  section.value = uid ? sectionForComponentUid(uid) : 'install';
+}, { immediate: true });
 watch(section, value => {
   componentVersions.value = [];
   componentError.value = '';

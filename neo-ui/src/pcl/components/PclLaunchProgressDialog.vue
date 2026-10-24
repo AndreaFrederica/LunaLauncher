@@ -1,6 +1,6 @@
 <template>
-  <q-dialog :model-value="modelValue" persistent @update:model-value="emit('update:modelValue', $event)">
-    <q-card class="pcl-dialog pcl-launch-dialog">
+  <q-dialog :model-value="modelValue" persistent :transition-show="plain ? 'none' : 'scale'" :transition-hide="plain ? 'none' : 'scale'" @update:model-value="emit('update:modelValue', $event)">
+    <q-card class="pcl-dialog pcl-launch-dialog" :class="{ 'pcl-launch-dialog--plain': plain }">
       <q-card-section class="pcl-launch-dialog__head">
         <span class="pcl-launch-dialog__badge"><PclIcon name="play" :size="20" /></span>
         <div class="pcl-launch-dialog__head-copy">
@@ -30,8 +30,9 @@
             <span class="pcl-launch-dialog__download-meta">{{ row.details || row.status || '校验失败' }}</span>
           </div>
         </div>
-        <div v-if="stepRows.length" class="pcl-launch-dialog__downloads">
+        <div v-if="stepRows.length || state === 'launching'" class="pcl-launch-dialog__downloads">
           <div class="pcl-launch-dialog__downloads-head">启动步骤</div>
+          <div v-if="!stepRows.length" class="pcl-launch-dialog__step-empty">等待任务步骤…</div>
           <div v-for="row in stepRows" :key="row.id" class="pcl-launch-dialog__download pcl-launch-dialog__step" :class="`is-${row.state}`">
             <span class="pcl-launch-dialog__step-mark">{{ row.mark }}</span>
             <span class="pcl-launch-dialog__download-name">{{ row.label }}</span>
@@ -66,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import PclButton from './PclButton.vue';
 import PclHint from './PclHint.vue';
 import PclIcon from './PclIcon.vue';
@@ -83,6 +84,7 @@ const props = withDefaults(defineProps<{
   accountName?: string;
   loginMethod?: string;
   hint?: string;
+  plain?: boolean;
   details?: string;
   children?: any[];
   cancelling?: boolean;
@@ -96,6 +98,7 @@ const props = withDefaults(defineProps<{
   accountName: '',
   loginMethod: '',
   hint: '',
+  plain: false,
   details: '',
   children: () => [],
   cancelling: false,
@@ -119,7 +122,27 @@ const failedRows = computed(() => (props.children || [])
   .slice(0, 8));
 const stateLabels: Record<string, string> = { running: '进行中', succeeded: '已完成', failed: '失败', waiting: '等待中' };
 const stateMarks: Record<string, string> = { running: '●', succeeded: '✓', failed: '×', waiting: '○' };
-const stepRows = computed(() => (props.children || [])
+const accumulatedRows = ref<any[]>([]);
+watch(() => props.children, (rows: any[]) => {
+  const incoming = Array.isArray(rows) ? rows.filter((row: any) => row && (row.label || row.status || row.details)) : [];
+  if (!incoming.length) {
+    if (props.state === 'launching') accumulatedRows.value = [];
+    return;
+  }
+  const map = new Map<string, any>();
+  for (const row of accumulatedRows.value) map.set(String(row.id || row.label || row.status), row);
+  const incomingKeys = new Set<string>();
+  for (const row of incoming) {
+    const key = String(row.id || row.label || row.status);
+    incomingKeys.add(key);
+    map.set(key, { ...(map.get(key) || {}), ...row });
+  }
+  for (const [key, row] of map) {
+    if (!incomingKeys.has(key) && row.state === 'running') map.set(key, { ...row, state: 'succeeded' });
+  }
+  accumulatedRows.value = [...map.values()];
+}, { deep: true, immediate: true });
+const stepRows = computed(() => (accumulatedRows.value || [])
   .filter((row: any) => row && (row.label || row.status || row.details))
   .slice(-16)
   .map((row: any) => {
@@ -266,4 +289,8 @@ function formatRate(value: unknown) {
 .pcl-launch-dialog__step .pcl-launch-dialog__download-name { grid-column: 2; }
 .pcl-launch-dialog__step .pcl-launch-dialog__download-meta { grid-column: 3; }
 .pcl-launch-dialog__step .pcl-launch-dialog__child-track { grid-column: 2 / -1; }
+
+.pcl-launch-dialog__downloads { height: 152px; max-height: 152px; overflow-y: auto; }
+.pcl-launch-dialog__step-empty { padding: 8px 2px; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
+.pcl-launch-dialog--plain, .pcl-launch-dialog--plain * { animation: none !important; transition: none !important; }
 </style>

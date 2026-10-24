@@ -239,6 +239,7 @@
       :children="launchChildren"
       :error="launchError"
       :instance-name="selected?.name"
+      :plain="preferences.pclNavLayout === 'mmc-classic'"
       :account-name="activeAccount?.profileName || activeAccount?.displayName"
       :login-method="launchLoginMethod"
       :hint="launchHint"

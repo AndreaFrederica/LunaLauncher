@@ -6,7 +6,9 @@
 <NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
  <Transition name="pcl-route" mode="out-in"><div v-if="isPclShell" :key="page" class="pcl-route-shell">
- <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
+ <PclLaunchPage v-if="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed"
+ :launch-details="launchDetails"
+ :launch-children="launchChildren" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
 
  <PclDownloadPage v-if="isPclShell && page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" />
  <PclToolsPage v-if="isPclShell && page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
@@ -139,7 +141,7 @@ const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref
 const launchQueue=ref<any[]>([])
 const launchTaskId=ref('');
 type LaunchUiState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
-const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref('初始化'), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchAccountId=ref('');
+const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref('初始化'), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchDetails=ref(''), launchChildren=ref<any[]>([]), launchAccountId=ref('');
 const selectedAccountStorageKey='luna-neo-selected-account';
 function rememberedAccountId(){try{return localStorage.getItem(selectedAccountStorageKey)||'';}catch{return '';}}
 function selectLaunchAccount(id:string){launchAccountId.value=id;try{localStorage.setItem(selectedAccountStorageKey,id);}catch{/* Storage may be unavailable in a restricted webview. */}}
@@ -204,7 +206,9 @@ function updateLaunchProgress(value:any){
  const total=Number(value.totalProgress ?? value.total ?? 0), current=Number(value.progress ?? value.current ?? 0);
   if(total>0 && Number.isFinite(current)) launchTargetProgress.value=Math.max(0,Math.min(1,current/total));
   else if(value.finished || value.running===false) launchTargetProgress.value=1;
- launchStage.value=value.status || value.details || launchStage.value || '正在执行';
+ launchStage.value=value.details || value.status || launchStage.value || '正在执行';
+ launchDetails.value=String(value.details || '');
+ launchChildren.value=Array.isArray(value.children) ? value.children : [];
  launchSpeed.value=Number(value.transferRate || 0);
  if(value.failReason || String(value.state || value.status || '').toLowerCase()==='failed'){launchError.value=value.failReason || value.details || '启动任务失败';setLaunchState('failed');}
  else if(!isTaskFinished(value) && (launchInFlight || preparingLaunch))setLaunchState('launching');
@@ -212,7 +216,7 @@ function updateLaunchProgress(value:any){
 async function launch(i:any, accountId?:string, serverAddress?:string, restoreSelectionId?:string){
  if(busy.value){if(i.id!==launchingId&&!launchQueue.value.some(x=>x.id===i.id))launchQueue.value.push(i);return;}
  if(launchUiResetTimer)clearTimeout(launchUiResetTimer);
-  launchProgress.value=0;launchTargetProgress.value=0;launchStage.value='初始化';launchSpeed.value=0;launchError.value='';setLaunchState('launching');
+  launchProgress.value=0;launchTargetProgress.value=0;launchStage.value='初始化';launchSpeed.value=0;launchError.value='';launchDetails.value='';launchChildren.value=[];setLaunchState('launching');
  busy.value=true;launchingId=i.id;preparingLaunch=true;
  await openInstance(i,true);if(isPclShell.value)page.value='instances';logMode.value='live';await connectConsole(i);preparingLaunch=false;
  if(!consoleSubscription){busy.value=false;launchingId='';setLaunchState('failed');launchError.value='无法连接实例控制台';resetLaunchUiSoon();return;}
@@ -389,7 +393,7 @@ async function selectPclInstance(i:any){
 }
 async function openInstance(i:any,forceRead=false){
  if(preparingLaunch&&!forceRead)return;
- if(busy.value&&!forceRead){taskCenterOpen.value=true;return;}
+ if(busy.value&&!forceRead)return;
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});
  if(selected.value?.id!==i.id){
   const old=sessions.get(selected.value?.id);if(old){old.lines=consoleLines.value;old.state=consoleState.value;}

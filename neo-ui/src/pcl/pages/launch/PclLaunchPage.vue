@@ -236,6 +236,8 @@
       :progress="launchProgress"
       :stage="launchStage"
       :speed="launchSpeed"
+      :details="launchDetails"
+      :children="launchChildren"
       :error="launchError"
       :instance-name="selected?.name"
       :account-name="activeAccount?.profileName || activeAccount?.displayName"
@@ -313,7 +315,7 @@ import { showPclToast } from '../../composables/usePclToast';
 import PclAccountAvatar from '../../components/PclAccountAvatar.vue';
 
 type LaunchState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
-const props = defineProps<{ selected?: any; icon?: string; busy: boolean; notice?: string; error?: string; instances: any[]; icons: Record<string, string>; accounts?: any[]; accountId?: string; launchState?: LaunchState; launchProgress?: number; launchStage?: string; launchLoginMethod?: string; launchSpeed?: number; launchError?: string; launchHint?: string; logLines?: string[]; execute?: (operation: string, parameters?: Record<string, unknown>) => Promise<any> }>();
+const props = defineProps<{ selected?: any; icon?: string; busy: boolean; notice?: string; error?: string; instances: any[]; icons: Record<string, string>; accounts?: any[]; accountId?: string; launchState?: LaunchState; launchProgress?: number; launchStage?: string; launchLoginMethod?: string; launchSpeed?: number; launchDetails?: string; launchChildren?: any[]; launchError?: string; launchHint?: string; logLines?: string[]; execute?: (operation: string, parameters?: Record<string, unknown>) => Promise<any> }>();
 const emit = defineEmits<{ launch: []; cancel: []; select: [instance: any]; 'open-folder': []; settings: []; refresh: []; download: []; tasks: []; 'clear-log': []; 'account-change': [id: string]; 'account-page': [mode: 'add' | 'manage']; 'instance-action': [instance: any, action: string]; 'quick-launch': [instance: any, switchSelected: boolean]; 'launch-instance': [instance: any]; 'edit-instance': [instance: any]; 'open-instance-folder': [instance: any]; 'connect-server': [address: string] }>();
 const { selected, busy, notice, error, instances, icons } = toRefs(props);
 const selectionOpen = ref(false), accountMenu = ref(false), hintDialog = ref(false), hintCode = ref('');
@@ -341,6 +343,8 @@ const launchTitle = computed(() => props.launchStage?.toLowerCase().includes('ex
 const launchStage = computed(() => props.launchStage || '初始化');
 const launchLoginMethod = computed(() => props.launchLoginMethod || loginMethodLabel.value);
 const launchSpeed = computed(() => Number(props.launchSpeed || 0));
+const launchDetails = computed(() => props.launchDetails || '');
+const launchChildren = computed(() => Array.isArray(props.launchChildren) ? props.launchChildren : []);
 const launchError = computed(() => props.launchError || props.error || '');
 const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));

@@ -11,6 +11,14 @@
       </q-card-section>
 
       <q-card-section class="pcl-task-center__body">
+        <div v-if="activeDownloads.length" class="pcl-task-downloads">
+          <div class="pcl-task-downloads__head">正在下载 · {{ activeDownloads.length }} 项</div>
+          <div v-for="row in activeDownloads" :key="row.id" class="pcl-task-downloads__row">
+            <span class="pcl-task-downloads__name">{{ row.label }}</span>
+            <span class="pcl-task-downloads__meta">{{ row.percent }}<template v-if="row.rate"> · {{ formatRate(row.rate) }}</template></span>
+            <div class="pcl-progress-track pcl-task-downloads__track"><span :style="{ width: `${row.value}%` }" /></div>
+          </div>
+        </div>
         <div v-if="tasks.length" class="pcl-task-list">
           <div v-for="task in tasks" :key="task.taskId" class="pcl-task-row">
             <div class="pcl-task-row__head">
@@ -41,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import PclButton from './PclButton.vue';
 import PclIcon from './PclIcon.vue';
 import { subscribeTaskSnapshots } from '../composables/useTaskEvents';
@@ -73,6 +81,14 @@ function applyTaskEvent(task: any) {
   if (index >= 0) tasks.value[index] = { ...tasks.value[index], ...task };
   else tasks.value.unshift(task);
 }
+
+const activeDownloads = computed(() => tasks.value.flatMap((task: any) => (Array.isArray(task.children) ? task.children : [])
+  .filter((row: any) => row && row.state === 'running' && (Number(row.total) > 0 || row.details || row.label))
+  .map((row: any) => {
+    const total = Number(row.total || 0), current = Number(row.current || 0);
+    const value = total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
+    return { id: row.id || `${task.taskId}:${row.label}`, label: row.label || row.details || '子任务', value, percent: total > 0 ? `${value}%` : '进行中', rate: Number(row.transferRate || 0) };
+  })).slice(0, 12));
 
 async function cancel(task: any) {
   try {
@@ -155,4 +171,12 @@ onUnmounted(() => unsubscribeTaskSnapshots?.());
 .pcl-task-row__meta { margin-top: 5px; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
 .pcl-task-row__meta span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcl-task-row .pcl-progress-track { margin: 7px 0 0; }
+
+.pcl-task-downloads { margin-bottom: 10px; padding: 8px; border: 1px solid var(--pcl-border); border-radius: 4px; background: var(--pcl-c8); }
+.pcl-task-downloads__head { margin-bottom: 4px; color: var(--pcl-c3); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-task-downloads__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 4px 0; border-top: 1px solid var(--pcl-border); }
+.pcl-task-downloads__row:first-of-type { border-top: 0; }
+.pcl-task-downloads__name { overflow: hidden; color: var(--pcl-text); font-size: calc(10px * var(--pcl-font-scale, 1)); text-overflow: ellipsis; white-space: nowrap; }
+.pcl-task-downloads__meta { color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-task-downloads__track { grid-column: 1 / -1; margin-top: 2px; }
 </style>

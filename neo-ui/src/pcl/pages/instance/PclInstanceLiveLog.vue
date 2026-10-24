@@ -26,6 +26,8 @@
       :state="launchDialogState"
       :progress="progress"
       :stage="stage"
+      :details="launchDetails"
+      :children="launchChildren"
       :error="launchError"
       :instance-name="instance?.name || instance?.id || ''"
       :cancelling="cancelling"
@@ -51,6 +53,8 @@ const connected = ref(false);
 const launching = ref(false);
 const launchDialogOpen = ref(false);
 const launchError = ref('');
+const launchDetails = ref('');
+const launchChildren = ref<any[]>([]);
 const launchCancelled = ref(false);
 const cancelling = ref(false);
 const running = ref(Boolean(props.instance?.running));
@@ -110,6 +114,8 @@ async function launch() {
   launchDialogOpen.value = true;
   launchError.value = '';
   launchCancelled.value = false;
+  launchDetails.value = '';
+  launchChildren.value = [];
   progress.value = 0;
   stage.value = '正在准备启动';
   try {
@@ -120,7 +126,9 @@ async function launch() {
     });
     currentTaskId = String(task?.taskId || '');
     const finished = await waitForTask(currentTaskId, snapshot => {
-      stage.value = snapshot?.status || snapshot?.details || stage.value;
+      stage.value = snapshot?.details || snapshot?.status || stage.value;
+      launchDetails.value = String(snapshot?.details || '');
+      launchChildren.value = Array.isArray(snapshot?.children) ? snapshot.children : [];
       const total = Number(snapshot?.totalProgress || snapshot?.total || 0);
       const current = Number(snapshot?.progress || 0);
       if (total > 0) progress.value = Math.max(0, Math.min(1, current / total));

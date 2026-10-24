@@ -22,6 +22,15 @@
           <PclIcon v-else name="info" :size="15" />
           <span>{{ stage || (state === 'launching' ? '正在准备启动…' : state === 'launched' ? '游戏进程已启动' : '启动流程已结束') }}</span>
         </div>
+        <p v-if="details" class="pcl-launch-dialog__details">{{ details }}</p>
+        <div v-if="activeRows.length" class="pcl-launch-dialog__downloads">
+          <div class="pcl-launch-dialog__downloads-head">正在处理</div>
+          <div v-for="row in activeRows" :key="row.id" class="pcl-launch-dialog__download">
+            <span class="pcl-launch-dialog__download-name">{{ row.label || row.details || '子任务' }}</span>
+            <span class="pcl-launch-dialog__download-meta">{{ childPercent(row) }}<template v-if="row.transferRate"> · {{ formatRate(row.transferRate) }}</template></span>
+            <div class="pcl-progress-track pcl-launch-dialog__child-track"><span :style="{ width: `${childPercentValue(row)}%` }" /></div>
+          </div>
+        </div>
 
         <div class="pcl-launch-dialog__info">
           <div><span>启动账户</span><strong>{{ accountName || '未选择账户' }}</strong></div>
@@ -66,6 +75,8 @@ const props = withDefaults(defineProps<{
   accountName?: string;
   loginMethod?: string;
   hint?: string;
+  details?: string;
+  children?: any[];
   cancelling?: boolean;
 }>(), {
   state: 'launching',
@@ -77,6 +88,8 @@ const props = withDefaults(defineProps<{
   accountName: '',
   loginMethod: '',
   hint: '',
+  details: '',
+  children: () => [],
   cancelling: false,
 });
 
@@ -92,6 +105,18 @@ const percent = computed<number | null>(() => {
   return Math.max(0, Math.min(100, Math.round(value * 100)));
 });
 const percentText = computed(() => percent.value === null ? '—' : `${percent.value}%`);
+
+const activeRows = computed(() => (props.children || [])
+  .filter((row: any) => row && row.state === 'running' && (Number(row.total) > 0 || row.details || row.label))
+  .slice(0, 8));
+function childPercentValue(row: any) {
+  const total = Number(row?.total || 0), current = Number(row?.current || 0);
+  return total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
+}
+function childPercent(row: any) {
+  const total = Number(row?.total || 0), current = Number(row?.current || 0);
+  return total > 0 ? `${childPercentValue(row)}%` : (row?.state || '进行中');
+}
 
 function formatRate(value: unknown) {
   const bytes = Number(value || 0);
@@ -158,4 +183,45 @@ function formatRate(value: unknown) {
 .pcl-launch-dialog__info span { color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
 .pcl-launch-dialog__info strong { overflow: hidden; color: var(--pcl-text); font-size: calc(9px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .pcl-launch-dialog__actions { padding-top: 2px; }
+
+.pcl-launch-dialog__details {
+  margin: 6px 0 0;
+  color: var(--pcl-muted);
+  font-size: calc(10px * var(--pcl-font-scale, 1));
+  overflow-wrap: anywhere;
+}
+.pcl-launch-dialog__downloads {
+  margin: 8px 0 0;
+  padding: 7px 8px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 4px;
+  background: var(--pcl-c8);
+}
+.pcl-launch-dialog__downloads-head {
+  margin-bottom: 4px;
+  color: var(--pcl-muted);
+  font-size: calc(9px * var(--pcl-font-scale, 1));
+  letter-spacing: .04em;
+}
+.pcl-launch-dialog__download {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--pcl-border);
+}
+.pcl-launch-dialog__download:first-of-type { border-top: 0; }
+.pcl-launch-dialog__download-name {
+  overflow: hidden;
+  color: var(--pcl-text);
+  font-size: calc(10px * var(--pcl-font-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pcl-launch-dialog__download-meta {
+  color: var(--pcl-muted);
+  font-size: calc(9px * var(--pcl-font-scale, 1));
+  white-space: nowrap;
+}
+.pcl-launch-dialog__child-track { grid-column: 1 / -1; margin-top: 2px; }
 </style>

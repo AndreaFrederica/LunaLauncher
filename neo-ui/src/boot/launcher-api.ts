@@ -217,6 +217,10 @@ export class LauncherApiClient {
     this.requireDesktop();
     await invoke('open_instance_editor', { id, name });
   }
+  async openResourceDownload(instance: string, kind: string, name = ''): Promise<void> {
+    this.requireDesktop();
+    await invoke('open_resource_download', { instance, kind, name });
+  }
   onEvent(handler: (event: unknown) => void): Promise<UnlistenFn> {
     this.requireDesktop();
     return listen('launcher-event', event => handler(event.payload));

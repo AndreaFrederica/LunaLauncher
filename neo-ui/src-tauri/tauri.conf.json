@@ -27,7 +27,8 @@
           "windows": [
             "main",
             "webui-manager",
-            "instance-editor-*"
+            "instance-editor-*",
+            "resource-download-*"
           ],
           "permissions": [
             "core:event:allow-listen",

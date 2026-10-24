@@ -6,7 +6,7 @@
         <PclIconButton icon="grid-2x2" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
         <PclIconButton icon="layout-list" label="列表视图" :size="28" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
       </div>
-      <PclButton v-if="catalogKind" size="sm" variant="highlight" icon="download" :disabled="busy" @click="downloadOpen = true">下载{{ kindLabel }}</PclButton>
+      <PclButton v-if="catalogKind" size="sm" variant="highlight" icon="download" :disabled="busy" @click="openDownload">下载{{ kindLabel }}</PclButton>
       <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">刷新</PclButton>
       <PclButton size="sm" icon="rotate-ccw" :disabled="busy || loading" @click="update">重新扫描</PclButton>
       <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder">打开目录</PclButton>
@@ -198,6 +198,14 @@ const folderKind = computed(() => ({
 const catalogKinds = new Set(['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'worlds', 'texturepacks']);
 const catalogKind = computed(() => catalogKinds.has(props.kind) ? ({ texturepacks: 'resourcepacks', worlds: 'worlds' } as Record<string, string>)[props.kind] || props.kind : '');
 const downloadOpen = ref(false);
+async function openDownload() {
+  try {
+    await launcher.openResourceDownload(props.instance, catalogKind.value, kindLabel.value);
+  } catch {
+    downloadOpen.value = true;
+  }
+}
+
 function onDownloadInstalled() {
   downloadOpen.value = false;
   void load();

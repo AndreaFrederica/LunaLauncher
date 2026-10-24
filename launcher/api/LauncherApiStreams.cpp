@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QJsonDocument>
 #include <QPointer>
 #include <QTimer>
@@ -129,6 +130,26 @@ QJsonObject LauncherApiStreams::subscribeConsole(const QJsonObject& p)
     return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
 }
 
+QJsonObject LauncherApiStreams::subscribeResources(const QJsonObject& p)
+{
+    const auto instance = APPLICATION->instances()->getInstanceById(p.value("instance").toString());
+    if (!instance) return OperationService::failure("Instance ID not found.", 2);
+    auto sub = create("resources", instance->id());
+    if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+    auto* watcher = new QFileSystemWatcher(&sub->context);
+    QStringList paths{ instance->instanceRoot(), instance->gameRoot(), instance->modsRoot() };
+    const QDir gameRoot(instance->gameRoot());
+    for (const auto& name : gameRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) paths.append(gameRoot.filePath(name));
+    for (const auto& path : paths) if (QFileInfo(path).isDir()) watcher->addPath(path);
+    const auto weak = std::weak_ptr<Subscription>(sub);
+    QObject::connect(watcher, &QFileSystemWatcher::directoryChanged, &sub->context,
+        [this, weak](const QString&) {
+            const auto sub = weak.lock();
+            if (sub) append(sub, { { "kind", "resource.changed" } });
+        });
+    return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
+}
+
 QJsonObject LauncherApiStreams::subscribeFile(const QJsonObject& p)
 {
     const auto instance = APPLICATION->instances()->getInstanceById(p.value("instance").toString());
@@ -245,6 +266,9 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
     api.registerOperation({ "instance.console.subscribe", "Subscribe to launch state and console output, including future launches.",
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeConsole(p); });
+    api.registerOperation({ "instance.resources.subscribe", "Watch an instance's resource directories and push change events.", 
+        schema({ { "instance", instance } }, { "instance" }), "streams" },
+        [this](const QJsonObject& p, UserInteraction&) { return subscribeResources(p); });
     api.registerOperation({ "instance.log.subscribe", "Follow an existing log file with bounded chunks and rotation/truncation notices.",
         schema({ { "instance", instance }, { "file", string("Log filename or absolute path within instance log roots.") },
             { "tailBytes", QJsonObject{ { "type", "integer" }, { "minimum", 0 }, { "maximum", 1048576 } } } }, { "instance", "file" }), "streams" },

@@ -170,7 +170,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
@@ -197,12 +197,48 @@ const folderKind = computed(() => ({
 const catalogKinds = new Set(['mods', 'resourcepacks', 'shaderpacks', 'datapacks', 'worlds', 'texturepacks']);
 const catalogKind = computed(() => catalogKinds.has(props.kind) ? ({ texturepacks: 'resourcepacks', worlds: 'worlds' } as Record<string, string>)[props.kind] || props.kind : '');
 const downloadOpen = ref(false);
+let resourceSubscription = '';
+let unlistenResourceStream: (() => void) | undefined;
+let resourceReloadTimer: ReturnType<typeof setTimeout> | undefined;
 async function openDownload() {
   try {
     await launcher.openResourceDownload(props.instance, catalogKind.value, kindLabel.value);
-  } catch {
-    downloadOpen.value = true;
+  } catch (exception) {
+    // The dedicated window is the normal desktop path. Keep the embedded
+    // catalog only for a browser preview where Tauri is unavailable.
+    if (!(window as any).__TAURI__) downloadOpen.value = true;
+    else error.value = exception instanceof Error ? exception.message : String(exception);
   }
+}
+
+function scheduleResourceReload() {
+  if (resourceReloadTimer) clearTimeout(resourceReloadTimer);
+  resourceReloadTimer = setTimeout(() => void load(), 250);
+}
+
+async function subscribeResources() {
+  try {
+    const subscription: any = await props.execute('instance.resources.subscribe', { instance: props.instance });
+    resourceSubscription = String(subscription?.subscriptionId || '');
+    if (!resourceSubscription) return;
+    unlistenResourceStream = await launcher.onStream((batch: any) => {
+      if (!batch || batch.subscriptionId !== resourceSubscription) return;
+      for (const event of batch.events || []) {
+        if (event.kind === 'resource.changed') scheduleResourceReload();
+      }
+    });
+  } catch {
+    // Resource changes are an enhancement; manual refresh still works.
+  }
+}
+
+async function unsubscribeResources() {
+  unlistenResourceStream?.();
+  unlistenResourceStream = undefined;
+  if (!resourceSubscription) return;
+  const subscriptionId = resourceSubscription;
+  resourceSubscription = '';
+  try { await props.execute('event.unsubscribe', { subscriptionId }); } catch { /* Already gone. */ }
 }
 
 function onDownloadInstalled() {
@@ -395,7 +431,12 @@ async function removeSelected() {
   }
 }
 watch(() => [props.instance, props.kind], load);
-onMounted(load);
+watch(() => props.instance, () => { void unsubscribeResources().then(subscribeResources); });
+onMounted(() => { void load(); void subscribeResources(); });
+onBeforeUnmount(() => {
+  if (resourceReloadTimer) clearTimeout(resourceReloadTimer);
+  void unsubscribeResources();
+});
 </script>
 
 <style scoped>

@@ -33,7 +33,7 @@ VersionList::VersionList(const QString& uid, QObject* parent) : BaseVersionList(
     setObjectName("Version list: " + uid);
 }
 
-Task::Ptr VersionList::getLoadTask()
+Task::Ptr VersionList::getLoadTask(bool forceReload)
 {
     // Check if a metadata provider handles this UID.
     auto* provider = findProviderForUid(m_uid);
@@ -42,8 +42,8 @@ Task::Ptr VersionList::getLoadTask()
     }
 
     auto loadTask = makeShared<SequentialTask>(tr("Load meta for %1", "This is for the task name that loads the meta index.").arg(m_uid));
-    loadTask->addTask(APPLICATION->metadataIndex()->loadTask(Net::Mode::Online));
-    loadTask->addTask(this->loadTask(Net::Mode::Online));
+    loadTask->addTask(APPLICATION->metadataIndex()->loadTask(Net::Mode::Online, forceReload));
+    loadTask->addTask(this->loadTask(Net::Mode::Online, forceReload));
     return loadTask;
 }
 

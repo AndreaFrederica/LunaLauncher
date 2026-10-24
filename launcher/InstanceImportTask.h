@@ -45,7 +45,12 @@
 class InstanceImportTask : public InstanceTask {
     Q_OBJECT
    public:
+    // Existing Luna API callers import arbitrary URLs; do not implicitly trust them.
     explicit InstanceImportTask(const QUrl& sourceUrl, QWidget* parent = nullptr, QMap<QString, QString>&& extra_info = {});
+    explicit InstanceImportTask(const QUrl& sourceUrl,
+                                bool trustedSource,
+                                QWidget* parent = nullptr,
+                                QMap<QString, QString>&& extra_info = {});
     virtual ~InstanceImportTask() = default;
     bool abort() override;
     QList<Task*> getSubTasks() const override;
@@ -68,6 +73,7 @@ class InstanceImportTask : public InstanceTask {
 
    private: /* data */
     QUrl m_sourceUrl;
+    bool m_trustedSource;
     QString m_archivePath;
     std::unique_ptr<QTemporaryFile> m_nestedArchive;
     int m_nestedArchiveDepth = 0;

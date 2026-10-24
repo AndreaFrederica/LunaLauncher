@@ -220,8 +220,10 @@ class ApiSmoke(unittest.TestCase):
         event = s.receive(lambda m: m.get("params", {}).get("requestId") == request_id and m["params"].get("kind") == "input")["params"]
         self.assertFalse(event["secret"])
         self.assertEqual(s.ok("task.list", runningOnly=True), [])
-        busy = s.response(s.start("settings.set", scope="launcher", key="Language", value="en_US"))
-        self.assertEqual(busy["error"]["code"], -32000)
+        queued = s.start("settings.set", scope="launcher", key="Language", value="en_US")
+        scheduler = s.ok("scheduler.status")
+        self.assertTrue(scheduler["writeActive"])
+        self.assertEqual(scheduler["queued"], 1)
         s.send("notifications/cancelled", {"requestId": "unrelated"}, notification=True)
         wrong = s.response(s.send("launcher/respond", {"interactionId": "stale", "value": "Ignored"}))
         self.assertEqual(wrong["error"]["code"], -32602)
@@ -229,6 +231,7 @@ class ApiSmoke(unittest.TestCase):
         self.assertEqual(wrong_type["error"]["code"], -32602)
         self.assertTrue(s.call("launcher/respond", {"interactionId": event["interactionId"], "value": "NeoSmoke"})["accepted"])
         self.assertEqual(s.response(request_id)["result"]["data"]["profileName"], "NeoSmoke")
+        self.assertTrue(s.response(queued)["result"]["ok"])
         request_id = s.start("account.login", type="offline")
         s.receive(lambda m: m.get("params", {}).get("requestId") == request_id and m["params"].get("kind") == "input")
         s.send("notifications/cancelled", {"requestId": request_id}, notification=True)
@@ -424,11 +427,20 @@ class ApiSmoke(unittest.TestCase):
         server = s.ok("instance.create", type="server", name="PTY fixture", executable=sys.executable, arguments=["-u", str(script)])
         ref = server["id"]
         resource = self.root / "fixture.jar"
-        resource.write_bytes(b"fixture resource")
+        import zipfile
+        with zipfile.ZipFile(resource, "w") as archive:
+            archive.writestr("plugin.yml", "name: Fixture\nversion: 1.0\nmain: example.Fixture\n")
+            archive.writestr("fabric.mod.json", json.dumps({"schemaVersion": 1, "id": "fixture", "version": "1.0", "name": "Fixture"}))
         for kind in ("mods", "plugins"):
             self.assertEqual(s.ok("resource.list", instance=ref, kind=kind), [])
-            s.ok("resource.install", instance=ref, kind=kind, source=str(resource))
-            self.assertEqual(s.ok("resource.list", instance=ref, kind=kind)[0]["fileName"], "fixture.jar")
+            result = s.execute("resource.install", instance=ref, kind=kind, source=str(resource))
+            self.assertTrue(result["ok"], (kind, result, "".join(s.stderr)))
+            deadline = time.monotonic() + 3
+            installed = s.ok("resource.list", instance=ref, kind=kind)
+            while not installed and time.monotonic() < deadline:
+                time.sleep(0.05)
+                installed = s.ok("resource.list", instance=ref, kind=kind)
+            self.assertEqual([item["fileName"] for item in installed], ["fixture.jar"])
             s.ok("resource.disable", instance=ref, kind=kind, resource="fixture.jar")
             self.assertFalse(s.ok("resource.inspect", instance=ref, kind=kind, resource="fixture.jar.disabled")["enabled"])
             s.ok("resource.enable", instance=ref, kind=kind, resource="fixture.jar.disabled")
@@ -526,7 +538,7 @@ class ApiSmoke(unittest.TestCase):
             s.ok("account.login", type="offline", username="NeoEvents")
             current = s.ok("account.snapshot")
             account = next(a for a in current["accounts"] if a["name"] == "NeoEvents")
-            self.assertIn("skin", account)
+            self.assertIn("skin", account["profile"])
             self.assertIn("lastError", account)
             changes = s.ok("event.poll", subscriptionId=sub, after=initial["nextCursor"])
             self.assertTrue(any(any(a["name"] == "NeoEvents" for a in e["data"]["accounts"]) for e in changes["events"]))
@@ -754,19 +766,17 @@ class ApiSmoke(unittest.TestCase):
             {"id": "enabled", "type": "toggle", "default": True},
             {"id": "mode", "type": "select", "options": ["first", "second"]},
             {"type": "account-select"}]}))
-        opened = s.ok("instance.custom-ui.open", instance="neo-client")
-        sid = opened["sessionId"]
-        self.assertEqual(s.ok("instance.custom-ui.open", instance="neo-client")["sessionId"], sid)
-        self.assertTrue(opened["tabs"][0]["controls"][0]["value"])
-        self.assertEqual(opened["tabs"][0]["controls"][1]["value"], "first")
-        self.assertFalse(s.ok("instance.custom-ui.trigger", sessionId=sid, tab=0, control=1, value="missing")["complete"])
-        self.assertTrue(s.ok("instance.custom-ui.trigger", sessionId=sid, tab=0, control=2, value="")["complete"])
-        self.assertTrue(s.ok("instance.custom-ui.save", sessionId=sid)["complete"])
+        opened = s.ok("instance.custom-ui.snapshot", instance="neo-client")
+        controls = opened["tabs"][0]["controls"]
+        self.assertTrue(controls[0]["value"])
+        self.assertEqual(controls[1]["value"], "first")
+        self.assertFalse(s.ok("instance.custom-ui.trigger", instance="neo-client", control=controls[1], value="missing")["triggered"])
+        self.assertTrue(s.ok("instance.custom-ui.trigger", instance="neo-client", control=controls[2], value="")["triggered"])
+        self.assertTrue(s.ok("instance.custom-ui.save", instance="neo-client")["saved"])
         state = s.ok("instance.custom-ui.state", instance="neo-client")
         s.ok("instance.custom-ui.save-state", instance="neo-client", revision=state["revision"], state={"external": True})
-        self.assertFalse(s.ok("instance.custom-ui.save", sessionId=sid)["complete"])
+        self.assertFalse(s.execute("instance.custom-ui.save-state", instance="neo-client", revision=state["revision"], state={"stale": True})["ok"])
         self.assertTrue(s.ok("instance.custom-ui.state", instance="neo-client")["state"]["external"])
-        s.ok("instance.custom-ui.close", sessionId=sid)
 
     def test_19_custom_ui_runtime(self):
         s = self.sidecar
@@ -775,14 +785,19 @@ function clicked(e) { launcher.setState('fromHandler', e.value); launcher.saveSt
 var tabs = [{title:'Test', controls:[{id:'toggle',type:'toggle',onChange:'clicked'}]}];
 '''
         s.ok("instance.file.write", instance="neo-client", path="lunaui/panel.js", content=script)
+        panel = s.ok("instance.custom-ui.snapshot", instance="neo-client")
+        self.assertEqual(panel["errors"], [])
+        control = panel["tabs"][0]["controls"][0]
+        result = s.ok("instance.custom-ui.trigger", instance="neo-client", control=control, value=True)
+        self.assertTrue(result["triggered"])
+        self.assertTrue(result["state"]["fromHandler"])
+        self.assertTrue(s.ok("instance.custom-ui.state", instance="neo-client")["state"]["fromHandler"])
+        self.assertFalse(s.execute("instance.custom-ui.trigger", instance="neo-client", control=99, value=True)["ok"])
+        # The session bridge remains available for direct sandboxed API calls.
         panel = s.ok("instance.custom-ui.open", instance="neo-client")
         sid = panel["sessionId"]
         try:
-            self.assertEqual(panel["errors"], [])
-            result = s.ok("instance.custom-ui.trigger", sessionId=sid, tab=0, control=0, value=True)
-            self.assertTrue(result["complete"])
-            self.assertTrue(result["state"]["fromHandler"])
-            self.assertTrue(s.ok("instance.custom-ui.state", instance="neo-client")["state"]["fromHandler"])
+            self.assertEqual(s.ok("instance.custom-ui.open", instance="neo-client")["sessionId"], sid)
             result = s.ok("instance.custom-ui.call", sessionId=sid, method="fs.writeFile", arguments=["lunaui/bridge.txt", "bridge"])
             self.assertTrue(result["value"])
             self.assertEqual(s.ok("instance.file.read", instance="neo-client", path="lunaui/bridge.txt")["content"], "bridge")
@@ -790,14 +805,12 @@ var tabs = [{title:'Test', controls:[{id:'toggle',type:'toggle',onChange:'clicke
             self.assertFalse(result["value"])
             result = s.ok("instance.custom-ui.call", sessionId=sid, method="fs.writeFile", arguments=["../escape", "bad"])
             self.assertFalse(result["value"])
-            self.assertFalse(s.execute("instance.custom-ui.trigger", sessionId=sid, tab=99, control=0, value=True)["ok"])
         finally:
             s.ok("instance.custom-ui.close", sessionId=sid)
-        self.assertFalse(s.execute("instance.custom-ui.snapshot", sessionId=sid)["ok"])
+        self.assertFalse(s.execute("instance.custom-ui.call", sessionId=sid, method="fs.exists", arguments=["."])["ok"])
         s.ok("instance.file.write", instance="neo-client", path="lunaui/loop.js", content="while(true){}")
-        panel = s.ok("instance.custom-ui.open", instance="neo-client")
+        panel = s.ok("instance.custom-ui.snapshot", instance="neo-client")
         self.assertTrue(panel["errors"])
-        s.ok("instance.custom-ui.close", sessionId=panel["sessionId"])
         s.ok("instance.file.remove", instance="neo-client", path="lunaui/loop.js", confirm=True)
 
     def test_18_update_marker_stream(self):

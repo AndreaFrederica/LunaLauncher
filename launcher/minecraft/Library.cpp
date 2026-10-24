@@ -170,7 +170,7 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
             dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, sha1));
             if (officialUrl != url)
                 dl->setFallbackUrl(QUrl(officialUrl));
-            qDebug() << "Checksummed Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
+            qDebug() << "Checksummed Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url << "expected sha1:" << sha1;
             out.append(dl);
         } else {
             auto dl = Net::ApiDownload::makeCached(url, entry, options);

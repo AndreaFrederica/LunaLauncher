@@ -138,9 +138,10 @@ bool ResourceFolderModel::installResource(QString original_path)
             QFileInfo new_path_file_info(new_path);
             resource.setFile(new_path_file_info);
 
-            if (!m_is_watching)
-                return update();
-
+            if (!m_is_watching) {
+                // A queued refresh does not undo the successful filesystem install.
+                update();
+            }
             return true;
         }
         case ResourceType::FOLDER: {
@@ -157,9 +158,10 @@ bool ResourceFolderModel::installResource(QString original_path)
             QFileInfo newpathInfo(new_path);
             resource.setFile(newpathInfo);
 
-            if (!m_is_watching)
-                return update();
-
+            if (!m_is_watching) {
+                // A queued refresh does not undo the successful filesystem install.
+                update();
+            }
             return true;
         }
         default:

@@ -44,7 +44,7 @@ class BaseEntity {
     void setLoadStatus(LoadStatus status);
 
     virtual void parse(const QJsonObject& obj) = 0;
-    [[nodiscard]] Task::Ptr loadTask(Net::Mode loadType = Net::Mode::Online);
+    [[nodiscard]] Task::Ptr loadTask(Net::Mode loadType = Net::Mode::Online, bool forceReload = false);
 
    protected:
     QString m_sha256;       // the expected sha256
@@ -59,7 +59,7 @@ class BaseEntityLoadTask : public Task {
     Q_OBJECT
 
    public:
-    explicit BaseEntityLoadTask(BaseEntity* parent, Net::Mode mode);
+    explicit BaseEntityLoadTask(BaseEntity* parent, Net::Mode mode, bool forceReload);
     ~BaseEntityLoadTask() override = default;
 
     virtual void executeTask() override;
@@ -69,6 +69,7 @@ class BaseEntityLoadTask : public Task {
    private:
     BaseEntity* m_entity;
     Net::Mode m_mode;
+    bool m_force_reload = false;
     NetJob::Ptr m_task;
 };
 }  // namespace Meta

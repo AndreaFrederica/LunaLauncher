@@ -27,12 +27,13 @@ test_sources = [
 
 test_inc = include_directories('..', '../launcher')
 snapshot_moc = qt.preprocess(moc_sources: files('AccountSnapshot_test.cpp'),
-  include_directories: [test_inc], dependencies: [qt_core_dep, qt_test_dep])
+  include_directories: [test_inc], dependencies: [qt_core_dep, qt_network_dep, qt_test_dep])
 snapshot_test = executable('AccountSnapshot_test',
   files('AccountSnapshot_test.cpp', '../launcher/minecraft/auth/AccountData.cpp', '../launcher/minecraft/auth/AuthSession.cpp') + snapshot_moc,
-  include_directories: [test_inc], dependencies: [qt_core_dep, qt_test_dep])
+  include_directories: [test_inc], dependencies: [qt_core_dep, qt_network_dep, qt_test_dep])
 test('AccountSnapshot_test', snapshot_test, args: ['-o', '-,txt'])
 test_qt_deps = [
+  buildconfig_dep,
   qt_core_dep,
   qt_gui_dep,
   qt_widgets_dep,

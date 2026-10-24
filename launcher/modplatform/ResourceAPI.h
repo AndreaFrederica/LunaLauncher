@@ -118,10 +118,10 @@ class ResourceAPI {
     virtual Task::Ptr searchProjects(SearchArgs&&, Callback<QList<ModPlatform::IndexedPack::Ptr>>&&) const;
 
     virtual Task::Ptr getProject(QString addonId, std::shared_ptr<QByteArray> response) const;
-    std::pair<Task::Ptr, QByteArray*> getProject(QString addonId) const;
+    virtual std::pair<Task::Ptr, QByteArray*> getProject(QString addonId, bool askRetry = true) const;
     virtual Task::Ptr getProjects(QStringList addonIds, std::shared_ptr<QByteArray> response) const = 0;
 
-    virtual Task::Ptr getProjectInfo(ProjectInfoArgs&&, Callback<ModPlatform::IndexedPack::Ptr>&&) const;
+    virtual Task::Ptr getProjectInfo(ProjectInfoArgs&&, Callback<ModPlatform::IndexedPack::Ptr>&&, bool askRetry = true) const;
     virtual Task::Ptr getProjectVersions(VersionSearchArgs&& args, Callback<QVector<ModPlatform::IndexedVersion>>&& callbacks) const;
     virtual Task::Ptr getDependencyVersion(DependencySearchArgs&&, Callback<ModPlatform::IndexedVersion>&&) const;
 

@@ -2,6 +2,7 @@
 #pragma once
 #include "UserInteraction.h"
 #include <QScopedValueRollback>
+#include <QJsonObject>
 #include <functional>
 
 // Existing main-thread tasks can request input without depending on a GUI page.
@@ -18,6 +19,8 @@ public:
 inline bool headlessConfirm(const QString& prompt)
 {
     if (!activeUserInteraction) return false;
-    const auto selected = activeUserInteraction->select(prompt, QJsonArray{ "Cancel", "Continue" });
+    const auto selected = activeUserInteraction->select(
+        prompt, QJsonArray{ QJsonObject{ { "id", "cancel" }, { "name", QObject::tr("Cancel") } },
+                            QJsonObject{ { "id", "continue" }, { "name", QObject::tr("Continue") } } });
     return selected && *selected == 1;
 }

@@ -99,7 +99,7 @@ class Task : public QObject, public QRunnable {
 
    public:
     explicit Task(bool show_debug_log = true);
-    virtual ~Task() = default;
+    ~Task() override;
 
     bool isRunning() const;
     bool isFinished() const;
@@ -173,7 +173,7 @@ class Task : public QObject, public QRunnable {
     //! used by external code to ask the task to abort
     virtual bool abort()
     {
-        if (canAbort())
+        if (canAbort() && isRunning())
             emitAborted();
         return canAbort();
     }

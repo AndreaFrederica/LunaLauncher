@@ -1,7 +1,7 @@
 project(
   'LunaLauncher',
   ['c', 'cpp', 'java'],
-  version: '11.0.2',
+  version: '11.1.1',
   meson_version: '>=1.4.0',
   default_options: [
     'buildtype=release',
@@ -169,8 +169,8 @@ launcher_config_file = 'lunalauncher.cfg'
 launcher_git_url = 'https://github.com/AndreaFrederica/LunaLauncher'
 launcher_copyright = '© 2025 Luna Launcher Contributors\\n© 2022-2025 Prism Launcher Contributors\\n© 2021-2022 PolyMC Contributors\\n© 2012-2021 MultiMC Contributors'
 launcher_version_major = 11
-launcher_version_minor = 0
-launcher_version_patch = 2
+launcher_version_minor = 1
+launcher_version_patch = 1
 launcher_version_prerelease = ''
 launcher_version_name = '@0@.@1@.@2@'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
 launcher_version_name4 = '@0@.@1@.@2@.0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)

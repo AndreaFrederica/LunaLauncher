@@ -1063,6 +1063,14 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             }
         }
         {
+            auto resetIfInvalid = [this](const Setting* setting) {
+                if (const auto value = setting->get().toString(); !value.isEmpty()) {
+                    if (const QUrl url(value); !url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) {
+                        m_settings->reset(setting->id());
+                    }
+                }
+            };
+
             // Meta URL
         m_settings->registerSetting("MetaURLOverride", "");
         m_settings->registerSetting("LocalServiceCache", true);
@@ -1071,20 +1079,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("LocalYggdrasilPort", 25585);
         m_settings->registerSetting("LocalYggdrasilPublicUrl", "");
 
-            QUrl metaUrl(m_settings->get("MetaURLOverride").toString());
-
-            // get rid of invalid meta urls
-            if (!metaUrl.isEmpty() && (!metaUrl.isValid() || (metaUrl.scheme() != "http" && metaUrl.scheme() != "https")))
-                m_settings->reset("MetaURLOverride");
+            resetIfInvalid(m_settings->getSetting("MetaURLOverride").get());
 
             // Resource URL
             m_settings->registerSetting({ "ResourceURLOverride", "ResourceURL" }, "");
 
-            QUrl resourceUrl(m_settings->get("ResourceURLOverride").toString());
-
-            // get rid of invalid resource urls
-            if (!resourceUrl.isEmpty() && (!resourceUrl.isValid() || (resourceUrl.scheme() != "http" && resourceUrl.scheme() != "https")))
-                m_settings->reset("ResourceURLOverride");
+            resetIfInvalid(m_settings->getSetting("ResourceURLOverride").get());
         }
         {
             // Download Mirror Settings
@@ -1137,16 +1137,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("MSAClientIDOverride", "");
 
         // Custom Flame API Key
-        {
-            m_settings->registerSetting("CFKeyOverride", "");
-            m_settings->registerSetting("FlameKeyOverride", "");
+        m_settings->registerSetting({ "FlameKeyOverride", "CFKeyOverride" }, "");
 
-            QString flameKey = m_settings->get("CFKeyOverride").toString();
-
-            if (!flameKey.isEmpty())
-                m_settings->set("FlameKeyOverride", flameKey);
-            m_settings->reset("CFKeyOverride");
-        }
         m_settings->registerSetting("FallbackMRBlockedMods", true);
         m_settings->registerSetting("ModrinthToken", "");
         m_settings->registerSetting("UserAgentOverride", "");
@@ -1211,15 +1203,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         QString pass = settings()->get("ProxyPass").toString();
         updateProxySettings(proxyTypeStr, addr, port, user, pass);
         qInfo() << "<> Network done.";
-    }
-
-    // load translations
-    {
-        m_translations.reset(new TranslationsModel("translations"));
-        auto bcp47Name = m_settings->get("Language").toString();
-        m_translations->selectLanguage(bcp47Name);
-        qInfo() << "Your language is" << bcp47Name;
-        qInfo() << "<> Translations loaded.";
     }
 
     // Instance icons
@@ -1304,8 +1287,14 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "<> Cache initialized.";
     }
 
-    // now we have network, download translation updates
-    m_translations->downloadIndex();
+    // load translations
+    {
+        m_translations.reset(new TranslationsModel("translations"));
+        m_translations->selectLanguage(m_settings->get("Language").toString());
+        m_translations->downloadIndex();
+        qInfo() << "Your language is" << m_translations->selectedLanguage();
+        qInfo() << "<> Translations loaded.";
+    }
 
     // FIXME: what to do with these?
     m_profilers.insert("jprofiler", std::shared_ptr<BaseProfilerFactory>(new JProfilerFactory()));

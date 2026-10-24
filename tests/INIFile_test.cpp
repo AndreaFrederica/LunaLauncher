@@ -1,7 +1,9 @@
 #include <QTest>
+#include <QSignalSpy>
 
 #include <settings/INIFile.h>
 #include <settings/INISettingsObject.h>
+#include <settings/Setting.h>
 #include <QList>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -16,6 +18,45 @@ class IniFileTest : public QObject {
    private slots:
     void initTestCase() {}
     void cleanupTestCase() {}
+
+    void test_OverrideFreezesInheritedValue()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        INISettingsObject global(dir.filePath("global.cfg"));
+        auto globalMemory = global.registerSetting("MaxMemAlloc", 4096);
+        const auto instancePath = dir.filePath("instance.cfg");
+        {
+            INISettingsObject instance(instancePath);
+            auto gate = instance.registerSetting("OverrideMemory", false);
+            instance.registerOverride(globalMemory, gate);
+            instance.set("OverrideMemory", true);
+            instance.set("MaxMemAlloc", 4096);
+            global.set("MaxMemAlloc", 8192);
+            QCOMPARE(instance.get("MaxMemAlloc").toInt(), 4096);
+        }
+        INISettingsObject restored(instancePath);
+        auto gate = restored.registerSetting("OverrideMemory", false);
+        restored.registerOverride(globalMemory, gate);
+        QCOMPARE(restored.get("MaxMemAlloc").toInt(), 4096);
+        restored.set("OverrideMemory", false);
+        QCOMPARE(restored.get("MaxMemAlloc").toInt(), 8192);
+    }
+
+    void test_UnchangedPlainSettingDoesNotEmit()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        INISettingsObject settings(dir.filePath("global.cfg"));
+        auto setting = settings.registerSetting("MaxMemAlloc", 4096);
+        QSignalSpy changed(setting.get(), &Setting::SettingChanged);
+        settings.set("MaxMemAlloc", 4096);
+        QCOMPARE(changed.count(), 0);
+        settings.set("MaxMemAlloc", 8192);
+        QCOMPARE(changed.count(), 1);
+        settings.set("MaxMemAlloc", 8192);
+        QCOMPARE(changed.count(), 1);
+    }
 
     void test_Escape_data()
     {

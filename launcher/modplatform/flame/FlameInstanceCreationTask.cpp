@@ -64,12 +64,14 @@
 
 #include <QDebug>
 #include <QFileInfo>
+#include <QDirIterator>
 
 #include "HardwareInfo.h"
 #include "meta/Index.h"
 #include "minecraft/World.h"
 #include "minecraft/mod/tasks/LocalResourceParse.h"
 #include "net/ApiDownload.h"
+#include "ui/dialogs/UntrustedModsDialog.h"
 #include "ui/pages/modplatform/OptionalModDialog.h"
 
 static const FlameAPI api;
@@ -333,6 +335,35 @@ QString FlameCreationTask::getVersionForLoader(QString uid, QString loaderType, 
     return loaderVersion;
 }
 
+bool FlameCreationTask::promptForUntrustedMods()
+{
+    if (m_trustedSource) {
+        return true;
+    }
+
+    QStringList untrustedMods;
+
+    const QDir mcDir{ FS::PathCombine(m_stagingPath, "minecraft") };
+    const QString modsPath{ FS::PathCombine(m_stagingPath, "minecraft/mods") };
+    if (QDir(modsPath).exists()) {
+        QDirIterator iter{ modsPath, QDir::Files, QDirIterator::Subdirectories | QDirIterator::FollowSymlinks };
+        while (iter.hasNext()) {
+            untrustedMods.append(mcDir.relativeFilePath(iter.next()));
+        }
+    }
+
+    if (untrustedMods.empty()) {
+        return true;
+    }
+
+    const auto confirmation = UntrustedModsDialog::confirm(untrustedMods, m_parent);
+    if (!confirmation.has_value()) {
+        setError(tr("This modpack includes untrusted mods and requires explicit confirmation from an interactive client."));
+        return false;
+    }
+    return *confirmation;
+}
+
 std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
 {
     QEventLoop loop;
@@ -355,7 +386,13 @@ std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
     }
 
     if (!m_pack.overrides.isEmpty()) {
-        QString overridePath = FS::PathCombine(m_stagingPath, m_pack.overrides);
+        const auto overridePath = FS::PathCombine(m_stagingPath, m_pack.overrides);
+        if (!QUrl::fromLocalFile(m_stagingPath).isParentOf(QUrl::fromLocalFile(overridePath))) {
+            // This means we somehow got out of the root folder, so abort here to prevent exploits
+            setError(tr("The overrides has a path that leads to an arbitrary location (%1). This is a security risk and isn't allowed.")
+                         .arg(m_pack.overrides));
+            return nullptr;
+        }
         if (QFile::exists(overridePath)) {
             // Create a list of overrides in "overrides.txt" inside flame/
             Override::createOverrides("overrides", parent_folder, overridePath);
@@ -369,6 +406,12 @@ std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
             logWarning(
                 tr("The specified overrides folder (%1) is missing. Maybe the modpack was already used before?").arg(m_pack.overrides));
         }
+    }
+
+    if (!promptForUntrustedMods()) {
+        if (getError().isEmpty())
+            m_abort = true;
+        return nullptr;
     }
 
     QString loaderType;

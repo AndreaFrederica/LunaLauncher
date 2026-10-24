@@ -50,6 +50,7 @@ import PclWindowTitleBar from '../../components/PclWindowTitleBar.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclInstancePage from '../instance/PclInstancePage.vue';
 import { launcher } from '../../../boot/launcher-api';
+import { pickPclFile } from '../../composables/usePclFileDialog';
 
 const props = defineProps<{ instanceId: string }>();
 
@@ -118,7 +119,7 @@ async function saveNotes(value: string) {
 }
 
 async function changeIcon() {
-  const path = window.prompt('图标文件完整路径（PNG / ICO 等）');
+  const path = await pickPclFile({ title: '选择实例图标', filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'ico', 'webp'] }] });
   if (!path?.trim()) return;
   try {
     await execute('instance.set-icon', { instance: props.instanceId, path: path.trim() });

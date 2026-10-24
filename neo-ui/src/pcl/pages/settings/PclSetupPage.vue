@@ -295,6 +295,7 @@
                     @update:model-value="drafts.GlobalDataPacksPath = $event"
                     @blur="save('GlobalDataPacksPath', drafts.GlobalDataPacksPath)"
                   />
+                  <PclIconButton icon="folder-open" label="选择全局数据包目录" :size="28" :disabled="busy" @click="chooseGlobalDataPacks" />
                 </div>
               </div>
             </PclCard>
@@ -583,6 +584,8 @@ import { launcher } from '../../../boot/launcher-api';
 import PclPageNav from '../../components/PclPageNav.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
+import PclIconButton from '../../components/PclIconButton.vue';
+import { pickPclDirectory } from '../../composables/usePclFileDialog';
 import PclHint from '../../components/PclHint.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
@@ -805,6 +808,12 @@ watch(windowMode, value => {
 
 function message(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
+}
+async function chooseGlobalDataPacks() {
+  const selected = await pickPclDirectory({ title: '选择全局数据包目录' });
+  if (!selected) return;
+  drafts.GlobalDataPacksPath = selected;
+  save('GlobalDataPacksPath', selected);
 }
 async function save(key: string, value: unknown) {
   error.value = '';

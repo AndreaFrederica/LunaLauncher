@@ -43,6 +43,7 @@
             <span>皮肤 PNG 路径</span>
             <div class="pcl-field-row">
               <PclInput v-model="skinPath" placeholder="D:\皮肤\skin.png" />
+              <PclIconButton icon="folder-open" label="选择皮肤 PNG" :size="28" :disabled="busy" @click="chooseSkinFile" />
               <PclButton icon="file-input" :disabled="busy || !skinPath" @click="installSkin">导入</PclButton>
             </div>
           </label>
@@ -130,6 +131,7 @@ import PclInput from '../../components/PclInput.vue';
 import PclListItem from '../../components/PclListItem.vue';
 import PclSelect from '../../components/PclSelect.vue';
 import PclSkinPreview from './PclSkinPreview.vue';
+import { pickPclFile } from '../../composables/usePclFileDialog';
 
 const props = defineProps<{ accounts: any[]; busy: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any> }>();
 const emit = defineEmits<{ changed: [] }>();
@@ -197,6 +199,11 @@ async function select(account: any) {
 async function move(account: any, delta: number) { await attempt(async () => { await props.execute('account.move', { account: accountRef(account), delta }); emit('changed'); }); }
 async function setDefault(account: any) { await attempt(async () => { await props.execute('account.set-default', { account: accountRef(account) }); emit('changed'); }); }
 async function remove(account: any) { await attempt(async () => { await props.execute('account.remove', { account: accountRef(account), confirm: true }); profile.value = null; selected.value = ''; emit('changed'); }); }
+async function chooseSkinFile() {
+  const selected = await pickPclFile({ title: '选择皮肤 PNG', filters: [{ name: 'PNG 图片', extensions: ['png'] }] });
+  if (selected) skinPath.value = selected;
+}
+
 async function installSkin() { await attempt(async () => { await props.execute('account.skin.install', { account: selected.value, path: skinPath.value }); skinPath.value = ''; await select({ id: selected.value }); }); }
 async function uploadSkin() { await attempt(async () => { await props.execute('account.skin.upload', { account: selected.value, skin: skinName.value, variant: variant.value }); await select({ id: selected.value }); }); }
 async function resetSkin() { await attempt(async () => { await props.execute('account.skin.reset', { account: selected.value, confirm: true }); await select({ id: selected.value }); }); }

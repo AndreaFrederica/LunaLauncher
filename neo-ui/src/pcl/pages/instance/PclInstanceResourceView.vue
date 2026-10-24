@@ -14,6 +14,7 @@
 
     <div class="pcl-resource-install">
       <PclInput v-model="installSource" placeholder="本地文件路径或 HTTP(S) URL" @enter="install" />
+      <PclIconButton icon="folder-open" label="选择本地文件" :size="28" :disabled="busy || localBusy" @click="chooseInstallFile" />
       <PclButton variant="highlight" icon="plus" :disabled="busy || localBusy || !installSource.trim()" @click="install">安装资源</PclButton>
     </div>
 
@@ -181,6 +182,7 @@ import PclInput from '../../components/PclInput.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclCatalogBrowser from '../download/PclCatalogBrowser.vue';
 import { launcher } from '../../../boot/launcher-api';
+import { pickPclFile } from '../../composables/usePclFileDialog';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: string; kind: string; busy: boolean; execute: Execute }>();
@@ -331,6 +333,11 @@ async function update() {
     localBusy.value = false;
   }
 }
+async function chooseInstallFile() {
+  const selected = await pickPclFile({ title: '选择要安装的资源文件' });
+  if (selected) installSource.value = selected;
+}
+
 async function install() {
   const source = installSource.value.trim();
   if (!source) return;

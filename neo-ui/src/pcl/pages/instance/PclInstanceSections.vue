@@ -64,7 +64,10 @@
           </label>
           <label class="pcl-export__field">
             <span>输出路径</span>
-            <PclInput v-model="exportOutput" :placeholder="exportOutputPlaceholder" />
+            <div class="pcl-path-row">
+              <PclInput v-model="exportOutput" :placeholder="exportOutputPlaceholder" />
+              <PclIconButton icon="folder-open" label="选择导出位置" :size="28" :disabled="busy" @click="chooseExportOutput" />
+            </div>
           </label>
           <label v-if="exportFormat === 'modrinth'" class="pcl-export__field pcl-export__field--wide">
             <span>Modrinth 简介</span>
@@ -107,7 +110,7 @@
       <q-banner class="pcl-hint"><span class="material-icons">tune</span>更完整的实例参数仍可在启动器设置 API 中读取；此页优先呈现 Luna 用户最常用的启动、Java 和内存选项。</q-banner>
     </section>
 
-    <section v-else-if="section === 'java'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">INSTANCE JAVA</span><h2>Java 设置</h2><p>选择此实例使用的 Java，并检测运行时兼容性。</p></div></div><div class="java-layout"><div class="java-summary"><span class="material-icons">coffee</span><div><strong>{{ settingValue('JavaPath') || '跟随启动器设置' }}</strong><small>当前 Java 路径</small></div><q-btn outline label="检测 Java" icon="search" :disable="busy" @click="emit('save',{key:'JavaPath',value:settingValue('JavaPath')})"/></div><div class="setting-grid"><div v-for="item in javaSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><q-input outlined dense :model-value="settingValue(item.key)" :disable="busy" @update:model-value="save(item.key,$event)"/></div></div></div></section>
+    <section v-else-if="section === 'java'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">INSTANCE JAVA</span><h2>Java 设置</h2><p>选择此实例使用的 Java，并检测运行时兼容性。</p></div></div><div class="java-layout"><div class="java-summary"><span class="material-icons">coffee</span><div><strong>{{ settingValue('JavaPath') || '跟随启动器设置' }}</strong><small>当前 Java 路径</small></div><q-btn outline label="检测 Java" icon="search" :disable="busy" @click="emit('save',{key:'JavaPath',value:settingValue('JavaPath')})"/></div><div class="setting-grid"><div v-for="item in javaSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><div class="pcl-path-row"><q-input outlined dense :model-value="settingValue(item.key)" :disable="busy" @update:model-value="save(item.key,$event)"/><PclIconButton v-if="item.key === 'JavaPath'" icon="folder-open" label="选择 Java" :size="26" :disabled="busy" @click="chooseJavaPath" /></div></div></div></div></section>
 
     <PclMemoryPanel v-else-if="section === 'memory'" :settings="settings || []" :busy="busy" :execute="execute || (async () => ({}))" @save="emit('save', $event)" />
 
@@ -123,6 +126,8 @@ import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclInput from '../../components/PclInput.vue';
+import PclIconButton from '../../components/PclIconButton.vue';
+import { pickPclDirectory, pickPclSavePath } from '../../composables/usePclFileDialog';
 import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props=defineProps<{section:string;components:any[];settings?:any[];busy:boolean;instance?:string;execute?:Execute}>();
@@ -132,6 +137,17 @@ const exportFormats=[{label:'ZIP 实例包（.zip）',value:'zip'},{label:'Modri
 const exportOutputPlaceholder=computed(()=>exportFormat.value==='modrinth'?'例如：D:/Export/pack.mrpack':'例如：D:/Export/pack.zip');
 const canExport=computed(()=>Boolean(exportName.value.trim() && exportOutput.value.trim() && (exportFormat.value==='zip' || exportVersion.value.trim())));
 function toggleExport(key:string, enabled:boolean){selectedExport.value=enabled?[...selectedExport.value,key]:selectedExport.value.filter(item=>item!==key);}
+async function chooseExportOutput() {
+  const extension = exportFormat.value === 'modrinth' ? 'mrpack' : 'zip';
+  const selected = await pickPclSavePath({ title: '选择导出位置', defaultPath: exportOutput.value || `${exportName.value || 'instance'}.${extension}`, filters: [{ name: exportFormat.value === 'modrinth' ? 'Modrinth 整合包' : 'ZIP 压缩包', extensions: [extension] }] });
+  if (selected) exportOutput.value = selected;
+}
+
+async function chooseJavaPath() {
+  const selected = await pickPclDirectory({ title: '选择 Java 目录' });
+  if (selected) save('JavaPath', selected);
+}
+
 function startExport(){
   exportError.value='';
   if(!exportName.value.trim()){exportError.value='请填写整合包名称。';return;}
@@ -422,4 +438,6 @@ onMounted(()=>{if(props.section==='server')void loadServer();});
   .pcl-export__grid,
   .pcl-export__options { grid-template-columns: 1fr; }
 }
+.pcl-path-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pcl-path-row > :first-child { flex: 1; min-width: 0; }
 </style>

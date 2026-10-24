@@ -49,6 +49,8 @@
         <span class="pcl-form-row__label">Java 目录</span>
         <div class="pcl-form-row__control">
           <PclInput v-model="manualPath" placeholder="D:\Program Files\Java\jdk-21 或 ...\bin\java.exe" />
+          <PclIconButton icon="folder-open" label="选择 Java 目录" :size="28" :disabled="busy || localBusy" @click="chooseJavaDirectory" />
+          <PclIconButton icon="file" label="选择 java.exe" :size="28" :disabled="busy || localBusy" @click="chooseJavaExecutable" />
         </div>
         <PclButton variant="highlight" icon="check" :disabled="busy || localBusy || !manualPath.trim()" @click="applyManual">应用</PclButton>
       </div>
@@ -125,6 +127,7 @@ import PclInput from '../../components/PclInput.vue';
 import PclListItem from '../../components/PclListItem.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclSelect from '../../components/PclSelect.vue';
+import { pickPclDirectory, pickPclFile } from '../../composables/usePclFileDialog';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ scope: Record<string, unknown>; settings: any[]; busy: boolean; execute: Execute }>();
@@ -219,6 +222,14 @@ function select(path: string) {
     manualPath.value = path;
     emit('changed');
   });
+}
+async function chooseJavaDirectory() {
+  const selected = await pickPclDirectory({ title: '选择 Java 目录' });
+  if (selected) manualPath.value = selected;
+}
+async function chooseJavaExecutable() {
+  const selected = await pickPclFile({ title: '选择 java.exe', filters: [{ name: 'Java 可执行文件', extensions: ['exe'] }, { name: '所有文件', extensions: ['*'] }] });
+  if (selected) manualPath.value = selected;
 }
 function applyManual() {
   let path = manualPath.value.trim().replace(/^"(.*)"$/, '$1');

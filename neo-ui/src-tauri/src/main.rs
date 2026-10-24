@@ -250,6 +250,43 @@ fn percent_encode(value: &str) -> String {
 }
 
 #[tauri::command]
+async fn pick_path_dialog(kind: String, title: Option<String>, default_path: Option<String>) -> Result<String, String> {
+    let title = title.unwrap_or_else(|| match kind.as_str() {
+        "directory" => "选择目录".into(),
+        "save" => "选择保存位置".into(),
+        _ => "选择文件".into(),
+    });
+    let default_path = default_path.unwrap_or_default();
+    let script = match kind.as_str() {
+        "directory" => format!(
+            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = '{}'; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ [Console]::Out.Write($d.SelectedPath) }}",
+            title.replace('\'', "''")
+        ),
+        "save" => format!(
+            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.SaveFileDialog; $d.Title = '{}'; $d.FileName = '{}'; $d.Filter = '所有文件 (*.*)|*.*'; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ [Console]::Out.Write($d.FileName) }}",
+            title.replace('\'', "''"),
+            default_path.replace('\'', "''")
+        ),
+        _ => format!(
+            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title = '{}'; $d.Filter = '所有文件 (*.*)|*.*'; $d.Multiselect = $false; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ [Console]::Out.Write($d.FileName) }}",
+            title.replace('\'', "''")
+        ),
+    };
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command", &script])
+            .output()
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().trim_start_matches('\u{feff}').to_string())
+}
+
+#[tauri::command]
 async fn open_resource_download(app: tauri::AppHandle, instance: String, kind: String, name: String) -> Result<(), String> {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -352,6 +389,7 @@ fn main() {
             launcher_request,
             open_instance_editor,
             open_resource_download,
+            pick_path_dialog,
             webui::webui_list,
             webui::webui_settings_get,
             webui::webui_settings_update,

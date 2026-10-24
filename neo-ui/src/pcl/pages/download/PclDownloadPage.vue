@@ -74,6 +74,7 @@
               <span class="pcl-form-row__label">本地文件</span>
               <div class="pcl-form-row__control pcl-form-row__control--column">
                 <PclInput v-model="importPath" placeholder="D:\下载\整合包.zip" />
+                <PclIconButton icon="folder-open" label="选择整合包文件" :size="28" :disabled="importing" @click="chooseImportFile" />
               </div>
             </div>
             <div class="pcl-form-row">
@@ -165,6 +166,8 @@ import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclIcon from '../../components/PclIcon.vue';
+import PclIconButton from '../../components/PclIconButton.vue';
+import { pickPclFile } from '../../composables/usePclFileDialog';
 import PclListItem from '../../components/PclListItem.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import PclInstallView from './PclInstallView.vue';
@@ -334,6 +337,11 @@ function onImportDrop(event: DragEvent) {
   if (file?.path) importPath.value = String(file.path);
   else if (file?.name) importError.value = '浏览器没有提供本地文件路径，请在下方粘贴完整路径。';
 }
+async function chooseImportFile() {
+  const selected = await pickPclFile({ title: '选择整合包文件', filters: [{ name: '整合包', extensions: ['zip', 'mrpack', 'jar'] }] });
+  if (selected) importPath.value = selected;
+}
+
 async function importInstance() {
   if (!importPath.value.trim()) return;
   importing.value = true;

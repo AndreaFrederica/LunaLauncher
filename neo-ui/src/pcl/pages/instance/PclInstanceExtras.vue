@@ -12,6 +12,8 @@
       </div>
       <div class="pcl-extras-form">
         <PclInput v-model="worldSource" placeholder="世界目录或 ZIP 路径" />
+        <PclIconButton icon="folder-open" label="选择世界目录" :size="28" :disabled="busy" @click="chooseWorldDirectory" />
+        <PclIconButton icon="file-archive" label="选择世界压缩包" :size="28" :disabled="busy" @click="chooseWorldArchive" />
         <PclInput v-model="worldName" placeholder="导入后的名称（可选）" />
         <PclButton variant="highlight" icon="arrow-up-from-line" :disabled="busy || !worldSource.trim()" @click="importWorld">导入</PclButton>
       </div>
@@ -51,6 +53,7 @@
       </div>
       <div class="pcl-extras-form">
         <PclInput v-model="screenshotSource" placeholder="本地图片路径" />
+        <PclIconButton icon="folder-open" label="选择图片文件" :size="28" :disabled="busy" @click="chooseScreenshotFile" />
         <PclInput v-model="screenshotName" placeholder="导入文件名（可选）" />
         <PclButton variant="highlight" icon="arrow-up-from-line" :disabled="busy || !screenshotSource.trim()" @click="importScreenshot">导入</PclButton>
       </div>
@@ -96,6 +99,7 @@ import PclIcon from '../../components/PclIcon.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclLoading from '../../components/PclLoading.vue';
+import { pickPclDirectory, pickPclFile, pickPclSavePath } from '../../composables/usePclFileDialog';
 import { launcher } from '../../../boot/launcher-api';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
@@ -178,13 +182,28 @@ async function deleteWorld(world: any) {
   await props.execute('instance.world.delete', { instance: props.instance, world: world.folder, confirm: true }); emit('changed'); await loadWorlds();
 }
 
+async function chooseWorldDirectory() {
+  const selected = await pickPclDirectory({ title: '选择世界存档目录' });
+  if (selected) worldSource.value = selected;
+}
+
+async function chooseWorldArchive() {
+  const selected = await pickPclFile({ title: '选择世界压缩包', filters: [{ name: '世界压缩包', extensions: ['zip', 'tar', 'gz'] }] });
+  if (selected) worldSource.value = selected;
+}
+
+async function chooseScreenshotFile() {
+  const selected = await pickPclFile({ title: '选择截图', filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
+  if (selected) screenshotSource.value = selected;
+}
+
 async function importWorld() {
   await props.execute('instance.world.import', { instance: props.instance, source: worldSource.value.trim(), ...(worldName.value.trim() ? { name: worldName.value.trim() } : {}) });
   worldSource.value = ''; worldName.value = ''; emit('changed'); await loadWorlds();
 }
 
 async function exportWorld(world: any) {
-  const output = window.prompt('导出 ZIP 的完整路径', `${world.name || world.folder}.zip`);
+  const output = await pickPclSavePath({ title: '导出世界存档', defaultPath: `${world.name || world.folder}.zip`, filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }] });
   if (!output) return;
   await props.execute('instance.world.export', { instance: props.instance, world: world.folder, output, overwrite: true });
 }

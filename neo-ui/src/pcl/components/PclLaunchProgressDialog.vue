@@ -118,6 +118,9 @@ const failedRows = computed(() => (props.children || [])
   .slice(0, 8));
 const stateLabels: Record<string, string> = { running: '进行中', succeeded: '已完成', failed: '失败', waiting: '等待中' };
 const stateMarks: Record<string, string> = { running: '●', succeeded: '✓', failed: '×', waiting: '○' };
+function stepKey(row: any) {
+  return String(row?.label || row?.status || row?.details || row?.id || '');
+}
 const accumulatedRows = ref<any[]>([]);
 watch(() => props.children, (rows: any[]) => {
   const incoming = Array.isArray(rows) ? rows.filter((row: any) => row && (row.label || row.status || row.details)) : [];
@@ -125,18 +128,20 @@ watch(() => props.children, (rows: any[]) => {
     if (props.state === 'launching') accumulatedRows.value = [];
     return;
   }
-  const map = new Map<string, any>();
-  for (const row of accumulatedRows.value) map.set(String(row.id || row.label || row.status), row);
-  const incomingKeys = new Set<string>();
+  const previous = new Map<string, any>();
+  for (const row of accumulatedRows.value) previous.set(stepKey(row), row);
+  const incomingKeys = new Set(incoming.map(stepKey));
+  // Preserve older launch steps that vanished from the snapshot, but keep
+  // the authoritative order of the current authentication steps.
+  const merged: any[] = [];
+  for (const row of accumulatedRows.value) {
+    if (!incomingKeys.has(stepKey(row))) merged.push({ ...row, state: row.state === 'running' ? 'succeeded' : row.state });
+  }
   for (const row of incoming) {
-    const key = String(row.id || row.label || row.status);
-    incomingKeys.add(key);
-    map.set(key, { ...(map.get(key) || {}), ...row });
+    const key = stepKey(row);
+    merged.push({ ...(previous.get(key) || {}), ...row, id: key });
   }
-  for (const [key, row] of map) {
-    if (!incomingKeys.has(key) && row.state === 'running') map.set(key, { ...row, state: 'succeeded' });
-  }
-  accumulatedRows.value = [...map.values()];
+  accumulatedRows.value = merged;
 }, { deep: true, immediate: true });
 const stepRows = computed(() => (accumulatedRows.value || [])
   .filter((row: any) => row && (row.label || row.status || row.details))

@@ -23,8 +23,8 @@
       <section class="settings-card">
         <h6>下载核心</h6>
         <q-select dark outlined emit-value map-options :model-value="value('DownloadBackend')" :options="backends" label="下载实现" @update:model-value="saveKey('DownloadBackend',$event)" />
-        <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" label="专用下载失败时回退 Qt" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" label="专用下载并发线程" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" label="专用下载限速（KB/s，0 为不限）" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
+        <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" label="专用 .NET 下载失败时回退 Qt" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" label="专用 .NET 下载并发线程" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" label="专用 .NET 下载限速（KB/s，0 为不限）" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
       </section>
       <section class="settings-card q-mt-md">
         <h6>Aria2</h6>

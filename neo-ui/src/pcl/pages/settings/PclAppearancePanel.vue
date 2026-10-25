@@ -85,7 +85,7 @@
 
       <div class="pcl-appearance-preview" :class="{ light: preferences.theme === 'light' }">
         <div class="pcl-appearance-preview__bar">
-          <span class="pcl-appearance-preview__logo">L</span>
+          <span class="pcl-appearance-preview__logo"><img :src="lunaLogo" alt="Luna Launcher" /></span>
           <span class="pcl-appearance-preview__nav"><i />启动</span>
           <span class="pcl-appearance-preview__nav active"><i />下载</span>
           <span class="pcl-appearance-preview__nav"><i />设置</span>
@@ -337,6 +337,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import lunaLogo from '../../../assets/luna-launcher.png';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -696,6 +697,12 @@ function reset() {
   border-radius: 4px;
   font-size: calc(12px * var(--pcl-font-scale, 1));
   font-weight: 800;
+}
+
+.pcl-appearance-preview__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .pcl-appearance-preview__nav {

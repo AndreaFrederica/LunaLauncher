@@ -1,7 +1,7 @@
 <template>
   <aside class="sidebar moveable" role="navigation" aria-label="XMCL sidebar">
     <div class="sidebar__pcl-brand" aria-label="Luna Launcher Neo UI">
-      <span class="sidebar__pcl-mark">L</span>
+      <img class="sidebar__pcl-mark" :src="lunaLogo" alt="Luna Launcher" />
       <span><strong>Luna Launcher</strong><small>Neo UI</small></span>
     </div>
     <div class="sidebar__section">
@@ -34,6 +34,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import fallback from './assets/minecraft.webp';
+import lunaLogo from '../assets/luna-launcher.png';
 defineProps<{ instances: any[]; selected: any; icons: Record<string, string>; page: string }>();
 const emit = defineEmits<{ navigate: [page: string]; select: [instance: any]; launch: [instance: any]; back: []; add: [] }>();
 const dragging = ref('');
@@ -45,7 +46,7 @@ function onDrop(target: any) { if (dragging.value && dragging.value !== target.i
 [data-neo-shell="pcl"] .sidebar__pcl-brand,[data-neo-shell="pcl"] .sidebar__pcl-launch,[data-neo-shell="pcl"] .sidebar__pcl-account,[data-neo-shell="pcl"] .sidebar__pcl-version,[data-neo-shell="pcl"] .sidebar__pcl-mark,[data-neo-shell="pcl"] .sidebar-item__label,[data-neo-shell="pcl"] .sidebar-instance__name{display:flex}
 [data-neo-shell="pcl"] .sidebar{top:48px;bottom:0;left:0;width:300px;min-width:300px;border-radius:0;padding:0 20px;background:#f7f9fc;color:#2f4052;box-shadow:3px 0 15px rgba(28,48,68,.12);backdrop-filter:none}
 [data-neo-shell="pcl"] .sidebar__pcl-brand{align-items:center;gap:10px;height:74px;border-bottom:1px solid #dce4ec;color:#31577b}
-[data-neo-shell="pcl"] .sidebar__pcl-mark{align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#559bd0,#2f6eaa);color:#fff;font-size:22px;font-weight:800;box-shadow:0 4px 10px rgba(47,110,170,.25)}
+[data-neo-shell="pcl"] .sidebar__pcl-mark{align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:#fff;object-fit:contain;box-shadow:0 4px 10px rgba(47,110,170,.25)}
 [data-neo-shell="pcl"] .sidebar__pcl-brand strong{font-size:14px;font-weight:700;white-space:nowrap}[data-neo-shell="pcl"] .sidebar__pcl-brand small{display:block;margin-top:2px;color:#8493a3;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
 [data-neo-shell="pcl"] .sidebar__section{align-items:stretch;padding:14px 0 8px;gap:3px}[data-neo-shell="pcl"] .sidebar-back-btn{display:none}
 [data-neo-shell="pcl"] .sidebar-item{width:100%;height:39px;margin:0;color:#526477;text-align:left}[data-neo-shell="pcl"] .sidebar-item__content{width:100%;height:39px;justify-content:flex-start;gap:11px;border-radius:6px;padding:0 12px;background:transparent}[data-neo-shell="pcl"] .sidebar-item:hover .sidebar-item__content{background:#e8f0f7;color:#2f6eaa}[data-neo-shell="pcl"] .sidebar-item.active .sidebar-item__content{background:#dcecf8;color:#24679d}[data-neo-shell="pcl"] .sidebar-item.active .sidebar-item__content .material-icons{color:#2d78b2}[data-neo-shell="pcl"] .sidebar-item::before{display:none}[data-neo-shell="pcl"] .sidebar-item__label{font-size:13px;font-weight:600}

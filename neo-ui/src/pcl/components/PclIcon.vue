@@ -28,7 +28,12 @@ const props = withDefaults(defineProps<{
 });
 
 const cssSize = computed(() => typeof props.size === 'number' ? `${props.size}px` : props.size);
-const source = computed(() => sources[`../icons/${props.name}.svg`] || '');
+const source = computed(() => {
+  const requested = sources[`../icons/${props.name}.svg`];
+  // Dynamic icons can come from the launcher API (loader/component metadata).
+  // Keep the control visible when an upstream name has no local SVG yet.
+  return requested || sources['../icons/circle-help.svg'];
+});
 </script>
 
 <style scoped>

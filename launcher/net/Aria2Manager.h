@@ -52,6 +52,8 @@ class Aria2Manager : public QObject {
     Task::Ptr createInstallTask() const;
     bool removeManagedExecutable(QString* reason = nullptr);
     bool ensureStarted(QString* error = nullptr);
+    /** Apply settings that can be changed while the aria2 process is running. */
+    void applyRuntimeSettings();
     bool isRunning() const;
     QString statusText() const;
     int rpcPort() const { return m_port; }

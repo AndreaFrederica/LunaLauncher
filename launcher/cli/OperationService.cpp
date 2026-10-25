@@ -46,6 +46,8 @@
 #include "net/ApiDownload.h"
 #include "net/Download.h"
 #include "net/NetJob.h"
+#include "net/Aria2Manager.h"
+#include "net/PclDownloadLibrary.h"
 #include "net/RawHeaderProxy.h"
 #include "net/Upload.h"
 #include "settings/Setting.h"
@@ -194,6 +196,37 @@ bool isSensitiveSetting(const QString& id)
     const auto lower = id.toLower();
     return lower.endsWith("password") || lower.endsWith("proxypass") || lower.contains("token") || lower.contains("secret") ||
            lower.endsWith("keyoverride");
+}
+
+void applyRuntimeDownloadSettings(const QString& key)
+{
+    if (!APPLICATION_DYN)
+        return;
+
+    const auto settings = APPLICATION->settings();
+    if (key == "PclDownloadThreadLimit") {
+        auto& library = PclDownloadLibrary::instance();
+        if (library.isLoaded())
+            library.setThreadLimit(qMax(1, settings->get(key).toInt()));
+    } else if (key == "PclDownloadSpeedLimitKBps") {
+        auto& library = PclDownloadLibrary::instance();
+        if (library.isLoaded())
+            library.setSpeedLimit(static_cast<qint64>(qMax(0, settings->get(key).toInt())) * 1024);
+    }
+
+    if (key == "NumberOfConcurrentDownloads")
+        NetJob::applyRuntimeSettings();
+
+    if (key == "Aria2MaxConcurrentDownloads" || key == "NumberOfConcurrentDownloads" ||
+        key == "Aria2FollowLauncherDownloadLimits" || key == "Aria2PollInterval") {
+        Net::Aria2Manager::instance()->applyRuntimeSettings();
+    }
+
+    if (key == "ProxyType" || key == "ProxyAddr" || key == "ProxyPort" || key == "ProxyUser" || key == "ProxyPass") {
+        APPLICATION->updateProxySettings(settings->get("ProxyType").toString(), settings->get("ProxyAddr").toString(),
+                                         settings->get("ProxyPort").toInt(), settings->get("ProxyUser").toString(),
+                                         settings->get("ProxyPass").toString());
+    }
 }
 
 Resource* findLoadedResource(const std::shared_ptr<ResourceFolderModel>& model, const QString& reference)
@@ -977,6 +1010,7 @@ QJsonObject OperationService::setSetting(const QJsonObject& parameters, UserInte
         return failure(tr("An instance can be added to the integrity whitelist only after instance.verify succeeds with trust=true."), 2);
     if (!settings->set(key, converted))
         return failure(tr("Could not set %1.").arg(key));
+    applyRuntimeDownloadSettings(key);
     if (instance)
         instance->saveNow();
     return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));
@@ -994,6 +1028,7 @@ QJsonObject OperationService::resetSetting(const QJsonObject& parameters)
     if (!setting)
         return failure(tr("Unknown setting: %1").arg(key), 2);
     settings->reset(key);
+    applyRuntimeDownloadSettings(key);
     if (instance)
         instance->saveNow();
     return success(describeSetting(settings, setting, parameters.value("reveal").toBool(false)));

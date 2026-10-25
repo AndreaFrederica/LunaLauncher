@@ -476,6 +476,28 @@ bool Aria2Manager::ensureStarted(QString* error)
     return true;
 }
 
+void Aria2Manager::applyRuntimeSettings()
+{
+    if (!isRunning()) {
+        return;
+    }
+
+    // aria2 keeps this value in its global runtime options. Updating it via
+    // RPC makes a changed launcher setting affect queued downloads immediately
+    // without restarting the helper process. New processes still receive the
+    // value through --max-concurrent-downloads in ensureStarted().
+    QJsonObject options{ { "max-concurrent-downloads", QString::number(maxConcurrentDownloads()) } };
+    rpc("aria2.changeGlobalOption", QJsonArray{ "token:" + m_secret, options }, this,
+        [](bool ok, const QJsonValue&, const QString& error) {
+            if (!ok) {
+                qCWarning(taskDownloadLogC) << "Failed to apply aria2 runtime settings:" << error;
+            }
+        });
+
+    const auto interval = qMax(250, APPLICATION->settings()->get("Aria2PollInterval").toInt());
+    m_pollTimer.setInterval(interval);
+}
+
 void Aria2Manager::connectWebSocket()
 {
     if (!isRunning() || m_port <= 0 || m_webSocket.state() != QAbstractSocket::UnconnectedState) {

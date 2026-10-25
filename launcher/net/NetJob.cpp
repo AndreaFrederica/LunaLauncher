@@ -50,16 +50,57 @@
 #include "ui/dialogs/NetworkJobFailedDialog.h"
 #endif
 
+QSet<NetJob*> NetJob::s_dynamicJobs;
+
 NetJob::NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> network, int max_concurrent)
     : ConcurrentTask(job_name), m_network(network)
 {
 #if defined(LAUNCHER_APPLICATION)
-    if (APPLICATION_DYN && max_concurrent < 0) {
-        max_concurrent = APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt();
+    m_dynamicMaxConcurrent = max_concurrent < 0;
+    if (APPLICATION_DYN && m_dynamicMaxConcurrent) {
+        max_concurrent = qMax(1, APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
     }
 #endif
     if (max_concurrent > 0)
         setMaxConcurrent(max_concurrent);
+    if (m_dynamicMaxConcurrent)
+        s_dynamicJobs.insert(this);
+}
+
+NetJob::~NetJob()
+{
+    s_dynamicJobs.remove(this);
+}
+
+void NetJob::applyRuntimeSettings()
+{
+#if defined(LAUNCHER_APPLICATION)
+    if (!APPLICATION_DYN)
+        return;
+    const auto limit = qMax(1, APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+    for (auto* job : s_dynamicJobs) {
+        if (!job || job->m_aria2Delegated)
+            continue;
+        job->setMaxConcurrent(limit);
+        if (job->isRunning()) {
+            // ConcurrentTask normally queues one refill after each child
+            // finishes.  A live limit increase must fill every newly opened
+            // slot immediately, otherwise changing 1 -> 6 still leaves five
+            // downloads idle until the first child completes.
+            const auto availableSlots = qMax(0, limit - job->m_doing.size());
+            for (auto i = 0; i < availableSlots; ++i)
+                QMetaObject::invokeMethod(job, &NetJob::executeNextSubTask, Qt::QueuedConnection);
+        }
+    }
+#endif
+}
+
+void NetJob::refreshConfiguredConcurrency()
+{
+#if defined(LAUNCHER_APPLICATION)
+    if (APPLICATION_DYN && m_dynamicMaxConcurrent && !m_aria2Delegated)
+        setMaxConcurrent(qMax(1, APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt()));
+#endif
 }
 
 auto NetJob::addNetAction(Net::NetRequest::Ptr action) -> bool
@@ -102,12 +143,15 @@ void NetJob::updateDownloadSpeed(const QUuid& taskId, qint64 downloadedBytes)
 
 void NetJob::executeTask()
 {
+    m_aria2Delegated = false;
     if (canDelegateWholeQueueToAria2()) {
+        m_aria2Delegated = true;
         setMaxConcurrent(static_cast<int>(totalSize()));
         ConcurrentTask::executeTask();
         return;
     }
 
+    refreshConfiguredConcurrency();
     ConcurrentTask::executeTask();
 }
 
@@ -122,6 +166,7 @@ void NetJob::executeNextSubTask()
             m_queue.enqueue(task);
         }
     }
+    refreshConfiguredConcurrency();
     ConcurrentTask::executeNextSubTask();
 }
 

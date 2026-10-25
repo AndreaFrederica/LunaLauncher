@@ -416,6 +416,7 @@
   background: transparent;
   color: var(--pcl-text);
   font: 400 calc(14px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
+  line-height: 1;
   text-align: left;
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
@@ -474,6 +475,10 @@
 
 :root[data-neo-shell="pcl"] .pcl-page-nav__item > span:not(.pcl-icon):not(.pcl-page-nav__refresh) {
   overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -741,6 +746,8 @@
   background: var(--pcl-half-white);
   color: var(--pcl-text);
   font: 400 calc(13px * var(--pcl-font-scale, 1))/1 var(--pcl-font);
+  line-height: 1;
+  vertical-align: middle;
   white-space: nowrap;
   cursor: pointer;
   transition: background .1s ease, border-color .1s ease, color .1s ease, transform .08s ease;
@@ -836,6 +843,8 @@
   width: 30px;
   height: 30px;
   padding: 0;
+  line-height: 1;
+  vertical-align: middle;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -1006,6 +1015,11 @@
   gap: 6px;
   min-width: 0;
   max-width: 360px;
+}
+
+:root[data-neo-shell="pcl"] .pcl-actions > *,
+:root[data-neo-shell="pcl"] .pcl-card__title-actions > * {
+  align-self: center;
 }
 
 :root[data-neo-shell="pcl"] .pcl-form-row > .pcl-btn,

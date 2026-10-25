@@ -3,8 +3,7 @@
     <PclPageNav v-if="!embedded" v-model="section" :groups="groups" @refresh="refreshSection" />
 
     <main class="pcl-page-main">
-      <Transition name="pcl-page" mode="out-in">
-        <div :key="section" class="pcl-page-view pcl-setup-stack">
+      <div class="pcl-page-view pcl-setup-stack">
           <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
           <PclHint v-if="notice" theme="blue" closable @close="notice = ''">{{ notice }}</PclHint>
 
@@ -16,11 +15,11 @@
             </div>
           </PclCard>
 
-          <template v-if="section === 'accounts'">
+          <div v-show="section === 'accounts'" class="pcl-settings-section">
             <PclAccountPage :accounts="accounts || []" :busy="busy" :execute="execute" embedded @changed="emit('changed')" />
-          </template>
+          </div>
 
-          <template v-else-if="section === 'launch'">
+          <div v-show="section === 'launch'" class="pcl-settings-section">
             <PclCard title="启动选项">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">默认实例隔离</span>
@@ -97,9 +96,9 @@
               </div>
             </PclCard>
 
-          </template>
+          </div>
 
-          <template v-else-if="section === 'memory'">
+          <div v-show="section === 'memory'" class="pcl-settings-section">
             <PclCard title="游戏内存">
               <PclHint v-if="maxMem < 2048" theme="yellow">最大内存低于 2 GiB，部分整合包可能无法启动。</PclHint>
               <div class="pcl-choice-row">
@@ -166,9 +165,9 @@
               </div>
             </PclCard>
 
-          </template>
+          </div>
 
-          <template v-else-if="section === 'advanced'">
+          <div v-show="section === 'advanced'" class="pcl-settings-section">
             <PclCard title="高级启动选项">
               <div class="pcl-form-row pcl-form-row--top">
                 <span class="pcl-form-row__label">JVM 参数</span>
@@ -231,9 +230,9 @@
 
               <PclHint theme="blue" class="pcl-advanced-hint">更多实例专属的 JVM、窗口和启动参数可以在实例设置中找到。</PclHint>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'download-settings'">
+          <div v-show="section === 'download-settings'" class="pcl-settings-section">
             <PclCard title="下载引擎与镜像">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">下载引擎</span>
@@ -450,9 +449,9 @@
               <div class="pcl-form-row"><span class="pcl-form-row__label">Modrinth Token</span><div class="pcl-form-row__control"><PclSecretInput label="Modrinth Token" :configured="secretConfigured('ModrinthToken')" :disabled="busy" :save="value => save('ModrinthToken', value)" /></div></div>
               <div class="pcl-form-row"><span class="pcl-form-row__label">CurseForge API Key</span><div class="pcl-form-row__control"><PclSecretInput label="CurseForge API Key" :configured="secretConfigured('FlameKeyOverride')" :disabled="busy" :save="value => save('FlameKeyOverride', value)" /></div></div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'paths'">
+          <div v-show="section === 'paths'" class="pcl-settings-section">
             <PclCard title="文件夹位置">
               <div v-for="item in pathSettings" :key="item.key" class="pcl-form-row">
                 <span class="pcl-form-row__label">{{ item.label }}</span>
@@ -467,9 +466,9 @@
 
               <div v-for="item in toolPathSettings" :key="item.key" class="pcl-form-row"><span class="pcl-form-row__label">{{ item.label }}</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue(item.key, '')" placeholder="可选" @update:model-value="drafts[item.key] = $event" @blur="save(item.key, drafts[item.key])" /><PclIconButton icon="file" :label="`选择${item.label}`" :size="28" :disabled="busy" @click="chooseFilePath(item.key, item.label)" /></div></div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'console'">
+          <div v-show="section === 'console'" class="pcl-settings-section">
             <PclCard title="控制台输出">
               <div class="pcl-form-row"><span class="pcl-form-row__label">最大保留行数</span><div class="pcl-form-row__control"><PclSlider :model-value="draftNumber('ConsoleMaxLines', 100000)" :min="100" :max="100000" :step="100" @update:model-value="drafts.ConsoleMaxLines = $event" @change="save('ConsoleMaxLines', $event)" /></div><span class="pcl-form-row__hint">{{ draftNumber('ConsoleMaxLines', 100000).toLocaleString() }} 行</span></div>
               <div class="pcl-check-grid"><PclCheckbox :model-value="bool('ConsoleOverflowStop')" label="日志溢出时停止输出" @update:model-value="save('ConsoleOverflowStop', $event)" /><PclCheckbox :model-value="bool('LogPrePostOutput')" label="记录启动前后输出" @update:model-value="save('LogPrePostOutput', $event)" /></div>
@@ -491,9 +490,9 @@
               </div>
               <PclHint theme="blue">自定义地址需兼容所选服务的 API。历史日志和实时控制台的「一键上传」共用此设置，上传前会显示目标地址并请求确认。</PclHint>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'advanced-settings'">
+          <div v-show="section === 'advanced-settings'" class="pcl-settings-section">
             <PclCard title="资源文件校验">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">校验方式</span>
@@ -531,9 +530,9 @@
             <PclCard title="游戏时间">
               <div class="pcl-check-grid"><PclCheckbox :model-value="bool('ShowGameTime')" label="显示游戏时间" @update:model-value="save('ShowGameTime', $event)" /><PclCheckbox v-if="!isInstance" :model-value="bool('ShowGlobalGameTime')" label="显示总游戏时间" @update:model-value="save('ShowGlobalGameTime', $event)" /><PclCheckbox v-if="!isInstance" :model-value="bool('ShowGameTimeWithoutDays')" label="不显示天数" @update:model-value="save('ShowGameTimeWithoutDays', $event)" /><PclCheckbox :model-value="bool('RecordGameTime')" label="记录游戏时间" @update:model-value="save('RecordGameTime', $event)" /></div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'game'">
+          <div v-show="section === 'game'" class="pcl-settings-section">
             <PclCard title="资源与整合包">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">安装行为</span>
@@ -573,9 +572,9 @@
                 <PclCheckbox :model-value="bool('FallbackMRBlockedMods')" label="Modrinth 受阻模组回退下载" @update:model-value="save('FallbackMRBlockedMods', $event)" />
               </div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'network'">
+          <div v-show="section === 'network'" class="pcl-settings-section">
             <PclCard v-if="isInstance" title="服务端">
               <p class="pcl-muted">服务端登录限制、地址和自动加入设置位于实例工作区的“服务端”页。</p>
               <PclHint theme="blue">当前页面只显示实例级服务端设置的入口说明，避免把启动器代理写进实例设置。</PclHint>
@@ -594,9 +593,9 @@
                 <PclHint theme="blue">联机控制、安装和房间操作使用与传统 C++ UI 相同的 multiplayer API，统一在“工具 → 联机”中管理；这里显示实时安装状态，避免保留不可用的 EasyTier 占位控件。</PclHint>
               </PclCard>
             </template>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'cache'">
+          <div v-show="section === 'cache'" class="pcl-settings-section">
             <PclCard title="内建 Yggdrasil 缓存">
               <template #actions>
                 <PclButton size="sm" icon="refresh-cw" :disabled="cacheBusy" @click="loadCache(true)">刷新</PclButton>
@@ -639,13 +638,13 @@
               </div>
               <PclHint theme="blue">这是启动器用于 Prism 元数据、资源目录和新闻等 HTTP 请求的本地缓存。元数据服务地址可在“下载与传输 → 自定义镜像 → 版本元数据地址”替换，缓存会按新的地址重新建立。</PclHint>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'java'">
+          <div v-show="section === 'java'" class="pcl-settings-section">
             <PclJavaPanel :scope="scope" :settings="settings" :busy="busy" :execute="execute" @changed="emit('changed')" />
-          </template>
+          </div>
 
-          <template v-else-if="section === 'ui'">
+          <div v-show="section === 'ui'" class="pcl-settings-section">
             <PclAppearancePanel />
             <PclCard title="C++ 界面与实例列表" collapsible>
               <PclHint theme="blue">这些选项用于 C++ 界面；PCL 风格的外观在上方设置。</PclHint>
@@ -654,9 +653,9 @@
               <div class="pcl-form-row"><span class="pcl-form-row__label">实例重命名</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('InstRenamingMode', 'AskEverytime')" :options="[{ label: '每次询问', value: 'AskEverytime' }, { label: '始终同步文件夹名', value: 'PhysicalDir' }, { label: '只改显示名称', value: 'MetadataOnly' }]" @update:model-value="save('InstRenamingMode', $event)" /></div></div>
             </PclCard>
 
-          </template>
+          </div>
 
-          <template v-else-if="section === 'language'">
+          <div v-show="section === 'language'" class="pcl-settings-section">
             <PclCard title="语言">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">界面语言</span>
@@ -687,9 +686,9 @@
                 </div>
               </div>
             </div>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'misc'">
+          <div v-show="section === 'misc'" class="pcl-settings-section">
             <PclCard v-if="!isInstance" title="网络">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">代理类型</span>
@@ -732,9 +731,9 @@
                 <PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" label="递归监控下载目录" @update:model-value="save('DownloadsDirWatchRecursive', $event)" />
               </div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'about'">
+          <div v-show="section === 'about'" class="pcl-settings-section">
             <PclCard :title="t('about.title')">
               <div class="pcl-about-head">
                 <div class="pcl-about-logo"><img :src="lunaLogo" alt="Luna Launcher" /></div>
@@ -794,9 +793,9 @@
                 <PclButton icon="file-box" @click="openUrl('https://lucide.dev/license')">{{ t('about.lucideLicense') }}</PclButton>
               </div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'update'">
+          <div v-show="section === 'update'" class="pcl-settings-section">
             <PclCard title="更新设置">
               <div class="pcl-check-grid">
                 <PclCheckbox :model-value="updateState.automatic" label="自动检查更新" @update:model-value="configureUpdate({ automatic: $event })" />
@@ -832,9 +831,9 @@
                 <span>上次检查</span><code>{{ updateState.lastCheck || '—' }}</code>
               </div>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'feedback'">
+          <div v-show="section === 'feedback'" class="pcl-settings-section">
             <PclCard title="提交反馈">
               <p class="pcl-feedback-copy">在提交反馈之前，请先搜索是否已经存在相同的问题。请尽量附上启动日志、复现步骤和系统信息；不要提交包含账户令牌或私人路径的内容。</p>
               <PclButton variant="highlight" icon="message-circle" @click="openUrl(projectUrl + '/issues')">前往反馈</PclButton>
@@ -842,9 +841,9 @@
             <PclCard title="反馈进度">
               <p class="pcl-muted">Luna Neo UI 的反馈会直接进入项目问题列表，提交时请附上复现步骤和相关日志。</p>
             </PclCard>
-          </template>
+          </div>
 
-          <template v-else-if="section === 'logs'">
+          <div v-show="section === 'logs'" class="pcl-settings-section">
             <PclCard title="日志操作">
               <div class="pcl-actions pcl-log-actions">
                 <PclButton variant="highlight" icon="folder-open" :disabled="busy" @click="openLogs">打开日志目录</PclButton>
@@ -857,9 +856,8 @@
               <pre v-if="updateState.updateLog" class="pcl-log-tail">{{ updateState.updateLog }}</pre>
               <div v-else class="pcl-empty">还没有可显示的更新日志。</div>
             </PclCard>
-          </template>
+          </div>
         </div>
-      </Transition>
     </main>
   </section>
 </template>
@@ -1244,6 +1242,10 @@ function save(key: string, value: unknown): Promise<boolean> {
   saveQueue = operation.catch(() => {});
   return operation;
 }
+function sameSettingValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  try { return JSON.stringify(left) === JSON.stringify(right); } catch { return String(left) === String(right); }
+}
 async function persistSetting(key: string, value: unknown): Promise<boolean> {
   const setting = settingsMap.value.get(key);
   if (value === undefined || !setting) return false;
@@ -1258,8 +1260,14 @@ async function persistSetting(key: string, value: unknown): Promise<boolean> {
         drafts[gate] = true;
       }
     }
-    await props.execute('settings.set', { ...props.scope, key, value: normalized });
-    if (!setting.redacted) drafts[key] = normalized;
+    const applied = await props.execute('settings.set', { ...props.scope, key, value: normalized });
+    // The API returns the value held by SettingsObject after conversion and
+    // persistence. Verify it before reporting success so a stale backend or a
+    // type conversion bug cannot leave the UI claiming that a setting applied.
+    if (applied?.key === key && !applied.redacted && !sameSettingValue(applied.value, normalized)) {
+      throw new Error(`后端未应用设置 ${key}（返回值与请求不一致）`);
+    }
+    if (!setting.redacted) drafts[key] = applied?.key === key ? applied.value : normalized;
     notice.value = '设置已保存';
     window.setTimeout(() => { if (notice.value === '设置已保存') notice.value = ''; }, 1800);
     emit('changed');

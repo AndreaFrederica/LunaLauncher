@@ -33,8 +33,7 @@
     </aside>
 
     <main class="pcl-page-main">
-      <Transition name="pcl-page" mode="out-in">
-        <div :key="section" class="pcl-page-view">
+      <div class="pcl-page-view">
           <div class="pcl-instance-toolbar">
             <div>
               <h1>{{ current.label }}</h1>
@@ -143,7 +142,6 @@
             </div>
           </PclCard>
         </div>
-      </Transition>
     </main>
   </section>
 </template>

@@ -14,7 +14,7 @@
           <PclIcon :name="item.icon" :size="16" /><span>{{ item.label }}</span>
         </button>
       </nav>
-      <template v-if="section === 'profile'">
+      <div v-show="section === 'profile'" class="pcl-account-section">
         <PclCard title="账户">
           <template #actions>
             <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin(offlineAccountAllowed ? 'offline' : 'microsoft')">添加账户</PclButton>
@@ -31,9 +31,10 @@
             </div>
           </div>
         </PclCard>
-      </template>
+      </div>
 
-      <PclCard v-else-if="section === 'services'" title="认证服务">
+      <div v-show="section === 'services'" class="pcl-account-section">
+      <PclCard title="认证服务">
         <template #actions>
           <PclButton size="sm" variant="highlight" icon="circle-plus" @click="openPreset()">添加服务</PclButton>
         </template>
@@ -62,7 +63,7 @@
         </PclHint>
       </PclCard>
 
-      <PclCard v-if="section === 'services'" title="本地验证服务">
+      <PclCard title="本地验证服务">
         <div class="pcl-local-status">
           <span class="pcl-local-status__dot" :class="{ ok: helper?.installed }" />
           <strong>{{ helper ? (helper.installed ? '认证组件已安装' : '认证组件未安装') : helperChecked ? '认证组件状态未知' : '点击“检查认证组件”读取状态' }}</strong>
@@ -118,7 +119,9 @@
         </div>
       </PclCard>
 
-      <PclCard v-else-if="section === 'tools'" title="账户工具">
+      </div>
+      <div v-show="section === 'tools'" class="pcl-account-section">
+      <PclCard title="账户工具">
         <div class="pcl-actions pcl-account-actions">
           <PclButton variant="highlight" icon="refresh-cw" :disabled="busy" @click="refreshAll">刷新所有账户</PclButton>
           <PclButton icon="shield-check" :disabled="busy" @click="checkAuthlib">检查认证组件</PclButton>
@@ -126,6 +129,7 @@
         </div>
         <p class="pcl-muted">{{ helper ? `认证组件：${helper.installed ? `已安装 ${helper.version || ''}` : '未安装'}` : '正在读取认证组件状态…' }}</p>
       </PclCard>
+      </div>
     </main>
     <q-dialog v-model="loginShown">
       <q-card class="pcl-dialog pcl-login-dialog">
@@ -546,6 +550,10 @@ async function loadServiceData() {
 
 </script>
 <style scoped>
+.pcl-account-section {
+  display: block;
+  min-width: 0;
+}
 .pcl-page{display:flex;min-height:calc(100vh - 48px);width:100%;color:#31485d}.pcl-page-nav{width:236px;min-width:236px;padding:25px 14px 30px 0;border-right:1px solid #d8e2eb}.pcl-page-nav__title{display:flex;align-items:center;gap:10px;padding:0 15px 20px;color:#315d80;font-size: calc(18px * var(--pcl-font-scale, 1));font-weight:700}.pcl-page-nav__title .material-icons{color:#3b83b7}.pcl-page-nav__group{padding:18px 15px 7px;color:#8a99a7;font-size: calc(10px * var(--pcl-font-scale, 1));font-weight:800;letter-spacing:.12em}.pcl-page-nav__item{display:flex;align-items:center;gap:10px;width:100%;height:39px;padding:0 14px;border:0;border-radius:5px;background:transparent;color:#607488;text-align:left;font:inherit;font-size: calc(13px * var(--pcl-font-scale, 1));cursor:pointer}.pcl-page-nav__item:hover,.pcl-page-nav__item.active{background:#dcecf8;color:#236a9f}.pcl-page-nav__item.active{font-weight:700;box-shadow:inset 3px 0 #3c8bc9}.pcl-page-nav__hint{display:flex;gap:8px;margin:28px 12px 0;padding:11px;border:1px solid #d9e4ec;border-radius:5px;color:#8a99a7;font-size: calc(11px * var(--pcl-font-scale, 1));line-height:1.5}.pcl-page-main{flex:1;min-width:0;padding:30px 34px 54px}.pcl-page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding-bottom:20px;border-bottom:1px solid #d8e2eb}.pcl-page-header h1{margin:4px 0 5px;color:#2f5979;font-size: calc(28px * var(--pcl-font-scale, 1))}.pcl-page-header p{margin:0;color:#81909d;font-size: calc(13px * var(--pcl-font-scale, 1))}.pcl-kicker{color:#4284b2;font-size: calc(10px * var(--pcl-font-scale, 1));letter-spacing:.16em;font-weight:800}.pcl-panel{margin-top:22px;padding:22px;border:1px solid #d5e0e8;background:#fff!important;border-radius:7px;box-shadow:0 4px 13px #22445f12}.pcl-card-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;color:#355d79;font-weight:700;font-size: calc(16px * var(--pcl-font-scale, 1))}.pcl-account-actions{display:flex;gap:9px;flex-wrap:wrap}.pcl-muted{color:#81909d;font-size: calc(12px * var(--pcl-font-scale, 1))}.pcl-dialog{width:520px;max-width:94vw;background:#fff;color:#31485d}.pcl-dialog h3{margin:4px 0 0;color:#2f5979}
 .pcl-account-empty {
   min-height: 300px;

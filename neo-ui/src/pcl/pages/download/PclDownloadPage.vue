@@ -3,29 +3,28 @@
     <PclPageNav v-model="section" :groups="visibleNavGroups" @refresh="refreshSection" />
 
     <main class="pcl-page-main">
-      <Transition name="pcl-page" mode="out-in">
-        <div :key="section" class="pcl-page-view pcl-download-view">
-          <PclInstallView
-            v-if="section === 'install'"
-            :key="`install-${refreshKey}`"
-            :execute="execute"
-            :busy="busy"
-            :instances="instances"
-            :preset="preset"
-            :initial-minecraft-version="initialMinecraftVersion"
-            @installed="onInstalled"
-            @preset-consumed="preset = null"
-            @install-start="emit('install-start', $event)"
-            @install-progress="emit('install-progress', $event)"
-            @install-done="emit('install-done', $event)"
-          />
+      <div class="pcl-page-view pcl-download-view">
+          <div v-show="section === 'install'" class="pcl-download-section">
+            <PclInstallView
+              :execute="execute"
+              :busy="busy"
+              :instances="instances"
+              :preset="preset"
+              :initial-minecraft-version="initialMinecraftVersion"
+              @installed="onInstalled"
+              @preset-consumed="preset = null"
+              @install-start="emit('install-start', $event)"
+              @install-progress="emit('install-progress', $event)"
+              @install-done="emit('install-done', $event)"
+            />
+          </div>
 
-          <template v-else-if="componentItem">
-            <PclCard :title="componentItem.label">
-              <PclHint v-if="!componentItem.uid && !componentItem.special" theme="yellow">
-                {{ componentItem.label }} 暂无 Luna 后端接口，无法在此处读取版本或安装。
+          <div v-show="Boolean(componentItem)" class="pcl-download-section">
+            <PclCard :title="componentItem?.label || ''">
+              <PclHint v-if="!componentItem?.uid && !componentItem?.special" theme="yellow">
+                {{ componentItem?.label || '' }} 暂无 Luna 后端接口，无法在此处读取版本或安装。
               </PclHint>
-              <template v-else-if="componentItem.uid || componentItem.special">
+              <template v-else-if="componentItem?.uid || componentItem?.special">
                 <div class="pcl-component-filter">
                   <PclInput v-model="componentMinecraft" placeholder="Minecraft 版本（可选）" @enter="loadComponentVersions" />
                   <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || componentLoading" @click="loadComponentVersions">
@@ -39,13 +38,13 @@
                     v-for="version in componentVersions"
                     :key="version.version"
                     :title="version.version"
-                    :info="componentItem.special ? `Minecraft ${version.minecraftVersion || version.version} · ${version.type || '版本'}` : (version.type || '版本')"
+                    :info="componentItem?.special ? `Minecraft ${version.minecraftVersion || version.version} · ${version.type || '版本'}` : (version.type || '版本')"
                     :tags="version.recommended ? ['推荐'] : []"
                     @click="useComponentVersion(version)"
                   >
-                    <template #icon><PclIcon :name="componentItem.icon" :size="20" /></template>
+                    <template #icon><PclIcon :name="componentItem?.icon || 'package'" :size="20" /></template>
                     <template #actions>
-                      <span class="pcl-component-use">{{ componentItem.id === 'client' ? '选择' : '用于安装' }}</span>
+                      <span class="pcl-component-use">{{ componentItem?.id === 'client' ? '选择' : '用于安装' }}</span>
                     </template>
                   </PclListItem>
                   <div v-if="!componentVersions.length" class="pcl-empty">
@@ -54,9 +53,10 @@
                 </div>
               </template>
             </PclCard>
-          </template>
+          </div>
 
-          <PclCard v-else-if="section === 'import'" title="导入整合包">
+          <div v-show="section === 'import'" class="pcl-download-section">
+          <PclCard title="导入整合包">
             <PclHint theme="blue">
               支持本地 .zip / .mrpack 文件、HTTP(S) 下载地址，以及 CurseForge 安装链接。把文件拖到下方，或直接粘贴路径 / URL。
             </PclHint>
@@ -92,8 +92,10 @@
               <PclButton variant="ghost" icon="download" @click="emit('launch')">返回实例</PclButton>
             </div>
           </PclCard>
+          </div>
 
-          <PclCard v-else-if="section === 'worlds'" title="世界">
+          <div v-show="section === 'worlds'" class="pcl-download-section">
+          <PclCard title="世界">
             <PclHint theme="yellow">
               Luna 的 Launcher API 暂不支持世界资源类型。你仍然可以在实例目录中手动安装世界存档。
             </PclHint>
@@ -101,10 +103,12 @@
               <PclButton icon="folder-open" @click="emit('launch')">返回实例</PclButton>
             </div>
           </PclCard>
+          </div>
 
-          <PclCard v-else-if="isResource" class="pcl-resource-panel">
+          <div v-show="isResource" class="pcl-download-section">
+          <PclCard class="pcl-resource-panel">
             <PclResourceCatalogView
-              :key="`${section}-${refreshKey}`"
+              :refresh-token="refreshKey"
               :instance="selected?.id"
               :kind="resourceKind"
               :minecraft-version="downloadMinecraft"
@@ -113,30 +117,34 @@
               :execute="execute"
               :default-provider="resourceProvider"
               :tag="resourceTag"
-              :auto-refresh="preferences.pclAutoRefreshOnPageOpen"
+              :auto-refresh="preferences.pclAutoRefreshOnPageOpen && isResource"
               @installed="emit('refresh')"
               @install-start="emit('install-start', $event)"
               @install-progress="emit('install-progress', $event)"
               @install-done="emit('install-done', $event)"
             />
           </PclCard>
+          </div>
 
-          <PclCard v-else-if="section === 'modpacks'">
+          <div v-show="section === 'modpacks'" class="pcl-download-section">
+          <PclCard>
             <PclCatalogBrowser
-              :key="`modpacks-${refreshKey}`"
+              :refresh-token="refreshKey"
               packs
               :busy="busy"
               :execute="execute"
               default-provider="modrinth"
-              :auto-refresh="preferences.pclAutoRefreshOnPageOpen"
+              :auto-refresh="preferences.pclAutoRefreshOnPageOpen && section === 'modpacks'"
               @installed="onModpackInstalled"
               @install-start="emit('install-start', $event)"
               @install-progress="emit('install-progress', $event)"
               @install-done="emit('install-done', $event)"
             />
           </PclCard>
+          </div>
 
-          <PclCard v-else-if="section === 'favorites'" title="我的收藏">
+          <div v-show="section === 'favorites'" class="pcl-download-section">
+          <PclCard title="我的收藏">
             <div class="pcl-favorites">
               <PclListItem
                 v-for="item in favorites"
@@ -155,8 +163,8 @@
               </div>
             </div>
           </PclCard>
+          </div>
         </div>
-      </Transition>
     </main>
   </section>
 </template>

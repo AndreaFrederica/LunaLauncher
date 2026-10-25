@@ -547,6 +547,15 @@ bool AccountList::loadList()
     return false;
 }
 
+bool AccountList::reloadList()
+{
+    beginResetModel();
+    m_accounts.clear();
+    m_defaultAccount = nullptr;
+    endResetModel();
+    return loadList();
+}
+
 bool AccountList::loadV3(QJsonObject& root)
 {
     beginResetModel();

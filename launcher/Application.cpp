@@ -58,6 +58,7 @@ unsigned char qResourceFeatureZstd()
 #include <QFontDatabase>
 
 #include "DataMigrationTask.h"
+#include "Filter.h"
 #include "java/JavaInstallList.h"
 #include "launch/LaunchTask.h"
 #include "meta/MetadataProvider.h"
@@ -127,6 +128,7 @@ unsigned char qResourceFeatureZstd()
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QLibraryInfo>
 #include <QList>
 #include <QNetworkAccessManager>
@@ -585,7 +587,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                                   .arg(dataPath));
         return;
     }
-    m_dataPath = dataPath;
+    // Keep the resolved absolute path.  NeoUI may complete migration after
+    // startup, and relative paths would otherwise be resolved against the
+    // already changed working directory a second time.
+    m_dataPath = QDir::currentPath();
 
     /*
      * Establish the mechanism for communication with an already running PrismLauncher that uses the same data path.
@@ -739,20 +744,38 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     }
 
     {
-        bool migrated = false;
-
-        if (!migrated)
-            migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
-                "PrismLauncher", "prismlauncher.cfg");
-        if (!migrated)
-            migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
-                "polymc.cfg");
-        if (!migrated)
-            migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"), "MultiMC",
-                "multimc.cfg");
+        // A headless sidecar has no QWidget to show the classic migration
+        // prompt. Record the same candidates and let NeoUI ask the user before
+        // copying anything. The classic UI keeps its existing startup flow.
+        if (isHeadless()) {
+            const auto addCandidate = [this](const QString& oldData, const QString& name, const QString& configFile) {
+                const QString nomigratePath = FS::PathCombine(m_dataPath, name + "_nomigrate.txt");
+                const QStringList configPaths = { FS::PathCombine(oldData, configFile), FS::PathCombine(oldData, BuildConfig.LAUNCHER_CONFIGFILE) };
+                bool configExists = false;
+                for (const auto& path : configPaths) configExists |= QFileInfo::exists(path);
+                if (!configExists || QFileInfo::exists(nomigratePath)) return;
+                const bool currentExists = QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
+                m_pendingDataMigrations.append({ name, oldData, configFile, currentExists });
+            };
+            addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
+                         "PrismLauncher", "prismlauncher.cfg");
+            addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC", "polymc.cfg");
+            addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"), "MultiMC", "multimc.cfg");
+        } else {
+            bool migrated = false;
+            if (!migrated)
+                migrated = handleDataMigration(
+                    m_dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
+                    "PrismLauncher", "prismlauncher.cfg");
+            if (!migrated)
+                migrated = handleDataMigration(
+                    m_dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
+                    "polymc.cfg");
+            if (!migrated)
+                migrated = handleDataMigration(
+                    m_dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"), "MultiMC",
+                    "multimc.cfg");
+        }
     }
 
     {
@@ -801,10 +824,17 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         }
     }
 
+    // A fresh headless backend must leave the config absent until the first
+    // explicit change. Bootstrap defaults otherwise create a config before
+    // NeoUI can ask about migration, making every candidate look unsafe.
+    const bool deferInitialSettingsSave = isHeadless() && !QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
+
     // Initialize application settings
     {
         // Provide a fallback for migration from PolyMC
         m_settings.reset(new INISettingsObject({ BuildConfig.LAUNCHER_CONFIGFILE, "polymc.cfg", "multimc.cfg" }, this));
+        if (deferInitialSettingsSave)
+            m_settings->suspendSave();
 
         // Theming
         m_settings->registerSetting("IconTheme", QString());
@@ -818,6 +848,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("MenuBarInsteadOfToolBar", false);
         m_settings->registerSetting("UseNewUI", false);
+        // Alternate UIs persist their first-run wizard completion in the
+        // launcher settings so switching between Classic UI and NeoUI does not
+        // restart the wizard or depend on WebView localStorage.
+        m_settings->registerSetting("NeoUISetupComplete", false);
 
         // Multiplayer features visibility
         m_settings->registerSetting("ShowServerPreview", true);
@@ -1356,6 +1390,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     detectLibraries();
 
     if (m_cliOptions.isHeadless()) {
+        if (deferInitialSettingsSave)
+            static_cast<INISettingsObject*>(m_settings.get())->resumeSaveWithoutFlush();
         m_status = Application::Initialized;
         if (m_cliOptions.mcp) {
             auto server = new McpServer(this);
@@ -2379,6 +2415,145 @@ bool Application::handleDataMigration(const QString& currentData,
         qWarning() << "<> Migration was skipped, due to existing data";
     }
     return true;
+}
+
+QJsonArray Application::dataMigrationCandidates() const
+{
+    QJsonArray result;
+    for (const auto& candidate : m_pendingDataMigrations) {
+        result.append(QJsonObject{ { "name", candidate.name },
+                                   { "source", candidate.oldData },
+                                   { "configFile", candidate.configFile },
+                                   { "target", m_dataPath },
+                                   { "currentDataExists", candidate.currentExists },
+                                   { "canMigrate", !candidate.currentExists } });
+    }
+    return result;
+}
+
+QJsonObject Application::startupStatus() const
+{
+    const auto candidates = dataMigrationCandidates();
+    const bool setupComplete = m_settings && m_settings->get("NeoUISetupComplete").toBool();
+    const bool languageRequired = m_settings && m_settings->get("Language").toString().isEmpty();
+    const bool javaRequired = m_settings && !(BuildConfig.JAVA_DOWNLOADER_ENABLED && m_settings->get("AutomaticJavaDownload").toBool()) &&
+                              !m_settings->get("IgnoreJavaWizard").toBool() &&
+                              FS::ResolveExecutable(m_settings->get("JavaPath").toString()).isNull();
+    const bool appearanceRequired = m_settings && m_themeManager &&
+        (!m_themeManager->isValidApplicationTheme(m_settings->get("ApplicationTheme").toString()) ||
+         !m_themeManager->isValidIconTheme(m_settings->get("IconTheme").toString()));
+    const bool javaQuestionRequired = m_settings && BuildConfig.JAVA_DOWNLOADER_ENABLED && !javaRequired &&
+        !m_settings->get("AutomaticJavaDownload").toBool() && !m_settings->get("AutomaticJavaSwitch").toBool() &&
+        !m_settings->get("UserAskedAboutAutomaticJavaDownload").toBool();
+    const bool pasteRequired = m_settings && !m_settings->get("PastebinURL").toString().isEmpty();
+    const bool firstRun = !QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
+    return QJsonObject{ { "firstRun", firstRun },
+                        { "setupComplete", setupComplete },
+                        { "needsSetup", !setupComplete || !candidates.isEmpty() || languageRequired || javaRequired || appearanceRequired ||
+                                        javaQuestionRequired || pasteRequired },
+                        { "migrationRequired", !candidates.isEmpty() },
+                        { "migrations", candidates },
+                        { "dataRoot", m_dataPath },
+                        { "portable", m_portable },
+                        { "headless", isHeadless() },
+                        { "languageRequired", languageRequired },
+                        { "javaRequired", javaRequired },
+                        { "javaQuestionRequired", javaQuestionRequired },
+                        { "javaDownloaderEnabled", BuildConfig.JAVA_DOWNLOADER_ENABLED },
+                        { "appearanceRequired", appearanceRequired },
+                        { "pasteRequired", pasteRequired },
+                        { "loginAvailable", m_capabilities.testFlag(Application::SupportsMSA) },
+                        { "loginRequired", m_accounts && !m_accounts->anyAccountIsValid() && m_capabilities.testFlag(Application::SupportsMSA) },
+                        { "hasAccounts", m_accounts && m_accounts->count() > 0 } };
+}
+
+std::unique_ptr<DataMigrationTask> Application::createDataMigrationTask(const QString& name, QString* errorMessage) const
+{
+    for (const auto& candidate : m_pendingDataMigrations) {
+        if (candidate.name != name) continue;
+        if (candidate.currentExists || QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE))) {
+            if (errorMessage) *errorMessage = tr("The current Luna data directory already contains a configuration file; automatic migration is unsafe.");
+            return nullptr;
+        }
+        using namespace Filters;
+        QList<Filter> filters;
+        filters.append(equals(candidate.configFile));
+        filters.append(equals(BuildConfig.LAUNCHER_CONFIGFILE));
+        filters.append(startsWith("logs/"));
+        filters.append(equals("accounts.json"));
+        filters.append(startsWith("accounts/"));
+        filters.append(startsWith("assets/"));
+        filters.append(startsWith("icons/"));
+        filters.append(startsWith("instances/"));
+        filters.append(startsWith("libraries/"));
+        filters.append(startsWith("mods/"));
+        filters.append(startsWith("themes/"));
+        return std::make_unique<DataMigrationTask>(candidate.oldData, m_dataPath, any(std::move(filters)));
+    }
+    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
+    return nullptr;
+}
+
+bool Application::finishDataMigration(const QString& name, QString* errorMessage)
+{
+    for (int i = 0; i < m_pendingDataMigrations.size(); ++i) {
+        const auto candidate = m_pendingDataMigrations.at(i);
+        if (candidate.name != name) continue;
+        const QString migratedConfig = FS::PathCombine(m_dataPath, candidate.configFile);
+        const QString lunaConfig = FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE);
+        if (candidate.configFile != BuildConfig.LAUNCHER_CONFIGFILE && QFileInfo::exists(migratedConfig) && !QFileInfo::exists(lunaConfig) &&
+            !FS::move(migratedConfig, lunaConfig)) {
+            if (errorMessage) *errorMessage = tr("Could not rename %1 to %2.").arg(migratedConfig, lunaConfig);
+            return false;
+        }
+        // The sidecar was already initialized before the user approved the
+        // migration. Reload the same native models that Classic UI initializes
+        // after copying the files so the imported instances/accounts/settings
+        // are visible immediately without restarting NeoUI.
+        if (m_settings && !m_settings->reload()) {
+            if (errorMessage) *errorMessage = tr("Could not load the migrated launcher configuration.");
+            return false;
+        }
+        if (m_instances) m_instances->loadList();
+        if (m_accounts) m_accounts->reloadList();
+        if (m_translations) m_translations->selectLanguage(m_settings->get("Language").toString());
+        if (m_themeManager) {
+            m_themeManager->refresh();
+            m_themeManager->applyCurrentlySelectedTheme(true);
+        }
+        updateCapabilities();
+        QFile marker(FS::PathCombine(m_dataPath, name + "_nomigrate.txt"));
+        if (!marker.open(QIODevice::WriteOnly)) {
+            if (errorMessage) *errorMessage = marker.errorString();
+            return false;
+        }
+        marker.close();
+        m_pendingDataMigrations.removeAt(i);
+        // Once one legacy profile has supplied the active configuration, the
+        // remaining profiles cannot be merged safely by the same automatic
+        // operation. Keep them visible so the user can explicitly skip them.
+        for (auto& remaining : m_pendingDataMigrations) remaining.currentExists = true;
+        return true;
+    }
+    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
+    return false;
+}
+
+bool Application::declineDataMigration(const QString& name, QString* errorMessage)
+{
+    for (int i = 0; i < m_pendingDataMigrations.size(); ++i) {
+        if (m_pendingDataMigrations.at(i).name != name) continue;
+        QFile marker(FS::PathCombine(m_dataPath, name + "_nomigrate.txt"));
+        if (!marker.open(QIODevice::WriteOnly)) {
+            if (errorMessage) *errorMessage = marker.errorString();
+            return false;
+        }
+        marker.close();
+        m_pendingDataMigrations.removeAt(i);
+        return true;
+    }
+    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
+    return false;
 }
 
 void Application::triggerUpdateCheck()

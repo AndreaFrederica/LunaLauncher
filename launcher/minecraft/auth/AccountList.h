@@ -99,6 +99,8 @@ class AccountList : public QAbstractListModel {
     void setListFilePath(QString path, bool autosave = false);
 
     bool loadList();
+    /** Clear the in-memory list and load the current accounts.json again. */
+    bool reloadList();
     bool loadV3(QJsonObject& root);
     bool saveList();
 

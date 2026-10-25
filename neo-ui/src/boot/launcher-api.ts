@@ -58,6 +58,7 @@ type QueueEntry = {
 const readOnlyTtl: Record<string, number> = {
   'api.describe': 60_000,
   'runtime.info': 5_000,
+  'startup.status': 2_000,
   'runtime.memory': 1_500,
   'instance.list': 2_000,
   'instance.info': 2_000,
@@ -72,7 +73,7 @@ const readOnlyTtl: Record<string, number> = {
 };
 
 const highPriority = new Set([
-  'runtime.info', 'runtime.memory', 'instance.list', 'instance.info', 'instance.icons', 'account.list',
+  'runtime.info', 'startup.status', 'runtime.memory', 'instance.list', 'instance.info', 'instance.icons', 'account.list',
   'settings.list', 'task.list', 'api.describe', 'component.catalog', 'component.versions',
   'language.list', 'launcher.update.status', 'authentication.helper.status',
 ]);

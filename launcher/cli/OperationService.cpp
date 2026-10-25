@@ -18,6 +18,7 @@
 #include <QVariant>
 
 #include "Application.h"
+#include "DataMigrationTask.h"
 #include "api/LauncherApiObjects.h"
 #include "BaseInstance.h"
 #include "FileSystem.h"
@@ -535,6 +536,14 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         return exportSettings(parameters);
     if (operation == "settings.import")
         return importSettings(parameters);
+    if (operation == "startup.status")
+        return success(APPLICATION->startupStatus());
+    if (operation == "startup.migrate")
+        return migrateStartupData(parameters, interaction);
+    if (operation == "startup.dismiss-migration")
+        return dismissStartupMigration(parameters);
+    if (operation == "startup.complete")
+        return completeStartupSetup();
     if (operation == "account.login")
         return loginAccount(parameters, interaction);
     if (operation == "instance.import")
@@ -542,6 +551,40 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
     if (operation == "instance.launch")
         return launchInstance(parameters, interaction);
     return failure(tr("Unknown operation: %1").arg(operation), 2);
+}
+
+QJsonObject OperationService::startupStatus() const
+{
+    return OperationService::success(APPLICATION->startupStatus());
+}
+
+QJsonObject OperationService::migrateStartupData(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto name = parameters.value("name").toString().trimmed();
+    if (name.isEmpty()) return failure(tr("A migration source name is required."), 2);
+    QString error;
+    auto task = APPLICATION->createDataMigrationTask(name, &error);
+    if (!task) return failure(error, 2);
+    if (!waitForTask(task.get(), interaction, &error)) return failure(error);
+    if (!APPLICATION->finishDataMigration(name, &error)) return failure(error);
+    return success(QJsonObject{ { "migrated", name }, { "status", APPLICATION->startupStatus() } });
+}
+
+QJsonObject OperationService::dismissStartupMigration(const QJsonObject& parameters)
+{
+    const auto name = parameters.value("name").toString().trimmed();
+    if (name.isEmpty()) return failure(tr("A migration source name is required."), 2);
+    QString error;
+    if (!APPLICATION->declineDataMigration(name, &error)) return failure(error, 2);
+    return success(QJsonObject{ { "dismissed", name }, { "status", APPLICATION->startupStatus() } });
+}
+
+QJsonObject OperationService::completeStartupSetup()
+{
+    if (!APPLICATION->dataMigrationCandidates().isEmpty())
+        return failure(tr("Complete or skip all pending data migrations first."), 2);
+    APPLICATION->settings()->set("NeoUISetupComplete", true);
+    return success(QJsonObject{ { "status", APPLICATION->startupStatus() } });
 }
 
 QJsonObject OperationService::listInstances()

@@ -96,7 +96,7 @@ QString toolNameForOperation(const QString& operation)
 bool isHighPriorityRead(const QString& operation)
 {
     static const QSet<QString> operations{
-        "runtime.info", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list",
+        "runtime.info", "startup.status", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list",
     };
     return operations.contains(operation);
 }
@@ -476,7 +476,7 @@ void McpServer::startNext()
 QJsonObject McpServer::schedulerStatus() const
 {
     QJsonArray high;
-    for (const auto& operation : { "runtime.info", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list" })
+    for (const auto& operation : { "runtime.info", "startup.status", "runtime.memory", "instance.list", "instance.info", "account.list", "settings.list" })
         high.append(operation);
     return QJsonObject{
         { "mode", "async-runtime-compat" },

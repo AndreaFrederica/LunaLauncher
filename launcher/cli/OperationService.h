@@ -57,6 +57,10 @@ class OperationService final : public QObject {
     QJsonObject resetSetting(const QJsonObject& parameters);
     QJsonObject exportSettings(const QJsonObject& parameters);
     QJsonObject importSettings(const QJsonObject& parameters);
+    QJsonObject startupStatus() const;
+    QJsonObject migrateStartupData(const QJsonObject& parameters, UserInteraction& interaction);
+    QJsonObject dismissStartupMigration(const QJsonObject& parameters);
+    QJsonObject completeStartupSetup();
     QJsonObject loginAccount(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject importInstance(const QJsonObject& parameters, UserInteraction& interaction);
     QJsonObject launchInstance(const QJsonObject& parameters, UserInteraction& interaction);

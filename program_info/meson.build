@@ -81,3 +81,18 @@ if is_macos
   )
   launcher_icns_file = configure_file(input: 'lunalauncher.icns', output: 'lunalauncher.icns', copy: true)
 endif
+
+if system_install
+  install_data(launcher_desktop_file, install_dir: get_option('datadir') / 'applications')
+  install_data(launcher_metainfo_file, install_dir: get_option('datadir') / 'metainfo')
+  install_data(launcher_mime_file, install_dir: get_option('datadir') / 'mime/packages')
+  install_data(launcher_svg_file, install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
+  install_data('org.lunalauncher.LunaLauncher_256.png',
+    install_dir: get_option('datadir') / 'icons/hicolor/256x256/apps',
+    rename: launcher_app_id + '.png')
+  scdoc_prog = find_program('scdoc', required: true)
+  custom_target('launcher-manpage',
+    input: 'lunalauncher.6.scd', output: 'lunalauncher.6',
+    command: [scdoc_prog], feed: true, capture: true,
+    install: true, install_dir: get_option('mandir') / 'man6')
+endif

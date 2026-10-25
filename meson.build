@@ -17,6 +17,10 @@ host_system = host_machine.system()
 is_windows = host_system == 'windows'
 is_linux = host_system == 'linux'
 is_macos = host_system == 'darwin'
+system_install = get_option('install_layout') == 'system'
+if system_install and not is_linux
+  error('The system install layout is only supported on Linux.')
+endif
 
 if is_macos
   add_languages('objcpp', required: true)
@@ -37,7 +41,7 @@ if is_windows
 endif
 
 git_prog = find_program('git', required: false)
-python_prog = find_program('python', required: true)
+python_prog = find_program('python3', 'python', required: true)
 
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
@@ -175,8 +179,11 @@ launcher_version_prerelease = ''
 launcher_version_name = '@0@.@1@.@2@'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
 launcher_version_name4 = '@0@.@1@.@2@.0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
 launcher_version_name4_comma = '@0@,@1@,@2@,0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
-launcher_build_platform = '@0@-@1@'.format(host_machine.system(), host_machine.cpu_family())
-launcher_updater_github_repo = 'https://github.com/AndreaFrederica/LunaLauncher'
+launcher_build_platform = get_option('build_platform')
+if launcher_build_platform == ''
+  launcher_build_platform = '@0@-@1@'.format(host_machine.system(), host_machine.cpu_family())
+endif
+launcher_updater_github_repo = get_option('updater_github_repo')
 launcher_build_artifact = ''
 launcher_news_rss_url = 'https://prismlauncher.org/feed/feed.xml'
 launcher_news_open_url = 'https://prismlauncher.org/news'
@@ -264,6 +271,12 @@ if is_linux
   resources_dest_dir = '.'
   jars_dest_dir = 'jars'
   framework_dest_dir = '.'
+  if system_install
+    binary_dest_dir = get_option('bindir')
+    resources_dest_dir = get_option('datadir') / launcher_name
+    jars_dest_dir = resources_dest_dir
+    exresource_dest_dir = resources_dest_dir / 'resources'
+  endif
 elif is_macos
   app_bundle_dir = launcher_name + '.app/Contents'
   binary_dest_dir = join_paths(app_bundle_dir, 'MacOS')

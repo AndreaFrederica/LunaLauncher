@@ -360,7 +360,9 @@ if get_option('build_updater')
 endif
 
 install_data('qtlogging.ini', install_dir: resources_dest_dir)
-install_data(qt_webp_plugin, install_dir: join_paths(plugin_dest_dir, 'imageformats'))
+if not system_install
+  install_data(qt_webp_plugin, install_dir: join_paths(plugin_dest_dir, 'imageformats'))
+endif
 if is_windows
   install_data(qt_crypto_dll, install_dir: binary_dest_dir)
 endif

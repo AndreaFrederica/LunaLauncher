@@ -1,111 +1,104 @@
-# Fedora Packaging
+# Fedora and COPR packaging
 
-This directory provides a Fedora/COPR baseline for building Luna Launcher as a
-COPR-friendly RPM without relying on the in-tree `CPack RPM` path.
+The RPM builds Luna Launcher 11.1.1 with Meson and installs under `/usr` using
+`-Dinstall_layout=system`. The native Qt launcher retains Luna's launcher API,
+CLI/MCP, JavaScript platform, PCL import, mirror selection, themes and native
+multiplayer controls.
 
-For distributable Fedora packages, use `CMAKE_INSTALL_PREFIX=/usr`.
-Do not use `/usr/local` for RPM/COPR builds: `/usr/local` is intended for
-administrator-managed local software, while packaged files belong under `/usr`.
+The offline RPM build disables the optional PCL.Download .NET backend,
+YukariConnect service, CurseForge WebView helper, Tauri/Quasar Neo UI and Rust
+yggdrasil service. These auxiliary programs are not bundled in this RPM. Native
+integration controls do not imply that an external service is installed. The
+Meson options for these features remain available for other distributions and
+local builds; disabling them here does not remove their source implementations.
 
-## What is included
+The RPM uses the system Qt WebP plugin from `qt6-qtimageformats`, and statically
+links the bundled QuickJS sources. It does not ship a separate `libqjs.so`.
+JARs and `qtlogging.ini` install under `/usr/share/LunaLauncher/`, with additional
+resources in `/usr/share/LunaLauncher/resources/`. The executable, desktop file,
+AppStream metadata, MIME definition, icons and manual use standard system paths.
 
-- `lunalauncher.spec`: RPM spec intended for Fedora 42 through Rawhide.
-- `make-srpm.sh`: helper to create a source tarball from `HEAD` and build an
-  SRPM locally.
+## Build a source RPM
 
-## Why use this instead of `CPack`
+Install `rpm-build`, `git`, `python3`, `tar` and `gzip`. Initialize all pinned
+submodules first, then run:
 
-`CPack` is still useful for local experiments, but COPR works better with a
-normal RPM spec because:
-
-- Fedora build dependencies are explicit.
-- Scriptlets for desktop, icon, and MIME cache updates are under RPM control.
-- Future Fedora-version-specific dependency changes can be made in one place.
-
-## Fedora baseline
-
-The spec currently targets Fedora 42 through Rawhide and sets:
-
-- `CMAKE_INSTALL_PREFIX=/usr`
-- `Launcher_BUILD_PLATFORM=fedora${fedora}`
-- system Qt 6 packages
-- standard RPM scriptlets for desktop, icon, and MIME caches
-
-## Build an SRPM locally
-
-Prerequisites:
-
-- `rpm-build`
-- `git`
-
-Run:
-
-```bash
+```fish
+git submodule update --init --recursive
 ./packaging/fedora/make-srpm.sh
 ```
 
-If you want a local packaging-oriented CMake configure outside `rpmbuild`, the
-repository now includes the preset:
+The helper writes the source archive and SRPM under `dist/fedora/rpmbuild/`.
+Pass an output directory as its first argument to use a different location.
+The source archive includes recursive source submodules, so the RPM build itself
+does not need to download source dependencies. Submodules explicitly marked
+`update=none` in their parent's snapshot `.gitmodules` are excluded, matching
+Git's initialization policy; QuickJS's optional `test262` test data is one such
+submodule. All other pinned submodules are required. `--wrap-mode=nodownload` enforces this
+for Meson wraps. Distro build dependencies are declared in `lunalauncher.spec`;
+COPR installs those separately from Fedora repositories.
 
-```bash
-cmake --preset linux_fedora_packaging
+The default `git` mode reads the spec, Meson version, source files and gitlink
+pins from the same committed `HEAD`. Uncommitted edits are excluded. A missing
+pinned source submodule object is an error, rather than a partially populated
+archive. Submodule exclusion policy is read from each archived revision's
+`.gitmodules`, not the current checkout's Git configuration.
+
+To verify local packaging changes before committing, explicitly use a worktree
+snapshot:
+
+```fish
+env LUNALAUNCHER_SRPM_SOURCE_MODE=worktree ./packaging/fedora/make-srpm.sh
 ```
 
-Use that preset only for packaging workflows. For normal local development,
-keep using the regular `linux` preset, which installs into the workspace-local
-`install/` directory.
+That mode includes tracked changes, nonignored new source files and recursively
+checked out submodule changes. It excludes Git metadata, local automation,
+credential directories and generated build/install output. Review new files
+before creating a distributable worktree snapshot. It also rejects unresolved
+merge entries and requires every nonexcluded pinned submodule object to be
+available. In this mode, exclusion policy follows each current `.gitmodules`
+file, consistently with the rest of the worktree snapshot.
+The spec version must match `project(version:)` in `meson.build` in either mode.
 
-The script writes the source tarball and SRPM under `dist/fedora/rpmbuild/`.
+The spec uses Fedora `%meson`, `%meson_build` and `%meson_install` macros. Tests
+are optional and can be enabled when building the binary RPM:
 
-## COPR usage
+```fish
+rpmbuild --rebuild --with tests dist/fedora/rpmbuild/SRPMS/lunalauncher-11.1.1-1.src.rpm
+```
 
-Two straightforward options:
+Enabled tests use `QT_QPA_PLATFORM=offscreen` for headless build workers.
+Fedora's macros supply the system prefix and standard compiler/linker flags.
+`build_platform` becomes `fedoraNN`, and the independent GitHub binary updater
+is disabled for the RPM. Updates should come through the package manager.
 
-1. Upload the generated SRPM to COPR.
-2. Point COPR SCM builds at this repository and use `packaging/fedora/lunalauncher.spec`.
+## COPR SCM configuration
 
-For COPR, use Fedora 42, Fedora 43, Fedora 44, and Rawhide targets.
+Use the repository's `.copr/Makefile` and **make srpm** build method. Selecting
+only the spec file or a GitHub source archive does not assemble the required
+submodule sources.
 
-### Build directly from GitHub in COPR
+Recommended package settings:
 
-Yes, but use a COPR `SCM` package pointed at the GitHub repository rather than
-the GitHub auto-generated source archive.
-
-Why:
-
-- this project builds with required git submodules under `libraries/`
-- GitHub release/source archives do not vendor submodule contents
-- the local `make-srpm.sh` workflow already handles creating a complete source
-  tarball that includes checked out submodules
-
-The repository now includes `.copr/Makefile` with an `srpm` target for COPR.
-That target:
-
-- rewrites the `libraries/quickjs-ng` submodule URL to HTTPS for builder access
-- initializes submodules with `git submodule update --init --recursive`
-- runs `packaging/fedora/make-srpm.sh`
-- copies the resulting `*.src.rpm` into COPR's expected output directory
-
-Recommended COPR package settings:
-
-- Source Type: `SCM`
-- SCM Type: `git`
+- Source type: `SCM`
+- SCM type: `git`
 - Clone URL: `https://github.com/W-874/LunaLauncher.git`
-- Committish: your target branch or tag
-- Spec File: `packaging/fedora/lunalauncher.spec`
-- SRPM Build Method: `make srpm`
+- Committish: `meson` (or an explicitly selected release tag/commit)
+- Spec file: `packaging/fedora/lunalauncher.spec`
+- SRPM build method: `make srpm`
 
-This lets COPR build directly from GitHub without you manually uploading SRPMs.
-The remaining requirement is that the referenced submodules are reachable from
-the COPR builders.
+The Makefile synchronizes submodule URLs from the repository's `.gitmodules`,
+initializes recursive submodules and copies the generated SRPM to COPR's
+`outdir`. It makes no hard-coded QuickJS remote override. Submodule hosts must
+be reachable during the SRPM preparation stage; binary RPM compilation is
+offline with respect to source downloads.
 
-## Extending later
+Inspect the COPR package's actual committish after changing development branches:
+Git pushes do not automatically change an SCM package configured to build a
+different branch. An existing configuration using `update-stream-11.0.2` must
+be changed to `meson` before it will build this branch. These repository files
+do not change the remote COPR configuration.
 
-If dependency or toolchain behavior diverges again between Fedora releases, keep
-the spec as the single point of change:
-
-- add `%if 0%{?fedora}` conditionals around dependency differences
-- adjust `Launcher_BUILD_PLATFORM` if you want release-specific branding in the
-  About dialog
-- keep the installed runtime resources under `share/LunaLauncher/resources` so
-  Linux packaging stays consistent across targets
+The spec is intended for Fedora 42 through Rawhide. Successful local source
+packaging or a host Meson build is not a successful build on every COPR chroot;
+check the real Fedora build logs after submitting a build.

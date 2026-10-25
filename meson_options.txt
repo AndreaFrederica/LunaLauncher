@@ -12,3 +12,7 @@ option('build_yukari_connect', type: 'boolean', value: true, description: 'Build
 option('curseforge_webview', type: 'feature', value: 'auto', description: 'Build the visible CurseForge WebView helper')
 option('neo_ui', type: 'feature', value: 'disabled', description: 'Build the optional Tauri/Quasar Neo UI')
 option('yggdrasil', type: 'feature', value: 'disabled', description: 'Build the Rust enhanced offline authentication service')
+
+option('install_layout', type: 'combo', choices: ['portable', 'system'], value: 'portable', description: 'Use a portable prefix or standard Linux distribution directories')
+option('build_platform', type: 'string', value: '', description: 'Distribution build platform label; empty uses the host system and CPU')
+option('updater_github_repo', type: 'string', value: 'https://github.com/AndreaFrederica/LunaLauncher', description: 'Release repository; empty disables repository updates')

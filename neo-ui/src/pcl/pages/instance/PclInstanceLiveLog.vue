@@ -42,12 +42,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
+import PclLaunchProgressDialog from '../../components/PclLaunchProgressDialog.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclCard from '../../components/PclCard.vue';
 import LogUploadButton from '../../../components/LogUploadButton.vue';
 import { launcher } from '../../../boot/launcher-api';
 import { waitForTask } from '../../composables/useTaskEvents';
 import { neoUiPreferences } from '../../../neo-ui-preferences';
+import { flattenTaskItems, taskActiveItems, taskProgressStats } from '../../composables/useTaskProgress';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: any; execute: Execute }>();
@@ -131,13 +133,13 @@ async function launch() {
     });
     currentTaskId = String(task?.taskId || '');
     const finished = await waitForTask(currentTaskId, snapshot => {
-      const activeStep = Array.isArray(snapshot?.children) ? snapshot.children.find((row: any) => row && row.state === 'running' && (row.label || row.status)) : null;
+      const rows = flattenTaskItems(snapshot);
+      const stats = taskProgressStats(snapshot, rows);
+      const activeStep = taskActiveItems(rows, 1)[0];
       stage.value = activeStep?.label || activeStep?.status || snapshot?.details || snapshot?.status || stage.value;
-      launchDetails.value = String(snapshot?.details || '');
-      launchChildren.value = Array.isArray(snapshot?.children) ? snapshot.children : [];
-      const total = Number(snapshot?.totalProgress || snapshot?.total || 0);
-      const current = Number(snapshot?.progress || 0);
-      if (total > 0) progress.value = Math.max(0, Math.min(1, current / total));
+      launchDetails.value = [snapshot?.details, stats.itemCount ? stats.summary : '', stats.byteSummary].filter(Boolean).join(' · ');
+      launchChildren.value = rows;
+      if (stats.percent !== null) progress.value = Math.max(0, Math.min(1, stats.percent / 100));
     });
     launching.value = false;
     if (finished?.state === 'succeeded') {

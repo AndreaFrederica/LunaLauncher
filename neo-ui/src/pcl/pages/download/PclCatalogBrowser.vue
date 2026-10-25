@@ -116,7 +116,7 @@ import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
 import PclLoading from '../../components/PclLoading.vue';
 type Execute=(op:string,p?:Record<string,unknown>)=>Promise<any>;
-const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftVersion?:string;loader?:string;busy:boolean;execute:Execute;defaultProvider?:string;tag?:string;autoRefresh?:boolean}>();
+const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftVersion?:string;loader?:string;busy:boolean;execute:Execute;defaultProvider?:string;tag?:string;autoRefresh?:boolean;refreshToken?:number}>();
 const emit=defineEmits<{installed:[result:any]; 'install-start':[info:any]; 'install-progress':[task:any]; 'install-done':[info:any]}>();
 const providers = ref<string[]>(props.packs ? ['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb'] : ['modrinth','curseforge']);
 const providerCatalog = ref<any[]>([]);
@@ -170,6 +170,11 @@ watch(() => props.busy, (busy, previous) => {
 });
 watch(() => props.autoRefresh, enabled => {
   if (enabled && !searched.value && !props.busy) void search(0);
+});
+watch(() => props.refreshToken, token => {
+  if (token === undefined) return;
+  reset();
+  if (props.autoRefresh !== false && !props.busy) void search(0);
 });
 watch(() => props.kind, () => { void loadProviders(); });
 

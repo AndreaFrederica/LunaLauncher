@@ -1,10 +1,9 @@
 <template>
   <section class="pcl-launch">
-    <Transition name="pcl-page" mode="out-in">
-      <div v-if="!selectionOpen" key="launch" class="pcl-launch-grid" :class="{ 'is-classic': preferences.pclNavLayout === 'mmc-classic', 'classic-left': preferences.pclClassicSide === 'left' }">
-        <div v-if="preferences.pclNavLayout !== 'mmc-classic'" class="pcl-launch-left">
-          <Transition name="pcl-launch-panel" mode="out-in">
-            <div v-if="launchState === 'launching' || launchState === 'launched'" key="launching" class="pcl-launching-panel" :class="{ 'pcl-launching-panel--done': launchState === 'launched' }">
+    <div class="pcl-launch-stage">
+      <div v-show="!selectionOpen" class="pcl-launch-grid" :class="{ 'is-classic': preferences.pclNavLayout === 'mmc-classic', 'classic-left': preferences.pclClassicSide === 'left' }">
+        <div v-show="preferences.pclNavLayout !== 'mmc-classic'" class="pcl-launch-left">
+            <div v-show="launchState === 'launching' || launchState === 'launched'" class="pcl-launching-panel" :class="{ 'pcl-launching-panel--done': launchState === 'launched' }">
               <PclLoading />
               <strong class="pcl-launching-title">{{ launchTitle }}</strong>
               <span class="pcl-launching-name">{{ selected?.name || 'Minecraft' }}</span>
@@ -21,7 +20,7 @@
               <PclButton v-if="launchState === 'launching'" class="pcl-cancel-button" icon="x" @click="emit('cancel')">取消启动</PclButton>
             </div>
 
-            <div v-else key="input" class="pcl-input-panel">
+            <div v-show="launchState !== 'launching' && launchState !== 'launched'" class="pcl-input-panel">
               <div class="pcl-account-area">
                 <div class="pcl-login-slot">
                   <button class="pcl-login-slot__avatar" type="button" title="切换启动账户" @click="accountMenu = !accountMenu">
@@ -66,8 +65,8 @@
                 </div>
               </div>
 
-              <Transition name="pcl-launch-state" mode="out-in">
-                <div v-if="launchState === 'failed' || launchState === 'cancelled'" key="failed" class="pcl-launch-error">
+              <div class="pcl-launch-state">
+                <div v-show="launchState === 'failed' || launchState === 'cancelled'" class="pcl-launch-error">
                   <PclHint theme="red" :closable="false">
                     <b>{{ launchState === 'cancelled' ? '已取消启动' : '启动失败' }}</b>
                     <span>{{ launchError || '请检查启动日志后重试。' }}</span>
@@ -75,8 +74,7 @@
                   <PclButton icon="refresh-cw" @click="emit('launch')">重试</PclButton>
                 </div>
                 <PclButton
-                  v-else
-                  key="button"
+                  v-show="launchState !== 'failed' && launchState !== 'cancelled'"
                   class="pcl-launch-button"
                   variant="accent"
                   size="xl"
@@ -88,7 +86,7 @@
                     <span class="pcl-launch-button__label"><PclIcon name="play" :size="18" />{{ launchButtonLabel }}</span>
                   </span>
                 </PclButton>
-              </Transition>
+              </div>
 
               <button class="pcl-instance-button" :disabled="launchState === 'loading'" @click="selectionOpen = true">
                 <PclIcon name="layout-list" :size="18" />
@@ -103,11 +101,10 @@
                 <PclButton variant="ghost" icon="settings" :disabled="!selected" @click="emit('settings')">实例设置</PclButton>
               </div>
             </div>
-          </Transition>
         </div>
 
         <PclClassicSidebar
-          v-if="preferences.pclNavLayout === 'mmc-classic'"
+          v-show="preferences.pclNavLayout === 'mmc-classic'"
           :instance="selected"
           :icon="selected ? icons[selected.id] : undefined"
           :account="activeAccount"
@@ -147,7 +144,7 @@
               <PclIconButton icon="refresh-cw" label="刷新" :size="24" :disabled="busy" @click="emit('refresh')" />
             </template>
             <div ref="logElement" class="pcl-launch-log" aria-live="polite">
-              <div v-if="logLines.length" v-for="(line, index) in logLines" :key="`${index}-${line}`">{{ line }}</div>
+              <div v-if="logLines.length" v-for="(line, index) in logLines" :key="index">{{ line }}</div>
               <span v-else>{{ notice || (selected ? `已选择实例：${selected.name}` : '尚未选择实例') }}</span>
             </div>
           </PclCard>
@@ -227,8 +224,8 @@
         </div>
       </div>
 
-      <PclInstanceSelectView v-else key="selection" :instances="instances" :icons="icons" :selected="selected" @back="selectionOpen = false" @select="selectInstance" @download="emit('download')" @action="(instance, action) => emit('instance-action', instance, action)" />
-    </Transition>
+      <PclInstanceSelectView v-show="selectionOpen" :instances="instances" :icons="icons" :selected="selected" @back="selectionOpen = false" @select="selectInstance" @download="emit('download')" @action="(instance, action) => emit('instance-action', instance, action)" />
+    </div>
 
     <PclLaunchProgressDialog
       v-model="launchDialogOpen"
@@ -554,6 +551,12 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
   background: var(--pcl-page-bg);
 }
 
+.pcl-launch-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 .pcl-launch-grid {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -578,6 +581,10 @@ function formatRate(value: number) { if (!Number.isFinite(value) || value <= 0) 
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+.pcl-launch-state {
+  min-height: 54px;
 }
 
 .pcl-input-panel .pcl-account-area {

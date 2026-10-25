@@ -5,6 +5,7 @@
       class="pcl-select__control"
       :class="{ open }"
       :disabled="disabled"
+      :aria-label="ariaLabel || undefined"
       :aria-expanded="open"
       @click="toggle"
       @keydown.esc="open = false"
@@ -50,11 +51,13 @@ const props = withDefaults(defineProps<{
   options?: RawOption[];
   placeholder?: string;
   disabled?: boolean;
+  ariaLabel?: string;
 }>(), {
   modelValue: '',
   options: () => [],
   placeholder: '请选择',
   disabled: false,
+  ariaLabel: '',
 });
 
 const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>();

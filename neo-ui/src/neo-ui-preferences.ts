@@ -300,7 +300,8 @@ function mixHex(color: string, target: string, amount: number): string {
 export function applyNeoUiPreferences() {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  root.dataset.neoTheme = neoUiIsDark.value ? 'dark' : 'light';
+  const isDark = neoUiIsDark.value;
+  root.dataset.neoTheme = isDark ? 'dark' : 'light';
   root.dataset.neoShell = neoUiPreferences.shell;
   root.dataset.neoDensity = neoUiPreferences.density;
   root.dataset.neoBackground = neoUiPreferences.background;
@@ -310,9 +311,9 @@ export function applyNeoUiPreferences() {
   root.style.setProperty('--neo-primary', neoUiPreferences.accent);
   const pclAccent = normalizePclAccent(neoUiPreferences.pclAccentColor);
   root.style.setProperty('--pcl-c3', pclAccent);
-  root.style.setProperty('--pcl-c2', mixHex(pclAccent, '#ffffff', 0.4));
+  root.style.setProperty('--pcl-c2', isDark ? mixHex(pclAccent, '#ffffff', 0.4) : mixHex(pclAccent, '#000000', 0.2));
   root.style.setProperty('--pcl-c4', mixHex(pclAccent, '#ffffff', 0.2));
-  root.style.setProperty('--pcl-c5', mixHex(pclAccent, '#000000', 0.32));
+  root.style.setProperty('--pcl-c5', isDark ? mixHex(pclAccent, '#000000', 0.32) : mixHex(pclAccent, '#ffffff', 0.6));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
   root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
   root.dataset.pclLaunchAnimation = neoUiPreferences.pclLaunchAnimation ? 'on' : 'off';

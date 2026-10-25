@@ -170,8 +170,8 @@ window.addEventListener('load', async () => {
 
 
 @contextmanager
-def temporary_profile():
-    temporary = tempfile.TemporaryDirectory(prefix='luna-webui-smoke-')
+def temporary_profile(directory=None):
+    temporary = tempfile.TemporaryDirectory(prefix='luna-webui-smoke-', dir=directory)
     try:
         yield temporary.name
     finally:
@@ -180,7 +180,9 @@ def temporary_profile():
             try:
                 temporary.cleanup()
                 break
-            except PermissionError:
+            except OSError as error:
+                if not isinstance(error, PermissionError) and getattr(error, 'winerror', None) not in (5, 32, 145):
+                    raise
                 if attempt == 29:
                     raise
                 time.sleep(0.2)

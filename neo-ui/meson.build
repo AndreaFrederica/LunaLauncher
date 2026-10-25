@@ -11,6 +11,7 @@ neo_ui_sources = files(
   'src/components/LogUploadButton.vue',
   'src/components/CatalogBrowser.vue',
   'src/components/JavaPanel.vue',
+  'src/components/NeoUiSetupWizard.vue',
   'src/settings-schema.ts',
   'src/settings-categories.ts',
   'src/main.ts',

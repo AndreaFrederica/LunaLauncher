@@ -74,6 +74,7 @@
 <PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" />
 <PclToastHost />
 <TaskInteractionDialog v-if="!editorInstanceId && !resourceDownloadInstance" :execute="call" :pcl="isPclShell" :legacy="legacyTaskInteraction" @legacy-finished="legacyTaskInteraction = null" />
+<NeoUiSetupWizard v-if="startupState?.needsSetup && !editorInstanceId && !resourceDownloadInstance" :status="startupState" :execute="call" @changed="refresh" @complete="finishStartupSetup" />
 <NeoUiOverlays :add-dialog="addDialog" :busy="busy" :execute="catalogExecute" :call="call" :is-pcl-shell="isPclShell" :status="status" :task-snapshot="taskSnapshot" :task-center-open="taskCenterOpen" :search-shown="searchShown" :global-search="globalSearch" :search-results="searchResults" :icons="icons" :dialog="dialog" :prompt="prompt" :answer="answer" :choices="choices" :confirmation="confirmation" :secret="secret" @update:add-dialog="addDialog=$event" @created="refresh" @cancel="cancel" @task-updated="handleTaskUpdate" @update:task-center-open="taskCenterOpen=$event" @update:search-shown="searchShown=$event" @update:global-search="globalSearch=$event" @search-result="openSearchResult" @dialog-finish="finishDialog" @update:answer="answer=$event" />
 </div>
 </template>
@@ -111,6 +112,7 @@ import { showPclToast } from './pcl/composables/usePclToast';
 import { initPclMusic } from './pcl/composables/usePclMusic';
 import NeoUiChrome from './xmcl-port/NeoUiChrome.vue';
 import TaskInteractionDialog from './components/TaskInteractionDialog.vue';
+import NeoUiSetupWizard from './components/NeoUiSetupWizard.vue';
 import NeoUiOverlays from './xmcl-port/NeoUiOverlays.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
@@ -126,6 +128,7 @@ const resourceDownloadName = launchQuery.get('name') || '';
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
 const downloadComponentUid = ref('');
 const quasar=useQuasar(),connected=ref(false),icons=ref<Record<string,string>>({});
+const startupState=ref<any>(null);
 function closeMobileNav(){if(quasar.screen.lt.md)drawerOpen.value=false;}
 async function loadIcons(refreshToken = refreshGeneration){
  const currentIds=new Set(instances.value.map((i:any)=>i.id));
@@ -352,6 +355,10 @@ async function catalogExecute(op:string,p:Record<string,unknown>){
  busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;if(op==='account.login'){deviceShown.value=false;device.value=null;}}
 }
 async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||'操作失败');connected.value=true;return r.data;}
+async function finishStartupSetup(){
+ try{startupState.value=await call('startup.status');await refresh();}
+ catch(e){error.value=message(e);}
+}
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
 let resourceRequest=0;
 let refreshGeneration=0;
@@ -511,7 +518,7 @@ async function cancelDeviceLogin(){
 async function openDeviceBrowser(){const url=String(device.value?.url || '');if(!url)return;try{await call('desktop.open-url',{url});}catch(e){error.value=message(e);}}
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
-onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();}catch(e){error.value=message(e);}});
+onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
 onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>

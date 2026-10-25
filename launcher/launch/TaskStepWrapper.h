@@ -29,6 +29,7 @@ class TaskStepWrapper : public LaunchStep {
 
     void executeTask() override;
     bool canAbort() const override;
+    QList<Task*> getSubTasks() const override { return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{}; }
     void proceed() override;
    public slots:
     bool abort() override;

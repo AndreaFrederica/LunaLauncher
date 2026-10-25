@@ -8,12 +8,12 @@
         <div v-if="taskCountLabel" class="task-count">{{ taskCountLabel }}</div>
         <div v-if="task?.details && task.details !== taskCountLabel" class="task-details">{{ task.details }}</div>
         <q-banner v-if="task?.failReason" dense class="task-error q-mb-sm">{{ task.failReason }}</q-banner>
-        <div v-if="stepRows.length" class="task-section-label">全部步骤（已完成、排队和进行中）</div>
+        <div v-if="stepRows.length" class="task-section-label">任务明细（进行中优先）</div>
         <q-list v-if="stepRows.length" dense class="task-steps">
           <q-item v-for="step in stepRows" :key="step.id">
-            <q-item-section avatar><q-icon :name="step.finished ? 'check_circle' : step.state === 'failed' ? 'error' : step.state === 'running' ? 'sync' : 'radio_button_unchecked'" :color="step.finished ? 'positive' : step.state === 'failed' ? 'negative' : step.state === 'running' ? 'primary' : 'grey'" /></q-item-section>
-            <q-item-section><q-item-label>{{ step.status || step.label || step.details || step.id }}</q-item-label><q-item-label v-if="step.details && step.status" caption class="task-detail-line">{{ step.details }}</q-item-label><q-linear-progress v-if="step.total > 0" :value="ratio(step.current, step.total)" color="primary" track-color="grey-8" rounded class="task-step-progress" /></q-item-section>
-            <q-item-section side><span v-if="step.current != null && step.total > 0">{{ `${formatBytes(step.current)} / ${formatBytes(step.total)}` }}</span><span v-if="step.transferRate > 0" class="task-step-rate">{{ formatRate(step.transferRate) }}</span></q-item-section>
+            <q-item-section avatar><q-icon :name="taskState(step) === 'succeeded' ? 'check_circle' : step.state === 'failed' ? 'error' : step.state === 'running' ? 'sync' : 'radio_button_unchecked'" :color="taskState(step) === 'succeeded' ? 'positive' : step.state === 'failed' ? 'negative' : step.state === 'running' ? 'primary' : 'grey'" /></q-item-section>
+            <q-item-section><q-item-label>{{ taskLabel(step) }}</q-item-label><q-item-label v-if="step.details && step.status" caption class="task-detail-line">{{ step.details }}</q-item-label><q-linear-progress v-if="step.total > 0" :value="ratio(step.current, step.total)" color="primary" track-color="grey-8" rounded class="task-step-progress" /></q-item-section>
+            <q-item-section side><span v-if="step.current != null && step.total > 0">{{ taskItemProgressText(step) }}</span><span v-if="step.transferRate > 0" class="task-step-rate">{{ formatRate(step.transferRate) }}</span></q-item-section>
           </q-item>
         </q-list>
         <div v-if="activeRows.length" class="task-section-label">当前下载</div>
@@ -21,7 +21,7 @@
           <q-item v-for="row in activeRows" :key="row.id">
             <q-item-section avatar><q-icon name="sync" color="primary" /></q-item-section>
             <q-item-section><q-item-label>{{ taskLabel(row.item) }}</q-item-label><q-item-label v-if="row.item.details || row.item.status" caption class="task-detail-line">{{ row.item.details || row.item.status }}</q-item-label><q-linear-progress v-if="childTotal(row.item) > 0" :value="ratio(childCurrent(row.item), childTotal(row.item))" color="primary" track-color="grey-8" rounded class="task-step-progress" /></q-item-section>
-            <q-item-section side><span v-if="childTotal(row.item) > 0">{{ `${formatBytes(childCurrent(row.item))} / ${formatBytes(childTotal(row.item))}` }}</span><span v-if="row.item.transferRate > 0" class="task-step-rate">{{ formatRate(row.item.transferRate) }}</span></q-item-section>
+            <q-item-section side><span v-if="childTotal(row.item) > 0">{{ taskItemProgressText(row.item) }}</span><span v-if="row.item.transferRate > 0" class="task-step-rate">{{ formatRate(row.item.transferRate) }}</span></q-item-section>
           </q-item>
         </q-list>
       </q-card-section>
@@ -32,24 +32,32 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { launcher } from '../boot/launcher-api';
+import { flattenTaskItems, taskProgressStats, taskItemProgressText, taskItemLabel, taskItemCurrent, taskItemTotal, isTaskItemActive, isTaskItemFinished, taskState } from '../pcl/composables/useTaskProgress';
 const props = defineProps<{ busy: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any>; title?: string; status?: string; snapshot?: any; open?: boolean }>();
 const emit = defineEmits<{ cancel: []; closed: []; updated: [task: any] }>();
-const shown = ref(false); const polled = ref<any>(null); const sampledRate = ref(0); let unlistenTaskEvents: (() => void) | undefined; let pollInFlight = false; let lastSampleBytes = 0; let lastSampleAt = 0;
-const task = computed(() => polled.value || props.snapshot || null); const steps = computed(() => Array.isArray(task.value?.steps) ? task.value.steps : []); const stepRows = computed(() => steps.value.filter((step:any) => Boolean(step))); const activeRows = computed(() => activeLeaves(task.value?.children)); const effectiveRate = computed(() => { const direct = Number(task.value?.transferRate || 0); if (direct > 0) return direct; const stepRate = stepRows.value.reduce((sum:number,step:any) => sum + Number(step.transferRate || 0), 0); if (stepRate > 0) return stepRate; const childRate = activeRows.value.reduce((sum:number,row:any) => sum + Number(row.item.transferRate || 0), 0); return childRate > 0 ? childRate : sampledRate.value; }); const done = computed(() => isFinished(task.value)); const progress = computed(() => { const t = Number(task.value?.totalProgress || task.value?.total || 0); const p = Number(task.value?.progress || task.value?.current || 0); return t > 0 ? Math.max(0, Math.min(1, p / t)) : done.value ? 1 : 0; }); const progressLabel = computed(() => progress.value ? `${Math.round(progress.value * 100)}%` : (done.value ? '已完成' : '进行中')); const canBackground = computed(() => !props.busy || done.value); const taskCountLabel = computed(() => { const total = Number(task.value?.totalProgress || task.value?.total || 0); const current = Number(task.value?.progress || task.value?.current || 0); const isFileCount = stepRows.value.length > 1 || activeRows.value.length > 1; return isFileCount && total > 1 ? `已完成 ${current} / ${total}` : ''; }); const eta = computed(() => { const rate = Number(task.value?.transferRate || 0); const total = Number(task.value?.totalProgress || 0); const current = Number(task.value?.progress || 0); return rate > 0 && total > current ? formatDuration((total - current) / rate) : ''; });
-function isFinished(value:any) { return Boolean(value?.finished) || value?.running === false || ['succeeded', 'failed', 'aborted', 'finished', 'completed', 'cancelled', 'canceled'].includes(String(value?.state || value?.status || '').toLowerCase()); }
-function activeLeaves(children:any, level = 0, rows:any[] = []) { if (!Array.isArray(children)) return rows; for (const item of children) { if (!item) continue; const nested = Array.isArray(item.children) && item.children.length > 0; if (nested) { activeLeaves(item.children, level + 1, rows); continue; } if (item.running === true || (!isFinished(item) && item.source?.kind === 'download')) rows.push({ item, level, id: `${level}:${item.id || item.type || rows.length}` }); } return rows; }
-function taskLabel(item:any) { const fileName = item.source?.fileName; if (fileName) return fileName; return item.name || item.status || item.details || item.type || '子任务'; }
-function childCurrent(item:any) { return Number(item.progress ?? item.current ?? 0); }
-function childTotal(item:any) { return Number(item.totalProgress ?? item.total ?? 0); }
+const shown = ref(false); const polled = ref<any>(null); let unlistenTaskEvents: (() => void) | undefined; let pollInFlight = false;
+const task = computed(() => props.snapshot || polled.value || null);
+const stepRows = computed(() => flattenTaskItems(task.value));
+const stats = computed(() => taskProgressStats(task.value));
+const activeRows = computed(() => stepRows.value.filter(isTaskItemActive).map(item => ({ item, id: item.id })));
+const effectiveRate = computed(() => isTaskItemFinished(task.value) ? 0 : Number(task.value?.transferRate || 0) || activeRows.value.reduce((sum, row) => sum + Number(row.item.transferRate || 0), 0));
+const done = computed(() => isFinished(task.value));
+const progress = computed(() => (stats.value.percent ?? 0) / 100);
+const progressLabel = computed(() => stats.value.percent === null ? '进行中' : `${Math.round(stats.value.percent)}%`);
+const canBackground = computed(() => !props.busy || done.value);
+const taskCountLabel = computed(() => [stats.value.summary, stats.value.byteSummary].filter(Boolean).join(' · '));
+const eta = computed(() => stats.value.hasBytes && !stats.value.unknownByteTotals && effectiveRate.value > 0 && stats.value.totalBytes > stats.value.currentBytes
+  ? formatDuration((stats.value.totalBytes - stats.value.currentBytes) / effectiveRate.value) : '');
+const isFinished = isTaskItemFinished;
+const taskLabel = taskItemLabel;
+const childCurrent = taskItemCurrent;
+const childTotal = taskItemTotal;
 function ratio(current:any, total:any) { const c = Number(current), t = Number(total); return t > 0 ? Math.max(0, Math.min(1, c / t)) : 0; }
-function byteProgress(value:any) { const steps = Array.isArray(value?.steps) ? value.steps : []; const stepBytes = steps.reduce((sum:number,step:any) => sum + (Number(step.total) > 0 ? Math.max(0, Number(step.current) || 0) : 0), 0); if (stepBytes > 0 || steps.some((step:any) => Number(step.total) > 0)) return stepBytes; const rows = activeLeaves(value?.children); const childBytes = rows.reduce((sum:number,row:any) => sum + (childTotal(row.item) > 0 ? Math.max(0, childCurrent(row.item)) : 0), 0); if (childBytes > 0 || rows.some((row:any) => childTotal(row.item) > 0)) return childBytes; const total = Number(value?.totalProgress || value?.total || 0); return total > 1024 ? Math.max(0, Number(value?.progress || value?.current) || 0) : 0; }
-function resetSample() { sampledRate.value = 0; lastSampleBytes = 0; lastSampleAt = 0; }
-function sample(value:any) { const now = performance.now(); const bytes = byteProgress(value); if (lastSampleAt > 0 && now > lastSampleAt && bytes >= lastSampleBytes) { const rate = (bytes - lastSampleBytes) * 1000 / (now - lastSampleAt); if (Number.isFinite(rate) && rate >= 0) sampledRate.value = rate; } lastSampleBytes = bytes; lastSampleAt = now; if (isFinished(value)) resetSample(); }
 function formatBytes(value:any) { const n = Number(value); if (!Number.isFinite(n) || n < 0) return ''; if (n < 1024) return `${Math.round(n)} B`; const units = ['KiB','MiB','GiB','TiB']; let size = n / 1024, index = 0; while (size >= 1024 && index < units.length - 1) { size /= 1024; index++; } return `${size.toFixed(2)} ${units[index]}`; }
 function formatDuration(value:any) { const seconds = Math.max(0, Math.round(Number(value))); if (seconds < 60) return `${seconds}s`; const minutes = Math.floor(seconds / 60); return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
 function formatRate(value: any) { const n = Number(value); if (!Number.isFinite(n) || n < 0) return ''; return n === 0 ? '0 B/s' : `${formatBytes(n)}/s`; }
-async function poll() { if ((!props.busy && !props.open && !props.snapshot) || pollInFlight) return; pollInFlight = true; try { const value = await props.execute('task.status'); if (value && !isFinished(value)) { sample(value); polled.value = value; emit('updated', value); shown.value = true; } else { polled.value = null; shown.value = false; if (value) { sample(value); emit('updated', value); } } } catch { /* Ordinary API calls can run without a tracked task. */ if (!props.snapshot) { polled.value = null; shown.value = false; } } finally { pollInFlight = false; } }
-watch(() => props.busy, (busy) => { if (busy) { resetSample(); void poll(); } else if (!props.snapshot) { resetSample(); polled.value = null; shown.value = false; } });
+async function poll() { if ((!props.busy && !props.open && !props.snapshot) || pollInFlight) return; pollInFlight = true; try { const value = props.snapshot?.taskId ? await props.execute('neo.task.status', { taskId: props.snapshot.taskId }) : await props.execute('task.status'); if (value && !isFinished(value)) { polled.value = value; emit('updated', value); shown.value = true; } else { polled.value = null; shown.value = false; if (value) { emit('updated', value); } } } catch { /* Ordinary API calls can run without a tracked task. */ if (!props.snapshot) { polled.value = null; shown.value = false; } } finally { pollInFlight = false; } }
+watch(() => props.busy, (busy) => { if (busy) { void poll(); } else if (!props.snapshot) { polled.value = null; shown.value = false; } });
 watch(() => props.snapshot, (value) => { if (value && !isFinished(value)) { polled.value = value; shown.value = true; } else if (!value) { polled.value = null; shown.value = false; } else { polled.value = null; shown.value = false; } });
 watch(() => props.open, (value) => { if (value) { shown.value = true; void poll(); } });
 onMounted(async () => {
@@ -57,7 +65,7 @@ onMounted(async () => {
     unlistenTaskEvents = await launcher.onEvent((event: any) => {
       if (event?.kind !== 'task' || (!event.task && !event.data)) return;
       const value = event.task || event.data;
-      sample(value);
+      if (props.snapshot?.taskId && value.taskId !== props.snapshot.taskId) return;
       if (!isFinished(value)) { polled.value = value; shown.value = true; emit('updated', value); }
       else { polled.value = null; shown.value = false; emit('updated', value); }
     });

@@ -28,6 +28,7 @@ class MinecraftLoadAndCheck : public Task {
     void executeTask() override;
 
     bool canAbort() const override;
+    QList<Task*> getSubTasks() const override { return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{}; }
    public slots:
     bool abort() override;
 

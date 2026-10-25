@@ -32,6 +32,7 @@
 #include "java/download/ManifestDownloadTask.h"
 #include "java/download/ArchiveDownloadTask.h"
 #include "tasks/SequentialTask.h"
+#include "tasks/TaskProgressSnapshot.h"
 #include "api/ResourceInstallTask.h"
 #include "api/InstanceExportTask.h"
 #include "api/LauncherApi.h"
@@ -225,7 +226,13 @@ class ApiOperationTask final : public Task {
             auto* child = m_api.currentTask();
             if (!child || child == this || child == m_child.data())
                 return;
+            if (m_child) disconnect(m_child, nullptr, this, nullptr);
+            m_step_progress.clear();
             m_child = child;
+            setStatus(child->getStatus());
+            setDetails(child->getDetails());
+            setProgress(child->getProgress(), child->getTotalProgress());
+            setTransferRate(child->getTransferRate());
             connect(child, &Task::status, this, &Task::setStatus, Qt::UniqueConnection);
             connect(child, &Task::details, this, &Task::setDetails, Qt::UniqueConnection);
             connect(child, &Task::progress, this, &Task::setProgress, Qt::UniqueConnection);
@@ -496,74 +503,19 @@ void AsyncTaskRuntime::emitChanged(const Record& record)
     emit taskChanged(snapshot(record));
 }
 
-namespace {
-
-QString stepStateName(TaskStepState state)
-{
-    switch (state) {
-        case TaskStepState::Running: return "running";
-        case TaskStepState::Succeeded: return "succeeded";
-        case TaskStepState::Failed: return "failed";
-        default: return "waiting";
-    }
-}
-
-void collectTaskChildren(Task* task, QJsonArray& out, QSet<QUuid>& seen, int depth = 0)
-{
-    if (!task || depth > 4 || out.size() >= 96) return;
-    for (const auto& step : task->getStepProgress()) {
-        if (!step || seen.contains(step->uid) || out.size() >= 96) continue;
-        seen.insert(step->uid);
-        out.append(QJsonObject{
-            { "id", step->uid.toString(QUuid::WithoutBraces) },
-            { "label", step->label.isEmpty() ? step->status : step->label },
-            { "current", static_cast<double>(step->current) },
-            { "total", static_cast<double>(step->total) },
-            { "transferRate", static_cast<double>(step->transferRate) },
-            { "status", step->status },
-            { "details", step->details },
-            { "state", stepStateName(step->state) },
-        });
-    }
-    for (Task* child : task->getSubTasks()) {
-        if (!child || out.size() >= 96) continue;
-        const auto steps = child->getStepProgress();
-        if (!steps.isEmpty()) {
-            collectTaskChildren(child, out, seen, depth + 1);
-            continue;
-        }
-        const auto uid = child->getUid();
-        if (seen.contains(uid)) continue;
-        seen.insert(uid);
-        const auto label = child->getStatus().isEmpty() ? child->objectName() : child->getStatus();
-        if (label.isEmpty() && child->getTotalProgress() <= 0) continue;
-        out.append(QJsonObject{
-            { "id", uid.toString(QUuid::WithoutBraces) },
-            { "label", label },
-            { "current", static_cast<double>(child->getProgress()) },
-            { "total", static_cast<double>(child->getTotalProgress()) },
-            { "transferRate", static_cast<double>(child->getTransferRate()) },
-            { "status", child->getStatus() },
-            { "details", child->getDetails() },
-            { "state", child->isFinished() ? (child->wasSuccessful() ? "succeeded" : "failed") : "running" },
-        });
-    }
-}
-
-}  // namespace
-
 QJsonObject AsyncTaskRuntime::snapshot(const Record& record) const
 {
     QJsonArray reads, writes, children;
     for (const auto& key : record.reads) reads.append(key);
     for (const auto& key : record.writes) writes.append(key);
-    QSet<QUuid> seen;
+    QJsonObject taskProgress;
     qint64 transferRate = 0;
     QString details;
     if (record.task) {
         transferRate = record.task->getTransferRate();
         details = record.task->getDetails();
-        collectTaskChildren(record.task.data(), children, seen);
+        taskProgress = TaskProgressSnapshot::snapshot(record.task.data());
+        children = taskProgress.value("children").toArray();
     }
     return QJsonObject{
         { "taskId", record.id },
@@ -580,6 +532,8 @@ QJsonObject AsyncTaskRuntime::snapshot(const Record& record) const
         { "interaction", dynamic_cast<ApiOperationTask*>(record.task.data()) ?
                          static_cast<ApiOperationTask*>(record.task.data())->pendingInteraction() : QJsonObject{} },
         { "children", children },
+        { "summary", taskProgress.value("summary") },
+        { "childrenTruncated", taskProgress.value("childrenTruncated") },
         { "steps", children },
         { "finished", record.finished },
         { "cancelRequested", record.cancelRequested },

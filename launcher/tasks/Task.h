@@ -53,6 +53,8 @@ struct TaskStepProgress {
     // Human-readable child label preserved across queued, running and
     // completed snapshots. Download tasks use this for the file name.
     QString label = "";
+    // Explicit units for API clients; unknown progress must not be called bytes.
+    QString progressUnit = "progress";
     qint64 current = 0;
     qint64 total = -1;
     // Instantaneous transfer speed in bytes per second for download steps.

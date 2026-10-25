@@ -23,20 +23,6 @@ export async function waitForTask(
       else resolve(snapshot);
     };
     try {
-      // Hybrid start: one authoritative snapshot avoids missing a task that
-      // completed before the event listener was attached.
-      try {
-        const current: any = await launcher.execute('neo.task.status', { taskId });
-        if (current) {
-          onUpdate?.(current);
-          if (current.finished || ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(current.state || '').toLowerCase())) {
-            finish(current);
-            return;
-          }
-        }
-      } catch {
-        // The task may be queued and not visible through the legacy status API.
-      }
       unlisten = await launcher.onEvent((event: any) => {
         if (event?.kind !== 'task' || (!event.task && !event.data)) return;
         const snapshot = event.task || event.data;
@@ -46,11 +32,27 @@ export async function waitForTask(
           finish(snapshot);
         }
       });
+      if (settled) { unlisten?.(); return; }
+      // Attach first, then read: a completion between the snapshot and listener
+      // registration would otherwise leave the launch dialog waiting forever.
+      try {
+        const current: any = await launcher.execute('neo.task.status', { taskId });
+        if (current && !settled) {
+          onUpdate?.(current);
+          if (current.finished || ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(current.state || '').toLowerCase())) {
+            finish(current);
+            return;
+          }
+        }
+      } catch {
+        // The task may be queued and not visible through the legacy status API.
+      }
+
     } catch (error) {
       finish(null, error instanceof Error ? error : new Error(String(error)));
       return;
     }
-    timer = setTimeout(() => finish(null, new Error('等待任务超时。')), timeoutMs);
+    if (!settled) timer = setTimeout(() => finish(null, new Error('等待任务超时。')), timeoutMs);
   });
 }
 

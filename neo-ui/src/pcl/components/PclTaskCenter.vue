@@ -12,14 +12,14 @@
 
       <q-card-section class="pcl-task-center__body">
         <div v-if="activeDownloads.length" class="pcl-task-downloads">
-          <div class="pcl-task-downloads__head">正在下载 · {{ activeDownloads.length }} 项</div>
+          <div class="pcl-task-downloads__head">正在执行 · {{ activeDownloadCount }} 项<template v-if="activeDownloadCount > activeDownloads.length">（展示前 {{ activeDownloads.length }} 项）</template></div>
           <div v-for="row in activeDownloads" :key="row.id" class="pcl-task-downloads__row">
             <span class="pcl-task-downloads__name">{{ row.label }}</span>
             <span class="pcl-task-downloads__meta">{{ row.percent }}<template v-if="row.rate"> · {{ formatRate(row.rate) }}</template></span>
             <div class="pcl-progress-track pcl-task-downloads__track"><span :style="{ width: `${row.value}%` }" /></div>
           </div>
         </div>
-        <div v-if="tasks.length" class="pcl-task-list">
+        <div v-show="tasks.length" class="pcl-task-list">
           <div v-for="task in tasks" :key="task.taskId" class="pcl-task-row">
             <div class="pcl-task-row__head">
               <strong>{{ operationLabel(task.operation) }}</strong>
@@ -33,12 +33,12 @@
               <span v-if="task.transferRate">{{ formatRate(task.transferRate) }}</span>
             </div>
             <div class="pcl-task-row__meta">
-              <span>{{ percent(task) }}% <template v-if="task.total > 0"> · {{ formatSize(task.progress) }} / {{ formatSize(task.total) }}</template></span>
+              <span>{{ taskStats(task).summary }}</span>
               <PclButton v-if="!task.finished" size="sm" variant="ghost" icon="x" @click="cancel(task)">取消</PclButton>
             </div>
           </div>
         </div>
-        <div v-else class="pcl-empty">
+        <div v-show="!tasks.length" class="pcl-empty">
           <PclIcon name="assignment" :size="34" />
           <strong>{{ loading ? '正在读取任务' : '没有正在执行的任务' }}</strong>
           <span>安装和启动任务会显示在这里。</span>
@@ -53,6 +53,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import PclButton from './PclButton.vue';
 import PclIcon from './PclIcon.vue';
 import { subscribeTaskSnapshots } from '../composables/useTaskEvents';
+import { formatTaskRate, taskActiveItems, isTaskItemActive, taskItemProgressText, taskItemCurrent, taskItemLabel, taskItemTotal, taskProgressStats } from '../composables/useTaskProgress';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -82,12 +83,13 @@ function applyTaskEvent(task: any) {
   else tasks.value.unshift(task);
 }
 
-const activeDownloads = computed(() => tasks.value.flatMap((task: any) => (Array.isArray(task.children) ? task.children : [])
-  .filter((row: any) => row && row.state === 'running' && (Number(row.total) > 0 || row.details || row.label))
+const activeDownloadCount = computed(() => tasks.value.filter(task => !task.finished).reduce((sum, task) => sum + taskProgressStats(task).active, 0));
+const activeDownloads = computed(() => tasks.value.filter(task => !task.finished).flatMap((task: any) => taskActiveItems(task, 64)
+  .filter(isTaskItemActive)
   .map((row: any) => {
-    const total = Number(row.total || 0), current = Number(row.current || 0);
+    const total = taskItemTotal(row), current = taskItemCurrent(row);
     const value = total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
-    return { id: row.id || `${task.taskId}:${row.label}`, label: row.label || row.details || '子任务', value, percent: total > 0 ? `${value}%` : '进行中', rate: Number(row.transferRate || 0) };
+    return { id: `${task.taskId}:${row.id}`, label: taskItemLabel(row), value, percent: taskItemProgressText(row), rate: Number(row.transferRate || 0) };
   })).slice(0, 12));
 
 async function cancel(task: any) {
@@ -99,22 +101,11 @@ async function cancel(task: any) {
   }
 }
 function percent(task: any) {
-  const total = Number(task?.totalProgress || task?.total || 0);
-  const progress = Number(task?.progress || 0);
-  if (total > 0) return Math.max(0, Math.min(100, Math.round(progress / total * 100)));
-  return task?.finished ? 100 : 0;
+  return taskStats(task).percent ?? 0;
 }
-function formatSize(value: unknown) {
-  const bytes = Number(value || 0);
-  if (!bytes) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB`;
-}
+function taskStats(task: any) { return taskProgressStats(task); }
 function formatRate(value: unknown) {
-  const bytes = Number(value || 0);
-  return bytes ? `${formatSize(bytes)}/s` : '';
+  return formatTaskRate(value);
 }
 function operationLabel(operation: string) {
   const labels: Record<string, string> = {

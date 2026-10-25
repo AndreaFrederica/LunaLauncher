@@ -19,6 +19,7 @@ class AssetUpdateTask : public Task {
     void executeTask() override;
 
     bool canAbort() const override;
+    QList<Task*> getSubTasks() const override { return downloadJob ? QList<Task*>{ downloadJob.get() } : QList<Task*>{}; }
 
    public:
     static QString resourceUrl();

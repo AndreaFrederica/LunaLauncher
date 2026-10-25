@@ -94,6 +94,8 @@ void ConcurrentTask::addTask(Task::Ptr task)
     if (task) {
         auto progress = std::make_shared<TaskStepProgress>(task->getUid());
         progress->label = childLabel(task.get());
+        if (task->objectName().contains(':') && progress->label != task->objectName())
+            progress->progressUnit = "bytes";
         m_task_progress.insert(task->getUid(), progress);
     }
     m_queue.append(task);
@@ -211,6 +213,8 @@ void ConcurrentTask::startSubTask(Task::Ptr next)
         m_task_progress.insert(next->getUid(), task_progress);
     }
     task_progress->label = childLabel(next.get());
+    task_progress->state = TaskStepState::Running;
+    emit stepProgress(*task_progress);
 
     updateState();
 
@@ -226,7 +230,7 @@ void ConcurrentTask::subTaskFinished(Task::Ptr task, TaskStepState state)
     m_task_transfer_rates.remove(task.get());
     updateTransferRate();
 
-    auto task_progress = *m_task_progress.value(task->getUid());
+    auto& task_progress = *m_task_progress.value(task->getUid());
     task_progress.state = state;
     task_progress.transferRate = 0;
     disconnect(task.get(), 0, this, 0);

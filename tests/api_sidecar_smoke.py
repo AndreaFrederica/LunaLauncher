@@ -198,7 +198,7 @@ class ApiSmoke(unittest.TestCase):
         s = self.sidecar
         # Split a multi-byte Chinese UTF-8 character across writes.
         request = {"jsonrpc": "2.0", "id": "fragment", "method": "launcher/execute",
-                   "params": {"operation": "account.login", "parameters": {"type": "offline", "username": "测试玩家"}}}
+                   "params": {"operation": "instance.rename", "parameters": {"instance": "neo-client", "name": "测试玩家"}}}
         payload = (json.dumps(request, ensure_ascii=False) + "\n").encode()
         split = payload.index("测".encode()) + 1
         s.write(payload[:split])
@@ -214,9 +214,26 @@ class ApiSmoke(unittest.TestCase):
         self.assertEqual(s.receive(lambda m: m.get("error", {}).get("code") == -32600)["error"]["code"], -32600)
         self.assertEqual(s.call("ping"), {})
 
+    def test_02b_requests_require_ids_without_mutating_state(self):
+        s = self.sidecar
+        before = s.ok("instance.info", instance="neo-client")["name"]
+        request = {"jsonrpc": "2.0", "method": "launcher/execute", "params": {
+            "operation": "instance.rename", "parameters": {"instance": "neo-client", "name": "Untracked mutation"}}}
+        for supplied_id in (False, True):
+            if supplied_id:
+                request["id"] = None
+            s.write((json.dumps(request) + "\n").encode())
+            result = s.receive(lambda message: message.get("error", {}).get("code") == -32600)
+            self.assertIsNone(result["id"])
+            self.assertEqual(s.ok("instance.info", instance="neo-client")["name"], before)
+        s.send("notifications/initialized", notification=True)
+        self.assertEqual(s.call("ping"), {})
+
     def test_03_interaction_reply_busy_and_scoped_cancel(self):
         s = self.sidecar
-        request_id = s.start("account.login", type="offline")
+        # Use a local validation failure after two input steps, so the protocol
+        # test works with both entitlement policies without contacting a server.
+        request_id = s.start("account.login", type="yggdrasil")
         event = s.receive(lambda m: m.get("params", {}).get("requestId") == request_id and m["params"].get("kind") == "input")["params"]
         self.assertFalse(event["secret"])
         self.assertEqual(s.ok("task.list", runningOnly=True), [])
@@ -228,8 +245,13 @@ class ApiSmoke(unittest.TestCase):
         wrong_type = s.response(s.send("launcher/respond", {"interactionId": event["interactionId"], "value": 17}))
         self.assertEqual(wrong_type["error"]["code"], -32602)
         self.assertTrue(s.call("launcher/respond", {"interactionId": event["interactionId"], "value": "NeoSmoke"})["accepted"])
-        self.assertEqual(s.response(request_id)["result"]["data"]["profileName"], "NeoSmoke")
-        request_id = s.start("account.login", type="offline")
+        password = s.receive(lambda m: m.get("params", {}).get("requestId") == request_id and m["params"].get("kind") == "input")["params"]
+        self.assertTrue(password["secret"])
+        self.assertTrue(s.call("launcher/respond", {"interactionId": password["interactionId"], "value": "fixture-only"})["accepted"])
+        result = s.response(request_id)["result"]
+        self.assertFalse(result["ok"])
+        self.assertIn("authUrl", result["error"])
+        request_id = s.start("account.login", type="yggdrasil")
         s.receive(lambda m: m.get("params", {}).get("requestId") == request_id and m["params"].get("kind") == "input")
         s.send("notifications/cancelled", {"requestId": request_id}, notification=True)
         self.assertFalse(s.response(request_id)["result"]["ok"])

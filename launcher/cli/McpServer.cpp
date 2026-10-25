@@ -121,6 +121,13 @@ bool isControlOperation(const QString& operation)
     return operations.contains(operation);
 }
 
+bool allowsNotification(const QString& method)
+{
+    // These are JSON-RPC/MCP notifications by definition and therefore do
+    // not have a response or an id to correlate.
+    return method == "notifications/initialized" || method == "notifications/cancelled";
+}
+
 }  // namespace
 
 McpServer::McpServer(QObject* parent) : QObject(parent), m_service()
@@ -242,6 +249,13 @@ void McpServer::handleMessage(const QJsonObject& request)
         writeError(QJsonValue(), -32600, QStringLiteral("Invalid JSON-RPC request."));
         return;
     }
+    if (id.isUndefined() && !allowsNotification(method)) {
+        // A notification cannot be matched to a response.  Rejecting it
+        // before dispatch prevents an untracked mutation from changing state
+        // after the caller has already moved on to another view/request.
+        writeError(QJsonValue(), -32600, QStringLiteral("Requests must include a non-null id."));
+        return;
+    }
     if (method == "initialize") {
         writeResult(
             id, QJsonObject{
@@ -358,6 +372,14 @@ void McpServer::executeOperation(const QJsonValue& id, const QString& operation,
 void McpServer::enqueueOperation(const QJsonValue& id, const QString& operation, const QJsonObject& arguments,
                                  const QJsonObject& metadata, bool native)
 {
+    // Keep read-only snapshots available while an interactive operation is
+    // waiting for input, but never defer another mutation behind it.  A
+    // deferred write can outlive the UI state that initiated it and execute
+    // unexpectedly after the user answers or cancels the active operation.
+    if (m_activeService && !isHighPriorityRead(operation)) {
+        writeError(id, -32000, QStringLiteral("Another launcher operation is already running. Task controls remain available."));
+        return;
+    }
     m_pending.enqueue({ id, operation, arguments, metadata, native, isHighPriorityRead(operation), conflictKeyFor(operation, arguments) });
     startNext();
 }

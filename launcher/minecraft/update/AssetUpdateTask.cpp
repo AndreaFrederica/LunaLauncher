@@ -87,8 +87,9 @@ void AssetUpdateTask::executeTask()
     connect(downloadJob.get(), &NetJob::succeeded, this, &AssetUpdateTask::assetIndexFinished);
     connect(downloadJob.get(), &NetJob::failed, this, &AssetUpdateTask::assetIndexFailed);
     connect(downloadJob.get(), &NetJob::aborted, this, &AssetUpdateTask::emitAborted);
-    connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::progress);
+    connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::setProgress);
     connect(downloadJob.get(), &NetJob::stepProgress, this, &AssetUpdateTask::propagateStepProgress);
+    connect(downloadJob.get(), &NetJob::transferRate, this, &AssetUpdateTask::setTransferRate);
 
     qDebug() << "Starting asset index download for" << m_inst->name();
     downloadJob->start();
@@ -140,8 +141,9 @@ void AssetUpdateTask::assetIndexFinished()
         connect(downloadJob.get(), &NetJob::succeeded, this, &AssetUpdateTask::emitSucceeded);
         connect(downloadJob.get(), &NetJob::failed, this, &AssetUpdateTask::assetsFailed);
         connect(downloadJob.get(), &NetJob::aborted, this, &AssetUpdateTask::emitAborted);
-        connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::progress);
+        connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::setProgress);
         connect(downloadJob.get(), &NetJob::stepProgress, this, &AssetUpdateTask::propagateStepProgress);
+        connect(downloadJob.get(), &NetJob::transferRate, this, &AssetUpdateTask::setTransferRate);
         downloadJob->start();
         return;
     }

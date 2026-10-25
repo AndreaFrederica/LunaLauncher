@@ -25,7 +25,7 @@
         <div v-if="failedRows.length" class="pcl-launch-dialog__downloads pcl-launch-dialog__failures">
           <div class="pcl-launch-dialog__downloads-head">失败的项目</div>
           <div v-for="row in failedRows" :key="row.id" class="pcl-launch-dialog__download">
-            <span class="pcl-launch-dialog__download-name">{{ row.label || '下载任务' }}</span>
+            <span class="pcl-launch-dialog__download-name">{{ taskItemLabel(row) }}</span>
             <span class="pcl-launch-dialog__download-meta">{{ row.details || row.status || '校验失败' }}</span>
           </div>
         </div>
@@ -66,10 +66,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import PclButton from './PclButton.vue';
 import PclHint from './PclHint.vue';
 import PclIcon from './PclIcon.vue';
+import {
+  flattenTaskItems,
+  formatTaskRate,
+  taskActiveItems,
+  taskItemProgressText,
+  taskItemCurrent,
+  taskItemLabel,
+  taskItemTotal,
+  taskState,
+} from '../composables/useTaskProgress';
 
 const props = withDefaults(defineProps<{
   modelValue: boolean;
@@ -113,69 +123,27 @@ const percent = computed<number | null>(() => {
 });
 const percentText = computed(() => percent.value === null ? '—' : `${percent.value}%`);
 
-const failedRows = computed(() => (props.children || [])
-  .filter((row: any) => row && (row.state === 'failed' || /fail|失败/i.test(String(row.status || ''))))
+const rows = computed(() => flattenTaskItems(props.children || []));
+const failedRows = computed(() => rows.value
+  .filter((row: any) => row && taskState(row) === 'failed')
   .slice(0, 8));
-const stateLabels: Record<string, string> = { running: '进行中', succeeded: '已完成', failed: '失败', waiting: '等待中' };
 const stateMarks: Record<string, string> = { running: '●', succeeded: '✓', failed: '×', waiting: '○' };
-function stepKey(row: any) {
-  return String(row?.label || row?.status || row?.details || row?.id || '');
-}
-const accumulatedRows = ref<any[]>([]);
-watch(() => props.children, (rows: any[]) => {
-  const incoming = Array.isArray(rows) ? rows.filter((row: any) => row && (row.label || row.status || row.details)) : [];
-  if (!incoming.length) {
-    if (props.state === 'launching') accumulatedRows.value = [];
-    return;
-  }
-  const previous = new Map<string, any>();
-  for (const row of accumulatedRows.value) previous.set(stepKey(row), row);
-  const incomingKeys = new Set(incoming.map(stepKey));
-  // Preserve older launch steps that vanished from the snapshot, but keep
-  // the authoritative order of the current authentication steps.
-  const merged: any[] = [];
-  for (const row of accumulatedRows.value) {
-    if (!incomingKeys.has(stepKey(row))) merged.push({ ...row, state: row.state === 'running' ? 'succeeded' : row.state });
-  }
-  for (const row of incoming) {
-    const key = stepKey(row);
-    merged.push({ ...(previous.get(key) || {}), ...row, id: key });
-  }
-  accumulatedRows.value = merged;
-}, { deep: true, immediate: true });
-const stepRows = computed(() => (accumulatedRows.value || [])
-  .filter((row: any) => row && (row.label || row.status || row.details))
-  .slice(-16)
-  .map((row: any) => {
-    const state = String(row.state || 'waiting');
-    const total = Number(row.total || 0), current = Number(row.current || 0);
-    const percentValue = total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
-    return {
-      ...row,
-      state,
-      mark: stateMarks[state] || '○',
-      label: row.label || row.status || row.details,
-      detail: state === 'running' && total > 0 ? `${percentValue}%` : (stateLabels[state] || state),
-      percentValue,
-      total,
-    };
-  }));
-
-function childPercentValue(row: any) {
-  const total = Number(row?.total || 0), current = Number(row?.current || 0);
-  return total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
-}
-function childPercent(row: any) {
-  const total = Number(row?.total || 0), current = Number(row?.current || 0);
-  return total > 0 ? `${childPercentValue(row)}%` : (row?.state || '进行中');
-}
+// Current authoritative rows only: disappearing or truncated rows are not
+// evidence of success. Prioritise active files instead of the last 16 entries.
+const stepRows = computed(() => {
+  const visible = taskActiveItems(rows.value, 16);
+  if (!visible.length) visible.push(...rows.value.slice(0, 16));
+  return visible.map(row => {
+    const state = taskState(row);
+    const total = taskItemTotal(row), current = taskItemCurrent(row);
+    return { ...row, state, mark: stateMarks[state] || '○', label: taskItemLabel(row),
+      detail: taskItemProgressText(row), rate: state === 'running' ? Number(row.transferRate || 0) : 0,
+      percentValue: total > 0 ? Math.min(100, current / total * 100) : 0, total };
+  });
+});
 
 function formatRate(value: unknown) {
-  const bytes = Number(value || 0);
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B/s`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB/s`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MiB/s`;
+  return formatTaskRate(value);
 }
 </script>
 

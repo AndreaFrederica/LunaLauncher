@@ -22,7 +22,7 @@
         <div v-if="activeFiles.length" class="pcl-install-progress__files">
           <div v-for="file in activeFiles" :key="file.id || file.label" class="pcl-install-progress__current">
             <div class="pcl-install-progress__current-head">
-              <span>{{ file.label || file.status || '正在下载' }}</span>
+              <span>{{ taskItemLabel(file) }}</span>
               <small>{{ rateText(file) }}</small>
             </div>
             <div class="pcl-progress-track pcl-install-progress__current-track" :class="{ 'is-indeterminate': childPercent(file) === null }">
@@ -35,7 +35,7 @@
           </div>
         </div>
         <div v-else-if="!finished" class="pcl-install-progress__current">
-          <div class="pcl-install-progress__current-head"><span>{{ task?.status || '正在准备下一步…' }}</span></div>
+          <div class="pcl-install-progress__current-head"><span>{{ task?.status || task?.details || '正在准备下一步…' }}</span></div>
           <div class="pcl-progress-track pcl-install-progress__current-track is-indeterminate"><span /></div>
         </div>
         <div class="pcl-install-progress__stages">
@@ -45,9 +45,10 @@
           </div>
         </div>
         <div class="pcl-install-progress__summary">
-          <span>已完成 {{ childDone }} / {{ children.length }}</span>
+          <span>{{ stats.summary }}</span>
+          <span v-if="stats.byteSummary"> · {{ stats.byteSummary }}</span>
           <span v-if="pendingCount"> · 等待 {{ pendingCount }}</span>
-          <span v-if="activeCount > 1"> · {{ activeCount }} 个并行下载</span>
+          <span v-if="activeCount > 1"> · 正在执行 {{ activeCount }} 项</span>
         </div>
         <div class="pcl-install-progress__meta">
           <span v-if="rateText(task)">{{ rateText(task) }}</span>
@@ -69,6 +70,16 @@ import { computed, onUnmounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclLoading from '../../components/PclLoading.vue';
+import {
+  flattenTaskItems,
+  isTaskItemFinished,
+  formatTaskRate,
+  taskItemProgressText,
+  taskItemPercent,
+  taskActiveItems,
+  taskItemLabel,
+  taskProgressStats,
+} from '../../composables/useTaskProgress';
 
 const props = withDefaults(defineProps<{
   modelValue: boolean;
@@ -86,13 +97,11 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
-const finished = computed(() => Boolean(props.task?.finished) || ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted', 'finished', 'completed'].includes(String(props.task?.state || '').toLowerCase()));
+const finished = computed(() => isTaskItemFinished(props.task));
+const children = computed<any[]>(() => flattenTaskItems(props.task));
+const stats = computed(() => taskProgressStats(props.task, children.value));
 const targetPercent = computed<number | null>(() => {
-  const total = Number(props.task?.totalProgress || props.task?.total || 0);
-  const progress = Number(props.task?.progress || 0);
-  if (total > 0) return Math.max(0, Math.min(100, Math.round(progress / total * 100)));
-  if (props.task?.finished) return 100;
-  return null;
+  return stats.value.percent === null ? null : Math.round(stats.value.percent);
 });
 const percent = ref<number | null>(null);
 let percentFrame = 0;
@@ -111,26 +120,15 @@ watch(targetPercent, value => {
   percentFrame = requestAnimationFrame(tick);
 }, { immediate: true });
 onUnmounted(() => cancelAnimationFrame(percentFrame));
-const children = computed<any[]>(() => {
-  const source = Array.isArray(props.task?.children) ? props.task.children : Array.isArray(props.task?.steps) ? props.task.steps : [];
-  const seen = new Set<string>();
-  return source.filter((child: any) => {
-    const key = String(child.id || child.label || '');
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 64);
-});
-const childDone = computed(() => children.value.filter(child => ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted', 'completed'].includes(String(child.state || '').toLowerCase())).length);
-const activeFiles = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'running').slice(0, 8));
-const activeCount = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'running').length);
-const pendingCount = computed(() => children.value.filter(child => String(child.state || '').toLowerCase() === 'waiting').length);
+const activeFiles = computed(() => taskActiveItems(children.value, 8));
+const activeCount = computed(() => stats.value.active);
+const pendingCount = computed(() => stats.value.waiting);
 const stages = computed(() => {
   const labels = props.task?.operation === 'modpack.install'
     ? ['准备', '下载整合包', '解压安装', '下载模组', '完成']
     : ['准备', '下载', '安装', '完成'];
   const status = String(props.task?.status || '').toLowerCase();
-  const finishedTask = Boolean(props.task?.finished);
+  const finishedTask = props.task?.state === 'succeeded';
   let active = 0;
   if (finishedTask) active = labels.length - 1;
   else if (children.value.some(child => /\.(jar|zip|litemod)$/i.test(String(child.label || '')))) active = Math.min(labels.length - 2, 3);
@@ -138,41 +136,16 @@ const stages = computed(() => {
   else if (children.value.length || status.includes('下载') || status.includes('download')) active = 1;
   return labels.map((label, index) => ({ label, state: index < active ? 'done' : index === active ? 'active' : 'waiting' }));
 });
-function childPercent(child: any): number | null {
-  const total = Number(child?.total || 0);
-  const current = Number(child?.current || 0);
-  if (total > 0) return Math.max(0, Math.min(100, Math.round(current / total * 100)));
-  if (['succeeded', 'failed', 'cancelled', 'canceled', 'aborted', 'completed'].includes(String(child?.state || '').toLowerCase())) return 100;
-  return null;
-}
-function childProgressText(child: any): string {
-  const total = Number(child?.total || 0);
-  const current = Number(child?.current || 0);
-  if (total > 0) return `${formatSize(current)} / ${formatSize(total)}`;
-  return child?.state === 'succeeded' ? '已完成' : '等待中';
-}
+const childPercent = taskItemPercent;
+const childProgressText = taskItemProgressText;
 
 function rateText(value: any) {
   if (!value) return '';
-  if (Number(value.transferRate) > 0) return formatRate(value.transferRate);
+  if (Number(value.transferRate) > 0) return formatTaskRate(value.transferRate);
   const match = String(value.details || '').match(/([\d.]+\s*(?:B|KiB|MiB|GiB|KB|MB|GB)\s*\/s)/i);
   return match ? match[1] : '';
 }
 
-function formatRate(value: unknown) {
-  const bytes = Number(value || 0);
-  if (!bytes) return '';
-  return `${formatSize(bytes)}/s`;
-}
-
-function formatSize(value: unknown) {
-  const bytes = Number(value || 0);
-  if (!bytes) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB`;
-}
 </script>
 
 <style scoped>
@@ -334,6 +307,7 @@ function formatSize(value: unknown) {
 
 .pcl-install-progress__summary {
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
   margin-top: 8px;
   color: var(--pcl-muted);

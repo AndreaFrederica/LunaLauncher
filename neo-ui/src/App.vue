@@ -116,6 +116,7 @@ import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 import { neoUiPreferences, persistNeoUiPreferences } from './neo-ui-preferences';
 import { useNeoDialogs } from './composables/useNeoDialogs';
+import { flattenTaskItems, taskActiveItems, taskProgressStats } from './pcl/composables/useTaskProgress';
 const buildLabel = '2026-09-20.1';
 const launchQuery = new URLSearchParams(window.location.search);
 const editorInstanceId = launchQuery.get('instanceEditor') || '';
@@ -205,14 +206,16 @@ function setLaunchState(state:LaunchUiState){launchUiState.value=state;if(state=
 function resetLaunchUiSoon(){if(launchUiResetTimer)clearTimeout(launchUiResetTimer);launchUiResetTimer=setTimeout(()=>{if(launchUiState.value==='launched' || launchUiState.value==='cancelled'){setLaunchState(selected.value ? 'launch' : (instances.value.length ? 'disabled' : 'download'));launchError.value='';}},2200);}
 function updateLaunchProgress(value:any){
  if(!value)return;
+ if(launchTaskId.value && value.taskId !== launchTaskId.value)return;
  if(!launchInFlight && !preparingLaunch && !['launching','launched'].includes(launchUiState.value))return;
- const total=Number(value.totalProgress ?? value.total ?? 0), current=Number(value.progress ?? value.current ?? 0);
-  if(total>0 && Number.isFinite(current)) launchTargetProgress.value=Math.max(0,Math.min(1,current/total));
-  else if(value.finished || value.running===false) launchTargetProgress.value=1;
- const activeStep=Array.isArray(value.children)?value.children.find((row:any)=>row&&row.state==='running'&&(row.label||row.status)):null;
+ const rows=flattenTaskItems(value);
+ const stats=taskProgressStats(value, rows);
+  if(stats.percent !== null) launchTargetProgress.value=Math.max(0,Math.min(1,stats.percent/100));
+  else if(value.state==='succeeded') launchTargetProgress.value=1;
+ const activeStep=taskActiveItems(rows, 1)[0];
  launchStage.value=activeStep?.label || activeStep?.status || value.details || value.status || launchStage.value || '正在执行';
- launchDetails.value=String(value.details || '');
- launchChildren.value=Array.isArray(value.children) ? value.children : [];
+ launchDetails.value=[value.details, stats.itemCount ? stats.summary : '', stats.byteSummary].filter(Boolean).join(' · ');
+ launchChildren.value=rows;
  launchSpeed.value=Number(value.transferRate || 0);
  if(value.failReason || String(value.state || value.status || '').toLowerCase()==='failed'){launchError.value=value.failReason || value.details || '启动任务失败';setLaunchState('failed');}
  else if(!isTaskFinished(value) && (launchInFlight || preparingLaunch))setLaunchState('launching');

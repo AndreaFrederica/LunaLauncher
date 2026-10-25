@@ -46,6 +46,8 @@
 #include <QIcon>
 #include <QMutex>
 #include <QUrl>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include "QObjectPtr.h"
 
@@ -76,6 +78,7 @@ class MCEditTool;
 class ThemeManager;
 class IconTheme;
 class BaseInstance;
+class DataMigrationTask;
 
 class LogModel;
 
@@ -172,6 +175,17 @@ class Application : public QApplication {
     QString getUserAgent();
 
     int importPrismSettings(QString* errorMessage = nullptr);
+
+    /**
+     * Migration/setup state exposed to alternate UIs.  The classic Qt UI
+     * handles migrations during startup; headless backends defer them here so
+     * NeoUI can present the same decision and run the same copy task.
+     */
+    QJsonObject startupStatus() const;
+    QJsonArray dataMigrationCandidates() const;
+    std::unique_ptr<DataMigrationTask> createDataMigrationTask(const QString& name, QString* errorMessage = nullptr) const;
+    bool finishDataMigration(const QString& name, QString* errorMessage = nullptr);
+    bool declineDataMigration(const QString& name, QString* errorMessage = nullptr);
 
     /// this is the root of the 'installation'. Used for automatic updates
     const QString& root() { return m_rootPath; }
@@ -280,6 +294,14 @@ class Application : public QApplication {
     Capabilities m_capabilities;
     bool m_portable = false;
     CliOptions m_cliOptions;
+
+    struct PendingDataMigration {
+        QString name;
+        QString oldData;
+        QString configFile;
+        bool currentExists = false;
+    };
+    QList<PendingDataMigration> m_pendingDataMigrations;
 
 #ifdef Q_OS_MACOS
     Qt::ApplicationState m_prevAppState = Qt::ApplicationInactive;

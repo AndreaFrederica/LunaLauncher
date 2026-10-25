@@ -31,8 +31,11 @@ class DataMigrationTask : public Task {
     void copyAborted();
 
    private:
-    const QString& m_sourcePath;
-    const QString& m_targetPath;
+    // Keep the paths by value. Migration tasks can outlive the caller that
+    // requested them (the Neo UI starts one through the API), so references to
+    // temporary or stack-owned strings would make the task unsafe.
+    QString m_sourcePath;
+    QString m_targetPath;
     const Filter m_pathMatcher;
 
     FS::copy m_copy;

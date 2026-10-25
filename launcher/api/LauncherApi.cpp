@@ -123,6 +123,12 @@ QList<ApiOperation> legacyOperations()
              { "settings.reset", "Reset a registered setting.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "key", stringProperty("Setting ID.") } }, { "scope", "key" }) },
              { "settings.export", "Export registered settings as a JSON values object.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "reveal", boolProperty("Include sensitive values.") } }, { "scope" }) },
              { "settings.import", "Import a JSON values object into registered settings.", objectSchema({ { "scope", stringProperty("launcher or instance." ) }, { "instance", instance }, { "values", QJsonObject{ { "type", "object" } } }, { "allowSensitive", boolProperty("Allow sensitive values in the import.") } }, { "scope", "values" }) } };
+    operations.append({ "startup.status", "Read NeoUI first-run, migration, and setup state.", objectSchema({}) });
+    operations.append({ "startup.migrate", "Copy a detected Prism/PolyMC/MultiMC data directory using the native migration task.",
+                        objectSchema({ { "name", stringProperty("Migration source name returned by startup.status.") } }, { "name" }) });
+    operations.append({ "startup.dismiss-migration", "Remember that a detected legacy data directory should not be migrated.",
+                        objectSchema({ { "name", stringProperty("Migration source name returned by startup.status.") } }, { "name" }) });
+    operations.append({ "startup.complete", "Persist that the NeoUI first-run setup has been completed.", objectSchema({}) });
     for (auto& operation : operations) {
         auto properties = operation.inputSchema.value("properties").toObject();
         if (operation.name.startsWith("resource.")) properties.insert("world", stringProperty("Optional world folder for datapacks."));

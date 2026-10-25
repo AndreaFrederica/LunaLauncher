@@ -176,7 +176,7 @@ meson install -C build --no-rebuild
 | `-Dbuild_testing=false` | Disable tests (default) |
 | `-Dbuild_updater=false` | Disable auto-updater |
 | `-Denable_java_downloader=true` | Enable Java auto-downloader |
-| `-Ddisable_ownership_check=false` | Disable ownership verification |
+| `-Ddeveloper_mode_build=false` | Enable developer mode |
 | `-Dgamemode=enabled` | Enable GameMode support (Linux) |
 | `-Db_vscrt=md` | Use MSVC dynamic runtime (Windows) |
 

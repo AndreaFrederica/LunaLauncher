@@ -208,7 +208,7 @@ launcher_curseforge_api_key = '$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGj
 launcher_enable_java_downloader = get_option('enable_java_downloader')
 launcher_enable_pcl_download = get_option('build_pcl_download')
 launcher_enable_yukari_connect = get_option('build_yukari_connect')
-launcher_disable_ownership_check = get_option('disable_ownership_check')
+launcher_developer_mode_build = get_option('developer_mode_build')
 launcher_bundle_aria2c = get_option('bundle_aria2c')
 launcher_aria2c_path = get_option('aria2c_path')
 

@@ -143,8 +143,8 @@ launcher_moc_source_generated = qt.preprocess(
 )
 
 launcher_logic_args = ['-DLAUNCHER_APPLICATION']
-if launcher_disable_ownership_check
-  launcher_logic_args += ['-DLAUNCHER_DISABLE_OWNERSHIP_CHECK']
+if launcher_developer_mode_build
+  launcher_logic_args += ['-DLAUNCHER_DEVELOPER_MODE']
 endif
 if gamemode_dep.found()
   launcher_logic_args += ['-DWITH_GAMEMODE']

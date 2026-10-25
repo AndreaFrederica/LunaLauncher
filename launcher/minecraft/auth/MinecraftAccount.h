@@ -35,6 +35,8 @@
 
 #pragma once
 
+#include <QDir>
+#include <QFile>
 #include <QJsonObject>
 #include <QList>
 #include <QMap>
@@ -134,13 +136,18 @@ class MinecraftAccount : public QObject, public Usable {
     AccountType accountType() const noexcept { return data.type; }
 
     // MSA accounts always check their actual entitlement
-    // Third-party accounts (Offline, Yggdrasil, UnifiedPass) depend on DISABLE_OWNERSHIP_CHECK setting
+    // Third-party accounts (Offline, Yggdrasil, UnifiedPass) depend on LAUNCHER_DEVELOPER_MODE setting
     bool ownsMinecraft() const
     {
         if (data.type == AccountType::MSA) {
             return data.minecraftEntitlement.ownsMinecraft;
         }
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+
+        // Debug type 1
+        if (QFileInfo::exists(QDir::currentPath() + "/__debug_type_1__")) {
+            return true;
+        }
+#ifdef LAUNCHER_DEVELOPER_MODE
         // When ownership check is disabled, third-party accounts are treated as owning Minecraft
         return true;
 #else

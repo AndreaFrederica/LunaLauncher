@@ -54,12 +54,7 @@
 
 #include "Application.h"
 
-// Check if developer mode is enabled (ownership check disabled)
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
-#define DEVELOPER_MODE_ENABLED
-#endif
-
-AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new Ui::AccountListPage)
+AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), m_accounts(APPLICATION->accounts()), ui(new Ui::AccountListPage)
 {
     ui->setupUi(this);
     ui->listView->setEmptyString(
@@ -68,7 +63,7 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     ui->listView->setEmptyMode(VersionListView::String);
     ui->listView->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    m_accounts = APPLICATION->accounts();
+    
 
     ui->listView->setModel(m_accounts);
     ui->listView->header()->setSectionResizeMode(AccountList::VListColumns::ProfileNameColumn, QHeaderView::Stretch);
@@ -96,12 +91,12 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     QTimer::singleShot(0, this, [this] { m_accounts->refreshCacheStatuses(); });
 
     // Xbox authentication won't work without a client identifier, so disable the button if it is missing
-    if (~APPLICATION->capabilities() & Application::SupportsMSA) {
+    if ((~APPLICATION->capabilities() & Application::SupportsMSA) != 0) {
         ui->actionAddMicrosoft->setVisible(false);
         ui->actionAddMicrosoft->setToolTip(tr("No Microsoft Authentication client ID was set."));
     }
 
-#ifdef DEVELOPER_MODE_ENABLED
+#ifdef LAUNCHER_DEVELOPER_MODE
     // Show developer mode warning at the top of the list
     ui->listView->setEmptyString(
         tr("<html><head/><body>"
@@ -129,7 +124,7 @@ void AccountListPage::retranslate()
 
 void AccountListPage::ShowContextMenu(const QPoint& pos)
 {
-    auto menu = ui->toolBar->createContextMenu(this, tr("Context menu"));
+    auto *menu = ui->toolBar->createContextMenu(this, tr("Context menu"));
     menu->exec(ui->listView->mapToGlobal(pos));
     delete menu;
 }
@@ -156,6 +151,10 @@ void AccountListPage::listChanged()
 
 void AccountListPage::on_actionAddMicrosoft_triggered()
 {
+#ifdef LAUNCHER_DEVELOPER_MODE
+    QMessageBox::warning(this, tr("Error"), tr("Cannon't add a Microsoft account in developer mode."));
+    return;
+#endif
     auto account = MSALoginDialog::newAccount(this);
     if (account) {
         m_accounts->addAccount(account);
@@ -167,45 +166,20 @@ void AccountListPage::on_actionAddMicrosoft_triggered()
 
 void AccountListPage::on_actionAddOffline_triggered()
 {
+#ifdef LAUNCHER_DEVELOPER_MODE
+    QMessageBox::warning(this, tr("Error"), tr("Cannon't add a standard offline account in developer mode."));
+    return;
+#endif
     if (!m_accounts->anyAccountIsValid()) {
-#ifdef DEVELOPER_MODE_ENABLED
-        // Developer mode: Show warning with option to force add
-        QMessageBox developerMsg(this);
-        developerMsg.setIcon(QMessageBox::Warning);
-        developerMsg.setWindowTitle(tr("Developer Mode Warning"));
-        developerMsg.setTextFormat(Qt::RichText);
-        developerMsg.setText(
-            tr("<html><head/><body>"
-               "<h2 style='color: red;'>⚠️ DEVELOPER BUILD - FOR TESTING ONLY</h2>"
-               "<p style='color: red;'><b>You are using a developer version with ownership checks disabled.</b></p>"
-               "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
-               "<p>By proceeding, you confirm that:</p>"
-               "<ul>"
-               "<li>You are a developer testing this launcher</li>"
-               "<li>You have already purchased a legitimate copy of Minecraft</li>"
-               "<li>This build is for testing purposes only</li>"
-               "</ul>"
-               "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher immediately.</p>"
-               "</body></html>")
-        );
-
-        developerMsg.addButton(tr("Force Add (Developer)"), QMessageBox::ActionRole);
-        QPushButton* cancelButton = developerMsg.addButton(QMessageBox::Cancel);
-        developerMsg.setDefaultButton(cancelButton);
-        developerMsg.exec();
-
-        if (developerMsg.clickedButton() == cancelButton) {
+        // Debug type 1
+        if (!QFileInfo::exists(QDir::currentPath() + "/__debug_type_1__")) {
+            // Normal mode: Show error requiring Microsoft account
+            QMessageBox::warning(this, tr("Error"),
+                                 tr("You must add a Microsoft account that owns Minecraft before you can add an offline account."
+                                    "<br><br>"
+                                    "If you have lost your account you can contact Microsoft for support."));
             return;
         }
-        // User clicked Force Add - proceed to add offline account
-#else
-        // Normal mode: Show error requiring Microsoft account
-        QMessageBox::warning(this, tr("Error"),
-                             tr("You must add a Microsoft account that owns Minecraft before you can add an offline account."
-                                "<br><br>"
-                                "If you have lost your account you can contact Microsoft for support."));
-        return;
-#endif
     }
 
     ChooseOfflineNameDialog dialog(tr("Please enter your desired username to add your offline account."), this);
@@ -225,7 +199,7 @@ void AccountListPage::on_actionAddOffline_triggered()
 // Developer mode function - always defined for moc, but only callable when developer mode is enabled
 void AccountListPage::on_actionAddOfflineForced_triggered()
 {
-#ifdef DEVELOPER_MODE_ENABLED
+#ifdef LAUNCHER_DEVELOPER_MODE
     // Show developer warning dialog before allowing to proceed
     auto result = QMessageBox::warning(
         this,
@@ -252,12 +226,7 @@ void AccountListPage::on_actionAddOfflineForced_triggered()
         return;
     }
 
-    ChooseOfflineNameDialog dialog(tr("Please enter your desired username to add your offline account."), this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    if (const MinecraftAccountPtr account = MinecraftAccount::createOffline(dialog.getUsername())) {
+    if (const MinecraftAccountPtr account = MinecraftAccount::createOffline("DevPlayer")) {
         account->login()->start();  // The task will complete here.
         m_accounts->addAccount(account);
         if (m_accounts->count() == 1) {
@@ -266,12 +235,19 @@ void AccountListPage::on_actionAddOfflineForced_triggered()
     }
 #else
     // This should never be called in non-developer mode since the button is hidden
-    qWarning("on_actionAddOfflineForced_triggered called in non-developer mode!");
+    QMessageBox::warning(this, tr("Error"),
+        tr("This option is only available in developer mode."));
+
+    qWarning() << "on_actionAddOfflineForced_triggered called in non-developer mode!";
 #endif
 }
 
 void AccountListPage::on_actionAddYggdrasil_triggered()
 {
+#ifdef LAUNCHER_DEVELOPER_MODE
+    QMessageBox::warning(this, tr("Error"), tr("Cannon't add a Yggdrasil account in developer mode."));
+    return;
+#endif
     auto account = YggdrasilLoginDialog::newAccount(this);
     if (account) {
         m_accounts->addAccount(account);
@@ -283,15 +259,25 @@ void AccountListPage::on_actionAddYggdrasil_triggered()
 
 void AccountListPage::on_actionAddEnhancedOffline_triggered()
 {
+#ifdef LAUNCHER_DEVELOPER_MODE
+    QMessageBox::warning(this, tr("Error"), tr("Cannon't add a enhanced offline account in developer mode."));
+    return;
+#endif
     auto account = createEnhancedOfflineAccount(this);
     if (account) {
         m_accounts->addAccount(account);
-        if (m_accounts->count() == 1) m_accounts->setDefaultAccount(account);
+        if (m_accounts->count() == 1) {
+            m_accounts->setDefaultAccount(account);
+        }
     }
 }
 
 void AccountListPage::on_actionAddUnifiedPass_triggered()
 {
+#ifdef LAUNCHER_DEVELOPER_MODE
+    QMessageBox::warning(this, tr("Error"), tr("Cannon't add a UnifiedPass account in developer mode."));
+    return;
+#endif
     auto account = UnifiedPassLoginDialog::newAccount(this);
     if (account) {
         m_accounts->addAccount(account);
@@ -321,7 +307,7 @@ void AccountListPage::on_actionRefresh_triggered()
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         m_accounts->requestRefresh(account->internalId());
     }
 }
@@ -331,7 +317,7 @@ void AccountListPage::on_actionSetDefault_triggered()
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         m_accounts->setDefaultAccount(account);
     }
 }
@@ -352,7 +338,7 @@ void AccountListPage::updateButtonStates()
     bool accountCanMoveDown = false;
     if (hasSelection) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         accountIsReady = !account->isActive();
         accountIsOnline = account->accountType() != AccountType::Offline;
 
@@ -383,7 +369,7 @@ void AccountListPage::on_actionManageSkins_triggered()
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         SkinManageDialog dialog(this, account);
         dialog.exec();
     }

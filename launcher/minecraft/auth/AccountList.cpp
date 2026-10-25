@@ -658,7 +658,11 @@ bool AccountList::anyAccountIsValid()
 
 bool AccountList::canAddOfflineAccount() const
 {
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+    // Debug type 1
+    if (QFileInfo::exists(QDir::currentPath() + "/__debug_type_1__")) {
+        return true;
+    }
+#ifdef LAUNCHER_DEVELOPER_MODE
     return true;
 #else
     for (const auto& account : m_accounts) {

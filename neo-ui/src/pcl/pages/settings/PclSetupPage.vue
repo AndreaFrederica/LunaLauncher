@@ -384,7 +384,7 @@
                 <span class="pcl-form-row__hint">0 表示不限速</span>
               </div>
 
-              <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" label="PCL 下载引擎不可用时回退到 Qt 内置下载" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
+              <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" label="专用 .NET 下载引擎不可用时回退到 Qt 内置下载" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
             </PclCard>
             <PclCard title="下载任务">
               <div class="pcl-form-row">
@@ -682,8 +682,8 @@
                 <p>翻译文件使用标准的 Qt 翻译格式，与启动器版本一起发布。</p>
                 <p>提交前请先阅读贡献指南，并在本地确认界面没有截断或错位。</p>
                 <div class="pcl-actions">
-                  <PclButton variant="highlight" icon="upload" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/blob/develop/CONTRIBUTING.md')">提交 Pull Request</PclButton>
-                  <PclButton icon="book-marked" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/wiki')">查看开发文档</PclButton>
+                  <PclButton variant="highlight" icon="upload" @click="openUrl(projectUrl + '/pulls')">提交 Pull Request</PclButton>
+                  <PclButton icon="book-marked" @click="openUrl(docsUrl)">查看项目文档</PclButton>
                 </div>
               </div>
             </div>
@@ -727,7 +727,7 @@
 
             <PclCard title="调试选项" collapsible>
               <div class="pcl-check-grid">
-                <PclCheckbox :model-value="bool('PclDownloadFallbackToQt')" label="PCL 下载失败时回退 Qt" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
+                <PclCheckbox :model-value="bool('PclDownloadFallbackToQt')" label="专用 .NET 下载失败时回退 Qt" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
                 <PclCheckbox :model-value="bool('Aria2FallbackToQt')" label="Aria2 失败时回退 Qt" @update:model-value="save('Aria2FallbackToQt', $event)" />
                 <PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" label="递归监控下载目录" @update:model-value="save('DownloadsDirWatchRecursive', $event)" />
               </div>
@@ -735,11 +735,11 @@
           </template>
 
           <template v-else-if="section === 'about'">
-            <PclCard title="关于">
+            <PclCard :title="t('about.title')">
               <div class="pcl-about-head">
-                <div class="pcl-about-logo">L</div>
+                <div class="pcl-about-logo"><img :src="lunaLogo" alt="Luna Launcher" /></div>
                 <div>
-                  <div class="pcl-about-name">Luna Launcher <span>Neo UI</span></div>
+                  <div class="pcl-about-name">{{ t('brand.name') }} <span>{{ t('brand.neoUi') }}</span></div>
                   <div class="pcl-about-version">{{ applicationVersion }} · {{ runtimeInfo.platform || 'Windows' }}</div>
                 </div>
               </div>
@@ -750,12 +750,20 @@
                 <span>能力</span><code>{{ (runtimeInfo.capabilities || []).join(' / ') || '—' }}</code>
               </div>
               <div class="pcl-actions">
-                <PclButton icon="external-link" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher')">项目主页</PclButton>
-                <PclButton icon="book-marked" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/wiki')">文档</PclButton>
+                <PclButton icon="external-link" @click="openUrl(projectUrl)">{{ t('about.projectHome') }}</PclButton>
+                <PclButton icon="book-marked" @click="openUrl(docsUrl)">{{ t('about.docs') }}</PclButton>
               </div>
             </PclCard>
 
-            <PclCard title="特别鸣谢">
+            <PclCard :title="t('about.services')">
+              <p class="pcl-muted">{{ t('about.servicesDescription') }}</p>
+              <div class="pcl-actions">
+                <PclButton icon="external-link" @click="openUrl(bmclApiUrl)">{{ t('about.bmclapi') }}</PclButton>
+                <PclButton icon="external-link" @click="openUrl(mcimUrl)">{{ t('about.mcim') }}</PclButton>
+              </div>
+            </PclCard>
+
+            <PclCard :title="t('about.credits')">
               <PclListItem
                 v-for="credit in credits"
                 :key="credit.name"
@@ -770,20 +778,20 @@
               </PclListItem>
             </PclCard>
 
-            <PclCard title="贡献者们">
+            <PclCard :title="t('about.contributors')">
               <div class="pcl-credit-tiles">
                 <span v-for="name in contributors" :key="name">{{ name }}</span>
               </div>
               <p class="pcl-muted pcl-credit-note">以上为 Luna Neo UI 与上游项目的公开贡献者代表；完整名单见各项目仓库。</p>
             </PclCard>
 
-            <PclCard title="许可与版权">
-              <p class="pcl-muted">Luna Launcher 基于 PrismLauncher 与 PCL-CE 的公开实现。界面参考 PCL-CE 的布局与交互，代码按各自许可证发布。</p>
-              <p class="pcl-muted">PCL-CE、PrismLauncher 及其依赖项的版权归各自作者所有。</p>
+            <PclCard :title="t('about.licenses')">
+              <p class="pcl-muted">{{ t('about.licenseText') }}</p>
+              <p class="pcl-muted">{{ t('about.pclIconCredit') }}</p>
               <div class="pcl-actions">
-                <PclButton icon="file-box" @click="openUrl('https://github.com/PCL-Community/PCL-CE/blob/dev/LICENSE')">PCL-CE 许可证</PclButton>
+                <PclButton icon="file-box" @click="openUrl(licenseUrl)">Luna Launcher GPL-3.0</PclButton>
                 <PclButton icon="file-box" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/blob/develop/LICENSE')">PrismLauncher 许可证</PclButton>
-                <PclButton icon="file-box" @click="openUrl('https://lucide.dev/license')">Lucide 许可证</PclButton>
+                <PclButton icon="file-box" @click="openUrl('https://lucide.dev/license')">{{ t('about.lucideLicense') }}</PclButton>
               </div>
             </PclCard>
           </template>
@@ -829,10 +837,10 @@
           <template v-else-if="section === 'feedback'">
             <PclCard title="提交反馈">
               <p class="pcl-feedback-copy">在提交反馈之前，请先搜索是否已经存在相同的问题。请尽量附上启动日志、复现步骤和系统信息；不要提交包含账户令牌或私人路径的内容。</p>
-              <PclButton variant="highlight" icon="message-circle" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/issues')">前往反馈</PclButton>
+              <PclButton variant="highlight" icon="message-circle" @click="openUrl(projectUrl + '/issues')">前往反馈</PclButton>
             </PclCard>
             <PclCard title="反馈进度">
-              <p class="pcl-muted">Luna 暂未接入 PCL 的反馈看板。你可以直接在上方打开问题列表查看处理状态。</p>
+              <p class="pcl-muted">Luna Neo UI 的反馈会直接进入项目问题列表，提交时请附上复现步骤和相关日志。</p>
             </PclCard>
           </template>
 
@@ -858,7 +866,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { launcher } from '../../../boot/launcher-api';
+import lunaLogo from '../../../assets/luna-launcher.png';
+import { localeFromLauncherLanguage, setNeoLocale } from '../../../i18n';
 import PclPageNav from '../../components/PclPageNav.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
@@ -896,6 +907,7 @@ type ApiSetting = {
 
 const props = defineProps<{ settings: ApiSetting[]; busy: boolean; scope: Record<string, unknown>; execute: Execute; accounts?: any[]; embedded?: boolean; initialSection?: string }>();
 const emit = defineEmits<{ changed: [] }>();
+const { t } = useI18n();
 
 const section = ref('launch');
 const error = ref(''), notice = ref('');
@@ -971,7 +983,7 @@ const mirrorOptions = [
 const downloadBackendOptions = [
   { label: 'Qt 原生下载', value: 0 },
   { label: 'Aria2', value: 1 },
-  { label: 'Downloader（PCL.Download）', value: 2 },
+  { label: 'Luna .NET 下载器（NativeAOT）', value: 2 },
 ];
 const modApiMirrorOptions = [
   { label: '官方源', value: 0 },
@@ -1067,13 +1079,19 @@ function formatSpeed(value: number): string {
 
 const applicationVersion = computed(() => String(runtimeInfo.value.applicationVersion || runtimeInfo.value.version || runtimeInfo.value.launcherVersion || '开发版本').trim());
 const credits = [
-  { name: 'PCL-CE', info: '界面布局、控件尺寸与交互参考', url: 'https://github.com/PCL-Community/PCL-CE' },
-  { name: 'PrismLauncher', info: '实例、账户、下载与启动后端', url: 'https://github.com/PrismLauncher/PrismLauncher' },
-  { name: 'PCL 上游', info: 'Plain Craft Launcher 原始项目', url: 'https://github.com/Meloong-Git/PCL' },
+  { name: 'PrismLauncher', info: '实例格式与启动器核心兼容性来源', url: 'https://github.com/PrismLauncher/PrismLauncher' },
+  { name: 'PCL-CE 图标资源', info: '仅使用整理后的 Lucide SVG 图标资源，不使用其页面或业务代码', url: 'https://github.com/PCL-Community/PCL-CE' },
+  { name: 'BMCLAPI', info: 'Minecraft 下载镜像 API', url: 'https://bmclapidoc.bangbang93.com/' },
+  { name: 'MCIM', info: 'Modrinth 与 CurseForge 社区镜像', url: 'https://mod.mcimirror.top/docs' },
   { name: 'Lucide', info: '线性 SVG 图标集', url: 'https://lucide.dev' },
   { name: 'Qt', info: '启动器与元数据工具链', url: 'https://www.qt.io' },
 ];
-const contributors = ['PCL-CE', 'PrismLauncher', 'Luna Neo UI', 'Lucide', 'Qt', 'MCBBS 社区', 'Bangbang93', 'Pysio'];
+const contributors = ['Luna Neo UI', 'PrismLauncher', 'BMCLAPI', 'MCIM', 'Lucide', 'Qt', 'MCBBS 社区', 'Bangbang93', 'Pysio'];
+const projectUrl = 'https://github.com/AndreaFrederica/LunaLauncher';
+const licenseUrl = `${projectUrl}/blob/main/COPYING.md`;
+const docsUrl = 'https://lunalauncher.sirrus.cc';
+const bmclApiUrl = 'https://bmclapidoc.bangbang93.com/';
+const mcimUrl = 'https://mod.mcimirror.top/docs';
 const maxMem = computed(() => draftNumber('MaxMemAlloc', 4096));
 const memoryMode = ref<'auto' | 'custom'>('custom');
 const memoryStats = ref({ totalMiB: 0, usedMiB: 0 });
@@ -1351,6 +1369,7 @@ async function loadLanguages(force = false) {
     languages.value = result?.languages || [];
     languageId.value = result?.selected || '';
     useSystemLocale.value = Boolean(result?.useSystemLocale);
+    if (languageId.value) setNeoLocale(localeFromLauncherLanguage(languageId.value));
   } catch (exception) {
     error.value = message(exception);
   } finally {
@@ -1362,6 +1381,7 @@ async function selectLanguage(id: string | number) {
   try {
     const result = await props.execute('language.select', { language: String(id) });
     languageId.value = result?.selected || String(id);
+    setNeoLocale(localeFromLauncherLanguage(languageId.value));
     notice.value = '语言已更新';
     emit('changed');
   } catch (exception) {
@@ -1370,6 +1390,8 @@ async function selectLanguage(id: string | number) {
 }
 async function setSystemLocale(value: boolean) {
   useSystemLocale.value = value;
+  if (value && typeof navigator !== 'undefined') setNeoLocale(navigator.language);
+  else if (languageId.value) setNeoLocale(localeFromLauncherLanguage(languageId.value));
   if (!languageId.value) return;
   try {
     await props.execute('language.select', { language: languageId.value, useSystemLocale: value });
@@ -1758,6 +1780,12 @@ async function openUpdateLog() {
   color: #fff;
   font-size: calc(28px * var(--pcl-font-scale, 1));
   font-weight: 800;
+}
+
+.pcl-about-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .pcl-about-name {

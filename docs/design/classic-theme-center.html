@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luna · Classic 主题中心设计</title>
+  <link rel="stylesheet" href="classic-theme-center.css">
+  <script defer src="classic-theme-center.js"></script>
+</head>
+<body>
+  <div class="prototype-bar"><span><strong>交互原型</strong> · 本地示例数据，预览为控件示意；操作不会下载文件或修改启动器。</span><label>演示情境 <select id="scenario"><option value="normal">正常网络</option><option value="offline">离线缓存</option><option value="failure">安装失败</option></select></label></div>
+  <div class="window">
+    <header class="window-header"><img src="../../neo-ui/src/assets/luna-launcher.png" alt=""><strong>Luna Launcher</strong><span class="divider"></span><span>主题中心</span><span class="header-end">Classic UI <span class="platform">Windows</span></span></header>
+    <div class="workspace">
+      <aside class="sidebar">
+        <div class="sidebar-label">个性化</div>
+        <nav aria-label="主题中心导航">
+          <button class="nav active" data-page="discover" aria-current="page"><i data-icon="globe"></i>在线主题</button>
+          <button class="nav" data-page="installed"><i data-icon="archive"></i>已安装<span id="installed-count" class="count">1</span></button>
+          <button class="nav" data-page="appearance"><i data-icon="layers"></i>外观组合</button>
+          <button class="nav" data-page="tasks"><i data-icon="download"></i>下载任务<span id="task-count" class="count">0</span></button>
+        </nav>
+        <div class="sidebar-bottom"><p>外观作用范围</p><strong>启动器 · Classic</strong><small>按组件搭配你的界面。</small><button id="sources" class="subtle"><i data-icon="settings"></i>管理主题来源</button><a href="../CLASSIC-UI-THEME-CENTER.md">查看页面设计说明 ↗</a></div>
+      </aside>
+      <main>
+        <section class="current-strip" aria-label="当前外观"><span class="status-dot"></span><span>当前生效 <strong id="effective-name">Luna Light</strong></span><span id="effective-meta" class="muted">Fusion · Luna 图标 · 系统装饰</span><button class="text-button" data-go="appearance">管理组合 <span aria-hidden="true">→</span></button></section>
+        <div id="pending-banner" class="pending-banner" hidden><span id="pending-text"></span><button id="undo-pending">撤销待生效更改</button><button id="restart" class="primary">模拟重新启动</button></div>
+
+        <section id="page-discover" class="page discover">
+          <div class="page-heading"><div><h1>在线主题</h1><p>从 KDE Store 获取配色与图标，让启动器拥有统一的外观。</p></div><a class="external" href="https://store.kde.org/" target="_blank" rel="noopener noreferrer">KDE Store <span aria-hidden="true">↗</span></a></div>
+          <div class="toolbar"><label class="source-control"><span class="sr-only">主题来源</span><select id="provider"><option value="kde">KDE Store</option><option value="github">GitHub 来源</option><option value="all">所有来源</option></select></label><label class="search"><i data-icon="search"></i><input id="search" type="search" placeholder="筛选已载入项目…" aria-label="筛选已载入项目"></label><button id="refresh"><i data-icon="refresh-cw"></i>刷新</button></div>
+          <div class="filter-row"><div class="categories" role="group" aria-label="主题分类"><button data-category="all" class="selected" aria-pressed="true">全部</button><button data-category="palette" aria-pressed="false">配色</button><button data-category="icons" aria-pressed="false">图标</button><button data-category="skin" aria-pressed="false">控件</button><button data-category="decoration" aria-pressed="false">装饰</button><button data-category="bundle" aria-pressed="false">成套</button></div><label class="check-label"><input id="compatible" type="checkbox" checked>仅显示可用组件</label></div>
+          <div class="results-meta"><span id="result-summary"></span><label>排序 <select id="sort"><option value="featured">示例顺序</option><option value="alpha">名称</option><option value="new">最近更新</option></select></label></div>
+          <div id="network-notice" class="notice" role="status" hidden></div>
+          <div class="browser-content">
+            <div class="catalog-pane"><div id="catalog" class="catalog" aria-label="主题列表"></div><div id="empty" class="empty" hidden><i data-icon="search"></i><h2>没有匹配的主题</h2><p>试试其他来源或取消兼容性筛选。</p><button id="clear-filters">清除筛选</button></div><footer class="pagination"><span>示例目录 · 非实时商店内容</span><div><button id="previous" aria-label="上一页"><i data-icon="chevron-left"></i></button><span id="page-number"></span><button id="next" aria-label="下一页"><i data-icon="chevron-right"></i></button></div></footer></div>
+            <aside id="detail" class="detail" aria-label="主题详情"></aside>
+          </div>
+        </section>
+
+        <section id="page-installed" class="page" hidden>
+          <div class="page-heading"><div><h1>已安装</h1><p>安装好的主题可以用于组合；被使用的组件会受到保护。</p></div><button id="import-local"><i data-icon="folder-open"></i>从文件导入</button></div>
+          <div id="installed-list" class="installed-list"></div>
+        </section>
+
+        <section id="page-appearance" class="page" hidden>
+          <div class="page-heading"><div><h1>外观组合</h1><p>分别选择控件、配色、图标与窗口装饰。</p></div><span class="badge neutral">仅用于 Classic UI</span></div>
+          <div class="appearance-grid"><div>
+            <fieldset class="mode-box"><legend>外观模式</legend><label><input type="radio" name="mode" value="independent" checked> 独立外观 <small>仅为启动器搭配主题</small></label><label><input type="radio" name="mode" value="system"> 跟随系统 <small>保留上次独立组合</small></label></fieldset>
+            <fieldset id="component-fields" class="component-fields"><legend class="sr-only">独立组件</legend>
+              <label class="setting-row"><span><strong>控件风格</strong><small>已验证的 Qt 控件引擎</small></span><select id="style"><option value="Fusion">Fusion</option></select></label>
+              <label class="setting-row"><span><strong>控件皮肤</strong><small>圆角、边框与控件细节</small></span><select id="skin"><option value="none">无额外皮肤</option><option value="arc">Luna Arc · 示例内置</option></select></label>
+              <label class="setting-row"><span><strong>配色</strong><small>主题的原始颜色</small></span><select id="palette"></select></label>
+              <label class="setting-row"><span><strong>图标</strong><small>缺失图标使用内置资源</small></span><select id="icons"></select></label>
+              <label class="setting-row"><span><strong>窗口装饰</strong><small>标题栏与窗口边框</small></span><select id="decoration"><option value="system">系统装饰</option><option value="luna">Luna 装饰 · 示例能力</option></select></label>
+            </fieldset>
+            <p class="muted capability-note">可选项目取决于实际平台能力。此处 Luna 装饰仅演示配置流程。</p>
+          </div><div class="combination-preview"><div class="section-title">组合预览 <span>控件示意</span></div><div id="combination-sample"></div><div class="impact-box"><h2>应用后会发生什么</h2><p id="impact"></p><div id="change-list"></div></div><button id="apply" class="primary wide">应用组合</button><button id="preview-combination" class="wide">放大预览</button></div></div>
+        </section>
+
+        <section id="page-tasks" class="page" hidden><div class="page-heading"><div><h1>下载任务</h1><p>安装与应用分开进行，页面切换会保留任务进度。</p></div><span class="badge neutral">模拟任务</span></div><div id="task-list"></div></section>
+      </main>
+    </div>
+    <footer class="window-status"><span><span class="status-dot"></span><span id="footer-network">本地演示 · 正常网络情境</span></span><span id="footer-tasks">没有进行中的任务</span></footer>
+  </div>
+  <dialog id="modal"><div class="modal-heading"><h2 id="modal-title"></h2><button id="modal-close" aria-label="关闭对话框"><i data-icon="x"></i></button></div><div id="modal-content"></div><div id="modal-actions"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

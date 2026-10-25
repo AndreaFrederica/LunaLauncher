@@ -89,7 +89,11 @@ Recommended package settings:
 
 The Makefile synchronizes submodule URLs from the repository's `.gitmodules`,
 initializes recursive submodules and copies the generated SRPM to COPR's
-`outdir`. It makes no hard-coded QuickJS remote override. Submodule hosts must
+`outdir`. Its `deps` target installs `git`, `rpm-build`, `tar`, `gzip` or
+`python3` with `dnf` when they are absent, because COPR's make-srpm chroot only
+adds `make` and `dnf` to Fedora's `@buildsys-build` group; on a workstation
+that already has those tools the target installs nothing. It makes no
+hard-coded QuickJS remote override. Submodule hosts must
 be reachable during the SRPM preparation stage; binary RPM compilation is
 offline with respect to source downloads.
 

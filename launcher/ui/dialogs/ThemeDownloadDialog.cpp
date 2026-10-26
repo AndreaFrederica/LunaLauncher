@@ -2,6 +2,7 @@
 #include "ThemeDownloadDialog.h"
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -20,6 +21,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
+#include <QSet>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStyle>
@@ -865,10 +867,12 @@ void ThemeDownloadDialog::refreshInstalled()
             QString error;
             const auto resolved = m_service->packageConfiguration(data.value("id").toString(), error);
             row->setText(2, !error.isEmpty() ? error : resolved.value("complete").toBool() ? tr("组件齐全") : tr("需要补齐或选择组件"));
+            QSet<QString> declaredDependencyKinds;
             for (const auto& value : data.value("dependencies").toArray()) {
                 auto dependency = value.toObject();
                 if (!dependency.value("supported").toBool())
                     continue;
+                declaredDependencyKinds.insert(dependency.value("category").toString());
                 bool found = false;
                 for (const auto& package : m_service->packages())
                     found |= package.toObject().value("provider") == dependency.value("provider") &&
@@ -880,6 +884,30 @@ void ThemeDownloadDialog::refreshInstalled()
                 auto child = new QTreeWidgetItem(row, { kindName(dependency.value("category").toString()) + " · #" + dependency.value("contentId").toString(),
                                                        tr("商店依赖"), tr("尚未安装 · 选择后点击下载") });
                 child->setData(0, Qt::UserRole, dependency);
+            }
+            // KDE look-and-feel packages commonly contain only contents/defaults.
+            // The defaults file names a widget style (for example Kvantum or
+            // Breeze), while the actual widget package is a separate store item.
+            // Keep that missing reference actionable instead of silently hiding it.
+            for (const auto& value : resolved.value("missing").toArray()) {
+                auto missing = value.toObject();
+                const auto kind = missing.value("kind").toString();
+                if (kind == "application" || declaredDependencyKinds.contains(kind))
+                    continue;
+                missing.insert("dependency", true);
+                missing.insert("provider", "kde");
+                missing.insert("category", kind);
+                missing.insert("reference", missing.value("name"));
+                missing.insert("id", "reference-" + kind + '-' +
+                                         QString::fromLatin1(QCryptographicHash::hash(missing.value("name").toString().toUtf8(),
+                                                                                       QCryptographicHash::Sha256)
+                                                                                  .toHex()
+                                                                                  .left(12)));
+                auto child = new QTreeWidgetItem(
+                    row,
+                    { kindName(kind) + " · " + missing.value("name").toString(), tr("KDE 组件引用"),
+                      tr("包内未包含资源 · 点击后浏览对应商店分类") });
+                child->setData(0, Qt::UserRole, missing);
             }
             row->setExpanded(true);
         }

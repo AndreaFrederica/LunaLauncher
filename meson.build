@@ -77,6 +77,7 @@ add_project_arguments(
 
 qt_core_dep = dependency('Qt6Core', method: 'cmake', required: true)
 qt_widgets_dep = dependency('Qt6Widgets', method: 'cmake', required: true)
+qt_svg_dep = dependency('Qt6Svg', method: 'cmake', required: true)
 qt_network_dep = dependency('Qt6Network', method: 'cmake', required: true)
 qt_networkauth_dep = dependency('Qt6NetworkAuth', method: 'cmake', required: true)
 qt_concurrent_dep = dependency('Qt6Concurrent', method: 'cmake', required: true)

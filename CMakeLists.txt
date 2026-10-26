@@ -303,7 +303,7 @@ set(Launcher_BUILD_TIMESTAMP "${TODAY}")
 # Find the required Qt parts
 if(Launcher_QT_VERSION_MAJOR EQUAL 6)
     set(QT_VERSION_MAJOR 6)
-    find_package(Qt6 6.4 REQUIRED COMPONENTS Core CoreTools Widgets Concurrent Network WebSockets Test Xml NetworkAuth OpenGL)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Core CoreTools Widgets Concurrent Network WebSockets Test Xml NetworkAuth OpenGL Svg)
     find_package(Qt6 COMPONENTS DBus)
     list(APPEND Launcher_QT_DBUS Qt6::DBus)
 else()
@@ -518,6 +518,9 @@ add_subdirectory(libraries/launcher) # java based launcher part for Minecraft
 add_subdirectory(libraries/javacheck) # java compatibility checker
 
 add_subdirectory(libraries/rainbow) # Qt extension for colors
+if(Qt6Core_VERSION VERSION_GREATER_EQUAL 6.6)
+    add_subdirectory(libraries/kvantum) # Application-local SVG widget themes
+endif()
 add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
 add_subdirectory(libraries/murmur2) # Hash for usage with the CurseForge API
 add_subdirectory(libraries/qdcss) # css parser

@@ -140,6 +140,24 @@ alongside the icon resources.
 
     Licensed under LGPL v3
 
+## Kvantum
+
+    Copyright (C) Pedram Pourang (aka Tsu Jan) 2014-2026
+
+    Kvantum is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Kvantum is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+Source: https://github.com/tsujan/Kvantum. The private, application-local
+renderer retains its license in `libraries/kvantum/COPYING` (installed as
+`licenses/kvantum/COPYING` on Windows). Downstream changes and the pinned
+upstream revision are documented in `libraries/kvantum/README.luna.md`.
+
 ## libnbt++
 
     libnbt++ - A library for the Minecraft Named Binary Tag format.

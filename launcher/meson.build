@@ -91,6 +91,7 @@ launcher_moc_header_generated = qt.preprocess(
     buildconfig_dep,
     qt_core_dep,
     qt_widgets_dep,
+    qt_svg_dep,
     qt_network_dep,
     qt_networkauth_dep,
     qt_concurrent_dep,
@@ -161,6 +162,7 @@ launcher_logic = static_library(
   ],
   dependencies: [
     murmur2_dep,
+    kvantum_dep,
     libnbt_dep,
     qdcss_dep,
     quickjs_dep,

@@ -1091,6 +1091,8 @@ SET(LAUNCHER_SOURCES
     ui/themes/IconTheme.h
     ui/themes/ThemePackage.cpp
     ui/themes/ThemePackage.h
+    ui/themes/ThemeStyle.cpp
+    ui/themes/ThemeStyle.h
     ui/themes/AppearanceService.cpp
     ui/themes/AppearanceService.h
     ui/themes/WindowChromeController.cpp
@@ -1593,7 +1595,11 @@ target_link_libraries(Launcher_logic
     BuildConfig
     Qt${QT_VERSION_MAJOR}::Widgets
     qtermwidget
+    Qt6::Svg
 )
+if(TARGET Luna_kvantum)
+    target_link_libraries(Launcher_logic Luna_kvantum)
+endif()
 
 if(TARGET PkgConfig::libqrencode)
     target_link_libraries(Launcher_logic PkgConfig::libqrencode)

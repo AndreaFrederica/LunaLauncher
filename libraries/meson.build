@@ -1,4 +1,9 @@
 rainbow_inc = include_directories('rainbow/include')
+if qt_core_dep.version().version_compare('>=6.6.0')
+  subdir('kvantum')
+else
+  kvantum_dep = declare_dependency()
+endif
 localpeer_inc = include_directories('LocalPeer/include')
 murmur2_inc = include_directories('murmur2', 'murmur2/src')
 qdcss_inc = include_directories('qdcss/include')

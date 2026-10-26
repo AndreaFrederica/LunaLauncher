@@ -19,13 +19,13 @@
 #include <QPushButton>
 #include <QSplitter>
 #include <QStyle>
-#include <QStyleFactory>
 #include <QTextCursor>
 #include <QTextEdit>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include "WindowChromeController.h"
+#include "ThemeStyle.h"
 
 // No Application, settings, accounts, network manager or data-directory lock.
 int runThemePreview(int argc, char** argv, const QString& path)
@@ -58,7 +58,7 @@ int runThemePreview(int argc, char** argv, const QString& path)
             values.append(value.toString());
         QDir::setSearchPaths(it.key(), values);
     }
-    if (auto style = QStyleFactory::create(spec.value("style").toString()))
+    if (auto style = ThemeStyle::create(spec.value("style").toString(), spec.value("widgetThemeFile").toString()))
         app.setStyle(style);
     auto palette = app.palette();
     const auto groups = spec.value("palette").toArray();

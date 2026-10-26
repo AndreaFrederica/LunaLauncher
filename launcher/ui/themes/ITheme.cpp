@@ -35,16 +35,16 @@
  */
 #include "ITheme.h"
 #include <QDir>
-#include <QStyleFactory>
 #include "Application.h"
 #include "HintOverrideProxyStyle.h"
+#include "ThemeStyle.h"
 #include "rainbow.h"
 
 void ITheme::apply(bool)
 {
     APPLICATION->setStyleSheet(QString());
     QDir::setSearchPaths("theme", searchPaths());
-    QApplication::setStyle(new HintOverrideProxyStyle(QStyleFactory::create(qtTheme())));
+    QApplication::setStyle(new HintOverrideProxyStyle(ThemeStyle::create(qtTheme(), widgetThemeFile())));
     QApplication::setPalette(colorScheme());
     APPLICATION->setStyleSheet(appStyleSheet());
 }

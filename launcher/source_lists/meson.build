@@ -985,6 +985,17 @@ launcher_logic_sources = [
   'ui/themes/ModernDarkTheme.h',
   'ui/themes/SystemTheme.cpp',
   'ui/themes/SystemTheme.h',
+  'ui/themes/ThemePackage.cpp',
+  'ui/themes/ThemePackage.h',
+  'ui/themes/AppearanceService.cpp',
+  'ui/themes/AppearanceService.h',
+  'ui/themes/WindowChromeController.cpp',
+  'ui/themes/WindowChromeController.h',
+  'ui/themes/ThemeStore.cpp',
+  'ui/themes/ThemeStore.h',
+  'ui/themes/ThemeInstallTask.cpp',
+  'ui/themes/ThemeInstallTask.h',
+  'ui/themes/ThemePreview.cpp',
   'ui/themes/ThemeManager.cpp',
   'ui/themes/ThemeManager.h',
   'ui/widgets/AppearanceWidget.cpp',
@@ -1145,6 +1156,7 @@ launcher_qrc_sources = [
 ]
 
 launcher_moc_headers = [
+  'ui/themes/AppearanceService.h',
   'api/AsyncTaskRuntime.h',
   'api/ResourceInstallTask.h',
   'api/InstanceExportTask.h',

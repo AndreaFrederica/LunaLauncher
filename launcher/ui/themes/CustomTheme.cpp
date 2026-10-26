@@ -45,23 +45,13 @@ const char* themeFile = "theme.json";
 /// @param isManifest whether to load a theme manifest or a qss file
 CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest)
 {
+    m_widgets = baseTheme->qtTheme();
+    m_themeDirPath = fileInfo.dir().absolutePath();
     if (isManifest) {
         m_id = fileInfo.dir().dirName();
 
         // Save the absolute path to the theme directory
         m_themeDirPath = fileInfo.dir().absolutePath();
-
-        QString path = FS::PathCombine("themes", m_id);
-        QString pathResources = FS::PathCombine("themes", m_id, "resources");
-
-        if (!FS::ensureFolderPathExists(path)) {
-            themeWarningLog() << "Theme directory for" << m_id << "could not be created. This theme might be invalid";
-            return;
-        }
-
-        if (!FS::ensureFolderPathExists(pathResources)) {
-            themeWarningLog() << "Resources directory for" << m_id << "could not be created";
-        }
 
         // Use absolute path to read the theme.json file
         QString themeFilePath = fileInfo.absoluteFilePath();
@@ -119,6 +109,7 @@ CustomTheme::CustomTheme(ITheme* baseTheme, QFileInfo& fileInfo, bool isManifest
             themeWarningLog() << "Couldn't load qss:" << e.cause() << "from" << path;
             m_styleSheet = baseTheme->appStyleSheet();
         }
+        m_logColors = defaultLogColors(m_palette);
     }
 }
 

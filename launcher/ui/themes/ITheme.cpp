@@ -43,10 +43,10 @@
 void ITheme::apply(bool)
 {
     APPLICATION->setStyleSheet(QString());
+    QDir::setSearchPaths("theme", searchPaths());
     QApplication::setStyle(new HintOverrideProxyStyle(QStyleFactory::create(qtTheme())));
     QApplication::setPalette(colorScheme());
     APPLICATION->setStyleSheet(appStyleSheet());
-    QDir::setSearchPaths("theme", searchPaths());
 }
 
 QPalette ITheme::fadeInactive(QPalette in, qreal bias, QColor color)

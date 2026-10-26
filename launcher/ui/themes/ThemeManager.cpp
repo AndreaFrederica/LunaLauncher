@@ -19,6 +19,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ThemeManager.h"
+#include "AppearanceService.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -81,7 +82,8 @@ QString ThemeManager::addTheme(std::unique_ptr<ITheme> theme)
 /// @return Theme at themeId
 ITheme* ThemeManager::getTheme(QString themeId)
 {
-    return m_themes[themeId].get();
+    auto found = m_themes.find(themeId);
+    return found == m_themes.end() ? nullptr : found->second.get();
 }
 
 QString ThemeManager::addIconTheme(IconTheme theme)
@@ -279,6 +281,7 @@ void ThemeManager::initializeWidgets()
 void ThemeManager::setTitlebarColorOnMac(WId windowId, QColor color) {}
 void ThemeManager::setTitlebarColorOfAllWindowsOnMac(QColor color) {}
 void ThemeManager::stopSettingNewWindowColorsOnMac() {}
+void ThemeManager::restoreSystemWindowColorsOnMac() {}
 #endif
 
 QList<IconTheme*> ThemeManager::getValidIconThemes()
@@ -343,7 +346,17 @@ void ThemeManager::setIconTheme(const QString& name)
         return;
     }
 
-    QIcon::setThemeName(name);
+    auto path = m_icons.at(name).path();
+    if (!path.startsWith(":/")) {
+        // Managed versions use immutable directories; give Qt the selected
+        // package's real directory name while keeping its stable catalog ID.
+        auto paths = QIcon::themeSearchPaths();
+        paths.prepend(QFileInfo(path).dir().absolutePath());
+        paths.removeDuplicates();
+        QIcon::setThemeSearchPaths(paths);
+        QIcon::setFallbackThemeName("pe_colored");
+        QIcon::setThemeName(QFileInfo(path).fileName());
+    } else QIcon::setThemeName(name);
 }
 
 void ThemeManager::setApplicationTheme(const QString& name, bool initial)
@@ -364,20 +377,21 @@ void ThemeManager::setApplicationTheme(const QString& name, bool initial)
 
 void ThemeManager::applyCurrentlySelectedTheme(bool initial)
 {
-    auto settings = APPLICATION->settings();
-    setIconTheme(settings->get("IconTheme").toString());
-    themeDebugLog() << "<> Icon theme set.";
-    auto applicationTheme = settings->get("ApplicationTheme").toString();
-    if (applicationTheme == "") {
-        applicationTheme = m_defaultStyle;
-    }
-    setApplicationTheme(applicationTheme, initial);
-    themeDebugLog() << "<> Application theme set.";
+    if (initial) appearance()->initialize();
+    else appearance()->adoptLegacySettings();
+}
+
+AppearanceService* ThemeManager::appearance()
+{
+    if (!m_appearance) m_appearance = std::make_unique<AppearanceService>(this);
+    return m_appearance.get();
 }
 
 QString ThemeManager::getCatPack(QString catName)
 {
-    auto catIter = m_catPacks.find(!catName.isEmpty() ? catName : APPLICATION->settings()->get("BackgroundCat").toString());
+    auto selected=APPLICATION->settings()->get("BackgroundCat").toString();
+    if (m_appearance && !m_appearance->state().value("effective").toObject().isEmpty()) selected=m_appearance->state().value("effective").toObject().value("background").toString();
+    auto catIter = m_catPacks.find(!catName.isEmpty() ? catName : selected);
     if (catIter != m_catPacks.end()) {
         auto& catPack = catIter->second;
         themeDebugLog() << "applying catpack" << catPack->id();
@@ -493,4 +507,5 @@ void ThemeManager::refresh()
 
     initializeThemes();
     initializeCatPacks();
+    if (m_appearance) m_appearance->reloadCatalog();
 }

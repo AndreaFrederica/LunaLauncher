@@ -1,61 +1,71 @@
 // SPDX-License-Identifier: GPL-3.0-only
-/*
- *  Prism Launcher - Minecraft Launcher
- *  Copyright (C) 2026 Prism Launcher Contributors
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, version 3.
- */
 #pragma once
-
 #include <QDialog>
-
+#include <QHash>
+#include <QJsonObject>
+#include <QPointer>
+#include "QObjectPtr.h"
+class AppearanceService;
+class ThemeStoreTask;
+class Task;
 class QComboBox;
+class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QPushButton;
-class QShowEvent;
+class QStackedWidget;
+class QTextBrowser;
 class QTreeWidget;
-class QTreeWidgetItem;
-
-class ThemeDownloadDialog : public QDialog {
+class QNetworkReply;
+// Original name retained for existing Classic UI entry points.
+class ThemeDownloadDialog final : public QDialog {
     Q_OBJECT
-
    public:
     explicit ThemeDownloadDialog(QWidget* parent = nullptr);
-
+    static void openCenter();
    signals:
     void themesInstalled();
 
-   protected:
-    void showEvent(QShowEvent* event) override;
-
-   private slots:
-    void loadRelease();
-    void installChecked();
-    void filterAssets(const QString& text);
-    void selectAllVisible();
-    void updateInstallButton();
-    void manageSources();
-
    private:
-    enum class AssetKind { Theme, Icons, CatPack };
-
-    static bool assetKind(const QString& fileName, AssetKind& kind);
-    static QString assetName(const QString& fileName, AssetKind kind);
-    static QString assetTypeName(AssetKind kind);
-    static QString archivePrefix(AssetKind kind);
-    static QString installPath(AssetKind kind);
-
-    bool validateArchive(const QString& path, AssetKind kind, QString& error) const;
-    bool validateDownload(QTreeWidgetItem* item, const QString& path, QString& error) const;
-    void reloadSources(const QString& preferredSource = {});
-
-    QComboBox* m_sourceCombo = nullptr;
-    QLabel* m_releaseLabel = nullptr;
-    QLineEdit* m_searchBox = nullptr;
-    QTreeWidget* m_assetList = nullptr;
-    QPushButton* m_installButton = nullptr;
-    bool m_loadStarted = false;
+    void reloadSources();
+    void manageSources();
+    QJsonObject queryParameters() const;
+    void query(bool refresh = false, int page = 0, const QString& contentId = {});
+    void showDetails();
+    void loadFiles(const QJsonObject& identity);
+    void loadThumbnail(const QString& url, quint64 generation);
+    void displayThumbnail(const QByteArray& bytes,quint64 generation,const QString& cachePath = {});
+    void filter();
+    void installSelected();
+    void startInstall(QJsonObject request);
+    void importLocal(bool directory);
+    void refreshInstalled();
+    void removeSelected();
+    void updateSelected();
+    void refreshChoices(bool fromState);
+    void updateState();
+    void addTask(Task* task);
+    Task* selectedTask() const;
+    QJsonObject draft() const;
+    QString describe(const QJsonObject& config) const;
+    AppearanceService* m_service;
+    QStackedWidget* m_pages;
+    QListWidget* m_navigation;
+    QLabel *m_summary, *m_status, *m_title, *m_thumbnail, *m_stateLabel, *m_draftStatus;
+    QComboBox *m_source, *m_category, *m_sort, *m_files;
+    QLineEdit* m_search;
+    QCheckBox *m_compatible, *m_titlebarPalette;
+    QTreeWidget *m_online, *m_installed, *m_tasks;
+    QTextBrowser* m_description;
+    QPushButton *m_install, *m_previous, *m_next, *m_remove, *m_update, *m_cancel, *m_retry, *m_undo;
+    QHash<QString, QComboBox*> m_options;
+    QHash<QString, QCheckBox*> m_allowed;
+    shared_qobject_ptr<ThemeStoreTask> m_query, m_details;
+    QPointer<QNetworkReply> m_imageReply;
+    QJsonObject m_selected, m_loadedQuery;
+    qint64 m_baseRevision = 0;
+    quint64 m_queryGeneration = 0, m_detailGeneration = 0;
+    int m_page = 0;
+    bool m_filling = false, m_dirty = false;
 };

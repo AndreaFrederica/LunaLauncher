@@ -19,6 +19,9 @@
 #include "ThemeManager.h"
 
 #include <AppKit/AppKit.h>
+#include <objc/runtime.h>
+
+static char originalWindowAppearanceKey;
 
 void ThemeManager::setTitlebarColorOnMac(WId windowId, QColor color)
 {
@@ -28,6 +31,11 @@ void ThemeManager::setTitlebarColorOnMac(WId windowId, QColor color)
 
     NSView* view = (NSView*)windowId;
     NSWindow* window = [view window];
+    if (!objc_getAssociatedObject(window,&originalWindowAppearanceKey)) {
+        NSDictionary* original=@{@"transparent":@(window.titlebarAppearsTransparent),
+            @"background":window.backgroundColor ?: [NSNull null], @"appearance":window.appearance ?: [NSNull null]};
+        objc_setAssociatedObject(window,&originalWindowAppearanceKey,original,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
     window.titlebarAppearsTransparent = YES;
     window.backgroundColor = [NSColor colorWithRed:color.redF() green:color.greenF() blue:color.blueF() alpha:color.alphaF()];
 
@@ -69,5 +77,18 @@ void ThemeManager::stopSettingNewWindowColorsOnMac()
         NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
         [center removeObserver:m_windowTitlebarObserver];
         m_windowTitlebarObserver = nil;
+    }
+}
+
+void ThemeManager::restoreSystemWindowColorsOnMac()
+{
+    stopSettingNewWindowColorsOnMac();
+    for (NSWindow* window : [NSApp windows]) {
+        NSDictionary* original=objc_getAssociatedObject(window,&originalWindowAppearanceKey);
+        if(!original)continue;
+        window.titlebarAppearsTransparent = [original[@"transparent"] boolValue];
+        window.backgroundColor = original[@"background"]==[NSNull null] ? nil : original[@"background"];
+        window.appearance = original[@"appearance"]==[NSNull null] ? nil : original[@"appearance"];
+        objc_setAssociatedObject(window,&originalWindowAppearanceKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }

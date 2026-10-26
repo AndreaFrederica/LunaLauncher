@@ -113,7 +113,7 @@
         <item row="3" column="3">
          <widget class="QPushButton" name="downloadThemesButton">
           <property name="text">
-           <string>Download...</string>
+           <string>主题中心…</string>
           </property>
          </widget>
         </item>

@@ -37,12 +37,21 @@
 
 #include "Application.h"
 
+int runThemePreview(int argc, char** argv, const QString& path);
+
 #if defined Q_OS_WIN32
 #include "console/WindowsConsole.h"
 #endif
 
 int main(int argc, char* argv[])
 {
+    for (int i=1; i+1<argc; ++i)
+        if (QByteArray(argv[i]) == "--theme-preview") return runThemePreview(argc, argv, QString::fromLocal8Bit(argv[i+1]));
+    for(int i=1;i<argc;++i) if(QByteArray(argv[i])=="--safe-theme") {
+        qputenv("LUNA_SAFE_THEME","1");
+        for(int j=i;j<argc;++j)argv[j]=argv[j+1];
+        --argc; --i;
+    }
 #if defined Q_OS_WIN32
     // Attach before validating the entry point so Windows GUI builds can report
     // an actionable error to the terminal that launched them.

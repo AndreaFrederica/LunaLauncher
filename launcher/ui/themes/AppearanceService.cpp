@@ -13,7 +13,7 @@
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QSettings>
-#include <QStyleFactory>
+#include <QStyle>
 #include <QStyleHints>
 #include <QTemporaryFile>
 #include <QTimer>
@@ -22,6 +22,7 @@
 #include "CustomTheme.h"
 #include "ThemeManager.h"
 #include "ThemePackage.h"
+#include "ThemeStyle.h"
 #include "WindowChromeController.h"
 #include "settings/SettingsObject.h"
 
@@ -34,7 +35,12 @@ class ManagedTheme final : public ITheme {
         const auto path = m_descriptor.value("path").toString();
         m_root = m_descriptor.value("directory").toString();
         const auto format = m_descriptor.value("format").toString();
-        if (format == "prism" || format == "legacy-qss") {
+        if (format == "kvantum") {
+            QString error;
+            if (!ThemePackage::validateKvantum(path, error))
+                throw std::runtime_error(error.toStdString());
+            m_style = "Kvantum";
+        } else if (format == "prism" || format == "legacy-qss") {
             QFileInfo info(path);
             m_legacy = std::make_unique<CustomTheme>(base, info, format == "prism");
             m_palette = m_legacy->colorScheme();
@@ -61,10 +67,19 @@ class ManagedTheme final : public ITheme {
     bool hasStyleSheet() override { return !m_qss.isEmpty(); }
     QString appStyleSheet() override { return m_qss; }
     QString qtTheme() override { return m_style; }
-    QPalette colorScheme() override { return m_palette; }
+    QString widgetThemeFile() override { return m_descriptor.value("format") == "kvantum" ? m_descriptor.value("path").toString() : QString(); }
+    QPalette colorScheme() override
+    {
+        if (m_descriptor.value("format") == "kvantum") {
+            std::unique_ptr<QStyle> style(ThemeStyle::create(m_style, widgetThemeFile()));
+            if (style)
+                return style->standardPalette();
+        }
+        return m_palette;
+    }
     QColor fadeColor() override { return Qt::gray; }
     double fadeAmount() override { return .5; }
-    LogColors logColorScheme() override { return m_legacy ? m_legacy->logColorScheme() : defaultLogColors(m_palette); }
+    LogColors logColorScheme() override { return m_legacy ? m_legacy->logColorScheme() : defaultLogColors(colorScheme()); }
     QString prefix() const
     {
         return "luna" + QString::fromLatin1(QCryptographicHash::hash(m_id.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
@@ -229,14 +244,14 @@ void AppearanceService::reloadCatalog()
                 try {
                     auto theme = std::make_unique<ManagedTheme>(id, data, m_manager->getTheme("dark"));
                     data.insert("engine", theme->qtTheme());
-                    if (!QStyleFactory::keys().contains(theme->qtTheme(), Qt::CaseInsensitive))
+                    if (!ThemeStyle::engines().contains(theme->qtTheme(), Qt::CaseInsensitive))
                         data.insert("unavailable", tr("Required Qt widget style is not installed: %1").arg(theme->qtTheme()));
                     else
                         m_manager->addTheme(std::move(theme));
                 } catch (const std::exception& e) {
                     data.insert("unavailable", QString::fromUtf8(e.what()));
                 }
-                if (!QStyleFactory::keys().contains(data.value("engine").toString("Fusion"), Qt::CaseInsensitive) &&
+                if (!ThemeStyle::engines().contains(data.value("engine").toString("Fusion"), Qt::CaseInsensitive) &&
                     data.value("format").toString() == "qss-v2")
                     data.insert("unavailable", tr("Required widget style is not installed."));
             } else if (kind == "icons") {
@@ -286,11 +301,126 @@ void AppearanceService::reloadCatalog()
     emit catalogChanged();
 }
 
+QJsonObject AppearanceService::packageConfiguration(const QString& id, QString& error) const
+{
+    QJsonObject package, bundle;
+    const auto selected = component(id);
+    const auto packageId = selected.isEmpty() ? id : selected.value("packageId").toString();
+    for (const auto& value : m_packages)
+        if (value.toObject().value("id") == packageId)
+            package = value.toObject();
+    if (package.isEmpty()) {
+        error = tr("Theme package is unavailable.");
+        return {};
+    }
+    if (selected.value("kind") == "bundle")
+        bundle = selected;
+    else
+        for (const auto& value : m_components) {
+            const auto entry = value.toObject();
+            if (entry.value("packageId") == packageId && entry.value("kind") == "bundle") {
+                if (!bundle.isEmpty()) {
+                    error = tr("This package contains several global themes. Select a specific global theme first.");
+                    return {};
+                }
+                bundle = entry;
+            }
+        }
+    const auto dependencies = bundle.value("dependencies").toArray();
+    QSet<QString> related{ packageId };
+    for (const auto& value : m_packages) {
+        const auto candidate = value.toObject();
+        for (const auto& dependency : dependencies) {
+            const auto dep = dependency.toObject();
+            if (dep.value("supported").toBool() && candidate.value("provider") == dep.value("provider") &&
+                candidate.value("contentId") == dep.value("contentId"))
+                related.insert(candidate.value("id").toString());
+        }
+    }
+    auto configuration = m_requested.isEmpty() ? defaults() : m_requested;
+    QJsonArray missing;
+    QJsonObject choices;
+    bool hasApplicationComponents = false;
+    const auto references = bundle.value("references").toObject();
+    for (const auto& kind : { "widgets", "palette", "icons", "background", "decoration" }) {
+        QJsonArray candidates, matching;
+        const auto reference = references.value(kind).toString();
+        auto matches = [&](const QJsonObject& entry) {
+            if (reference.isEmpty())
+                return false;
+            if (QString(kind) == "widgets" && reference.compare("kvantum", Qt::CaseInsensitive) == 0)
+                return entry.value("engine").toString().compare("Kvantum", Qt::CaseInsensitive) == 0;
+            for (const auto& value : { entry.value("name").toString(), entry.value("id").toString(),
+                                       QFileInfo(entry.value("path").toString()).completeBaseName(),
+                                       QFileInfo(entry.value("directory").toString()).fileName() })
+                if (value.compare(reference, Qt::CaseInsensitive) == 0)
+                    return true;
+            // The shipped Breeze icon variants use Prism's historical IDs.
+            return QString(kind) == "icons" &&
+                   ((reference == "breeze" && entry.value("id") == "breeze_light") ||
+                    (reference == "breeze-dark" && entry.value("id") == "breeze_dark"));
+        };
+        for (const auto& value : m_components) {
+            const auto entry = value.toObject();
+            if (entry.value("kind") != kind || entry.contains("unavailable"))
+                continue;
+            if (related.contains(entry.value("packageId").toString()))
+                candidates.append(entry);
+            if (matches(entry))
+                matching.append(entry);
+        }
+        if (!reference.isEmpty()) {
+            QJsonArray preferred;
+            for (const auto& entry : candidates)
+                if (matches(entry.toObject()))
+                    preferred.append(entry);
+            if (!preferred.isEmpty())
+                candidates = preferred;
+            else
+                candidates = matching;
+        }
+        if (selected.value("kind") == kind && !selected.contains("unavailable"))
+            candidates = QJsonArray{ selected };
+        if (candidates.isEmpty()) {
+            if (!reference.isEmpty())
+                missing.append(QJsonObject{ { "kind", kind }, { "name", reference } });
+            continue;
+        }
+        hasApplicationComponents = true;
+        if (candidates.size() > 1) {
+            choices.insert(kind, candidates);
+            continue;
+        }
+        const auto entry = candidates.first().toObject();
+        const auto key = QString(kind) == "widgets" ? "theme" : QString(kind) == "decoration" ? "decorationTheme" : kind;
+        configuration.insert(key, entry.value("id"));
+        if (QString(kind) == "widgets" || QString(kind) == "palette") {
+            configuration.insert("mode", "independent");
+            configuration.insert("colorMode", "fixed");
+        }
+        if (QString(kind) == "decoration")
+            configuration.insert("decoration", "luna");
+    }
+    if (!hasApplicationComponents && references.isEmpty())
+        missing.append(QJsonObject{ { "kind", "application" }, { "name", tr("No supported application components are included.") } });
+    const auto widgets = component(configuration.value("theme").toString());
+    if (widgets.value("fixedColors").toBool() ||
+        (widgets.value("format") == "qss-v2" && widgets.value("paletteBinding") != "semantic")) {
+        if (references.contains("widgets") || related.contains(widgets.value("packageId").toString()))
+            configuration.insert("palette", "");
+        else if (!configuration.value("palette").toString().isEmpty())
+            configuration.insert("theme", "Fusion");
+    }
+    return { { "configuration", configuration }, { "missing", missing }, { "choices", choices },
+             { "dependencies", dependencies }, { "complete", missing.isEmpty() && choices.isEmpty() },
+             { "packageId", packageId } };
+}
+
 QJsonObject AppearanceService::capabilities() const
 {
     return { { "target", "classic" },
-             { "formats", QJsonArray{ "prism", "qss", "kde-colors", "freedesktop", "luna-v2" } },
-             { "engines", QJsonArray::fromStringList(QStyleFactory::keys()) },
+             { "formats", QJsonArray{ "prism", "qss", "kde-colors", "freedesktop", "luna-v2", "kvantum" } },
+             { "engines", QJsonArray::fromStringList(ThemeStyle::engines()) },
              { "customDecoration", WindowChromeController::supported() },
              { "paletteHotSwap", true },
              { "thirdPartyStyleRequiresRestart", true },
@@ -752,6 +882,7 @@ void AppearanceService::preview(const QJsonObject& input, QWidget*, QString& err
         paths.insert(prefix, QJsonArray::fromStringList(prefix == "theme" ? theme->searchPaths() : QDir::searchPaths(prefix)));
     QJsonObject specification{ { "palette", roles },
                                { "style", theme->qtTheme() },
+                               { "widgetThemeFile", theme->widgetThemeFile() },
                                { "qss", theme->appStyleSheet() },
                                { "paths", paths },
                                { "decoration", config.value("decoration") },

@@ -41,6 +41,7 @@ class ThemeDownloadDialog final : public QDialog {
     void startInstall(QJsonObject request);
     void importLocal(bool directory);
     void refreshInstalled();
+    void configureSelected();
     void removeSelected();
     void updateSelected();
     void refreshChoices(bool fromState);

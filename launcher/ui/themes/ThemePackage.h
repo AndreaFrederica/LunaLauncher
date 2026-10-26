@@ -17,6 +17,8 @@ struct Palette {
 
 // These functions never change the application's active appearance.
 bool readColors(const QString& path, Palette& result, QString& error);
+bool validateKvantum(const QString& configuration, QString& error);
+QJsonObject readGlobalTheme(const QString& defaults, QString& error);
 QString containedPath(const QDir& root, const QString& relative, QString& error);
 bool extract(const QString& archive, const QDir& destination, QString& error, const std::function<bool()>& cancelled = {});
 QJsonArray inspect(const QDir& root, QString& error);

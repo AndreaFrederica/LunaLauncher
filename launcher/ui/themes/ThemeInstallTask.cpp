@@ -93,6 +93,10 @@ ThemeInstallTask::~ThemeInstallTask()
 }
 QList<Task*> ThemeInstallTask::getSubTasks() const
 {
+    if (m_dependencyTask && m_dependencyTask->isRunning())
+        return { m_dependencyTask.get() };
+    if (m_dependencyResolver && m_dependencyResolver->isRunning())
+        return { m_dependencyResolver.get() };
     if (m_download)
         return { m_download.get() };
     if (m_resolver)
@@ -103,6 +107,10 @@ void ThemeInstallTask::executeTask()
 {
     *m_cancelled = false;
     m_result = {};
+    m_dependencies = {};
+    m_unresolvedDependencies = {};
+    m_dependencyPackages = {};
+    m_dependencyIndex = 0;
     m_downloadError.clear();
     const int sources = int(m_request.contains("path")) + int(m_request.contains("url")) + int(m_request.contains("provider"));
     if (sources != 1) {
@@ -129,7 +137,7 @@ void ThemeInstallTask::resolve()
     setProgress(0, 0);
     auto request = m_request;
     const bool kde = request.value("provider") == "kde";
-    if (kde && !QStringList{ "palette", "icons", "bundle" }.contains(request.value("category").toString())) {
+    if (kde && !QStringList{ "palette", "icons", "widgets", "bundle" }.contains(request.value("category").toString())) {
         emitFailed(tr("This store category has no supported renderer."));
         return;
     }
@@ -280,8 +288,20 @@ void ThemeInstallTask::inspect(const QString& path, const QString& name)
         }
         if (selected.isEmpty()) {
             result.error = QObject::tr(
-                "No selected compatible components were found. Plasma, Aurorae, KDecoration and Kvantum scripts are not Luna themes.");
+                "No selected compatible components were found. Supported widgets require QSS or a Kvantum configuration and SVG pair.");
             return result;
+        }
+        QJsonArray dependencies;
+        for (const auto& value : entries) {
+            const auto entry = value.toObject();
+            if (entry.value("kind") != "bundle" || !selected.contains(entry.value("id")))
+                continue;
+            for (const auto& value : entry.value("dependencies").toArray()) {
+                const auto dep = value.toObject();
+                if (dep.value("supported").toBool() &&
+                    (allowed.isEmpty() || allowed.contains(dep.value("category"))) && !dependencies.contains(dep))
+                    dependencies.append(dep);
+            }
         }
         result.record = { { "name", request.value("title").toString(name) },
                           { "installedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
@@ -294,6 +314,7 @@ void ThemeInstallTask::inspect(const QString& path, const QString& name)
                           { "version", request.value("version") },
                           { "digest", "sha256:" + result.digest },
                           { "selectedComponents", selected },
+                          { "dependencies", dependencies },
                           { "catalog", entries } };
         QSaveFile file(root.filePath(".luna-package.json"));
         const auto bytes = QJsonDocument(result.record).toJson();
@@ -342,6 +363,8 @@ void ThemeInstallTask::publish()
             if (!selected.contains(value))
                 selected.append(value);
         previous.insert("selectedComponents", selected);
+        previous.insert("catalog", staged.record.value("catalog"));
+        previous.insert("dependencies", staged.record.value("dependencies"));
         staged.record.insert("selectedComponents", selected);
         QSaveFile update(QDir(target).filePath(".luna-package.json"));
         const auto bytes = QJsonDocument(previous).toJson();
@@ -360,8 +383,85 @@ void ThemeInstallTask::publish()
     m_downloadDirectory.reset();
     m_resolver.reset();
     m_download.reset();
+    if (!m_request.value("skipDependencies").toBool())
+        m_dependencies = staged.record.value("dependencies").toArray();
+    setAbortable(true);
+    installNextDependency();
+}
+void ThemeInstallTask::installNextDependency()
+{
+    if (isFinished())
+        return;
+    if (m_dependencyIndex >= m_dependencies.size()) {
+        finishInstall();
+        return;
+    }
+    const auto dependency = m_dependencies.at(m_dependencyIndex++).toObject();
+    setStatus(tr("Resolving theme dependency %1 (%2/%3)").arg(dependency.value("contentId").toString())
+                  .arg(m_dependencyIndex).arg(m_dependencies.size()));
+    setProgress(0, 0);
+    auto query = dependency;
+    query.insert("mode", "files");
+    m_dependencyResolver = makeShared<ThemeStoreTask>(m_network, query, m_cacheDirectory);
+    auto resolver = m_dependencyResolver.get();
+    connect(resolver, &Task::finished, this, [this, resolver, dependency] {
+        if (isFinished())
+            return;
+        auto unresolved = dependency;
+        if (!resolver->wasSuccessful()) {
+            unresolved.insert("error", resolver->failReason());
+            m_unresolvedDependencies.append(unresolved);
+            installNextDependency();
+            return;
+        }
+        QJsonArray files;
+        const auto override = m_request.value("dependencyFiles").toObject().value(dependency.value("contentId").toString()).toString();
+        for (const auto& value : resolver->result().value("files").toArray()) {
+            const auto file = value.toObject();
+            if (file.value("installable").toBool() && (override.isEmpty() || file.value("id") == override))
+                files.append(file);
+        }
+        if (files.size() != 1) {
+            unresolved.insert("files", files);
+            unresolved.insert("error", files.isEmpty() ? tr("No supported download file is available.")
+                                                      : tr("Choose a download variant for this dependency."));
+            m_unresolvedDependencies.append(unresolved);
+            installNextDependency();
+            return;
+        }
+        const auto file = files.first().toObject();
+        auto request = dependency;
+        request.insert("fileId", file.value("id"));
+        request.insert("name", file.value("name"));
+        request.insert("skipDependencies", true);
+        request.insert("components", QJsonArray{ dependency.value("category") });
+        m_dependencyTask = makeShared<ThemeInstallTask>(m_network, request, m_packageDirectory, m_cacheDirectory);
+        auto task = m_dependencyTask.get();
+        connect(task, &Task::status, this, [this](const QString& message) { setStatus(tr("Theme dependency: %1").arg(message)); });
+        connect(task, &Task::progress, this, [this](qint64 current, qint64 total) { setProgress(current, total); });
+        connect(task, &Task::finished, this, [this, task, dependency] {
+            if (isFinished())
+                return;
+            if (task->wasSuccessful())
+                m_dependencyPackages.append(task->result().value("packageId"));
+            else {
+                auto unresolved = dependency;
+                unresolved.insert("error", task->failReason());
+                m_unresolvedDependencies.append(unresolved);
+            }
+            installNextDependency();
+        });
+        task->start();
+    });
+    resolver->start();
+}
+void ThemeInstallTask::finishInstall()
+{
+    m_result.insert("dependencyPackages", m_dependencyPackages);
+    m_result.insert("unresolvedDependencies", m_unresolvedDependencies);
     setProgress(1, 1);
-    setStatus(tr("Installed · choose components to apply"));
+    setStatus(m_unresolvedDependencies.isEmpty() ? tr("Installed · choose components to apply")
+                                               : tr("Installed · some dependencies require selection or retry"));
     emitSucceeded();
 }
 bool ThemeInstallTask::abort()
@@ -375,5 +475,9 @@ bool ThemeInstallTask::abort()
         m_download->abort();
     if (m_resolver)
         m_resolver->abort();
+    if (m_dependencyResolver)
+        m_dependencyResolver->abort();
+    if (m_dependencyTask)
+        m_dependencyTask->abort();
     return true;
 }

@@ -45,17 +45,17 @@ QString categoryId(const QString& category)
     if (category == "decoration")
         return "717";
     if (category == "bundle")
-        return "722";
+        return "722,121";
     if (category == "plasma")
         return "104";
     return {};
 }
 QString compatibility(const QString& category)
 {
-    if (category == "palette" || category == "icons")
+    if (category == "palette" || category == "icons" || category == "widgets")
         return QObject::tr("Recognized component format · checked after download");
     if (category == "bundle")
-        return QObject::tr("Partial import only: palettes and icons; Plasma desktop effects are unavailable");
+        return QObject::tr("Imports included Kvantum widgets, palettes and icons; external dependencies are checked separately");
     return QObject::tr("Browse only: this renderer is unavailable in Luna");
 }
 }  // namespace
@@ -128,7 +128,7 @@ QJsonObject ThemeStoreTask::parseOcs(const QByteArray& bytes, const QJsonObject&
                           { "thumbnail", field(content, "smallpreviewpic1") },
                           { "preview", field(content, "previewpic1") },
                           { "compatibility", compatibility(category) },
-                          { "installable", category == "palette" || category == "icons" || category == "bundle" } };
+                          { "installable", category == "palette" || category == "icons" || category == "widgets" || category == "bundle" } };
         if (!numeric(item.value("id").toString()))
             continue;
         items.append(item);
@@ -148,7 +148,9 @@ QJsonObject ThemeStoreTask::parseOcs(const QByteArray& bytes, const QJsonObject&
                                           { "installable", direct && item.value("installable").toBool() } });
             }
     }
-    const int page = field(meta, "page").toInt(), perPage = field(meta, "pagesize").toInt(), total = field(meta, "totalitems").toInt();
+    const int page = meta.firstChildElement("page").isNull() ? request.value("page").toInt() : field(meta, "page").toInt();
+    const int perPage = field(meta, "pagesize").isEmpty() ? field(meta, "itemsperpage").toInt() : field(meta, "pagesize").toInt();
+    const int total = field(meta, "totalitems").toInt();
     return { { "items", items },
              { "files", files },
              { "page", meta.firstChildElement("page").isNull() ? request.value("page").toInt() : page },
@@ -225,7 +227,7 @@ void ThemeStoreTask::executeTask()
             return;
         }
         QString endpoint = "https://api.kde-look.org/ocs/v1/";
-        if (category == "widgets")
+        if (category == "widgets" || category == "bundle")
             endpoint = "https://api.opendesktop.org/ocs/v1/";
         if (mode == "query") {
             const auto sort = m_request.value("sort").toString("high");

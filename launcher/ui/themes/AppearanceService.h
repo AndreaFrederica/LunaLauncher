@@ -22,6 +22,7 @@ class AppearanceService final : public QObject {
     QJsonArray components() const { return m_components; }
     QJsonArray packages() const { return m_packages; }
     QJsonObject component(const QString& id) const;
+    QJsonObject packageConfiguration(const QString& id, QString& error) const;
     QJsonObject apply(const QJsonObject& configuration, qint64 baseRevision, QString& error);
     bool undoPending(qint64 baseRevision, QString& error);
     void adoptLegacySettings();

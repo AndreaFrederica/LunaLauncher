@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include <QFutureWatcher>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <atomic>
@@ -31,6 +32,8 @@ class ThemeInstallTask final : public Task {
     void download(const QJsonObject& file);
     void inspect(const QString& path, const QString& name);
     void publish();
+    void installNextDependency();
+    void finishInstall();
     QNetworkAccessManager* m_network;
     QJsonObject m_request, m_result;
     QString m_packageDirectory, m_cacheDirectory, m_downloadError;
@@ -38,5 +41,9 @@ class ThemeInstallTask final : public Task {
     std::shared_ptr<QTemporaryDir> m_downloadDirectory;
     shared_qobject_ptr<ThemeStoreTask> m_resolver;
     shared_qobject_ptr<NetJob> m_download;
+    shared_qobject_ptr<ThemeStoreTask> m_dependencyResolver;
+    shared_qobject_ptr<ThemeInstallTask> m_dependencyTask;
+    QJsonArray m_dependencies, m_unresolvedDependencies, m_dependencyPackages;
+    int m_dependencyIndex = 0;
     QFutureWatcher<Staged> m_worker;
 };

@@ -92,6 +92,8 @@ QString kindName(const QString& kind)
 {
     if (kind == "widgets")
         return QObject::tr("控件");
+    if (kind == "bundle")
+        return QObject::tr("成套组合");
     if (kind == "palette")
         return QObject::tr("配色");
     if (kind == "icons")
@@ -196,13 +198,15 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     m_source->setObjectName("themeSource");
     selectors->addWidget(m_source, 1);
     m_category = new QComboBox(online);
+    m_category->setObjectName("themeCategory");
     for (const auto& p : QList<QPair<QString, QString>>{ { tr("配色"), "palette" },
                                                          { tr("图标"), "icons" },
-                                                         { tr("成套主题"), "bundle" },
+                                                         { tr("成套主题（Plasma 5 / 6）"), "bundle" },
                                                          { tr("控件 / Kvantum"), "widgets" },
                                                          { tr("KWin 装饰"), "decoration" },
                                                          { tr("Plasma 桌面"), "plasma" } })
         m_category->addItem(p.first, p.second);
+    m_category->setCurrentIndex(m_category->findData("widgets"));
     selectors->addWidget(m_category);
     m_sort = new QComboBox(online);
     m_sort->addItem(tr("评分"), "high");
@@ -320,11 +324,12 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     imports->addStretch();
     imports->addWidget(rescan);
     m_installed = tree(installed, { tr("主题包 / 组件"), tr("版本 / 格式"), tr("状态") });
+    m_installed->setObjectName("themeInstalled");
     m_installed->setRootIsDecorated(true);
     il->addWidget(m_installed, 1);
     auto actions = new QHBoxLayout;
     il->addLayout(actions);
-    auto configure = button(tr("配置使用"), "configure", installed);
+    auto configure = button(tr("使用所选主题包…"), "configure", installed);
     m_update = button(tr("检查来源更新"), "view-refresh", installed);
     auto folder = button(tr("打开目录"), "folder-open", installed);
     m_remove = button(tr("卸载"), "edit-delete", installed);
@@ -336,7 +341,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     connect(importFile, &QPushButton::clicked, this, [this] { importLocal(false); });
     connect(importFolder, &QPushButton::clicked, this, [this] { importLocal(true); });
     connect(rescan, &QPushButton::clicked, this, [] { APPLICATION->themeManager()->refresh(); });
-    connect(configure, &QPushButton::clicked, this, [this] { m_navigation->setCurrentRow(2); });
+    connect(configure, &QPushButton::clicked, this, &ThemeDownloadDialog::configureSelected);
     connect(m_remove, &QPushButton::clicked, this, &ThemeDownloadDialog::removeSelected);
     connect(m_update, &QPushButton::clicked, this, &ThemeDownloadDialog::updateSelected);
     connect(folder, &QPushButton::clicked, this, [this] {
@@ -347,7 +352,8 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     connect(m_installed, &QTreeWidget::currentItemChanged, this, [this] {
         const auto s = selection(m_installed);
         m_remove->setEnabled(!s.value("packageId").toString().isEmpty() || s.value("removable").toBool());
-        m_update->setEnabled(!s.value("packageId").toString().isEmpty());
+        m_update->setEnabled(!s.value("packageId").toString().isEmpty() || s.value("dependency").toBool());
+        m_update->setText(s.value("dependency").toBool() ? tr("选择并下载此依赖…") : tr("检查来源更新"));
     });
 
     auto combination = new QWidget(this);
@@ -392,8 +398,9 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
         if (!m_filling)
             m_dirty = true;
     });
-    auto help = new QLabel(tr("安装不会自动应用。配色和图标可即时切换；控件皮肤、外观模式和窗口装饰的变化会在下次启动生效。KWin / Aurorae "
-                              "/ Kvantum 不等同于 Luna 装饰。"),
+    auto help = new QLabel(tr("安装不会自动应用。Kvantum 可改变真实 Qt 控件的形状、尺寸和状态绘制，并使用主题自带配色。"
+                              "配色和图标可即时切换；控件皮肤、外观模式和窗口装饰的变化会在下次启动生效。"
+                              "KWin / Aurorae 窗口装饰和 Plasma 桌面组件需要各自的运行环境。"),
                            fields);
     help->setWordWrap(true);
     form->addRow(help);
@@ -594,9 +601,10 @@ void ThemeDownloadDialog::query(bool refresh, int page, const QString& contentId
                 m_online->setCurrentItem(row);
         }
         m_online->blockSignals(false);
-        m_status->setText(tr("第 %1 页 · %2 项 · %3%4")
+        m_status->setText(tr("第 %1 页 · 本页 %2 项 / 共 %3 项 · %4%5")
                               .arg(m_page + 1)
                               .arg(result.value("items").toArray().size())
+                              .arg(result.value("total").toInt(result.value("items").toArray().size()))
                               .arg(result.value("offline").toBool() ? tr("离线缓存 · ") : QString())
                               .arg(result.value("cachedAt").toString()));
         m_previous->setEnabled(m_page > 0);
@@ -789,6 +797,8 @@ void ThemeDownloadDialog::installSelected()
     for (auto it = m_allowed.begin(); it != m_allowed.end(); ++it)
         if (it.value()->isChecked())
             allowed.append(it.key());
+    if (request.value("category") == "bundle")
+        allowed.append("bundle");
     if (allowed.isEmpty()) {
         m_status->setText(tr("至少选择一种要导入的组件。"));
         return;
@@ -841,12 +851,111 @@ void ThemeDownloadDialog::refreshInstalled()
             m_installed->setCurrentItem(row);
         if (data.contains("unavailable"))
             row->setText(2, data.value("unavailable").toString());
+        if (data.value("kind") == "bundle") {
+            QString error;
+            const auto resolved = m_service->packageConfiguration(data.value("id").toString(), error);
+            row->setText(2, !error.isEmpty() ? error : resolved.value("complete").toBool() ? tr("组件齐全") : tr("需要补齐或选择组件"));
+            for (const auto& value : data.value("dependencies").toArray()) {
+                auto dependency = value.toObject();
+                if (!dependency.value("supported").toBool())
+                    continue;
+                bool found = false;
+                for (const auto& package : m_service->packages())
+                    found |= package.toObject().value("provider") == dependency.value("provider") &&
+                             package.toObject().value("contentId") == dependency.value("contentId");
+                if (found)
+                    continue;
+                dependency.insert("dependency", true);
+                dependency.insert("id", "dependency-" + dependency.value("contentId").toString());
+                auto child = new QTreeWidgetItem(row, { kindName(dependency.value("category").toString()) + " · #" + dependency.value("contentId").toString(),
+                                                       tr("商店依赖"), tr("尚未安装 · 选择后点击下载") });
+                child->setData(0, Qt::UserRole, dependency);
+            }
+            row->setExpanded(true);
+        }
     }
     for (auto row : packages)
         row->setExpanded(true);
     m_remove->setEnabled(!selection(m_installed).value("packageId").toString().isEmpty() ||
                          selection(m_installed).value("removable").toBool());
-    m_update->setEnabled(m_remove->isEnabled());
+    const bool dependencySelected = selection(m_installed).value("dependency").toBool();
+    m_update->setEnabled(m_remove->isEnabled() || dependencySelected);
+    m_update->setText(dependencySelected ? tr("选择并下载此依赖…") : tr("检查来源更新"));
+}
+void ThemeDownloadDialog::configureSelected()
+{
+    const auto selected = selection(m_installed);
+    if (selected.value("dependency").toBool()) {
+        updateSelected();
+        return;
+    }
+    QJsonObject configuration;
+    QString error;
+    if (selected.contains("packageId")) {
+        const auto result = m_service->packageConfiguration(selected.value("id").toString(), error);
+        if (!error.isEmpty()) {
+            QMessageBox::warning(this, tr("无法组合主题"), error);
+            return;
+        }
+        if (!result.value("missing").toArray().isEmpty()) {
+            QStringList missing;
+            for (const auto& value : result.value("missing").toArray()) {
+                const auto component = value.toObject();
+                missing.append(kindName(component.value("kind").toString()) + "：" + component.value("name").toString());
+            }
+            QMessageBox::information(this, tr("主题组件尚未齐全"),
+                                     tr("此主题还缺少以下应用组件：\n%1\n\n请先下载包下列出的商店依赖，或从在线主题中安装对应组件。")
+                                         .arg(missing.join('\n')));
+            return;
+        }
+        configuration = result.value("configuration").toObject();
+        const auto choices = result.value("choices").toObject();
+        for (auto it = choices.begin(); it != choices.end(); ++it) {
+            const auto entries = it.value().toArray();
+            QStringList names;
+            for (const auto& value : entries)
+                names.append(value.toObject().value("name").toString() + " · " + value.toObject().value("id").toString());
+            bool ok = false;
+            const auto name = QInputDialog::getItem(this, tr("选择主题变体"), kindName(it.key()), names, 0, false, &ok);
+            if (!ok)
+                return;
+            const auto entry = entries.at(names.indexOf(name)).toObject();
+            configuration.insert(it.key() == "widgets" ? "theme" : it.key() == "decoration" ? "decorationTheme" : it.key(), entry.value("id"));
+            if (it.key() == "widgets" || it.key() == "palette") {
+                configuration.insert("mode", "independent");
+                configuration.insert("colorMode", "fixed");
+            }
+            if (it.key() == "decoration")
+                configuration.insert("decoration", "luna");
+        }
+        const auto widgets = m_service->component(configuration.value("theme").toString());
+        if (widgets.value("fixedColors").toBool() ||
+            (widgets.value("format") == "qss-v2" && widgets.value("paletteBinding") != "semantic"))
+            configuration.insert("palette", "");
+    } else {
+        configuration = m_service->state().value("requested").toObject();
+        const auto kind = selected.value("kind").toString();
+        if (kind == "widgets") {
+            configuration.insert("mode", "independent");
+            configuration.insert("theme", selected.value("id"));
+            configuration.insert("palette", "");
+            configuration.insert("colorMode", "fixed");
+        } else if (kind == "icons" || kind == "background")
+            configuration.insert(kind, selected.value("id"));
+    }
+    m_filling = true;
+    for (auto it = m_options.begin(); it != m_options.end(); ++it) {
+        const auto index = it.value()->findData(configuration.value(it.key()).toString());
+        if (index >= 0)
+            it.value()->setCurrentIndex(index);
+    }
+    m_filling = false;
+    m_baseRevision = m_service->state().value("revision").toInteger();
+    m_titlebarPalette->setChecked(configuration.value("systemTitlebarPalette").toBool());
+    m_dirty = true;
+    m_navigation->setCurrentRow(2);
+    updateState();
+    m_draftStatus->setText(tr("已载入此包的组件组合，请预览后应用。"));
 }
 void ThemeDownloadDialog::removeSelected()
 {

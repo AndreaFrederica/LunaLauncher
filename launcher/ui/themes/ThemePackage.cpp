@@ -9,6 +9,9 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
+#include <QUrl>
+#include <QSvgRenderer>
+#include <QXmlStreamReader>
 #include <algorithm>
 #include "archive/ArchiveReader.h"
 
@@ -443,6 +446,122 @@ bool ThemePackage::validateStyleSheet(const QString& text, const QDir& root, QSt
     return error.isEmpty();
 }
 
+bool ThemePackage::validateKvantum(const QString& configuration, QString& error)
+{
+    QFileInfo config(configuration);
+    if (!config.isFile() || config.size() > 1024 * 1024) {
+        error = QObject::tr("Invalid Kvantum configuration.");
+        return false;
+    }
+    QSettings settings(configuration, QSettings::IniFormat);
+    if (settings.status() != QSettings::NoError || settings.childGroups().isEmpty()) {
+        error = QObject::tr("Invalid Kvantum configuration.");
+        return false;
+    }
+    auto svgPath = containedPath(config.dir(), config.completeBaseName() + ".svg", error);
+    QFile svg(svgPath);
+    if (svgPath.isEmpty() || !svg.open(QIODevice::ReadOnly) || svg.size() > 16 * 1024 * 1024) {
+        error = QObject::tr("Kvantum requires a matching SVG beside its configuration.");
+        return false;
+    }
+    const auto bytes = svg.readAll();
+    QXmlStreamReader xml(bytes);
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isDTD() || xml.tokenType() == QXmlStreamReader::EntityReference) {
+            error = QObject::tr("Theme SVG declarations and external entities are unsupported.");
+            return false;
+        }
+        if (!xml.isStartElement())
+            continue;
+        for (const auto& attribute : xml.attributes()) {
+            const auto value = attribute.value().toString().trimmed();
+            if ((attribute.name() == QLatin1StringView("href") && !value.startsWith('#') &&
+                 !value.startsWith("data:image/")) ||
+                (value.contains("url(", Qt::CaseInsensitive) &&
+                 QRegularExpression(R"(url\(\s*['\"]?[^#\s])", QRegularExpression::CaseInsensitiveOption).match(value).hasMatch())) {
+                error = QObject::tr("Theme SVG must not reference external resources.");
+                return false;
+            }
+        }
+    }
+    QSvgRenderer renderer;
+    if (xml.hasError() || !renderer.load(bytes)) {
+        error = QObject::tr("Invalid Kvantum SVG.");
+        return false;
+    }
+    return true;
+}
+
+QJsonObject ThemePackage::readGlobalTheme(const QString& defaults, QString& error)
+{
+    QFile input(defaults);
+    if (!input.open(QIODevice::ReadOnly) || input.size() > 1024 * 1024) {
+        error = QObject::tr("Cannot read KDE global theme defaults.");
+        return {};
+    }
+    // KConfig nested groups use [file][group], unlike QSettings INI groups.
+    QHash<QString, QString> values;
+    QString group;
+    for (auto line : QString::fromUtf8(input.readAll()).split('\n')) {
+        line = line.trimmed();
+        if (line.startsWith('#') || line.startsWith(';') || line.isEmpty())
+            continue;
+        if (line.startsWith('[') && line.endsWith(']')) {
+            group = line.mid(1, line.size() - 2).replace("][", "/");
+        } else if (const auto separator = line.indexOf('='); separator > 0) {
+            values.insert(group + '/' + line.left(separator).trimmed(), line.mid(separator + 1).trimmed());
+        }
+    }
+    QJsonObject references;
+    for (const auto& pair : QList<QPair<QString, QString>>{
+             { "widgets", "kdeglobals/KDE/widgetStyle" }, { "palette", "kdeglobals/General/ColorScheme" },
+             { "icons", "kdeglobals/Icons/Theme" } })
+        if (!values.value(pair.second).isEmpty())
+            references.insert(pair.first, values.value(pair.second));
+    QDir directory = QFileInfo(defaults).dir();
+    directory.cdUp();
+    QJsonObject metadata;
+    const auto manifest = directory.filePath("metadata.json");
+    if (QFileInfo::exists(manifest)) {
+        metadata = jsonFile(manifest, error);
+        if (!error.isEmpty())
+            return {};
+    } else {
+        QSettings desktop(directory.filePath("metadata.desktop"), QSettings::IniFormat);
+        metadata.insert("KPlugin", QJsonObject{ { "Name", desktop.value("Desktop Entry/Name").toString() } });
+        metadata.insert("X-KPackage-Dependencies", QJsonArray::fromStringList(
+            desktop.value("Desktop Entry/X-KPackage-Dependencies").toString().split(';', Qt::SkipEmptyParts)));
+    }
+    QJsonArray dependencies;
+    const auto declared = metadata.value("X-KPackage-Dependencies");
+    const auto list = declared.isString() ? QJsonArray{ declared } : declared.toArray();
+    if (list.size() > 32) {
+        error = QObject::tr("The theme declares too many dependencies.");
+        return {};
+    }
+    for (const auto& value : list) {
+        const QUrl url(value.toString());
+        const auto parts = url.path().split('/', Qt::SkipEmptyParts);
+        QString category;
+        if (url.host() == "icons.knsrc")
+            category = "icons";
+        else if (url.host() == "colorschemes.knsrc")
+            category = "palette";
+        else if (url.host() == "kvantum.knsrc")
+            category = "widgets";
+        const bool recognized = url.scheme() == "kns" && !category.isEmpty() && parts.size() == 2 &&
+                                QStringList{ "api.kde-look.org", "api.opendesktop.org" }.contains(parts.value(0)) &&
+                                QRegularExpression("^[0-9]{1,12}$").match(parts.value(1)).hasMatch() &&
+                                url.userInfo().isEmpty() && !url.hasQuery() && !url.hasFragment();
+        dependencies.append(QJsonObject{ { "reference", value }, { "supported", recognized },
+                                          { "provider", "kde" }, { "category", category },
+                                          { "contentId", recognized ? parts[1] : QString() } });
+    }
+    return { { "name", metadata.value("KPlugin").toObject().value("Name").toString(directory.dirName()) },
+             { "references", references }, { "dependencies", dependencies } };
+}
+
 QJsonArray ThemePackage::inspect(const QDir& root, QString& error)
 {
     QJsonArray components;
@@ -512,14 +631,24 @@ QJsonArray ThemePackage::inspect(const QDir& root, QString& error)
         }
         const auto widgets = entries.value("widgets").toObject();
         if (!widgets.isEmpty()) {
-            const auto qss = widgets.value("qss").toString();
-            QFile input(containedPath(dir, qss, error));
-            if (!error.isEmpty() || !input.open(QIODevice::ReadOnly) || !validateStyleSheet(QString::fromUtf8(input.readAll()), dir, error))
-                return {};
             auto data = metadata;
             data.insert("engine", widgets.value("engine").toString("Fusion"));
-            data.insert("paletteBinding", widgets.value("paletteBinding").toString("fixed"));
-            append(dir, qss, "widgets", "qss-v2", name, {}, data);
+            if (widgets.value("engine").toString().compare("Kvantum", Qt::CaseInsensitive) == 0) {
+                const auto configuration = widgets.value("config").toString();
+                const auto location = containedPath(dir, configuration, error);
+                if (location.isEmpty() || !validateKvantum(location, error))
+                    return {};
+                data.insert("fixedColors", true);
+                // The resource root is the SVG/config directory, not the bundle root.
+                append(QFileInfo(location).dir(), QFileInfo(location).fileName(), "widgets", "kvantum", name, {}, data);
+            } else {
+                const auto qss = widgets.value("qss").toString();
+                QFile input(containedPath(dir, qss, error));
+                if (!error.isEmpty() || !input.open(QIODevice::ReadOnly) || !validateStyleSheet(QString::fromUtf8(input.readAll()), dir, error))
+                    return {};
+                data.insert("paletteBinding", widgets.value("paletteBinding").toString("fixed"));
+                append(dir, qss, "widgets", "qss-v2", name, {}, data);
+            }
         }
         const auto palettes = entries.value("palettes").toObject();
         for (auto it = palettes.begin(); it != palettes.end(); ++it) {
@@ -608,7 +737,18 @@ QJsonArray ThemePackage::inspect(const QDir& root, QString& error)
             }
         if (covered)
             continue;
-        if (info.suffix().compare("colors", Qt::CaseInsensitive) == 0 || info.fileName() == "colors") {
+        if (info.fileName() == "defaults" && info.dir().dirName() == "contents") {
+            auto data = readGlobalTheme(path, error);
+            if (!error.isEmpty())
+                return {};
+            append(info.dir(), info.fileName(), "bundle", "kde-global", data.value("name").toString(), {}, data);
+        } else if (info.suffix().compare("kvconfig", Qt::CaseInsensitive) == 0 &&
+            QFileInfo::exists(info.dir().filePath(info.completeBaseName() + ".svg"))) {
+            if (!validateKvantum(path, error))
+                return {};
+            append(info.dir(), info.fileName(), "widgets", "kvantum", info.completeBaseName(), {},
+                   { { "engine", "Kvantum" }, { "fixedColors", true } });
+        } else if (info.suffix().compare("colors", Qt::CaseInsensitive) == 0 || info.fileName() == "colors") {
             Palette palette;
             if (!readColors(path, palette, error))
                 return {};
@@ -632,6 +772,8 @@ QJsonArray ThemePackage::inspect(const QDir& root, QString& error)
                     return {};
             append(info.dir(), info.fileName(), "background", "prism", data.value("name").toString(info.dir().dirName()));
         } else if (info.suffix() == "qss" || info.suffix() == "css") {
+            if (info.suffix() == "css" && QRegularExpression("/gtk-[234](?:\\.[0-9]+)?/").match(path).hasMatch())
+                continue;  // GTK stylesheets in desktop bundles are not Qt skins.
             QFile input(path);
             if (!input.open(QIODevice::ReadOnly) || !validateStyleSheet(QString::fromUtf8(input.readAll()), info.dir(), error))
                 return {};

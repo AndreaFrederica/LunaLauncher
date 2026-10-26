@@ -363,6 +363,7 @@ void registerLauncherApiAppearanceOperations(LauncherApi& api)
                                        { "contentId", string("Store content identity.") },
                                        { "fileId", string("Explicit store file identity.") },
                                        { "components", strings() },
+                                       { "dependencyFiles", QJsonObject{ { "type", "object" }, { "additionalProperties", string("Dependency file ID, keyed by KDE content ID.") } } },
                                        { "title", string("Package display name.") },
                                        { "version", string("Source version.") },
                                        { "digest", string("Optional sha256: checksum.") },
@@ -383,6 +384,14 @@ void registerLauncherApiAppearanceOperations(LauncherApi& api)
         { "appearance.import", "Install immutable components from local files, KDE Store or Prism/GitHub; never auto-apply.", importSchema,
           "appearance", true },
         importTheme);
+    api.registerOperation(
+        { "appearance.package.configuration", "Resolve a package's widgets, icons and palette and report missing or ambiguous components.",
+          schema({ { "id", string("Package or global-theme component identity.") } }, { "id" }), "appearance" },
+        [appearance](const QJsonObject& p, UserInteraction&) {
+            QString error;
+            const auto result = appearance()->packageConfiguration(p.value("id").toString(), error);
+            return result.isEmpty() ? OperationService::failure(error, 2) : OperationService::success(result);
+        });
     api.registerOperation(
         { "appearance.package.remove", "Remove an unreferenced immutable theme package.",
           schema({ { "id", string("Package digest identity.") }, { "confirm", boolean() } }, { "id", "confirm" }), "appearance", true },

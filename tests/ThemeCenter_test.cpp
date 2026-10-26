@@ -2,6 +2,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDialog>
@@ -29,8 +30,10 @@
 #include <QUrlQuery>
 #include <QVBoxLayout>
 #include "Application.h"
+#include "FileSystem.h"
 #include "cli/McpServer.h"
 #include "ui/dialogs/ThemeDownloadDialog.h"
+#include "ui/widgets/PageContainer.h"
 #include "ui/themes/AppearanceService.h"
 #include "ui/themes/ThemeManager.h"
 #include "ui/themes/ThemeThumbnailLoader.h"
@@ -92,9 +95,41 @@ class ThumbnailNetwork final : public QNetworkAccessManager {
         return reply;
     }
 };
+
+class VisibilityTestPage final : public QWidget, public BasePage {
+   public:
+    explicit VisibilityTestPage(QString pageId, QString title) : QWidget(), m_id(std::move(pageId)), m_title(std::move(title))
+    {
+        auto* layout = new QVBoxLayout(this);
+        layout->addWidget(new QLabel(m_title, this));
+    }
+    QString id() const override { return m_id; }
+    QString displayName() const override { return m_title; }
+    QIcon icon() const override { return {}; }
+
+   private:
+    QString m_id;
+    QString m_title;
+};
+
+class VisibilityTestProvider final : public BasePageProvider {
+   public:
+    QList<BasePage*> getPages() override
+    {
+        return { new VisibilityTestPage("first", "First"), new VisibilityTestPage("second", "Second"),
+                 new VisibilityTestPage("third", "Third") };
+    }
+    QString dialogTitle() override { return "Visibility test"; }
+};
 class ThemeCenterTest : public QObject {
     Q_OBJECT
    private slots:
+    void initTestCase()
+    {
+        const auto source = qEnvironmentVariable("LUNA_THEME_TEST_PROFILE");
+        if (!source.isEmpty())
+            QVERIFY(QDir::current().canonicalPath() != QDir(source).canonicalPath());
+    }
     void thumbnailConcurrencyAndCancellation()
     {
         QTemporaryDir cache;
@@ -203,6 +238,12 @@ class ThemeCenterTest : public QObject {
             QFile file(cache.filePath(QString::fromLatin1(QCryptographicHash::hash(
                 url.toEncoded() + mode.toUtf8() + id.toUtf8(), QCryptographicHash::Sha256).toHex()) + ".json"));
             data.insert("cachedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+            data.insert("_lunaThemeCache", QJsonObject{ { "schema", 2 },
+                                                         { "provider", "kde" },
+                                                         { "mode", mode },
+                                                         { "url", QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded)) },
+                                                         { "contentId", id },
+                                                         { "category", "widgets" } });
             return file.open(QIODevice::WriteOnly) && file.write(QJsonDocument(data).toJson()) > 0;
         };
         for (int i = 0; i < 18; ++i) {
@@ -287,6 +328,12 @@ class ThemeCenterTest : public QObject {
                 ".json"));
             auto result = data;
             result.insert("cachedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+            result.insert("_lunaThemeCache", QJsonObject{ { "schema", 2 },
+                                                           { "provider", "kde" },
+                                                           { "mode", mode },
+                                                           { "url", QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded)) },
+                                                           { "contentId", id },
+                                                           { "category", "palette" } });
             return file.open(QIODevice::WriteOnly) && file.write(QJsonDocument(result).toJson()) > 0;
         };
         QUrl query("https://api.kde-look.org/ocs/v1/content/data");
@@ -352,11 +399,21 @@ class ThemeCenterTest : public QObject {
         auto apply = center.findChild<QPushButton*>("themeApply");
         auto completeApply = center.findChild<QPushButton*>("themeApplyComplete");
         auto undo = center.findChild<QPushButton*>("themeUndo");
+        auto effectsEnabled = center.findChild<QCheckBox*>("appearance_windowEffectsEnabled");
+        auto opacity = center.findChild<QSlider*>("appearance_windowOpacity");
+        auto blur = center.findChild<QSlider*>("appearance_windowBlur");
+        auto material = center.findChild<QComboBox*>("appearance_windowMaterial");
+        auto rounded = center.findChild<QCheckBox*>("appearance_windowRoundedCorners");
         QVERIFY(mode);
         QVERIFY(theme);
         QVERIFY(apply);
         QVERIFY(completeApply);
         QVERIFY(undo);
+        QVERIFY(effectsEnabled);
+        QVERIFY(opacity);
+        QVERIFY(blur);
+        QVERIFY(material);
+        QVERIFY(rounded);
         auto service = APPLICATION->themeManager()->appearance();
         if (!qEnvironmentVariableIsEmpty("LUNA_THEME_TEST_PROFILE")) {
             auto installed = center.findChild<QTreeWidget*>("themeInstalled");
@@ -430,11 +487,70 @@ class ThemeCenterTest : public QObject {
         QCOMPARE(navigation->currentRow(), 2);
         center->hide();
     }
+    void stackedPagesStayExclusive()
+    {
+        VisibilityTestProvider provider;
+        QDialog dialog;
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* container = new PageContainer(&provider, "first", &dialog);
+        layout->addWidget(container);
+        dialog.resize(640, 420);
+
+        WindowChromeController chrome;
+        chrome.setEffects({ { "composite", true },
+                            { "translucentWindows", true },
+                            { "backdrop", "none" },
+                            { "blurStrength", 0 },
+                            { "windowOpacity", 100 } });
+        chrome.initialize(true, { { "height", 36 } });
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+        const auto verifyPage = [&](const QString& selectedId) {
+            QCOMPARE(container->selectedPage()->id(), selectedId);
+            int visiblePages = 0;
+            for (auto* page : container->getPages()) {
+                auto* widget = dynamic_cast<QWidget*>(page);
+                QVERIFY(widget);
+                if (widget->isVisible())
+                    ++visiblePages;
+                QCOMPARE(widget->isVisible(), page->id() == selectedId);
+            }
+            QCOMPARE(visiblePages, 1);
+        };
+
+        verifyPage("first");
+        container->selectPage("second");
+        QCoreApplication::processEvents();
+        verifyPage("second");
+
+        // Opacity creates a native layered window on Windows. It must not
+        // change the page-stack invariant or make an old page paint through
+        // the newly selected page.
+        chrome.setEffects({ { "composite", true },
+                            { "translucentWindows", true },
+                            { "backdrop", "none" },
+                            { "blurStrength", 0 },
+                            { "windowOpacity", 82 } });
+        container->selectPage("third");
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
+        QCoreApplication::processEvents();
+        verifyPage("third");
+
+        dialog.resize(720, 480);
+        QCoreApplication::processEvents();
+        verifyPage("third");
+    }
     void chromeAndDialogs()
     {
         if (!WindowChromeController::supported())
             QSKIP("Uses native macOS decoration");
         WindowChromeController chrome;
+        chrome.setEffects({ { "composite", true },
+                            { "translucentWindows", true },
+                            { "backdrop", "none" },
+                            { "blurStrength", 0 },
+                            { "windowOpacity", 100 } });
         chrome.initialize(true, { { "height", 36 } });
         QMainWindow window;
         window.setWindowTitle("Luna native decoration");
@@ -442,10 +558,29 @@ class ThemeCenterTest : public QObject {
         window.resize(600, 400);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(window.testAttribute(Qt::WA_TranslucentBackground));
+        const auto translucentAttribute = window.testAttribute(Qt::WA_TranslucentBackground);
+        chrome.setEffects({ { "composite", true },
+                            { "translucentWindows", true },
+                            { "backdrop", "acrylic" },
+                            { "blurStrength", 75 },
+                            { "windowOpacity", 68 },
+                            { "roundedCorners", true } });
+        QCOMPARE(window.testAttribute(Qt::WA_TranslucentBackground), translucentAttribute);
+        QCOMPARE(window.property("_lunaWindowEffects").toJsonObject().value("blurStrength").toInt(), 75);
+        QCOMPARE(window.property("_lunaWindowEffects").toJsonObject().value("windowOpacity").toInt(), 68);
         auto caption = window.findChild<QWidget*>("lunaWindowCaption");
         QVERIFY(caption);
         QCOMPARE(caption->height(), 36);
         QVERIFY(window.windowFlags().testFlag(Qt::FramelessWindowHint));
+        // A native frame/style update must restore the original content
+        // margin from the controller instead of accumulating another caption
+        // height. This is the failure mode that previously recovered only
+        // after manually resizing the window.
+        const auto attachedMargins = window.contentsMargins();
+        window.setContentsMargins(attachedMargins.left(), attachedMargins.top() + 17, attachedMargins.right(), attachedMargins.bottom());
+        chrome.relayoutWindows();
+        QTRY_COMPARE(window.contentsMargins(), attachedMargins);
         window.showMaximized();
         QTRY_VERIFY(window.isMaximized());
         window.showNormal();
@@ -478,10 +613,27 @@ int main(int argc, char** argv)
 {
     const auto original = QDir::currentPath();
     QTemporaryDir profile;
+    if (!profile.isValid())
+        return 2;
+    const auto requestedProfile = qEnvironmentVariable("LUNA_THEME_TEST_PROFILE");
+    if (!requestedProfile.isEmpty()) {
+        // A supplied profile is a read-only source of appearance settings.
+        // Always run in a disposable copy: the gallery writes fake catalog
+        // entries and transactions change settings. Never copy accounts,
+        // instances or store caches into this test profile.
+        const QDir source(requestedProfile);
+        if (!source.exists())
+            return 2;
+        for (const auto& name : { "lunalauncher.cfg", "classic-appearance.json" })
+            if (source.exists(name) && !QFile::copy(source.filePath(name), profile.filePath(name)))
+                return 2;
+        for (const auto& name : { "theme-packages", "themes", "iconthemes", "catpacks", "icons" })
+            if (source.exists(name) && !FS::copy(source.filePath(name), profile.filePath(name))())
+                return 2;
+    }
     int result = 2;
     {
-        const auto requestedProfile = qEnvironmentVariable("LUNA_THEME_TEST_PROFILE");
-        QByteArrayList arguments{ QByteArray(argv[0]), "--dir", (requestedProfile.isEmpty() ? profile.path() : requestedProfile).toUtf8(), "--mcp" };
+        QByteArrayList arguments{ QByteArray(argv[0]), "--dir", profile.path().toUtf8(), "--mcp" };
         QList<char*> pointers;
         for (auto& value : arguments)
             pointers.append(value.data());

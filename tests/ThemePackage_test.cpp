@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/themes/ThemePackage.h"
+#include "archive/ArchiveWriter.h"
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QFile>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
@@ -21,7 +24,7 @@ class ThemeFixtureReply : public QNetworkReply {
     QByteArray m_bytes;
     qint64 m_position = 0;
    public:
-    ThemeFixtureReply(const QNetworkRequest& request, QByteArray bytes, QObject* parent)
+    ThemeFixtureReply(const QNetworkRequest& request, QByteArray bytes, QObject* parent, NetworkError error = NoError)
         : QNetworkReply(parent), m_bytes(std::move(bytes))
     {
         setRequest(request);
@@ -30,10 +33,15 @@ class ThemeFixtureReply : public QNetworkReply {
         setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
         setHeader(QNetworkRequest::ContentLengthHeader, m_bytes.size());
         open(QIODevice::ReadOnly | QIODevice::Unbuffered);
-        QTimer::singleShot(0, this, [this] {
+        QTimer::singleShot(0, this, [this, error] {
             if (isFinished())
                 return;
-            emit readyRead();
+            if (error != NoError) {
+                setError(error, "Fixture network unavailable");
+                emit errorOccurred(error);
+            } else {
+                emit readyRead();
+            }
             setFinished(true);
             emit finished();
         });
@@ -63,14 +71,17 @@ class ThemeFixtureNetwork : public QNetworkAccessManager {
    public:
     using QNetworkAccessManager::QNetworkAccessManager;
     bool multipleFiles = false;
+    bool offline = false;
     QStringList requests;
    protected:
     QNetworkReply* createRequest(Operation, const QNetworkRequest& request, QIODevice*) override
     {
         const auto path = request.url().path();
         requests.append(path);
+        if (offline)
+            return new ThemeFixtureReply(request, {}, this, QNetworkReply::HostNotFoundError);
         QByteArray data;
-        if (path.contains("content/data/")) {
+        if (path.endsWith("content/data") || path.contains("content/data/")) {
             data = "<content><id>123</id><name>Fixture</name><downloadname1>Fixture.colors</downloadname1><downloadway1>1</downloadway1><downloadprice1>0</downloadprice1>";
             if (multipleFiles)
                 data += "<downloadname2>FixtureLight.colors</downloadname2><downloadway2>1</downloadway2><downloadprice2>0</downloadprice2>";
@@ -269,6 +280,84 @@ class ThemePackageTest : public QObject {
         QCOMPARE(result.value("items").toArray().size(), 1);
         QCOMPARE(result.value("files").toArray().size(), 1);
     }
+    void catalogCacheRejectsInvalidIdentity_data()
+    {
+        QTest::addColumn<QString>("mismatch");
+        QTest::addColumn<bool>("offline");
+        for (const auto& field : { "unversioned", "schema", "provider", "mode", "url", "contentId", "category" }) {
+            QTest::newRow(qPrintable(QString(field) + "-online")) << QString(field) << false;
+            QTest::newRow(qPrintable(QString(field) + "-offline")) << QString(field) << true;
+        }
+    }
+    void catalogCacheRejectsInvalidIdentity()
+    {
+        QFETCH(QString, mismatch);
+        QFETCH(bool, offline);
+        QTemporaryDir cache;
+        QVERIFY(cache.isValid());
+        const QUrl url("https://api.opendesktop.org/ocs/v1/content/data?categories=123&sortmode=high&page=0&pagesize=24");
+        const auto path = cache.filePath(QString::fromLatin1(
+            QCryptographicHash::hash(url.toEncoded() + "query", QCryptographicHash::Sha256).toHex()) + ".json");
+        QJsonObject identity{ { "schema", 2 }, { "provider", "kde" }, { "mode", "query" },
+                              { "url", QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded)) },
+                              { "contentId", "" }, { "category", "widgets" } };
+        QJsonObject cached{ { "cachedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+                            { "items", QJsonArray{ QJsonObject{ { "id", "3000000" }, { "name", "KvArcDark" },
+                                { "thumbnail", "https://themes.example/KvArcDark.png" } } } } };
+        if (mismatch != "unversioned") {
+            if (mismatch == "schema")
+                identity.insert(mismatch, 1);
+            else
+                identity.insert(mismatch, "different-request");
+            cached.insert("_lunaThemeCache", identity);
+        }
+        put(path, QJsonDocument(cached).toJson());
+        ThemeFixtureNetwork network;
+        network.offline = offline;
+        ThemeStoreTask task(&network, { { "provider", "kde" }, { "category", "widgets" } }, cache.path());
+        task.start();
+        QTRY_VERIFY(task.isFinished());
+        QCOMPARE(network.requests.size(), 1);
+        if (offline) {
+            QVERIFY(!task.wasSuccessful());
+            QVERIFY(task.result().isEmpty());
+        } else {
+            QVERIFY2(task.wasSuccessful(), qPrintable(task.failReason()));
+            QCOMPARE(task.result().value("items").toArray().first().toObject().value("name").toString(), QString("Fixture"));
+        }
+    }
+    void catalogCacheReuseAndOfflineFallback()
+    {
+        QTemporaryDir cache;
+        QVERIFY(cache.isValid());
+        ThemeFixtureNetwork network;
+        QJsonObject request{ { "provider", "kde" }, { "category", "widgets" } };
+        ThemeStoreTask fresh(&network, request, cache.path());
+        fresh.start();
+        QTRY_VERIFY(fresh.isFinished());
+        QVERIFY2(fresh.wasSuccessful(), qPrintable(fresh.failReason()));
+        QCOMPARE(network.requests.size(), 1);
+        QVERIFY(!fresh.result().contains("_lunaThemeCache"));
+
+        network.offline = true;
+        ThemeStoreTask hit(&network, request, cache.path());
+        hit.start();
+        QTRY_VERIFY(hit.isFinished());
+        QVERIFY(hit.wasSuccessful());
+        QCOMPARE(network.requests.size(), 1);
+        QCOMPARE(hit.result(), fresh.result());
+
+        request.insert("refresh", true);
+        ThemeStoreTask fallback(&network, request, cache.path());
+        fallback.start();
+        QTRY_VERIFY(fallback.isFinished());
+        QVERIFY2(fallback.wasSuccessful(), qPrintable(fallback.failReason()));
+        QCOMPARE(network.requests.size(), 2);
+        QVERIFY(fallback.result().value("offline").toBool());
+        QVERIFY(!fallback.result().value("warning").toString().isEmpty());
+        QCOMPARE(fallback.result().value("items"), fresh.result().value("items"));
+        QVERIFY(!fallback.result().contains("_lunaThemeCache"));
+    }
     void declaredDependencyInstallation()
     {
         QTemporaryDir dir;
@@ -336,6 +425,33 @@ class ThemePackageTest : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(cancelled.isFinished(), 10000);
         QCOMPARE(cancelDone.size(), 1);
         QCOMPARE(cancelled.getState(), Task::State::AbortedByUser);
+    }
+    void caseCollidingArchiveEntries()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto archivePath = dir.filePath("case-colliding.zip");
+        MMCZip::ArchiveWriter writer(archivePath);
+        QVERIFY(writer.open());
+        QVERIFY(writer.addFile(QStringLiteral("candy-icons/mimetypes/scalable/text-x-r.svg"), QByteArray("lower")));
+        QVERIFY(writer.addFile(QStringLiteral("candy-icons/mimetypes/scalable/text-x-R.svg"), QByteArray("upper")));
+        QVERIFY(writer.close());
+
+        const auto destination = QDir(dir.filePath("out"));
+        QVERIFY(destination.mkpath("."));
+        const auto nativeCaseSensitive = ThemePackage::enableCaseSensitiveDirectory(destination);
+        QString error;
+        QVERIFY2(ThemePackage::extract(archivePath, destination, error), qPrintable(error));
+        QVERIFY(QFile::exists(destination.filePath("candy-icons/mimetypes/scalable/text-x-r.svg")));
+        QFile lower(destination.filePath("candy-icons/mimetypes/scalable/text-x-r.svg"));
+        QVERIFY(lower.open(QIODevice::ReadOnly));
+        QCOMPARE(lower.readAll(), QByteArray("lower"));
+        if (nativeCaseSensitive) {
+            QFile upper(destination.filePath("candy-icons/mimetypes/scalable/text-x-R.svg"));
+            QVERIFY(upper.open(QIODevice::ReadOnly));
+            QCOMPARE(upper.readAll(), QByteArray("upper"));
+        }
+        QVERIFY2(error.isEmpty(), qPrintable(error));
     }
 };
 int main(int argc, char** argv)

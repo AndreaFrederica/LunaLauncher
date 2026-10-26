@@ -5,6 +5,8 @@
 #include <QCryptographicHash>
 #include <QDirIterator>
 #include <QFile>
+#include <QFileInfo>
+#include <QHash>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
@@ -14,6 +16,10 @@
 #include <QXmlStreamReader>
 #include <algorithm>
 #include "archive/ArchiveReader.h"
+
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#endif
 
 namespace {
 QColor colorValue(const QVariant& value)
@@ -190,6 +196,47 @@ QString ThemePackage::containedPath(const QDir& root, const QString& relative, Q
     return path;
 }
 
+bool ThemePackage::enableCaseSensitiveDirectory(const QDir& directory)
+{
+#if defined(Q_OS_WIN)
+    if (!directory.exists())
+        return false;
+
+    // FileCaseSensitiveInformation is available in the Windows 10 SDK, but
+    // older SDKs used by some Qt/MSVC installations do not expose the enum or
+    // structure. The value is stable in the Windows API, so keep a private
+    // ABI-compatible definition here instead of making the whole project
+    // depend on a newer SDK.
+    constexpr auto fileCaseSensitiveInformation = static_cast<FILE_INFO_BY_HANDLE_CLASS>(23);
+    constexpr ULONG caseSensitiveDirectoryFlag = 0x00000001u;
+    struct FileCaseSensitiveInformation {
+        ULONG flags;
+    } info{};
+
+    const auto path = QDir::toNativeSeparators(directory.absolutePath()).toStdWString();
+    const auto handle = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES,
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                    FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return false;
+
+    bool result = false;
+    if (GetFileInformationByHandleEx(handle, fileCaseSensitiveInformation, &info, sizeof(info))) {
+        if (info.flags & caseSensitiveDirectoryFlag) {
+            result = true;
+        } else {
+            info.flags |= caseSensitiveDirectoryFlag;
+            result = SetFileInformationByHandle(handle, fileCaseSensitiveInformation, &info, sizeof(info)) != FALSE;
+        }
+    }
+    CloseHandle(handle);
+    return result;
+#else
+    Q_UNUSED(directory)
+    return false;
+#endif
+}
+
 bool ThemePackage::extract(const QString& archivePath, const QDir& destination, QString& error, const std::function<bool()>& cancelled)
 {
     struct Link {
@@ -197,7 +244,114 @@ bool ThemePackage::extract(const QString& archivePath, const QDir& destination, 
         bool hard;
     };
     QList<Link> links;
-    QSet<QString> seen;
+
+    // Probe names before writing anything. If the archive contains entries
+    // that differ only by case, a normal Windows directory cannot represent
+    // them. A newly-created package staging tree is a safe place to opt into
+    // NTFS' directory-local case-sensitive mode, but the operation is
+    // intentionally best-effort and must fall back on portable extraction.
+    bool preserveCaseCollisions = false;
+    {
+        QHash<QString, QString> probeNames;
+        QSet<QString> probeFiles;
+        QSet<QString> probeDirectories;
+        bool caseCollision = false;
+        int probeCount = 0;
+        MMCZip::ArchiveReader probe(archivePath);
+        const auto probeOk = probe.parse([&](MMCZip::ArchiveReader::File* file) {
+            auto name = file->filename();
+            while (name.startsWith("./"))
+                name.remove(0, 2);
+            if (name.endsWith('/'))
+                name.chop(1);
+            if ((name.isEmpty() || name == ".") && file->isDirectory())
+                return true;
+            if (!safeRelative(name) || ++probeCount > 50000) {
+                error = QObject::tr("Unsafe or excessive theme archive entries.");
+                return false;
+            }
+            if (probeNames.contains(name)) {
+                error = QObject::tr("Duplicate archive path: %1").arg(name);
+                return false;
+            }
+            probeNames.insert(name, name);
+            if (file->isDirectory())
+                probeDirectories.insert(name);
+            else
+                probeFiles.insert(name);
+
+            auto parent = QFileInfo(name).path();
+            while (!parent.isEmpty() && parent != ".") {
+                probeDirectories.insert(parent);
+                parent = QFileInfo(parent).path();
+            }
+            // Keep a separate folded map below: probeNames remains exact so
+            // that a pair such as foo.svg/foo.SVG is never mistaken for a
+            // duplicate.
+            return file->skip();
+        });
+        if (!probeOk) {
+            if (error.isEmpty())
+                error = QObject::tr("Could not read the theme archive.");
+            return false;
+        }
+
+        // The exact-name map above intentionally keeps archive paths intact;
+        // detect folds in a second, bounded pass without touching disk.
+        QHash<QString, QString> foldedNames;
+        for (const auto& name : probeNames.keys()) {
+            const auto folded = name.toCaseFolded();
+            if (foldedNames.contains(folded) && foldedNames.value(folded) != name)
+                caseCollision = true;
+            else
+                foldedNames.insert(folded, name);
+        }
+
+        // Reject an archive that describes a file and a directory at the same
+        // path before pre-creating directories for the case-sensitive pass.
+        for (const auto& directory : probeDirectories) {
+            if (probeFiles.contains(directory)) {
+                error = QObject::tr("Conflicting archive paths: %1").arg(directory);
+                return false;
+            }
+        }
+
+        if (caseCollision) {
+            const bool rootEnabled = destination.mkpath(".") && enableCaseSensitiveDirectory(destination);
+            if (rootEnabled) {
+                auto directories = probeDirectories.values();
+                std::sort(directories.begin(), directories.end(), [](const QString& left, const QString& right) {
+                    const auto leftDepth = left.count('/');
+                    const auto rightDepth = right.count('/');
+                    return leftDepth == rightDepth ? left.size() < right.size() : leftDepth < rightDepth;
+                });
+                preserveCaseCollisions = true;
+                for (const auto& relative : directories) {
+                    const auto directory = destination.filePath(relative);
+                    if (!QDir().mkpath(directory) || !enableCaseSensitiveDirectory(QDir(directory))) {
+                        preserveCaseCollisions = false;
+                        break;
+                    }
+                }
+                if (preserveCaseCollisions)
+                    qInfo() << "Using NTFS case-sensitive staging for theme archive" << archivePath;
+                else
+                    qInfo() << "Falling back to portable case-folded theme extraction for" << archivePath;
+            } else {
+                qInfo() << "NTFS case-sensitive staging is unavailable; using portable case-folded theme extraction for" << archivePath;
+            }
+        }
+    }
+
+    // Windows filesystems are case-insensitive, while a number of KDE icon
+    // archives contain both spellings of the same path (for example
+    // text-x-r.svg and text-x-R.svg).  Keep the first spelling so the same
+    // archive has deterministic contents on every platform.  An exact
+    // duplicate remains an error because it is ambiguous even on
+    // case-sensitive filesystems.
+    enum class EntryKind { File, Directory, Link };
+    QHash<QString, QString> seen;
+    QHash<QString, EntryKind> seenKinds;
     qint64 total = 0;
     int count = 0;
     MMCZip::ArchiveReader archive(archivePath);
@@ -217,12 +371,45 @@ bool ThemePackage::extract(const QString& archivePath, const QDir& destination, 
             error = QObject::tr("Unsafe or excessive theme archive entries.");
             return false;
         }
-        const auto folded = name.toCaseFolded();
-        if (seen.contains(folded)) {
-            error = QObject::tr("Duplicate archive path: %1").arg(name);
-            return false;
+        const auto kind = !file->linkTarget().isEmpty() ? EntryKind::Link : file->isDirectory() ? EntryKind::Directory : EntryKind::File;
+        const auto key = preserveCaseCollisions ? name : name.toCaseFolded();
+        if (seen.contains(key)) {
+            if (seen.value(key) == name) {
+                error = QObject::tr("Duplicate archive path: %1").arg(name);
+                return false;
+            }
+            // Prefer a real file or directory over an alias with the same
+            // spelling on a case-insensitive filesystem.  KDE icon archives
+            // commonly list aliases before the file they point at.
+            if (seenKinds.value(key) == EntryKind::Link && kind != EntryKind::Link) {
+                const auto previous = seen.value(key);
+                for (int i = links.size() - 1; i >= 0; --i)
+                    if (links.at(i).name == previous)
+                        links.removeAt(i);
+                seen[key] = name;
+                seenKinds[key] = kind;
+            } else if (seenKinds.value(key) == EntryKind::Link && kind == EntryKind::Link) {
+                // Flatten aliases that only differ by case.  Keeping the
+                // first name while adopting the later target avoids a chain
+                // such as Thunar.svg -> thunar.svg -> file-manager.svg,
+                // where Windows cannot materialize both spellings.
+                const auto previous = seen.value(key);
+                for (auto& pending : links)
+                    if (pending.name == previous) {
+                        pending.target = file->linkTarget();
+                        pending.hard = file->isHardLink();
+                        break;
+                    }
+                return true;
+            } else {
+                qWarning() << "Skipping case-colliding theme archive path" << name << "(keeping" << seen.value(key) << ")";
+                return true;
+            }
         }
-        seen.insert(folded);
+        else {
+            seen.insert(key, name);
+            seenKinds.insert(key, kind);
+        }
         if (file->isDirectory())
             return destination.mkpath(name);
         if (!file->linkTarget().isEmpty()) {
@@ -264,8 +451,22 @@ bool ThemePackage::extract(const QString& archivePath, const QDir& destination, 
             }
             const auto& link = links[i];
             if (link.target.startsWith('/') || link.target.contains(':') || link.target.contains('\\')) {
-                error = QObject::tr("External icon link.");
-                return false;
+                // KDE icon themes occasionally carry a link to a system icon
+                // outside the archive (for example /usr/share/icons/breeze-
+                // dark/...).  That target cannot be materialized on Windows,
+                // but it must not make the portable parts of the package
+                // unusable.  Leave this one alias absent so Qt can use the
+                // configured fallback icon theme.
+                const bool knownIconFallback = link.target.startsWith("/usr/share/icons/") ||
+                                               link.target.startsWith("/usr/local/share/icons/");
+                if (!knownIconFallback) {
+                    error = QObject::tr("Icon link escapes its package.");
+                    return false;
+                }
+                qWarning() << "Skipping external theme icon link" << link.name << "->" << link.target;
+                links.removeAt(i);
+                progressed = true;
+                continue;
             }
             auto relative = QDir::cleanPath(link.hard ? link.target : QFileInfo(link.name).path() + '/' + link.target);
             if (!safeRelative(relative)) {
@@ -274,8 +475,27 @@ bool ThemePackage::extract(const QString& archivePath, const QDir& destination, 
             }
             auto target = destination.filePath(relative);
             QFileInfo source(target);
-            if (!source.exists())
+            if (!source.exists()) {
+                // A few KDE icon archives contain optional SVG aliases whose
+                // target was removed upstream.  Keep the usable icons instead
+                // of rejecting the whole archive, but wait while another
+                // pending alias could still materialize this target.  The
+                // path has already passed safeRelative(), so skipping it
+                // cannot allow an escape from the package root.
+                bool pendingTarget = false;
+                for (const auto& pending : links)
+                    if (pending.name != link.name &&
+                        (pending.name == relative || pending.name.startsWith(relative + '/') || relative.startsWith(pending.name + '/'))) {
+                        pendingTarget = true;
+                        break;
+                    }
+                if (!pendingTarget && !link.hard && link.name.endsWith(".svg", Qt::CaseInsensitive)) {
+                    qWarning() << "Skipping missing optional theme icon link" << link.name << "->" << link.target;
+                    links.removeAt(i);
+                    progressed = true;
+                }
                 continue;
+            }
             if (source.isSymLink()) {
                 error = QObject::tr("Unsafe icon link.");
                 return false;
@@ -339,7 +559,8 @@ bool ThemePackage::extract(const QString& archivePath, const QDir& destination, 
             progressed = true;
         }
         if (!progressed) {
-            error = QObject::tr("Broken or cyclic icon links.");
+            const auto& pending = links.constFirst();
+            error = QObject::tr("Broken or cyclic icon link: %1 -> %2.").arg(pending.name, pending.target);
             return false;
         }
     }
@@ -493,6 +714,73 @@ bool ThemePackage::validateKvantum(const QString& configuration, QString& error)
     return true;
 }
 
+QJsonObject ThemePackage::readKvantumEffects(const QString& configuration, QString& error)
+{
+    QFileInfo config(configuration);
+    if (!config.isFile() || config.size() > 1024 * 1024) {
+        error = QObject::tr("Invalid Kvantum configuration.");
+        return {};
+    }
+    QSettings settings(configuration, QSettings::IniFormat);
+    if (settings.status() != QSettings::NoError) {
+        error = QObject::tr("Invalid Kvantum configuration.");
+        return {};
+    }
+
+    // Kvantum stores these in [General]. Keep the original names out of the
+    // public API: the launcher only needs the semantic window capabilities.
+    auto valueFor = [&](const QString& key) {
+        // Kvantum uses a [%General] group for most compositor settings and a
+        // [Hacks] group for blur_translucent in older theme revisions.
+        auto value = settings.value("General/" + key);
+        if (!value.isValid())
+            value = settings.value("Hacks/" + key);
+        return value;
+    };
+    auto boolean = [&](const QString& key, bool fallback = false) {
+        const auto value = valueFor(key);
+        if (!value.isValid())
+            return fallback;
+        if (value.metaType().id() == QMetaType::QString) {
+            const auto text = value.toString().trimmed();
+            if (text.compare("true", Qt::CaseInsensitive) == 0 || text == "1" || text.compare("yes", Qt::CaseInsensitive) == 0)
+                return true;
+            if (text.compare("false", Qt::CaseInsensitive) == 0 || text == "0" || text.compare("no", Qt::CaseInsensitive) == 0)
+                return false;
+        }
+        return value.toBool();
+    };
+    auto integer = [&](const QString& key, int fallback = 0) {
+        bool ok = false;
+        const auto value = valueFor(key).toString().trimmed().toInt(&ok);
+        return ok ? qBound(0, value, 100) : fallback;
+    };
+
+    const auto composite = boolean("composite", true);
+    const auto translucent = boolean("translucent_windows");
+    const auto blurring = boolean("blurring");
+    const auto blurTranslucent = boolean("blur_translucent");
+    const auto popupBlurring = boolean("popup_blurring");
+    const auto reduceOpacity = integer("reduce_window_opacity");
+    const auto menuShadow = integer("menu_shadow_depth");
+    const auto tooltipShadow = integer("tooltip_shadow_depth");
+
+    return { { "composite", composite },
+             { "translucentWindows", translucent },
+             { "blurring", blurring },
+             { "blurTranslucent", blurTranslucent },
+             { "popupBlurring", popupBlurring },
+             { "reduceWindowOpacity", reduceOpacity },
+             { "menuShadowDepth", menuShadow },
+             { "tooltipShadowDepth", tooltipShadow },
+             // These are deliberately derived rather than copied from a
+             // platform-specific config. A compositor can choose the closest
+             // native material (Acrylic on Win10, Mica on Win11, blur hints on
+             // X11) while preserving the user's intent.
+             { "backdrop", composite && translucent && (blurring || blurTranslucent) ? "acrylic" : composite && translucent ? "mica" : "none" },
+             { "windowShadow", composite && (menuShadow > 0 || tooltipShadow > 0) } };
+}
+
 QJsonObject ThemePackage::readGlobalTheme(const QString& defaults, QString& error)
 {
     QFile input(defaults);
@@ -639,6 +927,10 @@ QJsonArray ThemePackage::inspect(const QDir& root, QString& error)
                 if (location.isEmpty() || !validateKvantum(location, error))
                     return {};
                 data.insert("fixedColors", true);
+                auto effects = readKvantumEffects(location, error);
+                if (!error.isEmpty())
+                    return {};
+                data.insert("effects", effects);
                 // The resource root is the SVG/config directory, not the bundle root.
                 append(QFileInfo(location).dir(), QFileInfo(location).fileName(), "widgets", "kvantum", name, {}, data);
             } else {
@@ -746,8 +1038,11 @@ QJsonArray ThemePackage::inspect(const QDir& root, QString& error)
             QFileInfo::exists(info.dir().filePath(info.completeBaseName() + ".svg"))) {
             if (!validateKvantum(path, error))
                 return {};
+            auto effects = readKvantumEffects(path, error);
+            if (!error.isEmpty())
+                return {};
             append(info.dir(), info.fileName(), "widgets", "kvantum", info.completeBaseName(), {},
-                   { { "engine", "Kvantum" }, { "fixedColors", true } });
+                   { { "engine", "Kvantum" }, { "fixedColors", true }, { "effects", effects } });
         } else if (info.suffix().compare("colors", Qt::CaseInsensitive) == 0 || info.fileName() == "colors") {
             Palette palette;
             if (!readColors(path, palette, error))

@@ -2,10 +2,13 @@
 #include "AppearanceService.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QEvent>
 #include <QFile>
 #include <QJsonDocument>
 #include <QLockFile>
+#include <QLayout>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -17,6 +20,7 @@
 #include <QStyleHints>
 #include <QTemporaryFile>
 #include <QTimer>
+#include <QWidget>
 #include <stdexcept>
 #include "Application.h"
 #include "CustomTheme.h"
@@ -152,7 +156,12 @@ QJsonObject AppearanceService::defaults() const
              { "darkPalette", "" },
              { "decoration", "system" },
              { "decorationTheme", "" },
-             { "systemTitlebarPalette", true } };
+             { "systemTitlebarPalette", true },
+             { "windowEffectsEnabled", true },
+             { "windowOpacity", 100 },
+             { "windowBlur", 100 },
+             { "windowMaterial", "theme" },
+             { "windowRoundedCorners", true } };
 }
 
 QJsonObject AppearanceService::component(const QString& id) const
@@ -239,6 +248,15 @@ void AppearanceService::reloadCatalog()
             data.insert("directory", root.absoluteFilePath(data.value("root").toString()));
             const auto kind = data.value("kind").toString();
             if (kind == "widgets") {
+                // Older package records predate the effect metadata. Fill it
+                // from the immutable Kvantum file so upgrading does not
+                // require reinstalling a theme.
+                if (data.value("format").toString() == "kvantum" && !data.contains("effects")) {
+                    QString effectsError;
+                    const auto effects = ThemePackage::readKvantumEffects(data.value("path").toString(), effectsError);
+                    if (effectsError.isEmpty())
+                        data.insert("effects", effects);
+                }
                 if (data.value("format") == "prism" || data.value("format") == "legacy-qss")
                     data.insert("fixedColors", true);
                 try {
@@ -376,8 +394,22 @@ QJsonObject AppearanceService::packageConfiguration(const QString& id, QString& 
                     preferred.append(entry);
             if (!preferred.isEmpty())
                 candidates = preferred;
-            else
+            else if (!matching.isEmpty())
                 candidates = matching;
+            else {
+                // A KDE global theme may refer to a dependency by its desktop
+                // name while the dependency package exposes a different
+                // resource name (Nordic refers to candy-Nordic-green while
+                // the store archive registers Nordic-folders).  Keep only
+                // candidates coming from a separate related package here;
+                // components belonging to the global package itself must not
+                // satisfy an unresolved reference such as UnavailablePalette.
+                QJsonArray dependencyCandidates;
+                for (const auto& entry : candidates)
+                    if (entry.toObject().value("packageId").toString() != packageId)
+                        dependencyCandidates.append(entry);
+                candidates = dependencyCandidates;
+            }
         }
         if (selected.value("kind") == kind && !selected.contains("unavailable"))
             candidates = QJsonArray{ selected };
@@ -422,6 +454,11 @@ QJsonObject AppearanceService::capabilities() const
              { "formats", QJsonArray{ "prism", "qss", "kde-colors", "freedesktop", "luna-v2", "kvantum" } },
              { "engines", QJsonArray::fromStringList(ThemeStyle::engines()) },
              { "customDecoration", WindowChromeController::supported() },
+             { "windowEffects", WindowChromeController::effectsSupported() },
+             { "windowEffectMaterials", QJsonArray{ "theme", "none", "mica", "acrylic" } },
+             { "windowEffectControls", QJsonObject{ { "opacity", QJsonObject{ { "minimum", 10 }, { "maximum", 100 } } },
+                                                       { "blur", QJsonObject{ { "minimum", 0 }, { "maximum", 100 } } },
+                                                       { "roundedCorners", true } } },
              { "paletteHotSwap", true },
              { "thirdPartyStyleRequiresRestart", true },
              { "scope", "application" } };
@@ -467,6 +504,8 @@ bool AppearanceService::validate(const QJsonObject& config, QString& error) cons
             return reject(tr("Invalid appearance option type."));
         if (known.value(it.key()).isBool() && !it.value().isBool())
             return reject(tr("Invalid appearance option type."));
+        if (known.value(it.key()).isDouble() && !it.value().isDouble())
+            return reject(tr("Invalid appearance option type."));
     }
     if (config.value("mode") != "system" && config.value("mode") != "independent")
         return reject(tr("Invalid appearance mode."));
@@ -502,6 +541,15 @@ bool AppearanceService::validate(const QJsonObject& config, QString& error) cons
     const auto decoration = config.value("decorationTheme").toString();
     if (!decoration.isEmpty() && component(decoration).value("kind") != "decoration")
         return reject(tr("Window decoration theme is unavailable."));
+    const auto opacity = config.value("windowOpacity").toInt(-1);
+    const auto blur = config.value("windowBlur").toInt(-1);
+    if (opacity < 10 || opacity > 100)
+        return reject(tr("Window opacity must be between 10 and 100."));
+    if (blur < 0 || blur > 100)
+        return reject(tr("Window blur must be between 0 and 100."));
+    const auto material = config.value("windowMaterial").toString();
+    if (material != "theme" && material != "none" && material != "mica" && material != "acrylic")
+        return reject(tr("Invalid window material."));
     return true;
 }
 
@@ -513,6 +561,97 @@ QJsonObject AppearanceService::resolvedConfiguration(const QJsonObject& input) c
         config.insert("palette", config.value(qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark ? "darkPalette" : "lightPalette"));
 #endif
     return config;
+}
+
+QJsonObject AppearanceService::resolvedEffects(const QJsonObject& config) const
+{
+    auto effects = component(config.value("theme").toString()).value("effects").toObject();
+    const bool enabled = config.value("windowEffectsEnabled").toBool(true);
+    const int opacity = qBound(10, config.value("windowOpacity").toInt(100), 100);
+    const int blur = qBound(0, config.value("windowBlur").toInt(100), 100);
+    const auto material = config.value("windowMaterial").toString("theme").toLower();
+    if (!effects.contains("composite"))
+        effects.insert("composite", true);
+    if (!effects.contains("backdrop"))
+        effects.insert("backdrop", "none");
+    if (!effects.contains("translucentWindows"))
+        effects.insert("translucentWindows", false);
+    effects.insert("windowOpacity", opacity);
+    effects.insert("blurStrength", blur);
+    effects.insert("roundedCorners", enabled && config.value("windowRoundedCorners").toBool(true));
+    if (!enabled) {
+        effects.insert("composite", false);
+        effects.insert("translucentWindows", false);
+        effects.insert("blurring", false);
+        effects.insert("blurTranslucent", false);
+        effects.insert("backdrop", "none");
+        return effects;
+    }
+    if (material != "theme") {
+        effects.insert("composite", true);
+        effects.insert("translucentWindows", material != "none" || opacity < 100);
+        effects.insert("blurring", material == "mica" || (material == "acrylic" && blur > 0));
+        effects.insert("blurTranslucent", material == "mica" || (material == "acrylic" && blur > 0));
+        effects.insert("backdrop", material == "none" ? "none" : material);
+    } else if (opacity < 100) {
+        // Keep the theme's material, but make the user's opacity override
+        // visible even for themes that only request plain translucency.
+        effects.insert("translucentWindows", true);
+    }
+    return effects;
+}
+
+void AppearanceService::refreshWindowLayouts()
+{
+    // A style/palette change invalidates size hints, but Qt may defer the
+    // corresponding LayoutRequest until the event loop returns. Recompute
+    // every existing window explicitly so pages and dialogs do not remain in
+    // their pre-theme geometry until the user resizes them.
+    const auto refresh = [](QWidget* widget, const auto& self) -> void {
+        if (!widget)
+            return;
+        widget->ensurePolished();
+        widget->updateGeometry();
+        if (auto layout = widget->layout()) {
+            layout->invalidate();
+            layout->activate();
+        }
+        for (auto child : widget->children())
+            if (auto childWidget = qobject_cast<QWidget*>(child))
+                self(childWidget, self);
+        if (auto layout = widget->layout()) {
+            layout->invalidate();
+            layout->activate();
+        }
+        widget->update();
+    };
+
+    for (auto window : QApplication::topLevelWidgets()) {
+        refresh(window, refresh);
+        if (auto layout = window->layout())
+            layout->activate();
+    }
+    if (m_chrome)
+        m_chrome->relayoutWindows();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
+    for (auto window : QApplication::topLevelWidgets()) {
+        if (auto layout = window->layout())
+            layout->activate();
+        window->updateGeometry();
+        window->update();
+    }
+}
+
+void AppearanceService::queueWindowLayoutRefresh()
+{
+    refreshWindowLayouts();
+    if (m_layoutRefreshQueued)
+        return;
+    m_layoutRefreshQueued = true;
+    QTimer::singleShot(0, this, [this] {
+        m_layoutRefreshQueued = false;
+        refreshWindowLayouts();
+    });
 }
 
 bool AppearanceService::render(const QJsonObject& requested, bool initial, QString& error)
@@ -548,12 +687,20 @@ bool AppearanceService::render(const QJsonObject& requested, bool initial, QStri
         m_manager->restoreSystemWindowColorsOnMac();
     else
         m_manager->setTitlebarColorOfAllWindowsOnMac(qApp->palette().window().color());
+    // Kvantum themes describe compositor effects in their .kvconfig. Pass
+    // those semantic hints to the cross-platform controller even when the
+    // user keeps the native system title bar.
+    m_chrome->setEffects(resolvedEffects(config));
     if (initial) {
         QJsonObject decoration;
         if (!config.value("decorationTheme").toString().isEmpty())
             decoration = component(config.value("decorationTheme").toString()).value("config").toObject();
         m_chrome->initialize(config.value("decoration") == "luna", decoration);
     }
+    // Style sheets, palettes and native window attributes can each enqueue a
+    // layout request. Run once now and once after those deferred requests so
+    // switching back to a theme never needs a manual resize to recover.
+    queueWindowLayoutRefresh();
     return true;
 }
 
@@ -570,8 +717,14 @@ void AppearanceService::initialize()
     // Windows cannot atomically replace the file while this read handle is open.
     file.close();
     m_revision = saved.value("revision").toInteger();
-    m_lastGood = saved.value("lastKnownGood").toObject();
-    m_requested = saved.value("requested").toObject();
+    auto mergeDefaults = [&fallback](QJsonObject value) {
+        for (auto it = fallback.begin(); it != fallback.end(); ++it)
+            if (!value.contains(it.key()))
+                value.insert(it.key(), it.value());
+        return value;
+    };
+    m_lastGood = mergeDefaults(saved.value("lastKnownGood").toObject());
+    m_requested = mergeDefaults(saved.value("requested").toObject());
     if (m_requested.isEmpty())
         m_requested = fallback;
     if (qEnvironmentVariableIntValue("LUNA_SAFE_THEME") == 1) {
@@ -643,6 +796,12 @@ QJsonObject AppearanceService::apply(const QJsonObject& input, qint64 baseRevisi
         --m_revision;
         return {};
     }
+    if (restart) {
+        // Window materials are independent from the Qt widget engine. Apply
+        // them immediately so a theme's Mica/Acrylic/opacity conversion is
+        // visible while the style itself waits for the normal safe restart.
+        m_chrome->setEffects(resolvedEffects(config));
+    }
     if (!restart) {
         if (!render(config, false, error)) {
             m_requested = oldRequested;
@@ -694,6 +853,7 @@ bool AppearanceService::undoPending(qint64 revision, QString& error)
         --m_revision;
         return false;
     }
+    m_chrome->setEffects(resolvedEffects(m_effective));
     auto settings = APPLICATION->settings();
     settings->set("ApplicationTheme", m_effective.value("mode") == "system" ? "system" : m_effective.value("theme").toString());
     settings->set("IconTheme", m_effective.value("icons").toString());
@@ -890,6 +1050,7 @@ void AppearanceService::preview(const QJsonObject& input, QWidget*, QString& err
                                { "decoration", config.value("decoration") },
                                { "name", theme->name() } };
     specification.insert("decorationConfig", component(config.value("decorationTheme").toString()).value("config"));
+    specification.insert("effects", resolvedEffects(config));
     auto iconPaths = QIcon::themeSearchPaths();
     auto iconName = config.value("icons").toString();
     for (const auto& value : m_components) {

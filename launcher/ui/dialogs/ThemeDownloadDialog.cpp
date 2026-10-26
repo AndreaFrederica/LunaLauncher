@@ -8,6 +8,7 @@
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QJsonArray>
@@ -22,6 +23,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSet>
+#include <QSlider>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStyle>
@@ -40,6 +42,28 @@
 
 namespace {
 constexpr int thumbnailStatusRole = Qt::UserRole + 1;
+
+// Store records are read from JSON produced by different versions of the
+// installer.  Older records sometimes contain a numeric contentId while the
+// current manifest writes it as a string.  Comparing QJsonValues directly
+// makes an already installed dependency look missing in the tree.  Store
+// identities are textual (provider + content id), so normalize both fields
+// before comparing them.
+bool sameStoreIdentity(const QJsonObject& left, const QJsonObject& right)
+{
+    const auto text = [](const QJsonValue& value) {
+        if (value.isString())
+            return value.toString().trimmed();
+        if (value.isDouble())
+            return QString::number(value.toInteger());
+        return QString();
+    };
+    const auto provider = [&text](const QJsonObject& value) { return text(value.value("provider")).toCaseFolded(); };
+    const auto contentId = [&text](const QJsonObject& value) { return text(value.value("contentId")); };
+    return !provider(left).isEmpty() && provider(left) == provider(right) && !contentId(left).isEmpty() &&
+           contentId(left) == contentId(right);
+}
+
 class ThemeCardDelegate final : public QStyledItemDelegate {
    public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -441,12 +465,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
             QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
     connect(m_installed, &QTreeWidget::currentItemChanged, this, [this] {
-        const auto s = selection(m_installed);
-        m_remove->setEnabled(!s.value("packageId").toString().isEmpty() || s.value("removable").toBool());
-        m_update->setEnabled(!s.value("packageId").toString().isEmpty() || s.value("dependency").toBool());
-        m_update->setText(s.value("dependency").toBool() ? tr("选择并下载此依赖…") : tr("检查来源更新"));
-        const bool packageRow = s.value("packageId") == s.value("id") || s.value("kind") == "bundle";
-        m_completeApply->setEnabled(packageRow && !s.value("dependency").toBool());
+        updateInstalledActions();
     });
 
     auto combination = new QWidget(this);
@@ -491,8 +510,64 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
         if (!m_filling)
             m_dirty = true;
     });
+    auto effectsTitle = new QLabel(tr("窗口效果"), fields);
+    effectsTitle->setStyleSheet("font-weight: bold; margin-top: 8px;");
+    form->addRow(effectsTitle);
+    m_windowEffectsEnabled = new QCheckBox(tr("启用透明度、模糊和材质效果"), fields);
+    m_windowEffectsEnabled->setObjectName("appearance_windowEffectsEnabled");
+    form->addRow(m_windowEffectsEnabled);
+    connect(m_windowEffectsEnabled, &QCheckBox::toggled, this, [this] {
+        if (!m_filling)
+            m_dirty = true;
+        updateState();
+    });
+    auto sliderRow = [this, fields, form](const QString& label, QSlider*& slider, QLabel*& valueLabel, int minimum, int maximum) {
+        auto row = new QWidget(fields);
+        auto layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        slider = new QSlider(Qt::Horizontal, row);
+        slider->setRange(minimum, maximum);
+        slider->setSingleStep(5);
+        valueLabel = new QLabel(row);
+        valueLabel->setMinimumWidth(48);
+        valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        layout->addWidget(slider, 1);
+        layout->addWidget(valueLabel);
+        form->addRow(label, row);
+        connect(slider, &QSlider::valueChanged, this, [this, valueLabel](int value) {
+            valueLabel->setText(QString::number(value) + '%');
+            if (!m_filling)
+                m_dirty = true;
+            updateState();
+        });
+        return row;
+    };
+    sliderRow(tr("窗口透明度"), m_windowOpacity, m_windowOpacityValue, 10, 100);
+    sliderRow(tr("模糊强度"), m_windowBlur, m_windowBlurValue, 0, 100);
+    m_windowOpacity->setObjectName("appearance_windowOpacity");
+    m_windowBlur->setObjectName("appearance_windowBlur");
+    m_windowMaterial = new QComboBox(fields);
+    m_windowMaterial->setObjectName("appearance_windowMaterial");
+    m_windowMaterial->addItem(tr("跟随主题"), "theme");
+    m_windowMaterial->addItem(tr("关闭材质"), "none");
+    m_windowMaterial->addItem(tr("Windows Mica"), "mica");
+    m_windowMaterial->addItem(tr("Windows Acrylic"), "acrylic");
+    form->addRow(tr("材质类型"), m_windowMaterial);
+    connect(m_windowMaterial, &QComboBox::currentIndexChanged, this, [this] {
+        if (!m_filling)
+            m_dirty = true;
+        updateState();
+    });
+    m_windowRoundedCorners = new QCheckBox(tr("使用圆角窗口（Windows 11 / 支持的平台）"), fields);
+    m_windowRoundedCorners->setObjectName("appearance_windowRoundedCorners");
+    form->addRow(m_windowRoundedCorners);
+    connect(m_windowRoundedCorners, &QCheckBox::toggled, this, [this] {
+        if (!m_filling)
+            m_dirty = true;
+    });
     auto help = new QLabel(tr("安装不会自动应用。Kvantum 可改变真实 Qt 控件的形状、尺寸和状态绘制，并使用主题自带配色。"
                               "配色和图标可即时切换；控件皮肤、外观模式和窗口装饰的变化会在下次启动生效。"
+                              "窗口透明度和材质会立即尝试应用；Windows Acrylic / Mica 需要系统 DWM 合成，模糊半径由平台近似实现。"
                               "KWin / Aurorae 窗口装饰和 Plasma 桌面组件需要各自的运行环境。"),
                            fields);
     help->setWordWrap(true);
@@ -825,12 +900,17 @@ void ThemeDownloadDialog::installSelected()
     request.insert("components", allowed);
     startInstall(request);
 }
-void ThemeDownloadDialog::startInstall(QJsonObject request)
+void ThemeDownloadDialog::startInstall(QJsonObject request, std::function<void(bool, const QString&)> completion)
 {
     auto task =
         makeShared<ThemeInstallTask>(APPLICATION->network().get(), request, m_service->packageDirectory(), m_service->cacheDirectory());
     m_service->retainTask(task);
     connect(task.get(), &Task::succeeded, m_service, [] { APPLICATION->themeManager()->refresh(); });
+    if (completion) {
+        connect(task.get(), &Task::finished, this, [this, task, completion = std::move(completion)] {
+            completion(task->wasSuccessful(), task->failReason());
+        });
+    }
     task->start();
     m_navigation->setCurrentRow(3);
 }
@@ -882,14 +962,13 @@ void ThemeDownloadDialog::refreshInstalled()
                 declaredDependencyKinds.insert(dependency.value("category").toString());
                 bool found = false;
                 for (const auto& package : m_service->packages())
-                    found |= package.toObject().value("provider") == dependency.value("provider") &&
-                             package.toObject().value("contentId") == dependency.value("contentId");
+                    found |= sameStoreIdentity(package.toObject(), dependency);
                 if (found)
                     continue;
                 dependency.insert("dependency", true);
                 dependency.insert("id", "dependency-" + dependency.value("contentId").toString());
                 auto child = new QTreeWidgetItem(row, { kindName(dependency.value("category").toString()) + " · #" + dependency.value("contentId").toString(),
-                                                       tr("商店依赖"), tr("尚未安装 · 选择后点击下载") });
+                                                       tr("商店依赖"), tr("尚未安装 · 选择后自动下载") });
                 child->setData(0, Qt::UserRole, dependency);
             }
             // KDE look-and-feel packages commonly contain only contents/defaults.
@@ -913,7 +992,7 @@ void ThemeDownloadDialog::refreshInstalled()
                 auto child = new QTreeWidgetItem(
                     row,
                     { kindName(kind) + " · " + missing.value("name").toString(), tr("KDE 组件引用"),
-                      tr("包内未包含资源 · 点击后浏览对应商店分类") });
+                      tr("包内未包含资源 · 选择后自动查找并下载") });
                 child->setData(0, Qt::UserRole, missing);
             }
             row->setExpanded(true);
@@ -921,14 +1000,25 @@ void ThemeDownloadDialog::refreshInstalled()
     }
     for (auto row : packages)
         row->setExpanded(true);
-    m_remove->setEnabled(!selection(m_installed).value("packageId").toString().isEmpty() ||
-                         selection(m_installed).value("removable").toBool());
-    const bool dependencySelected = selection(m_installed).value("dependency").toBool();
-    m_update->setEnabled(m_remove->isEnabled() || dependencySelected);
-    m_update->setText(dependencySelected ? tr("选择并下载此依赖…") : tr("检查来源更新"));
-    const auto selectedData = selection(m_installed);
-    const bool packageRow = selectedData.value("packageId") == selectedData.value("id") || selectedData.value("kind") == "bundle";
-    m_completeApply->setEnabled(packageRow && !dependencySelected);
+    updateInstalledActions();
+}
+void ThemeDownloadDialog::updateInstalledActions()
+{
+    const auto selected = selection(m_installed);
+    const bool dependencySelected = selected.value("dependency").toBool();
+    const bool removable = !selected.value("packageId").toString().isEmpty() || selected.value("removable").toBool();
+    m_remove->setEnabled(removable);
+    m_update->setEnabled(removable || dependencySelected);
+    m_update->setText(dependencySelected ? tr("补全并下载此组件…") : tr("检查来源更新"));
+    const bool packageRow = selected.value("packageId") == selected.value("id") || selected.value("kind") == "bundle";
+    bool complete = true;
+    if (packageRow && !dependencySelected) {
+        QString error;
+        const auto resolved = m_service->packageConfiguration(selected.value("id").toString(), error);
+        complete = error.isEmpty() && resolved.value("complete").toBool();
+    }
+    m_completeApply->setText(complete ? tr("一键完整应用") : tr("补全依赖并应用"));
+    m_completeApply->setEnabled(packageRow && !dependencySelected && !m_completionInProgress);
 }
 bool ThemeDownloadDialog::buildSelectedConfiguration(QJsonObject& configuration, bool promptVariants, QString& error)
 {
@@ -1027,8 +1117,254 @@ void ThemeDownloadDialog::configureSelected()
     updateState();
     m_draftStatus->setText(tr("已载入此包的组件组合，请预览后应用。"));
 }
+void ThemeDownloadDialog::beginCompletion(const QJsonObject& package)
+{
+    if (m_completionInProgress)
+        return;
+    QString error;
+    const auto resolved = m_service->packageConfiguration(package.value("id").toString(), error);
+    if (!error.isEmpty()) {
+        QMessageBox::information(this, tr("无法补全主题"), error);
+        return;
+    }
+    QJsonArray queue;
+    QSet<QString> keys;
+    for (const auto& value : resolved.value("dependencies").toArray()) {
+        const auto dependency = value.toObject();
+        if (!dependency.value("supported").toBool() || dependency.value("contentId").toString().isEmpty())
+            continue;
+        const auto key = dependency.value("provider").toString() + ':' + dependency.value("contentId").toString();
+        bool installed = false;
+        for (const auto& installedPackage : m_service->packages())
+            installed |= sameStoreIdentity(installedPackage.toObject(), dependency);
+        if (!installed && !keys.contains(key)) {
+            keys.insert(key);
+            queue.append(dependency);
+        }
+    }
+    for (const auto& value : resolved.value("missing").toArray()) {
+        auto reference = value.toObject();
+        const auto kind = reference.value("kind").toString();
+        const auto name = reference.value("name").toString().trimmed();
+        if (!QStringList{ "widgets", "palette", "icons" }.contains(kind) || name.isEmpty())
+            continue;
+        const auto key = kind + ':' + name.toLower();
+        if (keys.contains(key))
+            continue;
+        keys.insert(key);
+        reference.insert("provider", "kde");
+        reference.insert("category", kind);
+        reference.insert("reference", name);
+        queue.append(reference);
+    }
+    if (queue.isEmpty()) {
+        m_status->setText(tr("主题组件已经齐全。"));
+        return;
+    }
+    m_completionPackageId = package.value("packageId").toString();
+    if (m_completionPackageId.isEmpty())
+        m_completionPackageId = package.value("id").toString();
+    m_completionQueue = queue;
+    m_completionAutoApply = true;
+    m_completionInProgress = true;
+    m_status->setText(tr("正在补全主题组件…"));
+    updateInstalledActions();
+    continueCompletion();
+}
+void ThemeDownloadDialog::continueCompletion()
+{
+    if (!m_completionInProgress)
+        return;
+    if (m_completionQueue.isEmpty()) {
+        const auto packageId = m_completionPackageId;
+        const auto apply = m_completionAutoApply;
+        m_completionInProgress = false;
+        m_completionAutoApply = false;
+        m_completionPackageId.clear();
+        refreshInstalled();
+        updateInstalledActions();
+        if (!apply) {
+            m_status->setText(tr("主题组件补全完成。"));
+            return;
+        }
+        QTimer::singleShot(0, this, [this, packageId] {
+            std::function<QTreeWidgetItem*(QTreeWidgetItem*)> find = [&](QTreeWidgetItem* parent) -> QTreeWidgetItem* {
+                for (int i = 0; i < parent->childCount(); ++i) {
+                    auto* item = parent->child(i);
+                    const auto data = item->data(0, Qt::UserRole).toJsonObject();
+                    if (data.value("packageId").toString() == packageId &&
+                        (data.value("id").toString() == packageId || data.value("kind") == "bundle"))
+                        return item;
+                    if (auto* found = find(item))
+                        return found;
+                }
+                return nullptr;
+            };
+            QTreeWidgetItem* selected = nullptr;
+            for (int i = 0; i < m_installed->topLevelItemCount() && !selected; ++i) {
+                auto* item = m_installed->topLevelItem(i);
+                const auto data = item->data(0, Qt::UserRole).toJsonObject();
+                selected = data.value("packageId").toString() == packageId ? item : find(item);
+            }
+            if (!selected) {
+                m_status->setText(tr("组件已下载，但无法定位原主题包。"));
+                return;
+            }
+            m_installed->setCurrentItem(selected);
+            applyCompleteSelected();
+        });
+        return;
+    }
+    const auto item = m_completionQueue.takeAt(0).toObject();
+    if (item.value("contentId").toString().isEmpty())
+        resolveCompletionReference(item);
+    else
+        installCompletionItem(item);
+}
+void ThemeDownloadDialog::resolveCompletionReference(const QJsonObject& reference)
+{
+    const auto wanted = reference.value("reference").toString();
+    const bool anyKvantumTheme = reference.value("category").toString() == "widgets" && wanted.compare("kvantum", Qt::CaseInsensitive) == 0;
+    auto request = QJsonObject{ { "provider", "kde" },
+                                { "category", reference.value("category") },
+                                { "sort", "high" },
+                                { "page", 0 },
+                                { "refresh", true } };
+    if (!anyKvantumTheme)
+        request.insert("search", wanted);
+    m_completionStore = makeShared<ThemeStoreTask>(APPLICATION->network().get(), request, m_service->cacheDirectory());
+    auto raw = m_completionStore.get();
+    connect(raw, &Task::finished, this, [this, raw, reference, wanted] {
+        if (!m_completionInProgress)
+            return;
+        if (!raw->wasSuccessful()) {
+            completeInstallation(false, tr("无法查找 %1：%2").arg(reference.value("reference").toString(), raw->failReason()));
+            return;
+        }
+        QList<QJsonObject> candidates;
+        for (const auto& value : raw->result().value("items").toArray()) {
+            const auto item = value.toObject();
+            if (!item.value("installable").toBool())
+                continue;
+            const auto name = item.value("name").toString();
+            if (reference.value("reference").toString().compare("kvantum", Qt::CaseInsensitive) == 0)
+                candidates.append(item);
+            else if (name.compare(wanted, Qt::CaseInsensitive) == 0)
+                candidates.prepend(item);
+            else if (name.contains(wanted, Qt::CaseInsensitive))
+                candidates.append(item);
+        }
+        if (candidates.isEmpty()) {
+            completeInstallation(false, tr("商店中没有找到与“%1”匹配的%2组件。").arg(wanted, kindName(reference.value("category").toString())));
+            return;
+        }
+        QJsonObject selected = candidates.first();
+        if (candidates.size() > 1) {
+            QStringList names;
+            for (const auto& candidate : candidates)
+                names.append(candidate.value("name").toString() + " · #" + candidate.value("id").toString());
+            bool ok = false;
+            const auto choice = QInputDialog::getItem(this, tr("选择要补全的组件"), kindName(reference.value("category").toString()), names,
+                                                      0, false, &ok);
+            if (!ok) {
+                completeInstallation(false, tr("已取消选择“%1”的组件。").arg(wanted));
+                return;
+            }
+            selected = candidates.at(qMax(0, names.indexOf(choice)));
+        }
+        installCompletionItem(selected);
+    });
+    m_completionStore->start();
+}
+void ThemeDownloadDialog::installCompletionItem(const QJsonObject& item)
+{
+    auto request = item;
+    request.insert("provider", "kde");
+    request.insert("mode", "files");
+    request.insert("contentId", item.value("contentId").toString().isEmpty() ? item.value("id") : item.value("contentId"));
+    request.insert("category", item.value("category"));
+    request.insert("refresh", true);
+    m_completionStore = makeShared<ThemeStoreTask>(APPLICATION->network().get(), request, m_service->cacheDirectory());
+    auto raw = m_completionStore.get();
+    connect(raw, &Task::finished, this, [this, raw, item] {
+        if (!m_completionInProgress)
+            return;
+        if (!raw->wasSuccessful()) {
+            completeInstallation(false, tr("无法读取 %1 的下载文件：%2").arg(item.value("name").toString(), raw->failReason()));
+            return;
+        }
+        QList<QJsonObject> files;
+        for (const auto& value : raw->result().value("files").toArray())
+            if (value.toObject().value("installable").toBool())
+                files.append(value.toObject());
+        if (files.isEmpty()) {
+            completeInstallation(false, tr("%1 没有可安装的下载文件。").arg(item.value("name").toString()));
+            return;
+        }
+        QJsonObject file = files.first();
+        if (files.size() > 1) {
+            QStringList names;
+            for (const auto& candidate : files)
+                names.append(candidate.value("name").toString());
+            bool ok = false;
+            const auto choice = QInputDialog::getItem(this, tr("选择主题组件文件"), item.value("name").toString(), names, 0, false, &ok);
+            if (!ok) {
+                completeInstallation(false, tr("已取消下载 %1。").arg(item.value("name").toString()));
+                return;
+            }
+            file = files.at(qMax(0, names.indexOf(choice)));
+        }
+        auto install = item;
+        const auto contentId = item.value("contentId").toString().isEmpty() ? item.value("id") : item.value("contentId");
+        install.insert("contentId", contentId);
+        install.insert("provider", "kde");
+        install.insert("category", item.value("category"));
+        if (install.value("name").toString().isEmpty() && !raw->result().value("items").toArray().isEmpty())
+            install.insert("name", raw->result().value("items").toArray().first().toObject().value("name"));
+        install.insert("fileId", file.value("id"));
+        install.insert("name", file.value("name"));
+        install.insert("title", item.value("name").toString().isEmpty() ? raw->result().value("items").toArray().at(0).toObject().value("name")
+                                                                          : item.value("name"));
+        install.insert("version", file.value("version"));
+        install.insert("components", QJsonArray{ item.value("category") });
+        install.insert("skipDependencies", true);
+        startInstall(install, [this, item](bool succeeded, const QString& error) {
+            if (!succeeded) {
+                completeInstallation(false, tr("安装 %1 失败：%2").arg(item.value("name").toString(), error));
+                return;
+            }
+            completeInstallation(true);
+        });
+    });
+    m_completionStore->start();
+}
+void ThemeDownloadDialog::completeInstallation(bool succeeded, const QString& error)
+{
+    m_completionStore.reset();
+    if (!succeeded) {
+        m_completionQueue = {};
+        m_completionInProgress = false;
+        m_completionAutoApply = false;
+        m_completionPackageId.clear();
+        updateInstalledActions();
+        m_status->setText(error.isEmpty() ? tr("主题组件补全失败。") : error);
+        return;
+    }
+    m_status->setText(tr("组件已安装，继续补全剩余组件…"));
+    continueCompletion();
+}
 void ThemeDownloadDialog::applyCompleteSelected()
 {
+    const auto selected = selection(m_installed);
+    if (!m_completionInProgress && !selected.value("dependency").toBool() &&
+        (selected.value("packageId") == selected.value("id") || selected.value("kind") == "bundle")) {
+        QString resolvedError;
+        const auto resolved = m_service->packageConfiguration(selected.value("id").toString(), resolvedError);
+        if (resolvedError.isEmpty() && !resolved.value("complete").toBool()) {
+            beginCompletion(selected);
+            return;
+        }
+    }
     QJsonObject configuration;
     QString error;
     if (!buildSelectedConfiguration(configuration, false, error)) {
@@ -1065,6 +1401,18 @@ void ThemeDownloadDialog::removeSelected()
 void ThemeDownloadDialog::updateSelected()
 {
     auto s = selection(m_installed);
+    if (s.value("dependency").toBool()) {
+        if (m_completionInProgress)
+            return;
+        m_completionQueue = QJsonArray{ s };
+        m_completionPackageId.clear();
+        m_completionAutoApply = false;
+        m_completionInProgress = true;
+        m_status->setText(tr("正在补全组件…"));
+        updateInstalledActions();
+        continueCompletion();
+        return;
+    }
     if (!s.contains("provider"))
         for (const auto& value : m_service->packages())
             if (value.toObject().value("id") == s.value("packageId"))
@@ -1098,6 +1446,11 @@ QJsonObject ThemeDownloadDialog::draft() const
     for (auto it = m_options.begin(); it != m_options.end(); ++it)
         result.insert(it.key(), it.value()->currentData().toString());
     result.insert("systemTitlebarPalette", m_titlebarPalette->isChecked());
+    result.insert("windowEffectsEnabled", m_windowEffectsEnabled->isChecked());
+    result.insert("windowOpacity", m_windowOpacity->value());
+    result.insert("windowBlur", m_windowBlur->value());
+    result.insert("windowMaterial", m_windowMaterial->currentData().toString());
+    result.insert("windowRoundedCorners", m_windowRoundedCorners->isChecked());
     return result;
 }
 void ThemeDownloadDialog::refreshChoices(bool fromState)
@@ -1143,6 +1496,14 @@ void ThemeDownloadDialog::refreshChoices(bool fromState)
         it.value()->setCurrentIndex(index);
     }
     m_titlebarPalette->setChecked(config.value("systemTitlebarPalette").toBool());
+    m_windowEffectsEnabled->setChecked(config.value("windowEffectsEnabled").toBool(true));
+    m_windowOpacity->setValue(qBound(10, config.value("windowOpacity").toInt(100), 100));
+    m_windowBlur->setValue(qBound(0, config.value("windowBlur").toInt(100), 100));
+    auto materialIndex = m_windowMaterial->findData(config.value("windowMaterial").toString("theme"));
+    m_windowMaterial->setCurrentIndex(materialIndex < 0 ? 0 : materialIndex);
+    m_windowRoundedCorners->setChecked(config.value("windowRoundedCorners").toBool(true));
+    m_windowOpacityValue->setText(QString::number(m_windowOpacity->value()) + '%');
+    m_windowBlurValue->setText(QString::number(m_windowBlur->value()) + '%');
     if (fromState)
         m_baseRevision = m_service->state().value("revision").toInteger();
     m_filling = false;
@@ -1177,6 +1538,11 @@ void ThemeDownloadDialog::updateState()
     for (const auto& key : { "lightPalette", "darkPalette" })
         m_options[key]->setEnabled(independent && automatic);
     m_options["decorationTheme"]->setEnabled(m_options["decoration"]->currentData() == "luna");
+    const bool effects = m_windowEffectsEnabled->isChecked();
+    m_windowOpacity->setEnabled(effects);
+    m_windowBlur->setEnabled(effects);
+    m_windowMaterial->setEnabled(effects);
+    m_windowRoundedCorners->setEnabled(effects);
     if (m_dirty && m_baseRevision != state.value("revision").toInteger())
         m_draftStatus->setText(tr("外观已在其他位置修改。草稿已保留，请重载已保存组合后重新审阅。"));
 }

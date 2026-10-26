@@ -16,6 +16,13 @@ namespace {
 constexpr qint64 maxSize = 256LL * 1024 * 1024;
 bool copyDirectory(const QDir& source, const QDir& target, QString& error, const std::shared_ptr<std::atomic_bool>& cancelled)
 {
+    // Directory imports need the same case-preserving staging as archive
+    // imports.  Icon themes such as Candy contain paths that differ only by
+    // case; on NTFS this is supported per directory, but only after the flag
+    // is enabled before the first colliding entry is copied.  Keep the
+    // portable fallback unchanged when the filesystem does not support it.
+    target.mkpath(".");
+    const bool caseSensitive = ThemePackage::enableCaseSensitiveDirectory(target);
     QDirIterator iterator(source.absolutePath(), QDir::Files | QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot,
                           QDirIterator::Subdirectories);
     qint64 size = 0;
@@ -39,6 +46,8 @@ bool copyDirectory(const QDir& source, const QDir& target, QString& error, const
                 error = QObject::tr("Could not copy theme directory.");
                 return false;
             }
+            if (caseSensitive)
+                ThemePackage::enableCaseSensitiveDirectory(QDir(target.filePath(relative)));
             continue;
         }
         size += info.size();

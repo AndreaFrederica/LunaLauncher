@@ -11,6 +11,70 @@ from api_sidecar_smoke import Sidecar
 from theme_system_smoke import COLORS, wait_for_png
 
 
+def native_test_environment(executable: Path, native_tests: Path) -> dict[str, str]:
+    """Return a self-contained Qt runtime environment for native GUI tests.
+
+    The launcher install tree normally contains the platform plugins, while a
+    build-tree test executable does not.  Keep an explicitly supplied Qt
+    environment intact and fill in the common local layouts when it is absent.
+    This prevents Windows from showing the Qt platform-plugin error dialog when
+    the smoke test is run from a clean shell or CI worker.
+    """
+    env = dict(os.environ)
+    env['QT_QPA_PLATFORM'] = 'windows'
+
+    executable_dir = executable.resolve().parent
+    native_dir = native_tests.resolve().parent
+    repository = Path(__file__).resolve().parents[1]
+
+    qt_roots: list[Path] = []
+    for variable in ('QT_DIR', 'Qt6_DIR', 'QTDIR'):
+        value = env.get(variable)
+        if value:
+            qt_roots.append(Path(value))
+
+    qt_roots.extend([
+        repository / 'third_party' / 'qt' / '6.10.1' / 'msvc2022_64',
+        native_dir / 'qt',
+        executable_dir,
+    ])
+
+    plugin_roots: list[Path] = []
+    existing_plugins = env.get('QT_PLUGIN_PATH')
+    if existing_plugins:
+        plugin_roots.extend(Path(item) for item in existing_plugins.split(os.pathsep) if item)
+    # The install directory is preferred because it carries the same plugins
+    # as the launcher DLLs used by the test process.
+    for root in [executable_dir, *qt_roots]:
+        candidate = root / 'plugins'
+        if (candidate / 'platforms').is_dir():
+            plugin_roots.append(candidate)
+        if (root / 'platforms').is_dir():
+            plugin_roots.append(root)
+
+    unique_plugins: list[str] = []
+    for path in plugin_roots:
+        resolved = str(path.resolve())
+        if resolved not in unique_plugins and Path(resolved).is_dir():
+            unique_plugins.append(resolved)
+    if unique_plugins:
+        env['QT_PLUGIN_PATH'] = os.pathsep.join(unique_plugins)
+
+    path_entries = [str(executable_dir)]
+    for root in qt_roots:
+        candidate = root / 'bin'
+        if candidate.is_dir():
+            path_entries.append(str(candidate.resolve()))
+    current_path = env.get('PATH', '')
+    path_entries.extend(item for item in current_path.split(os.pathsep) if item)
+    unique_path: list[str] = []
+    for item in path_entries:
+        if item and item not in unique_path:
+            unique_path.append(item)
+    env['PATH'] = os.pathsep.join(unique_path)
+    return env
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', type=Path, required=True)
@@ -76,6 +140,16 @@ def main():
             desktop = s.ok('appearance.import', path=str(empty.parent))
             report = s.ok('appearance.package.configuration', id=desktop['packageId'])
             assert not report['complete'] and report['missing'][0]['kind'] == 'application', report
+            global_only = root/'global-only/contents'
+            global_only.mkdir(parents=True)
+            (global_only/'defaults').write_text(
+                '[kdeglobals][KDE]\nwidgetStyle=MissingWidgetStyle\n[kdeglobals][Icons]\nTheme=MissingIcons\n',
+                encoding='utf-8')
+            (global_only.parent/'metadata.json').write_text(json.dumps({'KPlugin': {'Name': 'Global references only'}}), encoding='utf-8')
+            global_package = s.ok('appearance.import', path=str(global_only.parent))
+            global_report = s.ok('appearance.package.configuration', id=global_package['packageId'])
+            assert not global_report['complete'] and any(
+                item['kind'] == 'widgets' and item['name'] == 'MissingWidgetStyle' for item in global_report['missing']), global_report
             real_configurations = []
             for number, real in enumerate(args.real_theme):
                 package = s.ok('appearance.import', path=str(real.resolve()))
@@ -110,9 +184,12 @@ def main():
                     native_output.mkdir(exist_ok=True)
                     result = subprocess.run([str(args.native_tests.resolve()), 'nativeControls', 'cardGallery', 'navigationAndTransactions',
                         '-o', str(native_output/'native-tests.txt')+',txt'], cwd=executable.parent, capture_output=True, timeout=60,
-                        env={**os.environ, 'QT_QPA_PLATFORM': 'windows', 'LUNA_THEME_TEST_PROFILE': str(root/'profile'),
+                        env={**native_test_environment(executable, args.native_tests), 'LUNA_THEME_TEST_PROFILE': str(root/'profile'),
                             'LUNA_THEME_TEST_PREVIEWS': str(output), 'LUNA_THEME_TEST_OUTPUT': str(native_output)})
-                    assert result.returncode == 0, name + '\n' + (native_output/'native-tests.txt').read_text(errors='replace')[-5000:]
+                    native_log = native_output/'native-tests.txt'
+                    details = native_log.read_text(errors='replace') if native_log.exists() else (
+                        result.stdout.decode(errors='replace') + result.stderr.decode(errors='replace'))
+                    assert result.returncode == 0, name + f' (exit {result.returncode})\n' + details[-5000:]
                     s = Sidecar(executable, root/'profile')
                 evidence.append({'theme': name, 'configuration': configuration, 'restart': 'passed',
                     'nativeControlsAndGallery': 'passed' if args.native_tests else 'not requested'})

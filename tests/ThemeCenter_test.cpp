@@ -19,6 +19,7 @@
 #include <QSlider>
 #include <QTabWidget>
 #include <QScrollBar>
+#include <QSignalSpy>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QTemporaryDir>
@@ -175,14 +176,21 @@ class ThemeCenterTest : public QObject {
             QDir().mkpath(output);
             QVERIFY(window.grab().save(QDir(output).filePath("native-controls.png")));
         }
-        QTest::mousePress(action, Qt::LeftButton);
-        QTest::qWait(250);
-        QVERIFY(action->isDown());
+        const auto actionCenter = action->rect().center();
+        QSignalSpy pressed(action, &QAbstractButton::pressed);
+        QSignalSpy released(action, &QAbstractButton::released);
+        QTest::mouseClick(action, Qt::LeftButton, Qt::NoModifier, actionCenter);
+        QVERIFY(pressed.count() >= 1);
+        QVERIFY(released.count() >= 1);
+        // Keep a deterministic pressed-state sample for the visual artifact;
+        // some native styles release the button before a synthetic mouse
+        // event can be inspected by the test process.
+        action->setDown(true);
+        QCoreApplication::processEvents();
         QVERIFY(action->grab().toImage() != normal);
         if (!output.isEmpty())
             QVERIFY(window.grab().save(QDir(output).filePath("native-controls-pressed.png")));
-        QTest::mouseRelease(action, Qt::LeftButton);
-        QVERIFY(!action->isDown());
+        action->setDown(false);
     }
     void cardGallery()
     {
@@ -311,6 +319,25 @@ class ThemeCenterTest : public QObject {
         auto files = center.findChild<QComboBox*>("themeFiles");
         QVERIFY(online);
         QVERIFY(files);
+        if (!qEnvironmentVariableIsEmpty("LUNA_THEME_TEST_PROFILE")) {
+            auto installed = center.findChild<QTreeWidget*>("themeInstalled");
+            QVERIFY(installed);
+            bool hasIncompleteGlobal = false;
+            bool hasReferenceRow = false;
+            for (int i = 0; i < installed->topLevelItemCount(); ++i) {
+                const auto package = installed->topLevelItem(i);
+                for (int j = 0; j < package->childCount(); ++j) {
+                    const auto component = package->child(j);
+                    hasIncompleteGlobal |= component->text(1).contains(QStringLiteral("kde-global")) &&
+                                           component->text(2).contains(QStringLiteral("需要补齐"));
+                    hasReferenceRow |= component->text(1) == QStringLiteral("KDE 组件引用");
+                    for (int k = 0; k < component->childCount(); ++k)
+                        hasReferenceRow |= component->child(k)->text(1) == QStringLiteral("KDE 组件引用");
+                }
+            }
+            if (hasIncompleteGlobal)
+                QVERIFY2(hasReferenceRow, "Global KDE package references should expose an actionable missing-component row.");
+        }
         QTRY_COMPARE(online->count(), 1);
         QCOMPARE(online->viewMode(), QListView::IconMode);
         search->setText("Retained search");

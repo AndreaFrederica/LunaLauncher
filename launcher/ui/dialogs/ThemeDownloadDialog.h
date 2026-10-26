@@ -7,6 +7,7 @@
 #include "QObjectPtr.h"
 class AppearanceService;
 class ThemeStoreTask;
+class ThemeThumbnailLoader;
 class Task;
 class QComboBox;
 class QCheckBox;
@@ -17,7 +18,6 @@ class QPushButton;
 class QStackedWidget;
 class QTextBrowser;
 class QTreeWidget;
-class QNetworkReply;
 // Original name retained for existing Classic UI entry points.
 class ThemeDownloadDialog final : public QDialog {
     Q_OBJECT
@@ -34,8 +34,6 @@ class ThemeDownloadDialog final : public QDialog {
     void query(bool refresh = false, int page = 0, const QString& contentId = {});
     void showDetails();
     void loadFiles(const QJsonObject& identity);
-    void loadThumbnail(const QString& url, quint64 generation);
-    void displayThumbnail(const QByteArray& bytes,quint64 generation,const QString& cachePath = {});
     void filter();
     void installSelected();
     void startInstall(QJsonObject request);
@@ -57,13 +55,14 @@ class ThemeDownloadDialog final : public QDialog {
     QComboBox *m_source, *m_category, *m_sort, *m_files;
     QLineEdit* m_search;
     QCheckBox *m_compatible, *m_titlebarPalette;
-    QTreeWidget *m_online, *m_installed, *m_tasks;
+    QListWidget* m_online;
+    QTreeWidget *m_installed, *m_tasks;
     QTextBrowser* m_description;
     QPushButton *m_install, *m_previous, *m_next, *m_remove, *m_update, *m_cancel, *m_retry, *m_undo;
     QHash<QString, QComboBox*> m_options;
     QHash<QString, QCheckBox*> m_allowed;
     shared_qobject_ptr<ThemeStoreTask> m_query, m_details;
-    QPointer<QNetworkReply> m_imageReply;
+    ThemeThumbnailLoader* m_thumbnails;
     QJsonObject m_selected, m_loadedQuery;
     qint64 m_baseRevision = 0;
     quint64 m_queryGeneration = 0, m_detailGeneration = 0;

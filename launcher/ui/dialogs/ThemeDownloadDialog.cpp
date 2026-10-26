@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ThemeDownloadDialog.h"
-#include <QBuffer>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QCryptographicHash>
-#include <QDateTime>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
-#include <QFutureWatcher>
 #include <QGridLayout>
 #include <QHeaderView>
-#include <QImageReader>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QLabel>
@@ -20,26 +15,104 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
-#include <QNetworkReply>
+#include <QPainter>
+#include <QPersistentModelIndex>
 #include <QPushButton>
-#include <QSaveFile>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStyle>
+#include <QStyledItemDelegate>
 #include <QTextBrowser>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
-#include <QtConcurrent>
 #include "Application.h"
 #include "settings/SettingsObject.h"
 #include "ui/themes/AppearanceService.h"
 #include "ui/themes/ThemeInstallTask.h"
 #include "ui/themes/ThemeManager.h"
 #include "ui/themes/ThemeStore.h"
+#include "ui/themes/ThemeThumbnailLoader.h"
 
 namespace {
+constexpr int thumbnailStatusRole = Qt::UserRole + 1;
+class ThemeCardDelegate final : public QStyledItemDelegate {
+   public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const override
+    {
+        const auto view = qobject_cast<const QListView*>(parent());
+        return view && view->gridSize().isValid() ? view->gridSize() - QSize(2, 2) : QSize(218, 208);
+    }
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QStyleOptionViewItem panel(option);
+        initStyleOption(&panel, index);
+        panel.text.clear();
+        panel.icon = {};
+        auto style = panel.widget ? panel.widget->style() : QApplication::style();
+        painter->save();
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &panel, painter, panel.widget);
+        const auto card = option.rect.adjusted(5, 5, -5, -5);
+        const auto preview = QRect(card.left() + 7, card.top() + 7, card.width() - 14, card.height() - 76);
+        painter->setPen(option.palette.color((option.state & QStyle::State_Selected) ? QPalette::Highlight : QPalette::Mid));
+        painter->drawRoundedRect(card.adjusted(0, 0, -1, -1), 5, 5);
+        painter->fillRect(preview, option.palette.brush(QPalette::AlternateBase));
+        const auto pixmap = index.data(Qt::DecorationRole).value<QPixmap>();
+        if (!pixmap.isNull()) {
+            const auto size = pixmap.size().scaled(preview.size(), Qt::KeepAspectRatio);
+            const QRect target(preview.center() - QPoint(size.width() / 2, size.height() / 2), size);
+            painter->setRenderHint(QPainter::SmoothPixmapTransform);
+            painter->drawPixmap(target, pixmap);
+        } else {
+            painter->setPen(option.palette.color(QPalette::Text));
+            painter->drawText(preview, Qt::AlignCenter | Qt::TextWordWrap, index.data(thumbnailStatusRole).toString());
+        }
+        painter->setClipRect(card);
+        painter->setPen(option.palette.color((option.state & QStyle::State_Selected) ? QPalette::HighlightedText : QPalette::Text));
+        auto font = option.font;
+        font.setBold(true);
+        painter->setFont(font);
+        const QRect title(card.left() + 7, preview.bottom() + 9, card.width() - 14, 36);
+        painter->drawText(title, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, index.data(Qt::DisplayRole).toString());
+        font.setBold(false);
+        painter->setFont(font);
+        const auto metadata = index.data(Qt::UserRole).toJsonObject();
+        painter->drawText(QRect(title.left(), title.bottom() + 2, title.width(), 18), Qt::AlignCenter,
+                         QFontMetrics(font).elidedText(metadata.value("author").toString(), Qt::ElideRight, title.width()));
+        painter->restore();
+    }
+};
+class ThemeCardView final : public QListWidget {
+   public:
+    explicit ThemeCardView(QWidget* parent) : QListWidget(parent)
+    {
+        setViewMode(QListView::IconMode);
+        setResizeMode(QListView::Adjust);
+        setMovement(QListView::Static);
+        setSpacing(0);
+        setSelectionMode(QAbstractItemView::SingleSelection);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+        setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        setUniformItemSizes(true);
+        setMouseTracking(true);
+        setWordWrap(true);
+        setItemDelegate(new ThemeCardDelegate(this));
+        setMinimumWidth(190);
+    }
+   protected:
+    void resizeEvent(QResizeEvent* event) override
+    {
+        QListWidget::resizeEvent(event);
+        const auto width = qMax(160, viewport()->width() - 16);
+        const auto columns = qMax(1, width / 220);
+        const auto cellWidth = width / columns;
+        setGridSize(QSize(cellWidth, (cellWidth - 24) * 9 / 16 + 86));
+    }
+};
 QIcon iconFor(const QString& name)
 {
     QStyle::StandardPixmap fallback = QStyle::SP_FileIcon;
@@ -108,6 +181,15 @@ QJsonObject selection(QTreeWidget* view)
 {
     return view->currentItem() ? view->currentItem()->data(0, Qt::UserRole).toJsonObject() : QJsonObject();
 }
+QJsonObject selection(QListWidget* view)
+{
+    return view->currentItem() ? view->currentItem()->data(Qt::UserRole).toJsonObject() : QJsonObject();
+}
+QString previewUrl(const QJsonObject& item)
+{
+    const auto preview = item.value("preview").toString();
+    return preview.isEmpty() ? item.value("thumbnail").toString() : preview;
+}
 void openWeb(const QString& value)
 {
     const QUrl url(value);
@@ -147,6 +229,7 @@ void ThemeDownloadDialog::openCenter()
 ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_service(APPLICATION->themeManager()->appearance())
 {
     m_service->initialize();
+    m_thumbnails = new ThemeThumbnailLoader(APPLICATION->network().get(), m_service->cacheDirectory(), this);
     setWindowTitle(tr("主题中心 · Classic UI"));
     setObjectName("classicThemeCenter");
     setAttribute(Qt::WA_QuitOnClose, false);
@@ -178,6 +261,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     auto clearCache = button(tr("清理目录缓存"), "edit-clear", this);
     side->addWidget(clearCache);
     connect(clearCache, &QPushButton::clicked, this, [this] {
+        m_thumbnails->reset(true);
         QDir cache(m_service->cacheDirectory());
         if (!cache.exists() || cache.removeRecursively())
             m_status->setText(tr("目录缓存已清理，已安装主题保留。"));
@@ -232,7 +316,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     layout->addWidget(m_status);
     auto split = new QSplitter(online);
     layout->addWidget(split, 1);
-    m_online = tree(split, { tr("主题"), tr("类别"), tr("作者") });
+    m_online = new ThemeCardView(split);
     m_online->setObjectName("themeOnline");
     auto details = new QWidget(split);
     details->setMinimumWidth(260);
@@ -305,7 +389,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     });
     connect(m_search, &QLineEdit::textChanged, this, &ThemeDownloadDialog::filter);
     connect(m_compatible, &QCheckBox::toggled, this, &ThemeDownloadDialog::filter);
-    connect(m_online, &QTreeWidget::currentItemChanged, this, &ThemeDownloadDialog::showDetails);
+    connect(m_online, &QListWidget::currentItemChanged, this, &ThemeDownloadDialog::showDetails);
     connect(m_install, &QPushButton::clicked, this, &ThemeDownloadDialog::installSelected);
     connect(m_files, &QComboBox::currentIndexChanged, this,
             [this] { m_install->setEnabled(m_files->currentData().toJsonObject().value("installable").toBool()); });
@@ -589,14 +673,22 @@ void ThemeDownloadDialog::query(bool refresh, int page, const QString& contentId
         m_loadedQuery = params;
         m_page = result.value("page").toInt();
         const auto selected = m_selected.value("id").toString();
+        m_thumbnails->reset();
         m_online->blockSignals(true);
         m_online->clear();
         for (const auto& value : result.value("items").toArray()) {
             const auto item = value.toObject();
-            auto row = new QTreeWidgetItem(
-                m_online, { item.value("name").toString(), kindName(item.value("category").toString()), item.value("author").toString() });
-            row->setData(0, Qt::UserRole, item);
-            row->setToolTip(0, item.value("compatibility").toString());
+            auto row = new QListWidgetItem(item.value("name").toString(), m_online);
+            row->setData(Qt::UserRole, item);
+            row->setData(thumbnailStatusRole, tr("正在加载预览…"));
+            row->setToolTip(item.value("name").toString() + '\n' + item.value("compatibility").toString());
+            const QPersistentModelIndex index(m_online->model()->index(m_online->row(row), 0));
+            m_thumbnails->load(previewUrl(item), [this, index](const QImage& image) {
+                if (!index.isValid())
+                    return;
+                m_online->model()->setData(index, QPixmap::fromImage(image), Qt::DecorationRole);
+                m_online->model()->setData(index, image.isNull() ? tr("暂无预览图") : QString(), thumbnailStatusRole);
+            });
             if (item.value("id") == selected)
                 m_online->setCurrentItem(row);
         }
@@ -618,12 +710,12 @@ void ThemeDownloadDialog::query(bool refresh, int page, const QString& contentId
 void ThemeDownloadDialog::filter()
 {
     const auto text = m_search->text().trimmed();
-    for (int i = 0; i < m_online->topLevelItemCount(); ++i) {
-        auto row = m_online->topLevelItem(i);
-        const auto data = row->data(0, Qt::UserRole).toJsonObject();
+    for (int i = 0; i < m_online->count(); ++i) {
+        auto row = m_online->item(i);
+        const auto data = row->data(Qt::UserRole).toJsonObject();
         row->setHidden(
             (m_compatible->isChecked() && !data.value("installable").toBool()) ||
-            (!text.isEmpty() && !row->text(0).contains(text, Qt::CaseInsensitive) && !row->text(2).contains(text, Qt::CaseInsensitive)));
+            (!text.isEmpty() && !row->text().contains(text, Qt::CaseInsensitive) && !data.value("author").toString().contains(text, Qt::CaseInsensitive)));
     }
 }
 void ThemeDownloadDialog::showDetails()
@@ -631,8 +723,6 @@ void ThemeDownloadDialog::showDetails()
     ++m_detailGeneration;
     if (m_details && m_details->isRunning())
         m_details->abort();
-    if (m_imageReply)
-        m_imageReply->abort();
     m_selected = selection(m_online);
     m_files->clear();
     m_install->setEnabled(false);
@@ -655,7 +745,18 @@ void ThemeDownloadDialog::showDetails()
         m_files->setCurrentIndex(0);
     } else
         loadFiles(m_selected);
-    loadThumbnail(m_selected.value("thumbnail").toString(), m_detailGeneration);
+    const auto generation = m_detailGeneration;
+    m_thumbnail->setText(tr("正在加载预览…"));
+    m_thumbnails->load(previewUrl(m_selected), [this, generation](const QImage& image) {
+        if (generation != m_detailGeneration)
+            return;
+        if (image.isNull())
+            m_thumbnail->setText(tr("暂无预览图"));
+        else {
+            m_thumbnail->setPixmap(QPixmap::fromImage(image.scaled(300, 170, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+            m_thumbnail->setToolTip(tr("作者截图；本机效果请安装后使用独立预览。"));
+        }
+    }, true);
 }
 void ThemeDownloadDialog::loadFiles(const QJsonObject& identity)
 {
@@ -687,97 +788,6 @@ void ThemeDownloadDialog::loadFiles(const QJsonObject& identity)
             m_files->setPlaceholderText(tr("没有可下载的文件"));
     });
     m_details->start();
-}
-void ThemeDownloadDialog::loadThumbnail(const QString& value, quint64 generation)
-{
-    const QUrl url(value);
-    if (url.scheme() != "https" || url.host().isEmpty()) {
-        m_thumbnail->setText(tr("来源没有提供截图"));
-        return;
-    }
-    const auto cachePath =
-        QDir(m_service->cacheDirectory())
-            .filePath("images/" + QString::fromLatin1(QCryptographicHash::hash(url.toEncoded(), QCryptographicHash::Sha256).toHex()) +
-                      ".img");
-    QFile cached(cachePath);
-    QByteArray old;
-    if (cached.open(QIODevice::ReadOnly) && cached.size() <= 4 * 1024 * 1024)
-        old = cached.readAll();
-    if (!old.isEmpty() && QFileInfo(cached).lastModified().secsTo(QDateTime::currentDateTimeUtc()) < 7 * 86400) {
-        displayThumbnail(old, generation);
-        return;
-    }
-    QNetworkRequest request(url);
-    request.setTransferTimeout(20000);
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    auto reply = APPLICATION->network()->get(request);
-    m_imageReply = reply;
-    auto bytes = std::make_shared<QByteArray>();
-    connect(reply, &QIODevice::readyRead, this, [reply, bytes] {
-        *bytes += reply->readAll();
-        if (bytes->size() > 4 * 1024 * 1024)
-            reply->abort();
-    });
-    connect(reply, &QNetworkReply::finished, this, [this, reply, bytes, generation, cachePath, old] {
-        reply->deleteLater();
-        if (generation != m_detailGeneration)
-            return;
-        *bytes += reply->readAll();
-        if (reply->error() != QNetworkReply::NoError || bytes->size() > 4 * 1024 * 1024) {
-            if (!old.isEmpty())
-                displayThumbnail(old, generation);
-            else
-                m_thumbnail->setText(tr("截图暂不可用"));
-            return;
-        }
-        displayThumbnail(*bytes, generation, cachePath);
-    });
-}
-void ThemeDownloadDialog::displayThumbnail(const QByteArray& bytes, quint64 generation, const QString& cachePath)
-{
-    auto watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, generation, bytes, cachePath] {
-        const auto image = watcher->result();
-        watcher->deleteLater();
-        if (generation != m_detailGeneration)
-            return;
-        if (image.isNull()) {
-            m_thumbnail->setText(tr("截图暂不可用"));
-            return;
-        }
-        m_thumbnail->setPixmap(QPixmap::fromImage(image));
-        m_thumbnail->setToolTip(tr("作者截图；本机效果请安装后使用独立预览。"));
-        if (!cachePath.isEmpty()) {
-            const auto directory = QFileInfo(cachePath).dir();
-            QDir().mkpath(directory.absolutePath());
-            auto entries = directory.entryInfoList({ "*.img" }, QDir::Files, QDir::Time | QDir::Reversed);
-            qint64 total = bytes.size();
-            for (const auto& entry : entries)
-                total += entry.size();
-            while (!entries.isEmpty() && (entries.size() >= 128 || total > 32LL * 1024 * 1024)) {
-                auto entry = entries.takeFirst();
-                total -= entry.size();
-                QFile::remove(entry.absoluteFilePath());
-            }
-            QSaveFile file(cachePath);
-            if (file.open(QIODevice::WriteOnly)) {
-                file.write(bytes);
-                file.commit();
-            }
-        }
-    });
-    watcher->setFuture(QtConcurrent::run([bytes] {
-        QBuffer buffer;
-        buffer.setData(bytes);
-        buffer.open(QIODevice::ReadOnly);
-        QImageReader reader(&buffer);
-        reader.setAutoTransform(true);
-        const auto size = reader.size();
-        if (!size.isValid() || qint64(size.width()) * size.height() > 20000000)
-            return QImage();
-        reader.setScaledSize(size.scaled(300, 170, Qt::KeepAspectRatio));
-        return reader.read();
-    }));
 }
 void ThemeDownloadDialog::installSelected()
 {

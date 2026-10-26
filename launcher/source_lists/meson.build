@@ -989,6 +989,8 @@ launcher_logic_sources = [
   'ui/themes/ThemePackage.h',
   'ui/themes/ThemeStyle.cpp',
   'ui/themes/ThemeStyle.h',
+  'ui/themes/ThemeThumbnailLoader.cpp',
+  'ui/themes/ThemeThumbnailLoader.h',
   'ui/themes/AppearanceService.cpp',
   'ui/themes/AppearanceService.h',
   'ui/themes/WindowChromeController.cpp',

@@ -49,13 +49,16 @@ class ArchiveReader {
 
         QString filename();
         bool isFile();
+        bool isDirectory();
+        QString linkTarget();
+        bool isHardLink();
         bool isEncrypted();
         qint64 size();
         QDateTime dateTime();
         const char* error();
 
         QByteArray readAll(int* outStatus = nullptr);
-        bool copyTo(QIODevice& output);
+        bool copyTo(QIODevice& output, qint64 maximumBytes = -1);
         bool skip();
         bool writeFile(archive* out, const QString& targetFileName = "", bool notBlock = false);
         bool writeFile(archive* out, const QString& targetFileName, std::optional<QDir> root, bool notBlock = false);

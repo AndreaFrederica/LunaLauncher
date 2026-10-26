@@ -69,6 +69,23 @@ QString ArchiveReader::File::filename()
     return decodeLibArchivePath(m_entry, archive_entry_pathname_utf8, archive_entry_pathname);
 }
 
+bool ArchiveReader::File::isDirectory()
+{
+    return archive_entry_filetype(m_entry) == AE_IFDIR;
+}
+
+QString ArchiveReader::File::linkTarget()
+{
+    if (archive_entry_hardlink(m_entry))
+        return decodeLibArchivePath(m_entry, archive_entry_hardlink_utf8, archive_entry_hardlink);
+    return decodeLibArchivePath(m_entry, archive_entry_symlink_utf8, archive_entry_symlink);
+}
+
+bool ArchiveReader::File::isHardLink()
+{
+    return archive_entry_hardlink(m_entry) != nullptr;
+}
+
 QByteArray ArchiveReader::File::readAll(int* outStatus)
 {
     QByteArray data;
@@ -89,18 +106,21 @@ QByteArray ArchiveReader::File::readAll(int* outStatus)
     return data;
 }
 
-bool ArchiveReader::File::copyTo(QIODevice& output)
+bool ArchiveReader::File::copyTo(QIODevice& output, qint64 maximumBytes)
 {
     const void* buffer = nullptr;
     size_t size = 0;
     la_int64_t offset = 0;
 
     int status = ARCHIVE_OK;
+    qint64 written = 0;
     while ((status = archive_read_data_block(m_archive.get(), &buffer, &size, &offset)) == ARCHIVE_OK) {
+        if (maximumBytes >= 0 && (size > static_cast<quint64>(maximumBytes - written))) return false;
         if (output.write(static_cast<const char*>(buffer), static_cast<qint64>(size)) != static_cast<qint64>(size)) {
             qWarning() << "Failed writing extracted archive member:" << output.errorString();
             return false;
         }
+        written += static_cast<qint64>(size);
     }
     if (status != ARCHIVE_EOF) {
         qWarning() << "libarchive read error:" << archive_error_string(m_archive.get());

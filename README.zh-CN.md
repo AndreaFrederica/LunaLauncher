@@ -164,14 +164,14 @@ meson install -C build --no-rebuild
 
 #### 常用 Meson 选项
 
-| 选项 | 说明 |
-|------|------|
-| `-Dbuild_testing=false` | 禁用测试（默认） |
-| `-Dbuild_updater=false` | 禁用自动更新 |
-| `-Denable_java_downloader=true` | 启用 Java 自动下载 |
-| `-Ddisable_ownership_check=false` | 禁用所有权验证 |
-| `-Dgamemode=enabled` | 启用 GameMode 支持（Linux） |
-| `-Db_vscrt=md` | 使用 MSVC 动态运行时（Windows） |
+| 选项 | 说明 | 默认值 |
+|------|------| ------- |
+| `-Dbuild_testing` | 禁用测试（默认） | `false` |
+| `-Dbuild_updater` | 禁用自动更新 | `false` |
+| `-Denable_java_downloader` | 启用 Java 自动下载 | `true` |
+| `-Ddeveloper_mode_build` | 启用开发者模式 | `false` |
+| `-Dgamemode` | 启用 GameMode 支持（Linux） | `enabled` |
+| `-Db_vscrt` | 使用 MSVC 动态运行时（Windows） | `md` |
 
 ---
 

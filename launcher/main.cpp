@@ -35,6 +35,8 @@
 
 #include <iostream>
 
+#include <QMessageBox>
+
 #include "Application.h"
 
 #if defined Q_OS_WIN32
@@ -76,6 +78,33 @@ int main(int argc, char* argv[])
     switch (app.status()) {
         case Application::StartingUp:
         case Application::Initialized: {
+            if (DeveloperMode::isEnabled() && !DeveloperMode::hasDebugMarker(DeveloperMode::Marker0)) {
+                // Show developer warning dialog before allowing to proceed
+                auto result = QMessageBox::warning(
+                    nullptr,
+                    "Developer Mode Warning",
+                    "<html><head/><body>"
+                       "<h2 style='color: red;'>⚠️ DEVELOPER MODE ⚠️</h2>"
+                       "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
+                       "<p><b>You are about to use this launcher in developer mode without ownership verification.</b></p>"
+                       "<p>By proceeding, you confirm that:</p>"
+                       "<ul>"
+                       "<li>You are a developer testing this launcher</li>"
+                       "<li>You have already purchased a legitimate copy of Minecraft</li>"
+                       "<li>This build is for testing purposes only</li>"
+                       "</ul>"
+                       "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher immediately.</p>"
+                       "</body></html>"
+                       "<br><br>"
+                       "Do you wish to proceed?",
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No
+                );
+
+                if (result != QMessageBox::Yes) {
+                    return 0;
+                }
+            }
             Q_INIT_RESOURCE(multimc);
             Q_INIT_RESOURCE(lucide);
             Q_INIT_RESOURCE(backgrounds);

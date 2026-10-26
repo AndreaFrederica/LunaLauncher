@@ -40,10 +40,12 @@ class ThemeDownloadDialog final : public QDialog {
     void importLocal(bool directory);
     void refreshInstalled();
     void configureSelected();
+    void applyCompleteSelected();
     void removeSelected();
     void updateSelected();
     void refreshChoices(bool fromState);
     void updateState();
+    bool buildSelectedConfiguration(QJsonObject& configuration, bool chooseFirstVariant, QString& error);
     void addTask(Task* task);
     Task* selectedTask() const;
     QJsonObject draft() const;
@@ -58,7 +60,7 @@ class ThemeDownloadDialog final : public QDialog {
     QListWidget* m_online;
     QTreeWidget *m_installed, *m_tasks;
     QTextBrowser* m_description;
-    QPushButton *m_install, *m_previous, *m_next, *m_remove, *m_update, *m_cancel, *m_retry, *m_undo;
+    QPushButton *m_install, *m_previous, *m_next, *m_remove, *m_update, *m_completeApply, *m_cancel, *m_retry, *m_undo;
     QHash<QString, QComboBox*> m_options;
     QHash<QString, QCheckBox*> m_allowed;
     shared_qobject_ptr<ThemeStoreTask> m_query, m_details;

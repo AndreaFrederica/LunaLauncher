@@ -350,12 +350,38 @@ class ThemeCenterTest : public QObject {
         auto mode = center.findChild<QComboBox*>("appearance_mode");
         auto theme = center.findChild<QComboBox*>("appearance_theme");
         auto apply = center.findChild<QPushButton*>("themeApply");
+        auto completeApply = center.findChild<QPushButton*>("themeApplyComplete");
         auto undo = center.findChild<QPushButton*>("themeUndo");
         QVERIFY(mode);
         QVERIFY(theme);
         QVERIFY(apply);
+        QVERIFY(completeApply);
         QVERIFY(undo);
         auto service = APPLICATION->themeManager()->appearance();
+        if (!qEnvironmentVariableIsEmpty("LUNA_THEME_TEST_PROFILE")) {
+            auto installed = center.findChild<QTreeWidget*>("themeInstalled");
+            QVERIFY(installed);
+            for (int i = 0; i < installed->topLevelItemCount(); ++i) {
+                auto item = installed->topLevelItem(i);
+                const auto data = item->data(0, Qt::UserRole).toJsonObject();
+                QString packageError;
+                const auto resolved = service->packageConfiguration(data.value("id").toString(), packageError);
+                if (!data.value("packageId").toString().isEmpty() && resolved.value("complete").toBool()) {
+                    installed->setCurrentItem(item);
+                    QVERIFY(completeApply->isEnabled());
+                    const auto before = service->state();
+                    QTest::mouseClick(completeApply, Qt::LeftButton);
+                    QCOMPARE(pages->currentIndex(), 2);
+                    const auto after = service->state();
+                    QVERIFY(after.value("requiresRestart").toBool() || after.value("requested") == before.value("requested"));
+                    if (after.value("requiresRestart").toBool()) {
+                        QString undoError;
+                        QVERIFY(service->undoPending(after.value("revision").toInteger(), undoError));
+                    }
+                    break;
+                }
+            }
+        }
         const auto initial = service->state();
         mode->setCurrentIndex(mode->findData("independent"));
         theme->setCurrentIndex(theme->findData("Fusion"));

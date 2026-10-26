@@ -416,10 +416,14 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     auto actions = new QHBoxLayout;
     il->addLayout(actions);
     auto configure = button(tr("使用所选主题包…"), "configure", installed);
+    m_completeApply = button(tr("一键完整应用"), "dialog-ok-apply", installed);
+    m_completeApply->setObjectName("themeApplyComplete");
+    m_completeApply->setEnabled(false);
     m_update = button(tr("检查来源更新"), "view-refresh", installed);
     auto folder = button(tr("打开目录"), "folder-open", installed);
     m_remove = button(tr("卸载"), "edit-delete", installed);
     actions->addWidget(configure);
+    actions->addWidget(m_completeApply);
     actions->addWidget(m_update);
     actions->addWidget(folder);
     actions->addStretch();
@@ -428,6 +432,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     connect(importFolder, &QPushButton::clicked, this, [this] { importLocal(true); });
     connect(rescan, &QPushButton::clicked, this, [] { APPLICATION->themeManager()->refresh(); });
     connect(configure, &QPushButton::clicked, this, &ThemeDownloadDialog::configureSelected);
+    connect(m_completeApply, &QPushButton::clicked, this, &ThemeDownloadDialog::applyCompleteSelected);
     connect(m_remove, &QPushButton::clicked, this, &ThemeDownloadDialog::removeSelected);
     connect(m_update, &QPushButton::clicked, this, &ThemeDownloadDialog::updateSelected);
     connect(folder, &QPushButton::clicked, this, [this] {
@@ -440,6 +445,8 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
         m_remove->setEnabled(!s.value("packageId").toString().isEmpty() || s.value("removable").toBool());
         m_update->setEnabled(!s.value("packageId").toString().isEmpty() || s.value("dependency").toBool());
         m_update->setText(s.value("dependency").toBool() ? tr("选择并下载此依赖…") : tr("检查来源更新"));
+        const bool packageRow = s.value("packageId") == s.value("id") || s.value("kind") == "bundle";
+        m_completeApply->setEnabled(packageRow && !s.value("dependency").toBool());
     });
 
     auto combination = new QWidget(this);
@@ -919,45 +926,55 @@ void ThemeDownloadDialog::refreshInstalled()
     const bool dependencySelected = selection(m_installed).value("dependency").toBool();
     m_update->setEnabled(m_remove->isEnabled() || dependencySelected);
     m_update->setText(dependencySelected ? tr("选择并下载此依赖…") : tr("检查来源更新"));
+    const auto selectedData = selection(m_installed);
+    const bool packageRow = selectedData.value("packageId") == selectedData.value("id") || selectedData.value("kind") == "bundle";
+    m_completeApply->setEnabled(packageRow && !dependencySelected);
 }
-void ThemeDownloadDialog::configureSelected()
+bool ThemeDownloadDialog::buildSelectedConfiguration(QJsonObject& configuration, bool promptVariants, QString& error)
 {
     const auto selected = selection(m_installed);
-    if (selected.value("dependency").toBool()) {
-        updateSelected();
-        return;
+    if (selected.isEmpty()) {
+        error = tr("请先选择一个已安装的主题或组件。");
+        return false;
     }
-    QJsonObject configuration;
-    QString error;
+    if (selected.value("dependency").toBool()) {
+        error = tr("该组件尚未安装，请先下载依赖。");
+        return false;
+    }
     if (selected.contains("packageId")) {
         const auto result = m_service->packageConfiguration(selected.value("id").toString(), error);
-        if (!error.isEmpty()) {
-            QMessageBox::warning(this, tr("无法组合主题"), error);
-            return;
-        }
+        if (!error.isEmpty())
+            return false;
         if (!result.value("missing").toArray().isEmpty()) {
             QStringList missing;
             for (const auto& value : result.value("missing").toArray()) {
                 const auto component = value.toObject();
                 missing.append(kindName(component.value("kind").toString()) + "：" + component.value("name").toString());
             }
-            QMessageBox::information(this, tr("主题组件尚未齐全"),
-                                     tr("此主题还缺少以下应用组件：\n%1\n\n请先下载包下列出的商店依赖，或从在线主题中安装对应组件。")
-                                         .arg(missing.join('\n')));
-            return;
+            error = tr("此主题还缺少以下应用组件：\n%1\n\n请先下载包下列出的商店依赖，或从在线主题中安装对应组件。")
+                        .arg(missing.join('\n'));
+            return false;
         }
         configuration = result.value("configuration").toObject();
         const auto choices = result.value("choices").toObject();
         for (auto it = choices.begin(); it != choices.end(); ++it) {
             const auto entries = it.value().toArray();
-            QStringList names;
-            for (const auto& value : entries)
-                names.append(value.toObject().value("name").toString() + " · " + value.toObject().value("id").toString());
-            bool ok = false;
-            const auto name = QInputDialog::getItem(this, tr("选择主题变体"), kindName(it.key()), names, 0, false, &ok);
-            if (!ok)
-                return;
-            const auto entry = entries.at(names.indexOf(name)).toObject();
+            if (entries.isEmpty()) {
+                error = tr("主题变体列表为空：%1").arg(kindName(it.key()));
+                return false;
+            }
+            int selectedIndex = 0;
+            if (promptVariants) {
+                QStringList names;
+                for (const auto& value : entries)
+                    names.append(value.toObject().value("name").toString() + " · " + value.toObject().value("id").toString());
+                bool ok = false;
+                const auto name = QInputDialog::getItem(this, tr("选择主题变体"), kindName(it.key()), names, 0, false, &ok);
+                if (!ok)
+                    return false;
+                selectedIndex = names.indexOf(name);
+            }
+            const auto entry = entries.at(selectedIndex).toObject();
             configuration.insert(it.key() == "widgets" ? "theme" : it.key() == "decoration" ? "decorationTheme" : it.key(), entry.value("id"));
             if (it.key() == "widgets" || it.key() == "palette") {
                 configuration.insert("mode", "independent");
@@ -981,6 +998,21 @@ void ThemeDownloadDialog::configureSelected()
         } else if (kind == "icons" || kind == "background")
             configuration.insert(kind, selected.value("id"));
     }
+    return !configuration.isEmpty();
+}
+void ThemeDownloadDialog::configureSelected()
+{
+    if (selection(m_installed).value("dependency").toBool()) {
+        updateSelected();
+        return;
+    }
+    QJsonObject configuration;
+    QString error;
+    if (!buildSelectedConfiguration(configuration, true, error)) {
+        if (!error.isEmpty())
+            QMessageBox::information(this, tr("主题组件尚未齐全"), error);
+        return;
+    }
     m_filling = true;
     for (auto it = m_options.begin(); it != m_options.end(); ++it) {
         const auto index = it.value()->findData(configuration.value(it.key()).toString());
@@ -994,6 +1026,28 @@ void ThemeDownloadDialog::configureSelected()
     m_navigation->setCurrentRow(2);
     updateState();
     m_draftStatus->setText(tr("已载入此包的组件组合，请预览后应用。"));
+}
+void ThemeDownloadDialog::applyCompleteSelected()
+{
+    QJsonObject configuration;
+    QString error;
+    if (!buildSelectedConfiguration(configuration, false, error)) {
+        if (!error.isEmpty())
+            QMessageBox::information(this, tr("无法完整应用主题"), error);
+        return;
+    }
+    QString applyError;
+    const auto result = m_service->apply(configuration, m_service->state().value("revision").toInteger(), applyError);
+    if (result.isEmpty()) {
+        QMessageBox::warning(this, tr("无法应用主题"), applyError);
+        return;
+    }
+    m_dirty = false;
+    refreshChoices(true);
+    m_navigation->setCurrentRow(2);
+    const auto requiresRestart = result.value("requiresRestart").toBool();
+    m_draftStatus->setText(requiresRestart ? tr("已完整应用主题；控件风格、外观模式或窗口装饰将在下次启动生效。")
+                                           : tr("已完整应用主题。"));
 }
 void ThemeDownloadDialog::removeSelected()
 {

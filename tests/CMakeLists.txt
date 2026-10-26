@@ -75,3 +75,7 @@ ecm_add_test(CatPack_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR
 
 ecm_add_test(XmlLogs_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME XmlLogs)
+
+ecm_add_test(ThemePackage_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test TEST_NAME ThemePackage)
+
+ecm_add_test(ThemeCenter_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test TEST_NAME ThemeCenter)

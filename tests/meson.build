@@ -22,6 +22,8 @@ test_sources = [
   'Version_test.cpp',
   'MetaComponentParse_test.cpp',
   'CatPack_test.cpp',
+  'ThemePackage_test.cpp',
+  'ThemeCenter_test.cpp',
   'XmlLogs_test.cpp',
 ]
 

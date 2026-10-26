@@ -32,6 +32,7 @@ class ThemeInstallTask final : public Task {
     void download(const QJsonObject& file);
     void inspect(const QString& path, const QString& name);
     void publish();
+    bool reuseInstalledPackage();
     void installNextDependency();
     void finishInstall();
     QNetworkAccessManager* m_network;

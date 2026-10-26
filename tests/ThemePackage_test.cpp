@@ -380,6 +380,31 @@ class ThemePackageTest : public QObject {
         QVERIFY(task.result().value("unresolvedDependencies").toArray().isEmpty());
         QVERIFY(network->requests.contains("/ocs/v1/content/download/123/1"));
         QVERIFY(network->requests.contains("/fixture.colors"));
+        // Store identities are stable even when the provider's signed download
+        // URL changes. Reinstalling the same content/file must reuse the
+        // immutable package instead of issuing another resolve/download pair.
+        const QJsonObject storeRequest{ { "provider", "kde" },
+                                        { "category", "palette" },
+                                        { "contentId", "123" },
+                                        { "fileId", "1" },
+                                        { "name", "Fixture.colors" },
+                                        { "title", "Fixture" },
+                                        { "components", QJsonArray{ "palette" } },
+                                        { "skipDependencies", true } };
+        ThemeInstallTask storeInstall(network, storeRequest, dir.filePath("store-packages"), dir.filePath("store-cache"));
+        QSignalSpy storeDone(&storeInstall, &Task::finished);
+        storeInstall.start();
+        QVERIFY(storeDone.wait(10000));
+        QVERIFY2(storeInstall.wasSuccessful(), qPrintable(storeInstall.failReason()));
+        const auto requestsAfterStoreInstall = network->requests.size();
+        ThemeInstallTask storeRepeat(network, storeRequest, dir.filePath("store-packages"), dir.filePath("store-cache"));
+        QSignalSpy repeatDone(&storeRepeat, &Task::finished);
+        storeRepeat.start();
+        QTRY_COMPARE_WITH_TIMEOUT(repeatDone.size(), 1, 10000);
+        QVERIFY2(storeRepeat.wasSuccessful(), qPrintable(storeRepeat.failReason()));
+        QVERIFY(storeRepeat.result().value("alreadyInstalled").toBool());
+        QCOMPARE(network->requests.size(), requestsAfterStoreInstall);
+
         network->multipleFiles = true;
         // A different cache directory forces a fresh file inventory.
         ThemeInstallTask ambiguous(network, request, dir.filePath("packages"), dir.filePath("cache-ambiguous"));

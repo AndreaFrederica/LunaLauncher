@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QLockFile>
 #include <QSaveFile>
+#include <QRegularExpression>
 #include <QtConcurrent>
 #include "ThemePackage.h"
 #include "ThemeStore.h"
@@ -83,6 +84,41 @@ QString directoryDigest(const QDir& root, QString& error)
     }
     return QString::fromLatin1(hash.result().toHex());
 }
+
+QString requestIdentityPart(const QJsonValue& value)
+{
+    if (value.isString())
+        return value.toString().trimmed();
+    if (value.isDouble())
+        return QString::number(value.toInteger());
+    return {};
+}
+
+bool selectedComponentsCoverRequest(const QJsonObject& record, const QJsonObject& request, QJsonArray& selected)
+{
+    selected = record.value("selectedComponents").toArray();
+    const auto requested = request.value("components").toArray();
+    if (requested.isEmpty())
+        return true;
+
+    const auto catalog = record.value("catalog").toArray();
+    for (const auto& value : requested) {
+        const auto kind = value.toString();
+        if (kind.isEmpty())
+            continue;
+        bool found = false;
+        for (const auto& entryValue : catalog) {
+            const auto entry = entryValue.toObject();
+            if (entry.value("kind").toString() != kind || !selected.contains(entry.value("id")))
+                continue;
+            found = true;
+            break;
+        }
+        if (!found)
+            return false;
+    }
+    return true;
+}
 }  // namespace
 ThemeInstallTask::ThemeInstallTask(QNetworkAccessManager* network, QJsonObject request, QString packageDirectory, QString cacheDirectory)
     : m_network(network)
@@ -130,6 +166,12 @@ void ThemeInstallTask::executeTask()
         emitFailed(tr("Could not create theme package directory."));
         return;
     }
+    // Store installs are immutable and identified by their provider/content/file
+    // identity. Reusing a published package makes repeated clicks and completion
+    // callbacks idempotent, avoiding a fresh download and staging directory for
+    // an archive that is already installed.
+    if (m_request.contains("provider") && reuseInstalledPackage())
+        return;
     if (m_request.contains("path")) {
         inspect(m_request.value("path").toString(), QFileInfo(m_request.value("path").toString()).fileName());
         return;
@@ -139,6 +181,65 @@ void ThemeInstallTask::executeTask()
         return;
     }
     download(m_request);
+}
+
+bool ThemeInstallTask::reuseInstalledPackage()
+{
+    const auto provider = requestIdentityPart(m_request.value("provider"));
+    const auto contentId = requestIdentityPart(m_request.value("contentId"));
+    if (provider.isEmpty() || contentId.isEmpty())
+        return false;
+    const auto requestedFileId = requestIdentityPart(m_request.value("fileId"));
+    QDir packages(m_packageDirectory);
+    for (const auto& directory : packages.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (!QRegularExpression("^[a-f0-9]{64}$").match(directory).hasMatch())
+            continue;
+        QFile manifest(packages.filePath(directory + "/.luna-package.json"));
+        if (!manifest.open(QIODevice::ReadOnly) || manifest.size() > 4 * 1024 * 1024)
+            continue;
+        const auto record = QJsonDocument::fromJson(manifest.readAll()).object();
+        if (requestIdentityPart(record.value("provider")) != provider ||
+            requestIdentityPart(record.value("contentId")) != contentId)
+            continue;
+        if (!requestedFileId.isEmpty() && requestIdentityPart(record.value("fileId")) != requestedFileId)
+            continue;
+
+        QJsonArray selected;
+        if (!selectedComponentsCoverRequest(record, m_request, selected))
+            continue;
+
+        QJsonObject updated = record;
+        bool changed = false;
+        const auto requested = m_request.value("components").toArray();
+        for (const auto& value : requested) {
+            const auto kind = value.toString();
+            for (const auto& entryValue : record.value("catalog").toArray()) {
+                const auto entry = entryValue.toObject();
+                if (entry.value("kind").toString() == kind && !selected.contains(entry.value("id"))) {
+                    selected.append(entry.value("id"));
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            updated.insert("selectedComponents", selected);
+            QSaveFile save(packages.filePath(directory + "/.luna-package.json"));
+            const auto bytes = QJsonDocument(updated).toJson();
+            if (!save.open(QIODevice::WriteOnly) || save.write(bytes) != bytes.size() || !save.commit())
+                continue;
+        }
+
+        m_result = { { "packageId", directory },
+                     { "installed", QJsonArray{ directory } },
+                     { "alreadyInstalled", true },
+                     { "components", selected } };
+        setAbortable(false);
+        setProgress(1, 1);
+        setStatus(tr("Already installed · skipped download"));
+        emitSucceeded();
+        return true;
+    }
+    return false;
 }
 void ThemeInstallTask::resolve()
 {

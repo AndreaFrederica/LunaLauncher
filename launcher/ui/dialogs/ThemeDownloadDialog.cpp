@@ -64,6 +64,32 @@ bool sameStoreIdentity(const QJsonObject& left, const QJsonObject& right)
            contentId(left) == contentId(right);
 }
 
+bool sameInstallIdentity(const QJsonObject& left, const QJsonObject& right)
+{
+    if (!sameStoreIdentity(left, right))
+        return false;
+    const auto text = [](const QJsonValue& value) {
+        if (value.isString())
+            return value.toString().trimmed();
+        if (value.isDouble())
+            return QString::number(value.toInteger());
+        return QString();
+    };
+    const auto leftFile = text(left.value("fileId"));
+    const auto rightFile = text(right.value("fileId"));
+    return leftFile.isEmpty() || rightFile.isEmpty() || leftFile == rightFile;
+}
+
+bool hasActiveInstall(AppearanceService* service, const QJsonObject& request)
+{
+    for (const auto& retained : service->tasks()) {
+        const auto task = dynamic_cast<ThemeInstallTask*>(retained.get());
+        if (task && task->isRunning() && sameInstallIdentity(task->request(), request))
+            return true;
+    }
+    return false;
+}
+
 class ThemeCardDelegate final : public QStyledItemDelegate {
    public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -902,6 +928,16 @@ void ThemeDownloadDialog::installSelected()
 }
 void ThemeDownloadDialog::startInstall(QJsonObject request, std::function<void(bool, const QString&)> completion)
 {
+    // A task can outlive the details page. Do not enqueue another copy while
+    // the same store file is already being installed; the task itself also
+    // reuses a published package for repeated clicks after completion.
+    if (!completion && hasActiveInstall(m_service, request)) {
+        m_status->setText(tr("此主题文件已经在下载任务中。"));
+        m_navigation->setCurrentRow(3);
+        return;
+    }
+    if (!completion)
+        m_install->setEnabled(false);
     auto task =
         makeShared<ThemeInstallTask>(APPLICATION->network().get(), request, m_service->packageDirectory(), m_service->cacheDirectory());
     m_service->retainTask(task);
@@ -909,6 +945,13 @@ void ThemeDownloadDialog::startInstall(QJsonObject request, std::function<void(b
     if (completion) {
         connect(task.get(), &Task::finished, this, [this, task, completion = std::move(completion)] {
             completion(task->wasSuccessful(), task->failReason());
+        });
+    } else {
+        connect(task.get(), &Task::finished, this, [this, request] {
+            if (!m_files)
+                return;
+            const auto file = m_files->currentData().toJsonObject();
+            m_install->setEnabled(file.value("installable").toBool() && !hasActiveInstall(m_service, request));
         });
     }
     task->start();

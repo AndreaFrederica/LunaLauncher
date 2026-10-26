@@ -65,6 +65,10 @@ class ThemeCenterTest : public QObject {
                        { "files", QJsonArray{ QJsonObject{
                                       { "id", "1" }, { "name", "LunaDark.colors" }, { "installable", true }, { "sizeKiB", 4 } } } } }));
         ThemeDownloadDialog center;
+        auto category = center.findChild<QComboBox*>("themeCategory");
+        QVERIFY(category);
+        QCOMPARE(category->currentData().toString(), QString("widgets"));
+        category->setCurrentIndex(category->findData("palette"));
         center.show();
         QVERIFY(QTest::qWaitForWindowExposed(&center));
         auto navigation = center.findChild<QListWidget*>("themeNavigation");

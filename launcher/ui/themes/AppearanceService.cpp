@@ -567,6 +567,8 @@ void AppearanceService::initialize()
     QJsonObject saved;
     if (file.open(QIODevice::ReadOnly) && file.size() < 1024 * 1024)
         saved = QJsonDocument::fromJson(file.readAll()).object();
+    // Windows cannot atomically replace the file while this read handle is open.
+    file.close();
     m_revision = saved.value("revision").toInteger();
     m_lastGood = saved.value("lastKnownGood").toObject();
     m_requested = saved.value("requested").toObject();

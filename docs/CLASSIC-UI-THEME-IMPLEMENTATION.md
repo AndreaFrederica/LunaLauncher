@@ -52,6 +52,8 @@ Windows 提供应用内 Luna 标题栏及移动、缩放、最大化、系统菜
 
 目录响应缓存位于 `cache/theme-store`，一小时内复用，离线失败可返回带时间戳的旧数据；KDE 签名下载地址每次安装重新解析。目录缓存上限 100 个文件 / 32 MiB；截图缓存七天、128 个文件 / 32 MiB。清理缓存不删除已安装主题。
 
+在线商店使用原生 Qt 卡片网格：预览图在上，主题名称及作者在下。网格随窗口宽度调整列数，长名称换行，选中后在右侧查看文件及兼容信息。列表和详情共用缩略图加载器，最多四个下载/解码任务并行，相同 URL 合并请求，内存图像缓存上限 16 MiB。翻页会取消旧队列，模型索引失效后图片响应无法写入新卡片。
+
 ## API
 
 | 操作 | 主要参数 / 结果 |
@@ -105,6 +107,12 @@ Kvantum 控件组件声明为 `"widgets": {"engine":"Kvantum", "config":"widgets
 本次扩展增加了原生按钮 SVG 状态绘制、KDE 嵌套默认配置、声明依赖的下载/校验/安装、多附件选择及缺失组件测试。`theme_widgets_smoke.py` 覆盖控件与图标整包组合、重启恢复、缺失引擎、纯桌面包不误报完整，以及两个未经修改的上游主题 KvArcDark / KvMojaveLight 的 Windows 原生预览。KDE Store 本次联网验证遇到请求超时，不能把本地测试记为本次商店联网通过。
 
 最终构建的 `ThemePackage_test` 和 `ThemeCenter_test` 均通过。GUI / CLI 已部署到 `install-neo-ui` 并校对 SHA-256；直接使用安装目录的 CLI，通过控件整包测试、原有主题事务/隔离预览回归及两项既有外观 API 回归。
+
+后续实测扩展到 KvArcDark、KvMojaveLight、KvAdapta、KvOxygen、KvCurves3d、KvYaru 六个未经修改的上游主题。逐个应用、重启，确认真实 Kvantum 引擎及配置中的窗口配色；检查文本输入、下拉框、复选框、标签页、按钮按下效果，以及宽/窄窗口中的商店卡片。图标组合轮换 Breeze Dark、Breeze Light、Simple (Colored)。此过程修复了 Windows 初始化时读句柄未关闭、导致外观配置原子保存报“拒绝访问”的问题。
+
+原生测试还覆盖缩略图请求合并、四任务并发上限、缓存复用和取消后忽略旧回调。`theme_widgets_smoke.py --native-tests <ThemeCenter_test.exe> --output <目录> --real-theme <上游主题文件夹>` 会保留各主题的预览、原生控件及卡片截图、测试日志和 `verification.json`。商店截图使用本地目录响应及真实主题预览作为确定性测试数据；本次上游 KDE Store 仍连接超时，不把这些截图记作联网商店验证。
+
+原生控件及卡片网格另在实际设备像素比 1、1.5、2 下运行通过，并检查窗口缩窄后的卡片边界。
 
 ```powershell
 pixi run meson compile -C build-meson-neo-ui lunalauncher lunalauncher-cli ThemePackage_test ThemeCenter_test -j 8

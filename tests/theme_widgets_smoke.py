@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 from api_sidecar_smoke import Sidecar
 from theme_system_smoke import COLORS, wait_for_png
@@ -15,6 +16,7 @@ def main():
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--real-theme', type=Path, action='append', default=[])
+    parser.add_argument('--native-tests', type=Path, help='Run native interaction and gallery tests after restarting with each real theme.')
     parser.add_argument('--online', action='store_true')
     args = parser.parse_args()
     executable = args.exe.resolve()
@@ -56,7 +58,7 @@ def main():
             s.close()
             s = Sidecar(executable, root/'profile')
             state = s.ok('appearance.state')
-            assert state['effective'] == config and not state['requiresRestart'], state
+            assert state['effective'] == config and not state['requiresRestart'] and not state.get('error'), state.get('error') or state['effective']
             if output:
                 s.ok('appearance.preview', configuration={})
                 wait_for_png(capture)
@@ -74,17 +76,49 @@ def main():
             desktop = s.ok('appearance.import', path=str(empty.parent))
             report = s.ok('appearance.package.configuration', id=desktop['packageId'])
             assert not report['complete'] and report['missing'][0]['kind'] == 'application', report
-            for real in args.real_theme:
+            real_configurations = []
+            for number, real in enumerate(args.real_theme):
                 package = s.ok('appearance.import', path=str(real.resolve()))
                 report = s.ok('appearance.package.configuration', id=package['packageId'])
                 assert report['complete'], report
                 widgets = [c for c in s.ok('appearance.state')['components'] if c.get('packageId') == package['packageId'] and c['kind'] == 'widgets']
                 assert len(widgets) == 1 and widgets[0]['format'] == 'kvantum' and not widgets[0].get('unavailable'), widgets
+                configuration = report['configuration']
+                configuration['icons'] = ('breeze_dark', 'breeze_light', 'pe_colored')[number % 3]
+                real_configurations.append((real.name, configuration))
                 if output:
                     capture.unlink(missing_ok=True)
-                    s.ok('appearance.preview', configuration=report['configuration'])
+                    s.ok('appearance.preview', configuration=configuration)
                     wait_for_png(capture)
                     shutil.copy2(capture, output/(real.name+'.png'))
+            evidence = []
+            for name, configuration in real_configurations:
+                state = s.ok('appearance.state')
+                applied = s.ok('appearance.apply', configuration=configuration, baseRevision=state['revision'])
+                assert applied['requiresRestart'], applied
+                s.close()
+                s = Sidecar(executable, root/'profile')
+                state = s.ok('appearance.state')
+                assert state['effective'] == configuration and not state['requiresRestart'] and not state.get('error'), {
+                    'theme': name, 'expected': configuration, 'effective': state['effective'],
+                    'requiresRestart': state['requiresRestart'], 'error': state.get('error')}
+                if args.native_tests:
+                    assert output, '--native-tests requires --output for captured evidence'
+                    s.close()
+                    s = None
+                    native_output = output/name
+                    native_output.mkdir(exist_ok=True)
+                    result = subprocess.run([str(args.native_tests.resolve()), 'nativeControls', 'cardGallery', 'navigationAndTransactions',
+                        '-o', str(native_output/'native-tests.txt')+',txt'], cwd=executable.parent, capture_output=True, timeout=60,
+                        env={**os.environ, 'QT_QPA_PLATFORM': 'windows', 'LUNA_THEME_TEST_PROFILE': str(root/'profile'),
+                            'LUNA_THEME_TEST_PREVIEWS': str(output), 'LUNA_THEME_TEST_OUTPUT': str(native_output)})
+                    assert result.returncode == 0, name + '\n' + (native_output/'native-tests.txt').read_text(errors='replace')[-5000:]
+                    s = Sidecar(executable, root/'profile')
+                evidence.append({'theme': name, 'configuration': configuration, 'restart': 'passed',
+                    'nativeControlsAndGallery': 'passed' if args.native_tests else 'not requested'})
+                print('PASS: '+name+' applied, restarted'+(', native controls and gallery' if args.native_tests else ''))
+            if output:
+                (output/'verification.json').write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding='utf-8')
             if args.online:
                 catalog = s.ok('appearance.query', provider='kde', category='widgets', refresh=True)
                 assert catalog['items'] and all(i['installable'] for i in catalog['items'])
@@ -111,7 +145,8 @@ def main():
                 print('PASS: real Kvantum catalog, declared KDE dependency download and full component resolution')
             print('PASS: native widgets + icons, no auto-apply, restart, global references, missing component reports, real theme previews')
         finally:
-            s.close()
+            if s:
+                s.close()
 
 
 if __name__ == '__main__':

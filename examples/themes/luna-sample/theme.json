@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "name": "Luna Sample",
+  "version": "1.0",
+  "license": "GPL-3.0-only",
+  "author": "Luna Launcher Contributors",
+  "description": "A palette-aware Fusion skin with an independent Luna caption.",
+  "components": {
+    "widgets": { "engine": "Fusion", "qss": "skin.qss", "paletteBinding": "semantic" },
+    "palettes": { "dark": { "format": "kde-colors", "file": "dark.colors" } },
+    "decoration": { "renderer": "luna-widgets", "config": "decoration.json" }
+  }
+}

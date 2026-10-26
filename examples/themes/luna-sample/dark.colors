@@ -1,0 +1,20 @@
+[General]
+Name=Luna Sample Dark
+[Colors:Window]
+BackgroundNormal=30,33,40
+ForegroundNormal=233,237,245
+[Colors:View]
+BackgroundNormal=22,25,31
+BackgroundAlternate=29,33,41
+ForegroundNormal=233,237,245
+ForegroundInactive=158,169,190
+ForegroundLink=114,172,255
+[Colors:Button]
+BackgroundNormal=42,48,60
+ForegroundNormal=233,237,245
+[Colors:Selection]
+BackgroundNormal=64,112,201
+ForegroundNormal=255,255,255
+[Colors:Tooltip]
+BackgroundNormal=42,48,60
+ForegroundNormal=233,237,245

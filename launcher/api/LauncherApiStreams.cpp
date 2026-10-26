@@ -21,6 +21,8 @@
 #include "cli/OperationService.h"
 #include "launch/LaunchTask.h"
 #include "server/ServerLaunchTask.h"
+#include "ui/themes/AppearanceService.h"
+#include "ui/themes/ThemeManager.h"
 
 struct LauncherApiStreams::Subscription {
     QString id, type, instance;
@@ -275,6 +277,58 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
     using namespace ApiSupport;
     const auto instance = string("Installed instance ID.");
     const auto subscription = string("Subscription UUID from a subscribe operation.");
+    api.registerOperation(
+        { "appearance.subscribe", "Observe Classic appearance revisions, catalogs and native installation tasks.", schema({}), "streams" },
+        [this](const QJsonObject&, UserInteraction&) {
+            auto service = APPLICATION->themeManager()->appearance();
+            service->initialize();
+            auto sub = create("appearance", {});
+            if (!sub)
+                return OperationService::failure("At most 16 subscriptions may be active.", 2);
+            const auto weak = std::weak_ptr<Subscription>(sub);
+            auto state = [this, weak, service] {
+                if (auto sub = weak.lock())
+                    append(sub, { { "kind", "appearance.state" }, { "data", service->state() } });
+            };
+            auto catalog = [this, weak, service] {
+                if (auto sub = weak.lock())
+                    append(
+                        sub,
+                        { { "kind", "appearance.catalog" }, { "components", service->components() }, { "packages", service->packages() } });
+            };
+            QObject::connect(service, &AppearanceService::stateChanged, &sub->context, state);
+            QObject::connect(service, &AppearanceService::catalogChanged, &sub->context, catalog);
+            QObject::connect(service, &AppearanceService::previewFailed, &sub->context, [this, weak](const QString& error) {
+                if (auto sub = weak.lock())
+                    append(sub, { { "kind", "appearance.preview.failed" }, { "error", error } });
+            });
+            auto attach = [this, weak](Task* task) {
+                auto sub = weak.lock();
+                if (!sub)
+                    return;
+                auto update = [this, weak, task] {
+                    if (auto sub = weak.lock())
+                        append(sub, { { "kind", "appearance.task" },
+                                      { "operationId", task->getUid().toString() },
+                                      { "status", task->getStatus() },
+                                      { "current", task->getProgress() },
+                                      { "total", task->getTotalProgress() },
+                                      { "finished", task->isFinished() },
+                                      { "succeeded", task->wasSuccessful() },
+                                      { "error", task->failReason() } });
+                };
+                QObject::connect(task, &Task::status, &sub->context, update);
+                QObject::connect(task, &Task::progress, &sub->context, update);
+                QObject::connect(task, &Task::finished, &sub->context, update);
+                update();
+            };
+            QObject::connect(service, &AppearanceService::taskAdded, &sub->context, attach);
+            state();
+            catalog();
+            for (const auto& task : service->tasks())
+                attach(task.get());
+            return OperationService::success(subscriptionJson(sub->id, sub->type, {}));
+        });
     api.registerOperation({ "launcher.update.subscribe", "Observe changes to updater markers and bounded log tail; includes the initial state.", schema({}), "streams" },
         [this](const QJsonObject&, UserInteraction&) {
             auto sub = create("launcher-update", {});

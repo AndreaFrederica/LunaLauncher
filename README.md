@@ -245,6 +245,474 @@ For Fedora/COPR packaging, see [packaging/fedora/README.md](packaging/fedora/REA
 
 ---
 
+<!-- contributors:start -->
+## Contributors
+
+Luna Launcher is built upon Prism Launcher and the work of its contributors. We sincerely thank everyone who made the upstream project possible.
+
+### Luna contributors
+
+Authors identified from Luna-specific commits, plus manually acknowledged contributors.
+
+- Andrea Frederica
+- AndreaFrederica
+- AuraElicase
+- copilot-swe-agent\[bot\]
+- kasuganomeow
+- Octol1ttle
+- Trial97
+- W-874
+
+### Luna co-authors
+
+Co-authors identified from Luna-specific commits.
+
+- AndreaFrederica
+- Claude
+
+### Other Luna contributors
+
+_No contributors identified yet._
+
+### Prism Launcher contributors
+
+Authors identified from the complete history of Prism Launcher's default branch.
+
+<details>
+<summary>Show upstream contributors</summary>
+
+- 0x189D7997
+- 2lay
+- 44trent3
+- A\_D
+- Aaron
+- Aaron Sonin
+- abhicommands
+- AbigailBuccaneer
+- ACGaming
+- Adrian
+- Adrien
+- ADudeCalledLeo
+- Affe Ali
+- AhmedAliElashmawy
+- Aiden J Erickson
+- alcremieow
+- Alejandro González
+- Alex
+- Alex Sieberer
+- Alexandru Ionut Tripon
+- Alexia
+- AlexTMjugador
+- Alfio
+- Alfred Wingate
+- AliceDTRH
+- Anceph
+- Andrei Damian
+- Andrew
+- Andrew Okin
+- Andrey Kurlin
+- Anirudh Vempati
+- Anthony Parrott
+- Apix
+- AppleTheGolden
+- arch1t3cht
+- Archy
+- Arcitec
+- arnfaldur
+- ashka
+- Ashleigh
+- ashuntu
+- asie
+- ask6155
+- AtomHare
+- Awqre
+- Babbaj
+- BalkanMadman
+- Ben Westover
+- Benjamin Hoffmeyer
+- Bensuperpc
+- bexnoss
+- bit6tream
+- Blake Batson
+- bolli24
+- Bowser65
+- Brottweiler
+- bunchy7s
+- byquanton
+- captivator
+- Carl Philipp Reh
+- Cart
+- cat
+- cecilia
+- Celeste Peláez
+- Charles Milette
+- Charlotte 🦝 Delenk
+- chmodsayshello
+- chouzz
+- Chris Lane
+- Christopher Hasse
+- Chrono
+- Chrono-byte
+- cidkid
+- cidkidnix
+- Cinnamon
+- circuit10
+- clague
+- Cleo John
+- clickdevin
+- Colbie Dison
+- ColonelGerdauf
+- comp500
+- coolguy1842
+- CreeperzEdge
+- crpz1
+- cullvox
+- dada513
+- Dallas Strouse
+- Danhoby
+- Daniel Huang
+- Daniel Schemp
+- Danny
+- Danny Dorazio
+- David Kaluta
+- DavidoTek
+- deadmeu
+- deiseil
+- Desoroxxx
+- desvaters
+- DioEgizio
+- Dominic Monroe
+- Dominik Pakuła
+- Dylan
+- Dylan Renwick
+- Dylan Schooner
+- DylanJOrr
+- Dāvis Mosāns
+- Echo J
+- Edgar Onghena
+- Edgars Cirulis
+- Edgars Cīrulis
+- Edvin Bryntesson
+- eff3ry
+- Eldred Habert
+- Elise
+- Elliott Tallis
+- Elros
+- embeddedt
+- Eonfge
+- erik.lundstedt
+- ErogigGit
+- Evan Goode
+- Ezekiel Smith
+- Fayne Aldan
+- Felix Schnabel
+- Finian Wright
+- Finn Behrens
+- flcmc
+- flow
+- fn2006
+- forkiesassds
+- Forkk
+- Fourmisain
+- frapank
+- frigtear
+- FyberOptic
+- Ghalid
+- Ghosty
+- Gideon9212
+- Gingeh
+- Glitch
+- glowiak
+- Graeme Geldenhuys
+- Greenphlem
+- guihkx
+- Guilherme Espada
+- Gytis Ivaskevicius
+- Hamish Arblaster
+- hanlie
+- Harry Peach
+- haykam821
+- Hazel
+- Hazel Hofmann
+- he3als
+- helpimnotdrowning
+- Henrique Kirch Heck
+- Hibi
+- Hubcapp
+- hyperfang8
+- HyperSoop
+- iambob314
+- iarspider
+- icelimetea
+- iGerman00
+- Ilan Joselevich
+- Ilia
+- ImperatorStorm
+- Indrale Dnyaneshwar
+- Irgendwer01
+- Ismail
+- isoraqathedh
+- IThundxr
+- iTrooz
+- Ivan Ip
+- Ivan Puntiy
+- izder456
+- Işık
+- Jackson Huffstutler
+- Jacob Gogichaishvili
+- Jakub Wroński
+- James Beddek
+- James Zhou
+- Jamie Mansfield
+- Jan Dalheimer
+- Jan200101
+- Jannis Lübke
+- Janrupf
+- Japa
+- Jeffery Tolmie
+- Jeremy Lorelli
+- Jim Ramsay
+- Jitter
+- jn64
+- Johannes Michael Andreas Merl
+- John C. Allwein
+- Joona
+- jopejoe1
+- Joseph Turner
+- Joshua Anderson
+- Joshua Goins
+- Joshua Stone
+- Josiah Glosson
+- Joël Troch
+- K Henriksson
+- Kaeptm Blaubaer
+- Kaiyang Wu
+- Kat Tschan
+- Kationor
+- kb1000
+- Kenneth Chew
+- Keri
+- KGB-8375
+- Kilobyte
+- Kilobyte22
+- Kim2091
+- Kode
+- Kolja
+- KosmX
+- ktheticdev
+- kumquat-ir
+- Kurumi78
+- LAHarbottle
+- leia uwu
+- Leland Liu
+- Lenny McLennington
+- LennyMcLennington
+- Leo
+- leo78913
+- leozamboni
+- LocalSpook
+- Loetkolben
+- LostLuma
+- Ludgie
+- Lukas Eschbacher
+- Lukas Haigner
+- lumiscosity
+- m0nstrum
+- MandipJoshi
+- maple!
+- Marcelo Hernandez
+- Marco von Rosenberg
+- Mark Deneen
+- maskers
+- Mason Rocha
+- Matej Kafka
+- Matthew\_Cash
+- matthewperiut
+- Max Nordlund
+- max96at
+- mctaylors
+- Megumin
+- meguminloli
+- Metehan
+- Mia Moir
+- Michael Tyson
+- MinecraftZuriki
+- Mitchell Skaggs
+- MMK21Hub
+- moehreag
+- Moresteck
+- morsz
+- mortu
+- Mrazek, Petr
+- MrMelon
+- Muhammad Sameer Adnan
+- Muslim
+- Mustafa Çalışkan
+- NandoBF
+- Nathan
+- ncete
+- nea
+- NewoIsTaken
+- Nic
+- Nightly
+- Nikhil B
+- Nikita Mitasov
+- Noah
+- Noah Mayr
+- NotNite
+- Octol1ttle
+- OldWorldOrdr
+- oosh
+- Oreoezi
+- Orochimarufan
+- OverMighty
+- Owen Wang
+- Ozynt
+- p-schneider
+- Pagwin
+- PandaNinjas
+- Pavel Dydyshka
+- Petr Mrazek
+- Petr Mrázek
+- Philip T
+- Philipp David
+- phit
+- Piper McCorkle
+- porter milton
+- Puqns67
+- Qaz
+- QazCetelic
+- Rachel Powers
+- Radu Butoi
+- Rafael Ristovski
+- RaptaG
+- Redson
+- RedsonBr140
+- redstrate
+- Regular Baf
+- renner
+- renovate\[bot\]
+- Reuben Sonnenschein
+- rfl890
+- Richard Voigtmann
+- Richard-Rogalski
+- Riley Richard
+- Robb
+- robotbrain
+- robotbrainify
+- Russell Banks
+- Ryan Cao
+- SabrePenguin
+- Sambhav Saggi
+- Sameer
+- Samisafool
+- Samuel Rakitničan
+- Samuel Stidham
+- SandaruKasa
+- Santiago Cézar
+- Sebastian
+- Sebastian Rueth
+- Sebastian Rüth
+- Sebastían
+- Sefa Eyeoglu
+- Sergey Shatunov
+- Sergio
+- seth
+- Seth Flynn
+- Sheldon Corkery
+- sinidiem
+- Sky
+- Skyler Grey
+- so5iso4ka
+- Sofia
+- solonovamax
+- Soni L
+- Sophie Marie
+- Soup
+- Soup of the tomato kind
+- Spencer Burris
+- srakitnican
+- src\_resources
+- sshcrack
+- StaticRocket
+- Stefan
+- Sticks
+- Stiepen
+- Stiepen22
+- stoltsvensk
+- Stypox
+- swirl
+- SwitchAxe
+- swurl
+- Taeyeon Mori
+- TakSuyu
+- Taylor Smock
+- Tayou
+- Technous285
+- telans
+- Temm
+- Thalia Nero
+- TheCodex6824
+- TheCourierNV
+- TheDoctorsLife
+- TheEvilSkeleton
+- TheFrenchGhosty
+- TheKodeToad
+- TheLastRar
+- theMackabu
+- TheOPtimal
+- therealfarfetchd
+- Thomas Kain
+- Thomas Sirack
+- thonkdifferent
+- Tianhao Chai
+- tildejustin
+- Tim Flynn
+- timoreo
+- timoreo22
+- tjw123hh
+- tobfos
+- Tobias Möritz
+- tobimori
+- Toby Foster
+- Tomasz
+- Tomasz Kramkowski
+- TreyRuffy
+- Trial97
+- Trisave
+- Trung Lê
+- txtsd
+- umutcagand
+- Una
+- unnameduser5000
+- UnownPlain
+- Vance
+- Vedant
+- Victor
+- Vir Chaudhury
+- Vishrut Sachan
+- Vladislav Laetansky
+- Wechirok
+- WhiXard
+- William Gray
+- Wouink
+- XandarNull
+- Xander
+- xnrand
+- yash
+- Yihe Li
+- Yundi Xu
+- Zeke
+- Zetvue
+- Zipdox
+- 快乐的老鼠宝宝
+- 雪鈴 SnowLin
+
+</details>
+<!-- contributors:end -->
+
+---
+
 ## License
 
 All old Prism launcher code is available under the **GPL-3.0-only** license.

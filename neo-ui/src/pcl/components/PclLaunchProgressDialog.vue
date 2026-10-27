@@ -4,9 +4,9 @@
       <q-card-section class="pcl-launch-dialog__head">
         <span class="pcl-launch-dialog__badge"><PclIcon name="play" :size="20" /></span>
         <div class="pcl-launch-dialog__head-copy">
-          <span class="pcl-kicker">MINECRAFT LAUNCH</span>
-          <h3>{{ state === 'launched' ? '启动成功' : state === 'failed' ? '启动失败' : state === 'cancelled' ? '启动已取消' : '正在启动游戏' }}</h3>
-          <p>{{ instanceName || 'Minecraft 实例' }}</p>
+          <span class="pcl-kicker">{{ t('pcl.launchDialog.kicker') }}</span>
+          <h3>{{ state === 'launched' ? t('pcl.launchDialog.success') : state === 'failed' ? t('launch.failed') : state === 'cancelled' ? t('launch.cancelled') : t('pcl.launchDialog.launching') }}</h3>
+          <p>{{ instanceName || t('pcl.launchDialog.instance') }}</p>
         </div>
         <span class="pcl-launch-dialog__percent">{{ percentText }}</span>
       </q-card-section>
@@ -19,19 +19,19 @@
         <div class="pcl-launch-dialog__stage">
           <PclIcon v-if="state === 'launched'" name="circle-check" :size="15" />
           <PclIcon v-else name="info" :size="15" />
-          <span>{{ stage || (state === 'launching' ? '正在准备启动…' : state === 'launched' ? '游戏进程已启动' : '启动流程已结束') }}</span>
+          <span>{{ stage || (state === 'launching' ? t('pcl.launchDialog.preparing') : state === 'launched' ? t('pcl.launchDialog.processStarted') : t('pcl.launchDialog.ended')) }}</span>
         </div>
         <p v-if="details" class="pcl-launch-dialog__details">{{ details }}</p>
         <div v-if="failedRows.length" class="pcl-launch-dialog__downloads pcl-launch-dialog__failures">
-          <div class="pcl-launch-dialog__downloads-head">失败的项目</div>
+          <div class="pcl-launch-dialog__downloads-head">{{ t('pcl.launchDialog.failedItems') }}</div>
           <div v-for="row in failedRows" :key="row.id" class="pcl-launch-dialog__download">
             <span class="pcl-launch-dialog__download-name">{{ taskItemLabel(row) }}</span>
-            <span class="pcl-launch-dialog__download-meta">{{ row.details || row.status || '校验失败' }}</span>
+            <span class="pcl-launch-dialog__download-meta">{{ row.details || row.status || t('pcl.launchDialog.verifyFailed') }}</span>
           </div>
         </div>
         <div v-if="stepRows.length || state === 'launching'" class="pcl-launch-dialog__downloads">
-          <div class="pcl-launch-dialog__downloads-head">启动步骤</div>
-          <div v-if="!stepRows.length" class="pcl-launch-dialog__step-empty">等待任务步骤…</div>
+          <div class="pcl-launch-dialog__downloads-head">{{ t('pcl.launchDialog.steps') }}</div>
+          <div v-if="!stepRows.length" class="pcl-launch-dialog__step-empty">{{ t('pcl.launchDialog.waitingSteps') }}</div>
           <div v-for="row in stepRows" :key="row.id" class="pcl-launch-dialog__download pcl-launch-dialog__step" :class="`is-${row.state}`">
             <span class="pcl-launch-dialog__step-mark">{{ row.mark }}</span>
             <span class="pcl-launch-dialog__download-name">{{ row.label }}</span>
@@ -41,25 +41,25 @@
         </div>
 
         <div class="pcl-launch-dialog__info">
-          <div><span>启动账户</span><strong>{{ accountName || '未选择账户' }}</strong></div>
-          <div><span>登录方式</span><strong>{{ loginMethod || '—' }}</strong></div>
-          <div><span>启动进度</span><strong>{{ percentText }}</strong></div>
-          <div v-if="speed > 0"><span>下载速度</span><strong>{{ formatRate(speed) }}</strong></div>
+          <div><span>{{ t('launch.loginMethod') }}</span><strong>{{ accountName || t('nav.noAccount') }}</strong></div>
+          <div><span>{{ t('pcl.launchDialog.loginMethod') }}</span><strong>{{ loginMethod || '—' }}</strong></div>
+          <div><span>{{ t('launch.progress') }}</span><strong>{{ percentText }}</strong></div>
+          <div v-if="speed > 0"><span>{{ t('launch.speed') }}</span><strong>{{ formatRate(speed) }}</strong></div>
         </div>
 
         <PclHint v-if="state === 'launched'" theme="blue">
-          {{ hint || '游戏已经启动，可以关闭此窗口。' }}
+          {{ hint || t('pcl.launchDialog.startedHint') }}
         </PclHint>
         <PclHint v-else-if="error" theme="red" :closable="false">{{ error }}</PclHint>
-        <PclHint v-else theme="blue">正在准备游戏环境，请稍候。</PclHint>
+        <PclHint v-else theme="blue">{{ t('pcl.launchDialog.environment') }}</PclHint>
       </q-card-section>
 
       <q-card-actions align="right" class="pcl-launch-dialog__actions">
         <PclButton v-if="state === 'launching'" variant="ghost" icon="x" :disabled="cancelling" @click="emit('cancel')">
-          {{ cancelling ? '正在取消…' : '取消启动' }}
+          {{ cancelling ? t('pcl.launchDialog.cancelling') : t('launch.cancel') }}
         </PclButton>
-        <PclButton v-else-if="state === 'failed'" variant="highlight" icon="refresh-cw" @click="emit('retry')">重试</PclButton>
-        <PclButton v-if="state !== 'launching'" variant="ghost" icon="x" @click="emit('update:modelValue', false)">关闭</PclButton>
+        <PclButton v-else-if="state === 'failed'" variant="highlight" icon="refresh-cw" @click="emit('retry')">{{ t('common.retry') }}</PclButton>
+        <PclButton v-if="state !== 'launching'" variant="ghost" icon="x" @click="emit('update:modelValue', false)">{{ t('window.close') }}</PclButton>
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from './PclButton.vue';
 import PclHint from './PclHint.vue';
 import PclIcon from './PclIcon.vue';
@@ -115,6 +116,7 @@ const emit = defineEmits<{
   cancel: [];
   retry: [];
 }>();
+const { t } = useI18n();
 
 const percent = computed<number | null>(() => {
   const value = Number(props.progress);

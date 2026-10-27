@@ -3,25 +3,25 @@
     <Transition name="pcl-install-step" mode="out-in">
       <div v-if="step === 'versions'" key="versions" class="pcl-install-step">
         <PclCard v-if="loading">
-          <PclLoading text="正在加载 Minecraft 版本列表" />
+          <PclLoading :text="t('pcl.installPage.loadingVersions')" />
         </PclCard>
 
         <PclCard v-else-if="loadError">
           <PclHint theme="red">{{ loadError }}</PclHint>
           <div class="pcl-actions">
-            <PclButton variant="highlight" icon="refresh-cw" @click="loadMinecraft">重试</PclButton>
+            <PclButton variant="highlight" icon="refresh-cw" @click="loadMinecraft">{{ t('common.retry') }}</PclButton>
           </div>
         </PclCard>
 
         <template v-else>
-          <PclCard v-model:open="categoryOpen.latest" title="最新版本">
+          <PclCard v-model:open="categoryOpen.latest" :title="t('pcl.installPage.latest')">
             <div class="pcl-version-list">
               <PclListItem
                 v-for="version in latestVersions"
                 :key="version.version"
                 :title="version.version"
                 :info="versionInfo(version)"
-                :tags="version.recommended ? ['推荐'] : []"
+                :tags="version.recommended ? [t('download.recommended')] : []"
                 @click="selectMinecraft(version)"
               >
                 <template #icon><PclIcon name="boxes" :size="21" /></template>
@@ -42,7 +42,7 @@
                 :key="version.version"
                 :title="version.version"
                 :info="versionInfo(version)"
-                :tags="version.recommended ? ['推荐'] : []"
+                :tags="version.recommended ? [t('download.recommended')] : []"
                 @click="selectMinecraft(version)"
               >
                 <template #icon><PclIcon name="boxes" :size="21" /></template>
@@ -55,31 +55,31 @@
       <div v-else key="select" class="pcl-install-step">
         <PclCard class="pcl-install-header">
           <div class="pcl-install-header__row">
-            <PclIconButton icon="arrow-left" label="返回版本选择" :size="26" @click="backToVersions" />
+            <PclIconButton icon="arrow-left" :label="t('pcl.installPage.backVersions')" :size="26" @click="backToVersions" />
             <span class="pcl-install-header__logo"><PclIcon name="boxes" :size="32" /></span>
             <div class="pcl-install-header__copy">
               <div class="pcl-install-header__eyebrow">Minecraft {{ selectedVersion?.version }}</div>
               <PclInput
                 v-model="instanceName"
-                placeholder="实例名称"
+                :placeholder="t('app.instanceName')"
                 class="pcl-install-name"
                 @update:model-value="nameTouched = true"
               />
             </div>
-            <span class="pcl-install-header__hint">{{ selectedLoader ? selectedLoader.label : '原版' }}</span>
+            <span class="pcl-install-header__hint">{{ selectedLoader ? selectedLoader.label : t('pcl.installPage.vanilla') }}</span>
           </div>
         </PclCard>
 
         <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
         <PclHint v-if="nameError" theme="red">{{ nameError }}</PclHint>
         <PclHint v-if="selectedLoader?.id === 'fabric'" theme="blue">
-          Fabric API 不包含在客户端安装中，可在实例创建后从资源页安装。
+          {{ t('pcl.installPage.fabricHint') }}
         </PclHint>
         <PclHint v-if="selectedLoader?.id === 'forge'" theme="yellow">
-          OptiFine 与 Forge 的组合需要额外补丁，Luna 暂不支持自动安装。
+          {{ t('pcl.installPage.forgeHint') }}
         </PclHint>
         <PclHint theme="blue">
-          加载器版本会按当前 Minecraft 版本从同一套组件元数据读取；Cleanroom、Quilt 与 LiteLoader 的兼容范围由后端版本列表决定。
+          {{ t('pcl.installPage.loaderHint') }}
         </PclHint>
 
         <PclCard
@@ -99,17 +99,17 @@
           <template #actions>
             <span v-if="selectedLoader?.id === loader.id" class="pcl-loader-selected">{{ selectedLoader.version }}</span>
             <span v-else-if="isLoaderDisabled(loader)" class="pcl-loader-unavailable">{{ loaderStateLabel(loader) }}</span>
-            <span v-else class="pcl-loader-add">添加</span>
+            <span v-else class="pcl-loader-add">{{ t('pcl.installPage.addLoader') }}</span>
             <PclIconButton
               v-if="selectedLoader?.id === loader.id"
               icon="x"
-              label="清除加载器"
+              :label="t('pcl.installPage.clearLoader')"
               :size="22"
               @click.stop="clearLoader"
             />
           </template>
 
-          <PclLoading v-if="loaderState[loader.id]?.loading" text="正在读取版本" inline />
+          <PclLoading v-if="loaderState[loader.id]?.loading" :text="t('pcl.installPage.readingVersions')" inline />
           <PclHint v-else-if="loaderState[loader.id]?.error" theme="red">{{ loaderState[loader.id].error }}</PclHint>
           <div v-else class="pcl-loader-list">
             <PclListItem
@@ -123,14 +123,14 @@
               <template #icon><PclIcon :name="loader.icon" :size="19" /></template>
             </PclListItem>
             <div v-if="!(loaderState[loader.id]?.versions || []).length" class="pcl-empty">
-              没有与 Minecraft {{ selectedVersion?.version }} 兼容的版本。
+              {{ t('pcl.installPage.noCompatible', { version: selectedVersion?.version }) }}
             </div>
           </div>
         </PclCard>
 
         <div class="pcl-install-footer">
           <PclButton variant="accent" size="xl" icon="download" :disabled="!canInstall || installing" @click="install">
-            {{ installing ? '正在创建实例' : '开始下载' }}
+            {{ installing ? t('pcl.installPage.creating') : t('pcl.installPage.startDownload') }}
           </PclButton>
         </div>
       </div>
@@ -140,6 +140,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -161,6 +162,7 @@ const props = defineProps<{
   initialMinecraftVersion?: string;
 }>();
 const emit = defineEmits<{ installed: [result: any]; 'preset-consumed': []; 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
+const { t } = useI18n();
 
 const step = ref<'versions' | 'select'>('versions');
 const loading = ref(false), loadError = ref(''), installing = ref(false), error = ref('');
@@ -181,8 +183,8 @@ const loaderCards: LoaderCard[] = [
   { id: 'quilt', label: 'Quilt', icon: 'layers', uid: 'org.quiltmc.quilt-loader', alias: 'quilt' },
   { id: 'liteloader', label: 'LiteLoader', icon: 'egg', uid: 'com.mumfrey.liteloader', alias: 'liteloader' },
   { id: 'legacyfabric', label: 'Legacy Fabric', icon: 'scroll', alias: 'legacyfabric', special: 'legacyfabric' },
-  { id: 'labymod-production', label: 'LabyMod（正式版）', icon: 'sparkles', alias: 'labymod-production', special: 'labymod-production', channel: 'production' },
-  { id: 'labymod-snapshot', label: 'LabyMod（快照）', icon: 'sparkles', alias: 'labymod-snapshot', special: 'labymod-snapshot', channel: 'snapshot' },
+  { id: 'labymod-production', label: 'LabyMod (Release)', icon: 'sparkles', alias: 'labymod-production', special: 'labymod-production', channel: 'production' },
+  { id: 'labymod-snapshot', label: 'LabyMod (Snapshot)', icon: 'sparkles', alias: 'labymod-snapshot', special: 'labymod-snapshot', channel: 'snapshot' },
 ];
 
 const sortedVersions = computed(() => [...versions.value].sort((a, b) => dateValue(b.time) - dateValue(a.time)));
@@ -197,16 +199,16 @@ const latestVersions = computed(() => {
   return list.filter(Boolean) as Version[];
 });
 const versionCategories = computed(() => [
-  { id: 'release', label: '正式版', versions: releaseVersions.value },
-  { id: 'snapshot', label: '快照', versions: snapshotVersions.value },
-  { id: 'old', label: '旧版本', versions: oldVersions.value },
+  { id: 'release', label: t('pcl.installPage.release'), versions: releaseVersions.value },
+  { id: 'snapshot', label: t('pcl.installPage.snapshot'), versions: snapshotVersions.value },
+  { id: 'old', label: t('pcl.installPage.old'), versions: oldVersions.value },
 ].filter(category => category.versions.length));
 
 const nameError = computed(() => {
   const value = instanceName.value.trim();
-  if (!value) return '请输入实例名称。';
-  if (/[\\/:*?"<>|]/.test(value)) return '实例名称不能包含 \\ / : * ? " < > |。';
-  if ((props.instances || []).some(instance => String(instance.name || '').trim().toLowerCase() === value.toLowerCase())) return '已存在同名实例，请换一个名称。';
+  if (!value) return t('pcl.installPage.nameRequired');
+  if (/[\\/:*?"<>|]/.test(value)) return t('pcl.installPage.nameInvalid');
+  if ((props.instances || []).some(instance => String(instance.name || '').trim().toLowerCase() === value.toLowerCase())) return t('pcl.installPage.nameDuplicate');
   return '';
 });
 const canInstall = computed(() => Boolean(selectedVersion.value) && !nameError.value && !installing.value && !props.busy);
@@ -236,7 +238,7 @@ function dateValue(value?: string): number {
   return Number.isFinite(time) ? time : 0;
 }
 function versionInfo(version: Version): string {
-  const date = version.time ? new Date(version.time).toLocaleDateString('zh-CN') : '未知日期';
+  const date = version.time ? new Date(version.time).toLocaleDateString() : t('pcl.installPage.unknownDate');
   return `${date} | ${version.version}`;
 }
 function generatedName(): string {
@@ -253,8 +255,8 @@ function isLoaderDisabled(loader: LoaderCard): boolean {
   return !isLoaderCompatible(loader);
 }
 function loaderStateLabel(loader: LoaderCard): string {
-  if (loader.disabled) return '暂不支持';
-  return '不兼容';
+  if (loader.disabled) return t('pcl.installPage.unsupported');
+  return t('pcl.installPage.incompatible');
 }
 
 function clearLoaderState() {
@@ -367,7 +369,7 @@ async function install() {
   if (!selectedVersion.value || !canInstall.value) return;
   installing.value = true;
   error.value = '';
-  const installInfo = { title: selectedLoader.value ? '正在安装 Minecraft 与加载器' : '正在安装 Minecraft', name: instanceName.value.trim() || selectedVersion.value.version };
+  const installInfo = { title: selectedLoader.value ? t('pcl.installPage.installMinecraftLoader') : t('pcl.installPage.installMinecraft'), name: instanceName.value.trim() || selectedVersion.value.version };
   emit('install-start', installInfo);
   try {
     const parameters: Record<string, unknown> = {
@@ -389,10 +391,10 @@ async function install() {
       task = await props.execute('neo.task.status', { taskId: task.taskId });
     }
     emit('install-progress', task);
-    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '实例创建失败');
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('pcl.installPage.createFailed'));
     let createdId = task.createdInstanceId || '';
     if (selectedLoader.value?.special) {
-      if (!createdId) throw new Error('实例创建成功但没有返回实例 ID');
+      if (!createdId) throw new Error(t('pcl.installPage.noCreatedId'));
       task = await props.execute('neo.task.start', {
         operation: 'instance.special-loader.install',
         priority: 'high',
@@ -410,7 +412,7 @@ async function install() {
         task = await props.execute('neo.task.status', { taskId: task.taskId });
       }
       emit('install-progress', task);
-      if (!task || task.state !== 'succeeded') throw new Error(task?.error || '特殊加载器安装失败');
+      if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('pcl.installPage.specialFailed'));
     }
     emit('installed', { id: createdId, name: instanceName.value.trim() || selectedVersion.value.version });
   } catch (exception) {

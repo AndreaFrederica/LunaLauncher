@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MPL-2.0
 export const settingCategoryLabels: Record<string, string> = {
-  all: '全部设置',
-  launch: '启动与窗口',
-  java: 'Java 与内存',
-  paths: '目录与文件',
-  network: '网络连接',
-  downloads: '下载与资源',
-  compatibility: '兼容性与性能',
-  console: '控制台与日志',
-  playtime: '游戏时间',
-  instance: '客户端信息',
-  'instance-overrides': '客户端覆盖项',
-  'qt-ui': 'Qt 旧界面兼容',
-  advanced: '高级设置',
+  all: 'settings.categories.all',
+  launch: 'settings.categories.launch',
+  java: 'settings.categories.java',
+  paths: 'settings.categories.paths',
+  network: 'settings.categories.network',
+  downloads: 'settings.categories.downloads',
+  compatibility: 'settings.categories.compatibility',
+  console: 'settings.categories.console',
+  playtime: 'settings.categories.playtime',
+  instance: 'settings.categories.instance',
+  'instance-overrides': 'settings.categories.instance-overrides',
+  'qt-ui': 'settings.categories.qt-ui',
+  advanced: 'settings.categories.advanced',
 };
 
 export const settingCategoryOrder = [

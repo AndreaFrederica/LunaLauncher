@@ -1,21 +1,21 @@
 <template>
-  <PclCard title="游戏内存">
+  <PclCard :title="t('pcl.memory.title')">
     <template #actions>
       <span class="pcl-memory-live">
         <span class="pcl-memory-live__dot" />
-        实时刷新
+        {{ t('pcl.memory.live') }}
       </span>
     </template>
 
     <div class="pcl-memory-mode">
-      <PclRadio v-model="mode" value="auto" label="自动配置" name="pcl-memory-mode" />
-      <PclRadio v-model="mode" value="custom" label="自定义" name="pcl-memory-mode" />
-      <span class="pcl-memory-mode__hint">{{ mode === 'auto' ? `自动配置会设为 ${autoLabel}` : '手动设置最小/最大内存' }}</span>
+      <PclRadio v-model="mode" value="auto" :label="t('pcl.memory.auto')" name="pcl-memory-mode" />
+      <PclRadio v-model="mode" value="custom" :label="t('pcl.memory.custom')" name="pcl-memory-mode" />
+      <span class="pcl-memory-mode__hint">{{ mode === 'auto' ? t('pcl.memory.autoHint', { value: autoLabel }) : t('pcl.memory.manualHint') }}</span>
     </div>
 
     <div class="pcl-memory-usage">
       <div class="pcl-memory-usage__head">
-        <span>已使用内存 / 已安装内存</span>
+        <span>{{ t('pcl.memory.usage') }}</span>
         <strong>{{ usedGiB }} GiB <em>/</em> {{ totalGiB }} GiB</strong>
       </div>
       <div class="pcl-memory-track">
@@ -24,14 +24,14 @@
         <span class="pcl-memory-divider" :style="{ left: `${usedPercent}%` }" />
       </div>
       <div class="pcl-memory-usage__foot">
-        <span>系统占用 {{ usedPercent.toFixed(1) }}%</span>
-        <span>游戏分配 <strong>{{ allocationGiB }} GiB</strong></span>
+        <span>{{ t('pcl.memory.systemUsage', { value: usedPercent.toFixed(1) }) }}</span>
+        <span>{{ t('pcl.memory.gameAllocation') }} <strong>{{ allocationGiB }} GiB</strong></span>
       </div>
     </div>
 
     <div class="pcl-memory-sliders">
       <label class="pcl-memory-field">
-        <span>最小内存</span>
+        <span>{{ t('pcl.memory.min') }}</span>
         <PclSlider
           :model-value="minMemory"
           :min="512"
@@ -43,7 +43,7 @@
         />
       </label>
       <label class="pcl-memory-field">
-        <span>最大内存</span>
+        <span>{{ t('pcl.memory.max') }}</span>
         <PclSlider
           :model-value="maxMemory"
           :min="1024"
@@ -57,13 +57,14 @@
     </div>
 
     <PclHint theme="blue">
-      内存条每 2 秒读取一次系统物理内存；游戏分配位置显示当前实例的最大内存。自动配置会按系统内存推荐一个上限，仍可手动覆盖。
+      {{ t('pcl.memory.hint') }}
     </PclHint>
   </PclCard>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclCard from '../../components/PclCard.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclRadio from '../../components/PclRadio.vue';
@@ -73,6 +74,7 @@ import { launcher } from '../../../boot/launcher-api';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ settings: any[]; busy: boolean; execute: Execute }>();
 const emit = defineEmits<{ save: [payload: { key: string; value: any }] }>();
+const { t } = useI18n();
 
 const mode = ref<'auto' | 'custom'>('auto');
 const minMemory = ref(512);

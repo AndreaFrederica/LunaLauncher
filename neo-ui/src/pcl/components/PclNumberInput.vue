@@ -11,12 +11,14 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclInput from './PclInput.vue';
 
 const props = withDefaults(defineProps<{
   modelValue: number; min: number; max: number; step?: number; unit?: string; label?: string; disabled?: boolean;
 }>(), { step: 1, unit: '', label: '', disabled: false });
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>();
+const { t } = useI18n();
 const draft = ref<string | number>(props.modelValue);
 const error = ref('');
 watch(() => props.modelValue, value => { draft.value = value; error.value = ''; });
@@ -24,7 +26,7 @@ function commit() {
   if (props.disabled) return;
   const value = Number(draft.value);
   if (draft.value === '' || !Number.isInteger(value) || value < props.min || value > props.max) {
-    error.value = `请输入 ${props.min}–${props.max} 之间的整数`;
+    error.value = t('pcl.number.integerRange', { min: props.min, max: props.max });
     return;
   }
   error.value = '';

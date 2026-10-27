@@ -4,10 +4,10 @@
       <img v-if="icon" :src="icon" alt="" />
       <span v-else class="pcl-edit-window__fallback"><PclIcon name="box" :size="18" /></span>
       <div class="pcl-edit-window__title">
-        <strong>{{ instance?.name || '实例设置' }}</strong>
-        <small>实例设置 · {{ instance?.id || '' }}</small>
+        <strong>{{ instance?.name || t('instanceSections.settings') }}</strong>
+        <small>{{ t('instanceSections.settings') }} · {{ instance?.id || '' }}</small>
       </div>
-      <button type="button" class="pcl-edit-window__close" aria-label="关闭" @click="emit('close')">×</button>
+      <button type="button" class="pcl-edit-window__close" :aria-label="t('window.close')" @click="emit('close')">×</button>
     </div>
 
     <div class="pcl-edit-window__body">
@@ -24,6 +24,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import PclIcon from './PclIcon.vue';
 import PclSetupPage from '../pages/settings/PclSetupPage.vue';

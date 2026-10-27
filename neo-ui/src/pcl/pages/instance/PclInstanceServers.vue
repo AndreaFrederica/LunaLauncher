@@ -2,20 +2,20 @@
   <div class="pcl-instance-servers">
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
-    <PclCard title="多人服务器">
+    <PclCard :title="t('server.title')">
       <template #actions>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">刷新</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">{{ t('server.refresh') }}</PclButton>
       </template>
       <div class="pcl-server-form">
-        <PclInput v-model="form.name" placeholder="服务器名称" />
-        <PclInput v-model="form.ip" placeholder="地址，例如 play.example.com:25565" @enter="addOrUpdate" />
+        <PclInput v-model="form.name" :placeholder="t('server.name')" />
+        <PclInput v-model="form.ip" :placeholder="t('server.address')" @enter="addOrUpdate" />
         <PclButton variant="highlight" icon="plus" :disabled="busy || !form.ip.trim()" @click="addOrUpdate">
-          {{ editingIndex === null ? '添加' : '更新' }}
+          {{ editingIndex === null ? t('server.add') : t('server.update') }}
         </PclButton>
       </div>
       <div class="pcl-server-form pcl-server-form--options">
-        <PclCheckbox v-model="form.acceptTextures" label="接受服务器资源包" />
-        <PclButton v-if="editingIndex !== null" size="sm" variant="ghost" @click="resetForm">取消编辑</PclButton>
+        <PclCheckbox v-model="form.acceptTextures" :label="t('server.acceptTextures')" />
+        <PclButton v-if="editingIndex !== null" size="sm" variant="ghost" @click="resetForm">{{ t('server.cancelEdit') }}</PclButton>
       </div>
 
       <div class="pcl-server-list">
@@ -33,25 +33,26 @@
           </template>
           <template #actions>
             <span v-if="pingState[server.ip]?.text" class="pcl-server-ping" :class="{ bad: pingState[server.ip]?.bad }">{{ pingState[server.ip].text }}</span>
-            <PclIconButton icon="gauge" label="测试连接" :size="24" :disabled="busy || pingState[server.ip]?.loading" @click.stop="pingServer(server)" />
-            <PclIconButton icon="pencil" label="编辑" :size="24" :disabled="busy" @click.stop="editServer(server, index)" />
-            <PclIconButton icon="trash-2" label="删除" :size="24" danger :disabled="busy" @click.stop="removeServer(index)" />
+            <PclIconButton icon="gauge" :label="t('server.test')" :size="24" :disabled="busy || pingState[server.ip]?.loading" @click.stop="pingServer(server)" />
+            <PclIconButton icon="pencil" :label="t('server.edit')" :size="24" :disabled="busy" @click.stop="editServer(server, index)" />
+            <PclIconButton icon="trash-2" :label="t('server.delete')" :size="24" danger :disabled="busy" @click.stop="removeServer(index)" />
           </template>
         </PclListItem>
-        <div v-if="!servers.length" class="pcl-empty pcl-empty--compact">servers.dat 里还没有服务器。</div>
+        <div v-if="!servers.length" class="pcl-empty pcl-empty--compact">{{ t('server.empty') }}</div>
       </div>
 
       <div class="pcl-actions">
-        <PclButton variant="highlight" icon="save" :disabled="busy || loading" @click="save">保存名单</PclButton>
+        <PclButton variant="highlight" icon="save" :disabled="busy || loading" @click="save">{{ t('server.save') }}</PclButton>
         <span class="pcl-server-path">{{ path || 'servers.dat' }}</span>
       </div>
-      <PclHint theme="blue">保存会原子替换实例游戏目录下的 <code>servers.dat</code>，并带上读取时的 revision 防止覆盖外部修改。</PclHint>
+      <PclHint theme="blue">{{ t('server.hint') }}</PclHint>
     </PclCard>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
@@ -63,6 +64,7 @@ import PclListItem from '../../components/PclListItem.vue';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: any; busy: boolean; execute: Execute }>();
+const { t } = useI18n();
 
 interface ServerEntry { name: string; ip: string; icon: string; acceptTextures: boolean }
 const servers = ref<ServerEntry[]>([]);
@@ -86,7 +88,7 @@ function serverInfo(server: ServerEntry) {
 }
 async function pingServer(server: ServerEntry) {
   const key = server.ip;
-  pingState[key] = { loading: true, text: '测试中…', bad: false, icon: server.icon, motd: '', version: '' };
+  pingState[key] = { loading: true, text: t('server.testing'), bad: false, icon: server.icon, motd: '', version: '' };
   try {
     const result = await props.execute('server.ping', { address: key });
     const players = result?.players || {};
@@ -95,7 +97,7 @@ async function pingServer(server: ServerEntry) {
     const latency = Number(result?.latencyMs ?? 0);
     pingState[key] = {
       loading: false,
-      text: `${max > 0 ? `${online}/${max} · ` : `${online} 人在线 · `}${latency} ms`,
+      text: t('server.online', { online: max > 0 ? `${online}/${max}` : online, latency }),
       bad: false,
       icon: String(result?.favicon || server.icon || ''),
       motd: flattenMotd(result?.description),

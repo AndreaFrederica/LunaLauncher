@@ -2,16 +2,16 @@
   <div class="pcl-java-panel">
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
-    <PclCard title="Java 运行时">
+    <PclCard :title="t('java.runtime')">
       <template #actions>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy || localBusy" @click="scan">扫描</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy || localBusy" @click="scan">{{ t('java.scan') }}</PclButton>
       </template>
 
-      <PclLoading v-if="localBusy && !installed.length" text="正在扫描 Java 运行时" inline />
+      <PclLoading v-if="localBusy && !installed.length" :text="t('java.scanning')" inline />
       <div v-else class="pcl-java-list">
         <PclListItem
-          title="自动选择"
-          info="根据当前实例自动选择兼容的 Java 运行时"
+          :title="t('java.automatic')"
+          :info="t('java.automaticInfo')"
           :selected="automatic"
           @click="toggleAutomatic(true)"
         >
@@ -32,73 +32,73 @@
           <template #icon><PclIcon name="coffee" :size="19" /></template>
           <template #actions>
             <PclIcon v-if="!automatic && selectedPath === runtime.path" name="circle-check" :size="16" />
-            <PclIconButton v-if="isManaged(runtime)" icon="trash-2" label="删除托管 Java" :size="24" danger @click.stop="remove(runtime)" />
+            <PclIconButton v-if="isManaged(runtime)" icon="trash-2" :label="t('java.removeManaged')" :size="24" danger @click.stop="remove(runtime)" />
           </template>
         </PclListItem>
 
         <div v-if="!installed.length" class="pcl-empty">
           <PclIcon name="coffee" :size="34" />
-          <strong>尚未发现 Java</strong>
-          <span>点击“扫描”读取本机 Java 运行时。</span>
+          <strong>{{ t('java.none') }}</strong>
+          <span>{{ t('java.noneHint') }}</span>
         </div>
       </div>
     </PclCard>
 
-    <PclCard title="手动选择 Java">
+    <PclCard :title="t('java.manual')">
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">Java 目录</span>
+        <span class="pcl-form-row__label">{{ t('java.directory') }}</span>
         <div class="pcl-form-row__control">
-          <PclInput v-model="manualPath" placeholder="D:\Program Files\Java\jdk-21 或 ...\bin\java.exe" />
-          <PclIconButton icon="folder-open" label="选择 Java 目录" :size="28" :disabled="busy || localBusy" @click="chooseJavaDirectory" />
-          <PclIconButton icon="file" label="选择 java.exe" :size="28" :disabled="busy || localBusy" @click="chooseJavaExecutable" />
+          <PclInput v-model="manualPath" :placeholder="t('java.pathPlaceholder')" />
+          <PclIconButton icon="folder-open" :label="t('java.chooseDirectory')" :size="28" :disabled="busy || localBusy" @click="chooseJavaDirectory" />
+          <PclIconButton icon="file" :label="t('java.chooseExecutable')" :size="28" :disabled="busy || localBusy" @click="chooseJavaExecutable" />
         </div>
-        <PclButton variant="highlight" icon="check" :disabled="busy || localBusy || !manualPath.trim()" @click="applyManual">应用</PclButton>
+        <PclButton variant="highlight" icon="check" :disabled="busy || localBusy || !manualPath.trim()" @click="applyManual">{{ t('java.apply') }}</PclButton>
       </div>
-      <PclHint theme="blue">可以填 Java 主目录，会自动补全 <code>bin\java.exe</code>；也可以直接填 java.exe。应用后会关闭自动选择并写入当前作用域的 JavaPath。</PclHint>
+      <PclHint theme="blue">{{ t('java.manualHint') }}</PclHint>
     </PclCard>
 
-    <PclCard title="诊断与修复">
+    <PclCard :title="t('java.diagnostics')">
       <div class="pcl-actions pcl-java-actions">
-        <PclButton icon="fact_check" :disabled="busy || localBusy" @click="diagnose">测试当前设置</PclButton>
-        <PclButton icon="tool-case" :disabled="busy || localBusy" @click="repair">自动修复</PclButton>
-        <PclButton variant="ghost" icon="folder-open" :disabled="busy || localBusy" @click="openJavaRoot">打开 Java 目录</PclButton>
+        <PclButton icon="fact_check" :disabled="busy || localBusy" @click="diagnose">{{ t('java.test') }}</PclButton>
+        <PclButton icon="tool-case" :disabled="busy || localBusy" @click="repair">{{ t('java.repair') }}</PclButton>
+        <PclButton variant="ghost" icon="folder-open" :disabled="busy || localBusy" @click="openJavaRoot">{{ t('java.openDirectory') }}</PclButton>
       </div>
 
       <template v-if="diagnostic">
         <div class="pcl-java-summary">
           <span class="pcl-java-summary__dot" :class="{ ok: diagnostic.usable && diagnostic.compatible }" />
-          <strong>{{ diagnostic.usable ? 'Java 可以运行' : 'Java 不可用' }}</strong>
-          <span>{{ diagnostic.compatible ? '与当前实例兼容' : '请检查兼容性' }}</span>
+          <strong>{{ diagnostic.usable ? t('java.usable') : t('java.unusable') }}</strong>
+          <span>{{ diagnostic.compatible ? t('java.compatible') : t('java.incompatible') }}</span>
         </div>
         <div class="pcl-java-meta">
-          <span>版本</span><code>{{ diagnostic.version || '—' }}</code>
-          <span>架构</span><code>{{ diagnostic.architecture || '—' }}{{ diagnostic.is64Bit ? ' · 64 位' : '' }}</code>
-          <span>路径</span><code>{{ diagnostic.executable || diagnostic.resolved || '—' }}</code>
+          <span>{{ t('java.version') }}</span><code>{{ diagnostic.version || '—' }}</code>
+          <span>{{ t('java.architecture') }}</span><code>{{ diagnostic.architecture || '—' }}{{ diagnostic.is64Bit ? ` · ${t('java.bits64')}` : '' }}</code>
+          <span>{{ t('java.path') }}</span><code>{{ diagnostic.executable || diagnostic.resolved || '—' }}</code>
         </div>
         <PclHint v-if="diagnostic.recommendations?.length" theme="yellow">
           <span v-for="recommendation in diagnostic.recommendations" :key="recommendation">{{ recommendation }}</span>
         </PclHint>
         <pre v-if="diagnostic.probeOutput || diagnostic.probeError" class="pcl-java-probe">{{ diagnostic.probeOutput }}{{ diagnostic.probeError }}</pre>
       </template>
-      <p v-else class="pcl-muted pcl-java-placeholder">点击“测试当前设置”检查 Java 是否可执行、是否与实例版本兼容。</p>
+      <p v-else class="pcl-muted pcl-java-placeholder">{{ t('java.testHint') }}</p>
     </PclCard>
 
-    <PclCard title="下载 Java" collapsible>
+    <PclCard :title="t('java.download')" collapsible>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">发行商</span>
+        <span class="pcl-form-row__label">{{ t('java.vendor') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="provider" :options="providers" @update:model-value="resetDownload" />
         </div>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">Java 版本</span>
+        <span class="pcl-form-row__label">{{ t('java.version') }}</span>
         <div class="pcl-form-row__control">
-          <PclSelect v-model="version" :options="versions" placeholder="先加载版本" />
+          <PclSelect v-model="version" :options="versions" :placeholder="t('java.loadFirst')" />
         </div>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy || localBusy" @click="loadVersions">加载版本</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy || localBusy" @click="loadVersions">{{ t('java.loadVersions') }}</PclButton>
       </div>
       <div class="pcl-actions">
-        <PclButton icon="package" :disabled="busy || localBusy || !version" @click="loadPackages">查找安装包</PclButton>
+        <PclButton icon="package" :disabled="busy || localBusy || !version" @click="loadPackages">{{ t('java.findPackages') }}</PclButton>
       </div>
       <div class="pcl-java-packages">
         <div v-for="item in packages" :key="item.url" class="pcl-java-package">
@@ -106,9 +106,9 @@
             <strong>{{ item.name }} {{ item.version }}</strong>
             <small>{{ item.vendor }} · {{ item.runtimeOS }}</small>
           </div>
-          <PclButton size="sm" variant="highlight" icon="download" :disabled="busy || localBusy" @click="install(item)">安装</PclButton>
+          <PclButton size="sm" variant="highlight" icon="download" :disabled="busy || localBusy" @click="install(item)">{{ t('java.install') }}</PclButton>
         </div>
-        <PclLoading v-if="localBusy && packagesLoading" text="正在读取安装包" inline />
+        <PclLoading v-if="localBusy && packagesLoading" :text="t('java.readPackages')" inline />
       </div>
     </PclCard>
     <PclInstallProgressDialog v-model="installOpen" :title="installTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstall" />
@@ -117,6 +117,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -131,13 +132,14 @@ import { pickPclDirectory, pickPclFile } from '../../composables/usePclFileDialo
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ scope: Record<string, unknown>; settings: any[]; busy: boolean; execute: Execute }>();
+const { t } = useI18n();
 const emit = defineEmits<{ changed: [] }>();
 
 const installed = ref<any[]>([]);
 const diagnostic = ref<any>(null);
 const error = ref('');
 const localBusy = ref(false);
-const installOpen = ref(false), installTask = ref<any>(null), installCancelling = ref(false), installTitle = ref('正在安装 Java');
+const installOpen = ref(false), installTask = ref<any>(null), installCancelling = ref(false), installTitle = ref(t('java.installing'));
 const packagesLoading = ref(false);
 const provider = ref('net.minecraft.java');
 const version = ref('');
@@ -224,11 +226,11 @@ function select(path: string) {
   });
 }
 async function chooseJavaDirectory() {
-  const selected = await pickPclDirectory({ title: '选择 Java 目录' });
+  const selected = await pickPclDirectory({ title: t('java.chooseDirectory') });
   if (selected) manualPath.value = selected;
 }
 async function chooseJavaExecutable() {
-  const selected = await pickPclFile({ title: '选择 java.exe', filters: [{ name: 'Java 可执行文件', extensions: ['exe'] }, { name: '所有文件', extensions: ['*'] }] });
+  const selected = await pickPclFile({ title: t('java.chooseExecutable'), filters: [{ name: t('java.executableFilter'), extensions: ['exe'] }, { name: t('java.allFiles'), extensions: ['*'] }] });
   if (selected) manualPath.value = selected;
 }
 function applyManual() {
@@ -248,7 +250,7 @@ function applyManual() {
   });
 }
 async function remove(runtime: any) {
-  if (!window.confirm(`确定删除托管 Java ${runtime.version || runtime.path} 吗？`)) return;
+  if (!window.confirm(t('java.confirmRemove', { name: runtime.version || runtime.path }))) return;
   await perform(async () => {
     await props.execute('java.remove', { name: runtime.path, path: runtime.path, confirm: true });
     await fetchInstalled();
@@ -285,7 +287,7 @@ async function cancelInstall() {
 
 function install(metadata: any) {
   return perform(async () => {
-    installTitle.value = `正在安装 Java：${metadata?.name || metadata?.version || ''}`;
+    installTitle.value = t('java.installingNamed', { name: metadata?.name || metadata?.version || '' });
     installTask.value = null;
     installCancelling.value = false;
     installOpen.value = true;
@@ -297,7 +299,7 @@ function install(metadata: any) {
         task = await props.execute('neo.task.status', { taskId: task.taskId });
       }
       installTask.value = task;
-      if (!task || task.state !== 'succeeded') throw new Error(task?.error || 'Java 安装失败');
+      if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('java.installFailed'));
       await fetchInstalled();
       emit('changed');
     } finally {
@@ -333,10 +335,10 @@ async function openJavaRoot() {
   }
 }
 function runtimeTitle(runtime: any): string {
-  return `Java ${runtime.version || runtime.id || '未知版本'}`;
+  return t('java.runtimeNamed', { version: runtime.version || runtime.id || t('java.unknownVersion') });
 }
 function runtimeInfo(runtime: any): string {
-  const bits = runtime.is64Bit ? '64 位' : '32 位';
+  const bits = runtime.is64Bit ? t('java.bits64') : t('java.bits32');
   const architecture = runtime.architecture ? ` · ${runtime.architecture}` : '';
   return `${bits}${architecture} · ${runtime.path}`;
 }

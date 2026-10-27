@@ -9,29 +9,29 @@
               <span class="pcl-launching-name">{{ selected?.name || 'Minecraft' }}</span>
               <div class="pcl-progress-track"><span :style="{ width: `${progressPercent}%` }" /></div>
               <div class="pcl-launch-info" :class="{ 'pcl-launch-info--done': launchState === 'launched' }">
-                <span><em>当前步骤</em><b>{{ launchStage || '初始化' }}</b></span>
-                <span><em>登录方式</em><b>{{ launchLoginMethod || loginMethodLabel }}</b></span>
-                <span><em>启动进度</em><b>{{ progressLabel }}</b></span>
-                <span v-if="launchSpeed > 0"><em>下载速度</em><b>{{ formatRate(launchSpeed) }}</b></span>
+                <span><em>{{ t('launch.step') }}</em><b>{{ launchStage || t('launch.init') }}</b></span>
+                <span><em>{{ t('launch.loginMethod') }}</em><b>{{ launchLoginMethod || loginMethodLabel }}</b></span>
+                <span><em>{{ t('launch.progress') }}</em><b>{{ progressLabel }}</b></span>
+                <span v-if="launchSpeed > 0"><em>{{ t('launch.speed') }}</em><b>{{ formatRate(launchSpeed) }}</b></span>
               </div>
               <Transition name="pcl-hint">
                 <PclHint v-if="launchState === 'launched' && launchHint" theme="blue" class="pcl-launch-trivia">{{ launchHint }}</PclHint>
               </Transition>
-              <PclButton v-if="launchState === 'launching'" class="pcl-cancel-button" icon="x" @click="emit('cancel')">取消启动</PclButton>
+              <PclButton v-if="launchState === 'launching'" class="pcl-cancel-button" icon="x" @click="emit('cancel')">{{ t('launch.cancel') }}</PclButton>
             </div>
 
             <div v-show="launchState !== 'launching' && launchState !== 'launched'" class="pcl-input-panel">
               <div class="pcl-account-area">
                 <div class="pcl-login-slot">
-                  <button class="pcl-login-slot__avatar" type="button" title="切换启动账户" @click="accountMenu = !accountMenu">
+                  <button class="pcl-login-slot__avatar" type="button" :title="t('pcl.launchPage.switchAccount')" @click="accountMenu = !accountMenu">
                     <PclAccountAvatar v-if="activeAccount?.profile?.skin?.url" :src="activeAccount.profile.skin.url" :name="activeAccount.profileName || activeAccount.displayName" />
                     <PclIcon v-else name="user" :size="26" />
                   </button>
                   <div class="pcl-login-slot__copy">
-                    <strong>{{ activeAccount?.profileName || activeAccount?.displayName || '未选择账户' }}</strong>
+                    <strong>{{ activeAccount?.profileName || activeAccount?.displayName || t('nav.noAccount') }}</strong>
                     <small>{{ loginMethodLabel }}</small>
                   </div>
-                  <button class="pcl-account-toggle" type="button" aria-label="切换账户" @click="accountMenu = !accountMenu">
+                  <button class="pcl-account-toggle" type="button" :aria-label="t('pcl.launchPage.switchAccount')" @click="accountMenu = !accountMenu">
                     <PclIcon name="chevron-left" :size="14" class="pcl-account-toggle__icon" />
                   </button>
                 </div>
@@ -41,8 +41,8 @@
                     <PclListItem
                       v-for="account in accounts"
                       :key="accountKey(account)"
-                      :title="account.profileName || account.displayName || '未命名账户'"
-                      :info="accountTypeLabel(account) + (account.default ? ' · 默认' : '')"
+                      :title="account.profileName || account.displayName || t('account.unnamed')"
+                      :info="accountTypeLabel(account) + (account.default ? ` · ${t('account.default')}` : '')"
                       :selected="accountKey(account) === accountId"
                       @click="chooseAccount(account)"
                     >
@@ -57,10 +57,10 @@
                       </template>
                     </PclListItem>
                   </div>
-                  <div v-else class="pcl-account-menu__empty">没有账户，请先添加一个启动账户。</div>
+                  <div v-else class="pcl-account-menu__empty">{{ t('launch.noAccount') }}</div>
                   <div class="pcl-account-menu__actions">
-                    <PclButton variant="ghost" icon="user-plus" @click="openAccountPage('add')">添加账户</PclButton>
-                    <PclButton variant="ghost" icon="settings" @click="openAccountPage('manage')">管理账户</PclButton>
+                    <PclButton variant="ghost" icon="user-plus" @click="openAccountPage('add')">{{ t('launch.addAccount') }}</PclButton>
+                    <PclButton variant="ghost" icon="settings" @click="openAccountPage('manage')">{{ t('launch.manageAccounts') }}</PclButton>
                   </div>
                 </div>
               </div>
@@ -68,10 +68,10 @@
               <div class="pcl-launch-state">
                 <div v-show="launchState === 'failed' || launchState === 'cancelled'" class="pcl-launch-error">
                   <PclHint theme="red" :closable="false">
-                    <b>{{ launchState === 'cancelled' ? '已取消启动' : '启动失败' }}</b>
-                    <span>{{ launchError || '请检查启动日志后重试。' }}</span>
+                    <b>{{ launchState === 'cancelled' ? t('launch.cancelled') : t('launch.failed') }}</b>
+                    <span>{{ launchError || t('launch.retryHint') }}</span>
                   </PclHint>
-                  <PclButton icon="refresh-cw" @click="emit('launch')">重试</PclButton>
+                  <PclButton icon="refresh-cw" @click="emit('launch')">{{ t('common.retry') }}</PclButton>
                 </div>
                 <PclButton
                   v-show="launchState !== 'failed' && launchState !== 'cancelled'"
@@ -91,14 +91,14 @@
               <button class="pcl-instance-button" :disabled="launchState === 'loading'" @click="selectionOpen = true">
                 <PclIcon name="layout-list" :size="18" />
                 <span class="pcl-instance-button__text">
-                  <small>当前实例</small>
-                  <strong>{{ selected?.name || (instances.length ? '选择 Minecraft 实例' : '没有可用实例') }}</strong>
+                  <small>{{ t('launch.currentInstance') }}</small>
+                  <strong>{{ selected?.name || (instances.length ? t('launch.chooseInstance') : t('launch.noInstances')) }}</strong>
                 </span>
                 <PclIcon name="chevron-right" :size="16" class="pcl-instance-button__arrow" />
               </button>
               <div class="pcl-launch-links">
-                <PclButton variant="ghost" icon="folder-open" :disabled="!selected" @click="emit('open-folder')">打开实例目录</PclButton>
-                <PclButton variant="ghost" icon="settings" :disabled="!selected" @click="emit('settings')">实例设置</PclButton>
+                <PclButton variant="ghost" icon="folder-open" :disabled="!selected" @click="emit('open-folder')">{{ t('launch.openFolder') }}</PclButton>
+                <PclButton variant="ghost" icon="settings" :disabled="!selected" @click="emit('settings')">{{ t('launch.instanceSettings') }}</PclButton>
               </div>
             </div>
         </div>
@@ -124,36 +124,36 @@
         />
 
         <div class="pcl-launch-right">
-          <PclCard v-if="hintVisible" title="Neo UI 提示" :style="{ order: homeCardOrder('hint') }">
+          <PclCard v-if="hintVisible" :title="t('pcl.launchPage.neoHint')" :style="{ order: homeCardOrder('hint') }">
             <template #actions>
-              <PclIconButton icon="x" label="关闭提示" :size="24" @click="hintDialog = true" />
+              <PclIconButton icon="x" :label="t('pcl.common.closeHint')" :size="24" @click="hintDialog = true" />
             </template>
-            <p class="pcl-launch-card-copy">感谢你使用 Luna Launcher Neo UI。</p>
-            <p class="pcl-launch-card-copy pcl-muted">Neo UI 正在持续完善，遇到问题可以在社区反馈。</p>
+            <p class="pcl-launch-card-copy">{{ t('launch.thanks') }}</p>
+            <p class="pcl-launch-card-copy pcl-muted">{{ t('launch.feedback') }}</p>
           </PclCard>
 
           <PclCard v-for="card in homeCards" :key="card.id" :title="card.title" class="pcl-home-card" :style="{ order: homeCardOrder(`custom:${card.id}`) }">
             <p class="pcl-home-card__content">{{ card.content }}</p>
           </PclCard>
 
-          <PclCard title="启动日志" :style="{ order: homeCardOrder('log') }">
+          <PclCard :title="t('launch.log')" :style="{ order: homeCardOrder('log') }">
             <template #actions>
-              <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" label="自动滚动" />
-              <PclIconButton icon="copy" label="复制日志" :size="24" :disabled="!logLines.length" @click="copyLog" />
-              <PclIconButton icon="trash-2" label="清空日志" :size="24" :disabled="!logLines.length" @click="emit('clear-log')" />
-              <PclIconButton icon="refresh-cw" label="刷新" :size="24" :disabled="busy" @click="emit('refresh')" />
+              <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" :label="t('launch.autoScroll')" />
+              <PclIconButton icon="copy" :label="t('common.copyLog')" :size="24" :disabled="!logLines.length" @click="copyLog" />
+              <PclIconButton icon="trash-2" :label="t('common.clearLog')" :size="24" :disabled="!logLines.length" @click="emit('clear-log')" />
+              <PclIconButton icon="refresh-cw" :label="t('common.refresh')" :size="24" :disabled="busy" @click="emit('refresh')" />
             </template>
             <div ref="logElement" class="pcl-launch-log" aria-live="polite">
               <div v-if="logLines.length" v-for="(line, index) in logLines" :key="index">{{ line }}</div>
-              <span v-else>{{ notice || (selected ? `已选择实例：${selected.name}` : '尚未选择实例') }}</span>
+              <span v-else>{{ notice || (selected ? t('launch.selected', { name: selected.name }) : t('launch.notSelected')) }}</span>
             </div>
           </PclCard>
 
-          <PclCard v-if="preferences.pclHomeShowInstances" title="全部实例" class="pcl-home-instances" :style="[homeInstanceStyle, { order: homeCardOrder('instances') }]">
+          <PclCard v-if="preferences.pclHomeShowInstances" :title="t('pcl.launchPage.allInstances')" class="pcl-home-instances" :style="[homeInstanceStyle, { order: homeCardOrder('instances') }]">
             <template #actions>
-              <PclIconButton icon="grid-2x2" label="网格排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'grid' }" @click="setInstanceLayout('grid')" />
-              <PclIconButton icon="list" label="单列排列" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'list' }" @click="setInstanceLayout('list')" />
-              <PclIconButton icon="refresh-cw" label="刷新实例" :size="24" :disabled="busy" @click="emit('refresh')" />
+              <PclIconButton icon="grid-2x2" :label="t('pcl.launchPage.grid')" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'grid' }" @click="setInstanceLayout('grid')" />
+              <PclIconButton icon="list" :label="t('pcl.launchPage.list')" :size="24" :class="{ active: preferences.pclHomeInstanceLayout === 'list' }" @click="setInstanceLayout('list')" />
+              <PclIconButton icon="refresh-cw" :label="t('common.refresh')" :size="24" :disabled="busy" @click="emit('refresh')" />
             </template>
             <div v-if="instances.length" class="pcl-home-instance-groups" :style="{ maxHeight: homeInstanceMaxHeight }">
               <div v-for="group in homeInstanceGroups" :key="group.id" class="pcl-home-instance-group">
@@ -179,7 +179,7 @@
                     class="pcl-home-instance"
                     :class="{ active: item.id === selected?.id, 'is-drag-over': dragOverId === item.id, 'text-below': preferences.pclHomeInstanceTextPosition === 'below' }"
                     :draggable="true"
-                    :title="`双击启动 ${item.name}`"
+                    :title="t('pcl.launchPage.doubleLaunchNamed', { name: item.name })"
                     @click="clickInstance(item)"
                     @dblclick="quickLaunch(item)"
                     @contextmenu.prevent.stop="openContextMenu(item, $event)"
@@ -195,21 +195,21 @@
                       <strong>{{ item.name }}</strong>
                       <small v-if="instanceSubtitle(item)">{{ instanceSubtitle(item) }}</small>
                     </span>
-                    <span v-if="item.running" class="pcl-home-instance__running">运行中</span>
-                    <span v-else class="pcl-home-instance__hint">{{ preferences.pclHomeInstanceSort === 'manual' ? '拖拽排序 · 双击启动' : '双击启动' }}</span>
+                    <span v-if="item.running" class="pcl-home-instance__running">{{ t('launch.runningStatus') }}</span>
+                    <span v-else class="pcl-home-instance__hint">{{ preferences.pclHomeInstanceSort === 'manual' ? t('launch.dragLaunch') : t('launch.doubleLaunch') }}</span>
                   </button>
                 </div>
               </div>
             </div>
-            <div v-else class="pcl-empty pcl-empty--compact">还没有实例。</div>
+            <div v-else class="pcl-empty pcl-empty--compact">{{ t('launch.noInstancesYet') }}</div>
           </PclCard>
 
-          <PclCard v-if="preferences.pclHomeShowServers" title="当前实例服务器" class="pcl-home-servers" :style="{ order: homeCardOrder('servers') }">
+          <PclCard v-if="preferences.pclHomeShowServers" :title="t('pcl.sidebar.currentServers')" class="pcl-home-servers" :style="{ order: homeCardOrder('servers') }">
             <template #actions>
-              <PclIconButton icon="refresh-cw" label="刷新服务器" :size="24" :disabled="busy || serversLoading" @click="loadServers" />
+              <PclIconButton icon="refresh-cw" :label="t('server.refresh')" :size="24" :disabled="busy || serversLoading" @click="loadServers" />
             </template>
-            <div v-if="!selected" class="pcl-empty pcl-empty--compact">先选择一个实例。</div>
-            <div v-else-if="serversLoading" class="pcl-home-server-loading"><PclLoading inline /> 正在读取服务器列表…</div>
+            <div v-if="!selected" class="pcl-empty pcl-empty--compact">{{ t('launch.selectInstance') }}</div>
+            <div v-else-if="serversLoading" class="pcl-home-server-loading"><PclLoading inline /> {{ t('launch.loadingServers') }}</div>
             <div v-else-if="serversError" class="pcl-home-server-error">{{ serversError }}</div>
             <div v-else-if="servers.length" class="pcl-home-server-list">
               <button v-for="server in servers" :key="server.ip" type="button" class="pcl-home-server" @click="connectServer(server)">
@@ -218,8 +218,8 @@
                 <PclIcon name="play" :size="14" class="pcl-home-server__play" />
               </button>
             </div>
-            <div v-else class="pcl-empty pcl-empty--compact">servers.dat 里还没有服务器。</div>
-            <p class="pcl-home-servers__hint">单击或双击服务器即可带地址启动当前实例。</p>
+            <div v-else class="pcl-empty pcl-empty--compact">{{ t('launch.noServers') }}</div>
+            <p class="pcl-home-servers__hint">{{ t('launch.serverHint') }}</p>
           </PclCard>
         </div>
       </div>
@@ -245,19 +245,19 @@
     />
 
     <q-dialog v-model="hintDialog">
-      <PclCard title="关闭社区提示" class="pcl-hint-dialog">
-        <p>请输入 <b>pclcommunity</b> 以确认关闭。</p>
+      <PclCard :title="t('pcl.launchPage.closeCommunityHint')" class="pcl-hint-dialog">
+        <p>{{ t('pcl.launchPage.enterCommunityCode') }} <b>pclcommunity</b> {{ t('launch.confirmClose') }}</p>
         <PclInput v-model="hintCode" placeholder="pclcommunity" @enter="confirmHint" />
         <div class="pcl-actions">
-          <PclButton variant="ghost" @click="hintDialog = false">取消</PclButton>
-          <PclButton variant="highlight" icon="circle-check" @click="confirmHint">确认</PclButton>
+          <PclButton variant="ghost" @click="hintDialog = false">{{ t('common.cancel') }}</PclButton>
+          <PclButton variant="highlight" icon="circle-check" @click="confirmHint">{{ t('dialog.confirm') }}</PclButton>
         </div>
       </PclCard>
     </q-dialog>
 
     <div v-if="contextMenu" class="pcl-context-backdrop" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu" />
     <div v-if="contextMenu" class="pcl-instance-context" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
-      <div class="pcl-instance-context__head">{{ contextMenu.item?.name || '实例操作' }}</div>
+      <div class="pcl-instance-context__head">{{ contextMenu.item?.name || t('pcl.instanceSelect.actions') }}</div>
       <button
         v-for="action in contextActions(contextMenu.item)"
         :key="action.id"
@@ -275,7 +275,7 @@
       <PclExtraButton
         v-if="preferences.pclFloatTasks"
         icon="list"
-        label="任务中心"
+        :label="t('tasks.title')"
         :badge="busy ? '·' : ''"
         :progress="launchState === 'launching' ? launchProgress : undefined"
         @click="emit('tasks')"
@@ -283,17 +283,18 @@
       <PclExtraButton
         v-if="pclMusic.loaded && preferences.pclFloatMusic"
         icon="music"
-        :label="pclMusic.playing ? '暂停背景音乐' : '播放背景音乐'"
+        :label="pclMusic.playing ? t('pcl.launchPage.pauseMusic') : t('pcl.launchPage.playMusic')"
         @click="togglePclMusic"
       />
-      <PclExtraButton v-if="preferences.pclFloatLog" icon="scroll-text" label="启动日志" @click="scrollToLog" />
-      <PclExtraButton v-if="preferences.pclFloatRefresh" icon="refresh-cw" label="刷新" :disabled="busy" @click="refreshHome" />
+      <PclExtraButton v-if="preferences.pclFloatLog" icon="scroll-text" :label="t('launch.log')" @click="scrollToLog" />
+      <PclExtraButton v-if="preferences.pclFloatRefresh" icon="refresh-cw" :label="t('common.refresh')" :disabled="busy" @click="refreshHome" />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclInstanceSelectView from './PclInstanceSelectView.vue';
 import PclClassicSidebar from '../../components/PclClassicSidebar.vue';
 import PclLaunchProgressDialog from '../../components/PclLaunchProgressDialog.vue';
@@ -311,6 +312,7 @@ import { neoUiPreferences } from '../../../neo-ui-preferences';
 import { pclMusic, togglePclMusic } from '../../composables/usePclMusic';
 import { showPclToast } from '../../composables/usePclToast';
 import PclAccountAvatar from '../../components/PclAccountAvatar.vue';
+const { t } = useI18n();
 
 type LaunchState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
 const props = defineProps<{ selected?: any; icon?: string; busy: boolean; notice?: string; error?: string; instances: any[]; icons: Record<string, string>; accounts?: any[]; accountId?: string; launchState?: LaunchState; launchProgress?: number; launchStage?: string; launchLoginMethod?: string; launchSpeed?: number; launchDetails?: string; launchChildren?: any[]; launchError?: string; launchHint?: string; logLines?: string[]; execute?: (operation: string, parameters?: Record<string, unknown>) => Promise<any> }>();
@@ -329,7 +331,7 @@ watch(launchState, value => {
 
 const hasAccount = computed(() => Boolean(activeAccount.value));
 const loginMethodLabel = computed(() => props.launchLoginMethod || accountTypeLabel(activeAccount.value));
-const launchButtonLabel = computed(() => launchState.value === 'loading' ? '正在加载' : launchState.value === 'download' ? '下载 Minecraft' : !hasAccount.value ? '添加账户' : '启动游戏');
+const launchButtonLabel = computed(() => launchState.value === 'loading' ? t('pcl.launchPage.loading') : launchState.value === 'download' ? t('pcl.launchPage.downloadMinecraft') : !hasAccount.value ? t('account.add') : t('launch.launch'));
 const launchButtonDisabled = computed(() => {
   if (launchState.value === 'download') return false;
   if (launchState.value !== 'launch') return true;
@@ -337,14 +339,14 @@ const launchButtonDisabled = computed(() => {
 });
 const progressPercent = computed(() => Math.max(0, Math.min(100, Number(props.launchProgress || 0) * 100)));
 const progressLabel = computed(() => `${progressPercent.value.toFixed(2)} %`);
-const launchTitle = computed(() => props.launchStage?.toLowerCase().includes('export') ? '正在导出启动脚本' : '正在启动');
-const launchStage = computed(() => props.launchStage || '初始化');
+const launchTitle = computed(() => props.launchStage?.toLowerCase().includes('export') ? t('pcl.launchPage.exportingScript') : t('pcl.launchPage.launching'));
+const launchStage = computed(() => props.launchStage || t('launch.init'));
 const launchLoginMethod = computed(() => props.launchLoginMethod || loginMethodLabel.value);
 const launchSpeed = computed(() => Number(props.launchSpeed || 0));
 const launchDetails = computed(() => props.launchDetails || '');
 const launchChildren = computed(() => Array.isArray(props.launchChildren) ? props.launchChildren : []);
 const launchError = computed(() => props.launchError || props.error || '');
-const launchHint = computed(() => props.launchHint || '正在准备游戏环境，请稍候。');
+const launchHint = computed(() => props.launchHint || t('pcl.launchDialog.environment'));
 const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(card => card.title || card.content));
 const preferences = neoUiPreferences;
 function instanceSubtitle(instance: any) {
@@ -387,7 +389,7 @@ const orderedInstances = computed(() => {
   return list.sort((a, b) => (rank.get(a.id) ?? 100000) - (rank.get(b.id) ?? 100000));
 });
 const homeInstanceGroups = computed(() => {
-  if (preferences.pclHomeInstanceGrouping === 'flat') return [{ id: '__all', label: '全部实例', items: orderedInstances.value }];
+  if (preferences.pclHomeInstanceGrouping === 'flat') return [{ id: '__all', label: t('pcl.launchPage.allInstances'), items: orderedInstances.value }];
   const groups = new Map<string, any[]>();
   for (const item of orderedInstances.value) {
     const id = String(item.group || '').trim() || '__regular';
@@ -395,7 +397,7 @@ const homeInstanceGroups = computed(() => {
     list.push(item);
     groups.set(id, list);
   }
-  return [...groups.entries()].map(([id, items]) => ({ id, label: id === '__regular' ? '常规实例' : id, items })).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
+  return [...groups.entries()].map(([id, items]) => ({ id, label: id === '__regular' ? t('pcl.instanceSelect.regular') : id, items })).sort((a, b) => a.label.localeCompare(b.label));
 });
 const draggingInstance = ref<any>(null), dragOverId = ref('');
 function startDrag(instance: any, event: DragEvent) {
@@ -439,15 +441,15 @@ function openContextMenu(instance: any, event: MouseEvent) {
 function closeContextMenu() { contextMenu.value = null; }
 function contextActions(instance: any) {
   return [
-    { id: 'launch', label: '启动', icon: 'play', disabled: Boolean(instance?.running) },
-    { id: 'stop', label: '结束进程', icon: 'power', disabled: !instance?.running },
-    { id: 'edit', label: '编辑', icon: 'settings', disabled: false },
-    { id: 'group', label: '改变分组', icon: 'folder-open', disabled: false },
-    { id: 'folder', label: '实例文件夹', icon: 'folder-open', disabled: false },
-    { id: 'export', label: '导出', icon: 'file-archive', disabled: false },
-    { id: 'copy', label: '复制', icon: 'copy', disabled: false },
-    { id: 'delete', label: '删除', icon: 'trash-2', disabled: false, danger: true },
-    { id: 'shortcut', label: '创建快捷方式', icon: 'external-link', disabled: false },
+    { id: 'launch', label: t('pcl.sidebar.launch'), icon: 'play', disabled: Boolean(instance?.running) },
+    { id: 'stop', label: t('pcl.sidebar.stopProcess'), icon: 'power', disabled: !instance?.running },
+    { id: 'edit', label: t('common.edit'), icon: 'settings', disabled: false },
+    { id: 'group', label: t('app.moveGroup'), icon: 'folder-open', disabled: false },
+    { id: 'folder', label: t('instance.instanceDir'), icon: 'folder-open', disabled: false },
+    { id: 'export', label: t('instanceSections.export'), icon: 'file-archive', disabled: false },
+    { id: 'copy', label: t('xmcl.instance.copy'), icon: 'copy', disabled: false },
+    { id: 'delete', label: t('common.delete'), icon: 'trash-2', disabled: false, danger: true },
+    { id: 'shortcut', label: t('pcl.sidebar.shortcut'), icon: 'external-link', disabled: false },
   ];
 }
 function runContextMenu(action: string) {
@@ -495,11 +497,11 @@ function connectServer(server: any) {
 const logElement = ref<HTMLElement | null>(null);
 function scrollToLog() {
   logElement.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  showPclToast({ type: 'info', title: '启动日志', message: logLines.value.length ? '已定位到启动日志' : '暂无启动日志', timeout: 2200 });
+  showPclToast({ type: 'info', title: t('launch.log'), message: logLines.value.length ? t('pcl.launchPage.logLocated') : t('pcl.launchPage.noLog'), timeout: 2200 });
 }
 function refreshHome() {
   emit('refresh');
-  showPclToast({ type: 'info', title: '刷新', message: '正在刷新实例和账户信息…', timeout: 2200 });
+  showPclToast({ type: 'info', title: t('common.refresh'), message: t('pcl.launchPage.refreshing'), timeout: 2200 });
 }
 const logLines = computed(() => (props.logLines || []).slice(-500));
 
@@ -508,9 +510,9 @@ async function copyLog() {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    showPclToast({ type: 'success', title: '日志已复制', message: `${logLines.value.length} 行` });
+  showPclToast({ type: 'success', title: t('pcl.launchPage.logCopied'), message: `${logLines.value.length} ${t('pcl.launchPage.lines')}` });
   } catch (error) {
-    showPclToast({ type: 'error', title: '复制失败', message: error instanceof Error ? error.message : String(error) });
+  showPclToast({ type: 'error', title: t('pcl.launchPage.copyFailed'), message: error instanceof Error ? error.message : String(error) });
   }
 }
 watch(() => props.logLines?.length, async () => {
@@ -528,7 +530,7 @@ watch(() => preferences.pclLaunchLogAutoScroll, async (enabled) => {
 const hintVisible = ref(loadHintVisibility());
 function loadHintVisibility() { try { return localStorage.getItem('pcl-ce-community-hint-hidden') !== '1'; } catch { return true; } }
 function accountKey(account: any) { return String(account?.internalId || account?.id || account?.profileName || ''); }
-function accountTypeLabel(account: any) { if (!account) return '请先添加启动账户'; const type = String(account.type || '').toLowerCase(); if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户'; if (type.includes('ygg')) { const server = account.yggdrasil?.displayName || account.yggdrasil?.sourceName || account.authServer?.displayName || account.authServerName || '第三方认证'; return `第三方认证 · ${server}`; } if (type.includes('unified')) { const server = account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServer?.displayName || account.authServerName || 'UnifiedPass'; return `UnifiedPass · ${server}`; } return '离线账户'; }
+function accountTypeLabel(account: any) { if (!account) return t('launch.noAccount'); const type = String(account.type || '').toLowerCase(); if (type.includes('msa') || type.includes('microsoft')) return t('account.microsoftAccount'); if (type.includes('ygg')) { const server = account.yggdrasil?.displayName || account.yggdrasil?.sourceName || account.authServer?.displayName || account.authServerName || t('account.thirdParty'); return `${t('account.thirdParty')} · ${server}`; } if (type.includes('unified')) { const server = account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServer?.displayName || account.authServerName || 'UnifiedPass'; return `UnifiedPass · ${server}`; } return t('account.offlineAccountLabel'); }
 function chooseAccount(account: any) { accountMenu.value = false; emit('account-change', accountKey(account)); }
 function openAccountPage(mode: 'add' | 'manage') { accountMenu.value = false; emit('account-page', mode); }
 function selectInstance(instance: any) { selectionOpen.value = false; emit('select', instance); }

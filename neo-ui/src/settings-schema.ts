@@ -2,208 +2,208 @@
 // Labels and numeric constraints mirrored from the Qt settings widgets.
 export const settingMetadata: Record<string, {label:string;group:string;minimum?:number;maximum?:number}> = {
   "LaunchMaximized": {
-    "label": "启动时最大化",
-    "group": "窗口与启动"
+    "label": "neo.schema.k2cf44bea7a",
+    "group": "launch"
   },
   "MinecraftWinWidth": {
-    "label": "窗口宽度",
-    "group": "窗口与启动",
+    "label": "neo.schema.kfbd8afb6b1",
+    "group": "launch",
     "minimum": 1,
     "maximum": 65536
   },
   "MinecraftWinHeight": {
-    "label": "窗口高度",
-    "group": "窗口与启动",
+    "label": "neo.schema.ke2176a7c0b",
+    "group": "launch",
     "minimum": 1,
     "maximum": 65536
   },
   "CloseAfterLaunch": {
-    "label": "游戏启动后隐藏启动器",
-    "group": "窗口与启动"
+    "label": "neo.schema.kebf223ab17",
+    "group": "launch"
   },
   "QuitAfterGameStop": {
-    "label": "游戏结束后退出启动器",
-    "group": "窗口与启动"
+    "label": "neo.schema.kcedfc70ad4",
+    "group": "launch"
   },
   "ShowGameTime": {
-    "label": "显示游戏时间",
-    "group": "游戏时间"
+    "label": "neo.schema.kff9e4486e9",
+    "group": "playtime"
   },
   "RecordGameTime": {
-    "label": "记录游戏时间",
-    "group": "游戏时间"
+    "label": "neo.schema.k19241e920e",
+    "group": "playtime"
   },
   "ShowConsole": {
-    "label": "显示控制台",
-    "group": "控制台"
+    "label": "neo.schema.kd6dca20f52",
+    "group": "console"
   },
   "AutoCloseConsole": {
-    "label": "正常退出后关闭控制台",
-    "group": "控制台"
+    "label": "neo.schema.k7a434e1b3c",
+    "group": "console"
   },
   "ShowConsoleOnError": {
-    "label": "出错时显示控制台",
-    "group": "控制台"
+    "label": "neo.schema.k1f4eac88bb",
+    "group": "console"
   },
   "OnlineFixes": {
-    "label": "旧版本在线服务修复",
-    "group": "性能与兼容"
+    "label": "neo.schema.k29eb9b95d0",
+    "group": "compatibility"
   },
   "UseNativeGLFW": {
-    "label": "使用系统 GLFW",
-    "group": "性能与兼容"
+    "label": "neo.schema.kb6565ef62e",
+    "group": "compatibility"
   },
   "CustomGLFWPath": {
-    "label": "自定义 GLFW 路径",
-    "group": "性能与兼容"
+    "label": "neo.schema.k5e4c8e9367",
+    "group": "compatibility"
   },
   "UseNativeOpenAL": {
-    "label": "使用系统 OpenAL",
-    "group": "性能与兼容"
+    "label": "neo.schema.k7377d6632f",
+    "group": "compatibility"
   },
   "CustomOpenALPath": {
-    "label": "自定义 OpenAL 路径",
-    "group": "性能与兼容"
+    "label": "neo.schema.kaca0121202",
+    "group": "compatibility"
   },
   "EnableFeralGamemode": {
-    "label": "启用 GameMode",
-    "group": "性能与兼容"
+    "label": "neo.schema.k903512cd37",
+    "group": "compatibility"
   },
   "EnableMangoHud": {
-    "label": "启用 MangoHud",
-    "group": "性能与兼容"
+    "label": "neo.schema.kdedb43a2ff",
+    "group": "compatibility"
   },
   "UseDiscreteGpu": {
-    "label": "使用独立显卡",
-    "group": "性能与兼容"
+    "label": "neo.schema.k505ed891dc",
+    "group": "compatibility"
   },
   "UseZink": {
-    "label": "使用 Zink",
-    "group": "性能与兼容"
+    "label": "neo.schema.kedb41c0c52",
+    "group": "compatibility"
   },
   "JoinServerOnLaunch": {
-    "label": "启动后快速加入",
-    "group": "账户与快速加入"
+    "label": "neo.schema.kcf39d8520b",
+    "group": "launch"
   },
   "UseAccountForInstance": {
-    "label": "为实例指定账户",
-    "group": "账户与快速加入"
+    "label": "neo.schema.k59d3735305",
+    "group": "launch"
   },
   "OverrideLegacySettings": {
     "label": "Legacy Tweaks",
-    "group": "游戏与启动"
+    "group": "launch"
   },
   "GlobalDataPacksEnabled": {
-    "label": "启用全局数据包",
-    "group": "下载与资源"
+    "label": "neo.schema.ke3ac026340",
+    "group": "downloads"
   },
   "GlobalDataPacksPath": {
-    "label": "全局数据包路径",
-    "group": "下载与资源"
+    "label": "neo.schema.kd4b0445d28",
+    "group": "downloads"
   },
   "AssetCacheExpiryDays": {
-    "label": "资源校验缓存有效天数",
-    "group": "下载与资源",
+    "label": "neo.schema.k921ffa9cc7",
+    "group": "downloads",
     "minimum": 1,
     "maximum": 365
   },
   "OverrideJavaLocation": {
     "label": "Java Installation",
-    "group": "Java 与内存"
+    "group": "java"
   },
   "JavaPath": {
-    "label": "Java 可执行文件路径",
-    "group": "Java 与内存"
+    "label": "neo.schema.k9476a9d703",
+    "group": "java"
   },
   "IgnoreJavaCompatibility": {
-    "label": "跳过 Java 兼容性检查",
-    "group": "Java 与内存"
+    "label": "neo.schema.k60b0ba35e0",
+    "group": "java"
   },
   "JvmArgs": {
-    "label": "JVM 参数",
-    "group": "Java 与内存"
+    "label": "neo.schema.kb001801f13",
+    "group": "java"
   },
   "IgnoreJavaWizard": {
-    "label": "跳过 Java 向导",
-    "group": "Java 与内存"
+    "label": "neo.schema.k24582745ff",
+    "group": "java"
   },
   "AutomaticJavaSwitch": {
-    "label": "自动选择 Java",
-    "group": "Java 与内存"
+    "label": "neo.schema.ke1fa494669",
+    "group": "java"
   },
   "AutomaticJavaDownload": {
-    "label": "自动下载 Java",
-    "group": "Java 与内存"
+    "label": "neo.schema.k5f68598ff5",
+    "group": "java"
   },
   "PermGen": {
     "label": "PermGen（MiB）",
-    "group": "Java 与内存",
+    "group": "java",
     "minimum": 4,
     "maximum": 1048576
   },
   "LowMemWarning": {
-    "label": "显示内存不足警告",
-    "group": "Java 与内存"
+    "label": "neo.schema.k7d21c07a44",
+    "group": "java"
   },
   "ShowGlobalGameTime": {
-    "label": "显示总游戏时间",
-    "group": "游戏时间"
+    "label": "neo.schema.k60f26bd0b9",
+    "group": "playtime"
   },
   "ShowGameTimeWithoutDays": {
-    "label": "以小时显示游戏时间",
-    "group": "游戏时间"
+    "label": "neo.schema.kfad9d70eb1",
+    "group": "playtime"
   },
   "MinMemAlloc": {
-    "label": "最小内存（MiB）",
-    "group": "Java 与内存"
+    "label": "neo.schema.ka6551c0898",
+    "group": "java"
   },
   "MaxMemAlloc": {
-    "label": "最大内存（MiB）",
-    "group": "Java 与内存"
+    "label": "neo.schema.k14469bb314",
+    "group": "java"
   },
   "PreLaunchCommand": {
-    "label": "启动前命令",
-    "group": "命令与环境"
+    "label": "neo.schema.k7e026da625",
+    "group": "launch"
   },
   "WrapperCommand": {
-    "label": "包装命令",
-    "group": "命令与环境"
+    "label": "neo.schema.k49a71399fa",
+    "group": "launch"
   },
   "PostExitCommand": {
-    "label": "退出后命令",
-    "group": "命令与环境"
+    "label": "neo.schema.kfa4f7c58eb",
+    "group": "launch"
   },
   "Env": {
-    "label": "环境变量（JSON 文本）",
-    "group": "命令与环境"
+    "label": "neo.schema.k84f9fa0400",
+    "group": "launch"
   },
   "JoinServerOnLaunchAddress": {
-    "label": "服务器地址",
-    "group": "账户与快速加入"
+    "label": "neo.schema.k2eb291f695",
+    "group": "launch"
   },
   "JoinWorldOnLaunch": {
-    "label": "世界名称",
-    "group": "账户与快速加入"
+    "label": "neo.schema.k5a09d081b2",
+    "group": "launch"
   },
   "InstanceAccountId": {
-    "label": "指定账户 ID",
-    "group": "账户与快速加入"
+    "label": "neo.schema.kda883dd5ca",
+    "group": "launch"
   },
   "OverrideModDownloadLoaders": {
-    "label": "覆盖模组下载加载器筛选",
-    "group": "下载与资源"
+    "label": "neo.schema.k5415101e28",
+    "group": "downloads"
   },
   "ModDownloadLoaders": {
-    "label": "模组下载加载器（JSON 文本）",
-    "group": "下载与资源"
+    "label": "neo.schema.k99ec1d1a85",
+    "group": "downloads"
   },
   "AssetVerificationMode": {
-    "label": "资源校验模式",
-    "group": "下载与资源"
+    "label": "neo.schema.k402717b964",
+    "group": "downloads"
   },
   "AssetIntegrityTrusted": {
-    "label": "实例完整性白名单",
-    "group": "下载与资源"
+    "label": "neo.schema.k88cd2c41dc",
+    "group": "downloads"
   },
   "TechnicClientID": {
     "label": "TechnicClientID",

@@ -1,14 +1,14 @@
 <template>
   <div class="pcl-resource-download-window">
-    <PclWindowTitleBar :title="`下载${kindLabel}`" :subtitle="instanceName || instanceId" />
+    <PclWindowTitleBar :title="t('resource.download', { kind: kindLabel })" :subtitle="instanceName || instanceId" />
     <div class="pcl-resource-download-window__body">
       <div class="pcl-resource-download-window__toolbar">
         <PclSelect v-model="provider" :options="providerOptions" @update:model-value="changeProvider" />
-        <PclInput v-model="query" :placeholder="`搜索${kindLabel}`" @enter="search(true)" />
-        <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? '搜索中…' : '搜索' }}</PclButton>
+        <PclInput v-model="query" :placeholder="t('pcl.resourceDownload.searchPlaceholder', { kind: kindLabel })" @enter="search(true)" />
+        <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? t('pcl.resourceDownload.searching') : t('search.placeholder') }}</PclButton>
         <div class="pcl-resource-download-window__view">
-          <PclIconButton icon="grid-2x2" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" />
-          <PclIconButton icon="layout-list" label="列表视图" :size="28" :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" />
+          <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="28" :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" />
+          <PclIconButton icon="layout-list" :label="t('resource.list')" :size="28" :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" />
         </div>
       </div>
 
@@ -16,15 +16,15 @@
         <PclIcon name="gauge" :size="13" />
         <span v-if="instanceVersion">Minecraft {{ instanceVersion }}</span>
         <span v-if="instanceLoaderLabel" class="pcl-resource-download-window__loader">{{ instanceLoaderLabel }}</span>
-        <span class="pcl-resource-download-window__constraint-hint">已按当前实例筛选</span>
+        <span class="pcl-resource-download-window__constraint-hint">{{ t('pcl.resourceDownload.instanceFilter') }}</span>
       </div>
 
       <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
       <div v-if="!projects.length && !searching" class="pcl-empty">
         <PclIcon name="download" :size="36" />
-        <strong>搜索要下载的{{ kindLabel }}</strong>
-        <span>勾选多个项目，选择版本后一起下载。</span>
+        <strong>{{ t('pcl.resourceDownload.searchKind', { kind: kindLabel }) }}</strong>
+        <span>{{ t('pcl.resourceDownload.searchHint') }}</span>
       </div>
 
       <div ref="resultsList" class="pcl-resource-download-window__list" :class="`is-${viewMode}`">
@@ -49,18 +49,18 @@
       </div>
 
       <div v-if="offset > 0 || hasNext" class="pcl-resource-download-window__pager">
-        <PclButton size="sm" variant="ghost" icon="arrow-left" :disabled="offset === 0 || searching" @click="previousPage">上一页</PclButton>
-        <span>第 {{ pageNumber }} 页</span>
-        <PclButton size="sm" variant="ghost" icon="arrow-right" :disabled="!hasNext || searching" @click="nextPage">下一页</PclButton>
+        <PclButton size="sm" variant="ghost" icon="arrow-left" :disabled="offset === 0 || searching" @click="previousPage">{{ t('pcl.resourceDownload.previous') }}</PclButton>
+        <span>{{ t('pcl.resourceDownload.page', { page: pageNumber }) }}</span>
+        <PclButton size="sm" variant="ghost" icon="arrow-right" :disabled="!hasNext || searching" @click="nextPage">{{ t('pcl.resourceDownload.next') }}</PclButton>
       </div>
 
       <div class="pcl-resource-download-window__footer">
-        <PclCheckbox v-if="kind === 'mods'" v-model="includeOptional" label="安装可选依赖" />
-        <span class="pcl-resource-download-window__count">已选择 {{ selectedList.length }} 项</span>
+        <PclCheckbox v-if="kind === 'mods'" v-model="includeOptional" :label="t('pcl.resourceDownload.optionalDeps')" />
+        <span class="pcl-resource-download-window__count">{{ t('resource.selected', { count: selectedList.length }) }}</span>
         <PclButton variant="highlight" icon="download" :disabled="!selectedList.length || downloading" @click="prepareDownload">
-          {{ downloading ? '下载中…' : '检查依赖并下载' }}
+          {{ downloading ? t('pcl.resourceDownload.downloading') : t('pcl.resourceDownload.checkDownload') }}
         </PclButton>
-        <PclButton variant="ghost" icon="x" @click="closeWindow">关闭</PclButton>
+        <PclButton variant="ghost" icon="x" @click="closeWindow">{{ t('window.close') }}</PclButton>
       </div>
     </div>
 
@@ -68,13 +68,13 @@
       <q-card class="pcl-dialog pcl-resource-detail">
         <q-card-section class="pcl-resource-detail__head">
           <img v-if="detail?.iconUrl" :src="detail.iconUrl" alt="" />
-          <div><div class="pcl-kicker">资源详情</div><h3>{{ detail?.name || '加载中…' }}</h3><p>{{ detail?.authors?.map((a:any) => a.name).join(', ') || providerLabel(provider) }}</p></div>
-          <PclIconButton icon="x" label="关闭" :size="28" @click="detailOpen = false" />
+          <div><div class="pcl-kicker">{{ t('resource.detail') }}</div><h3>{{ detail?.name || t('tasks.loading') }}</h3><p>{{ detail?.authors?.map((a:any) => a.name).join(', ') || providerLabel(provider) }}</p></div>
+          <PclIconButton icon="x" :label="t('window.close')" :size="28" @click="detailOpen = false" />
         </q-card-section>
         <q-card-section class="pcl-resource-detail__body">
-          <div v-if="detailLoading" class="pcl-resource-detail__loading">正在读取项目详情…</div>
-          <p v-else>{{ detail?.description || '没有项目说明。' }}</p>
-          <a v-if="detail?.websiteUrl" :href="detail.websiteUrl" target="_blank" rel="noreferrer" @click.prevent="openExternal(detail.websiteUrl)">打开项目页面</a>
+          <div v-if="detailLoading" class="pcl-resource-detail__loading">{{ t('resource.loadingDetail') }}…</div>
+          <p v-else>{{ detail?.description || t('pcl.resourceDownload.noDescription') }}</p>
+          <a v-if="detail?.websiteUrl" :href="detail.websiteUrl" target="_blank" rel="noreferrer" @click.prevent="openExternal(detail.websiteUrl)">{{ t('pcl.resourceDownload.openProject') }}</a>
         </q-card-section>
       </q-card>
     </q-dialog>
@@ -82,21 +82,21 @@
     <q-dialog v-model="confirmOpen">
       <q-card class="pcl-dialog pcl-resource-confirm">
         <q-card-section class="pcl-resource-detail__head">
-          <div><div class="pcl-kicker">下载确认</div><h3>确认下载 {{ confirmEntries.filter((entry:any) => entry.checked).length }} 项</h3><p>包含自动解析的必需依赖</p></div>
-          <PclIconButton icon="x" label="关闭" :size="28" @click="confirmOpen = false" />
+          <div><div class="pcl-kicker">{{ t('pcl.resourceDownload.downloadConfirm') }}</div><h3>{{ t('pcl.resourceDownload.confirmCount', { count: confirmEntries.filter((entry:any) => entry.checked).length }) }}</h3><p>{{ t('pcl.resourceDownload.requiredDeps') }}</p></div>
+          <PclIconButton icon="x" :label="t('window.close')" :size="28" @click="confirmOpen = false" />
         </q-card-section>
         <q-card-section class="pcl-resource-confirm__body">
-          <PclHint theme="blue">下载前可以取消不想安装的项目。依赖项由当前资源版本递归解析。</PclHint>
+          <PclHint theme="blue">{{ t('pcl.resourceDownload.confirmHint') }}</PclHint>
           <div class="pcl-resource-confirm__list">
             <label v-for="entry in confirmEntries" :key="entry.projectId" class="pcl-resource-confirm__row">
               <PclCheckbox v-model="entry.checked" />
-              <span><strong>{{ entry.name }}</strong><small>{{ entry.dependency ? `${entry.dependencyType === 'optional' ? '可选依赖' : '必需依赖'} · 由 ${entry.requiredBy || '所选资源'} 需要` : '已选择' }}</small></span>
+              <span><strong>{{ entry.name }}</strong><small>{{ entry.dependency ? t(entry.dependencyType === 'optional' ? 'pcl.resourceDownload.optionalBy' : 'pcl.resourceDownload.requiredBy', { name: entry.requiredBy || t('pcl.resourceDownload.selectedResource') }) : t('pcl.resourceDownload.selected') }}</small></span>
             </label>
           </div>
         </q-card-section>
         <q-card-actions align="right">
-          <PclButton variant="ghost" @click="confirmOpen = false">取消</PclButton>
-          <PclButton variant="highlight" icon="download" :disabled="!confirmEntries.some((entry:any) => entry.checked && entry.versionId)" @click="confirmDownload">开始下载</PclButton>
+          <PclButton variant="ghost" @click="confirmOpen = false">{{ t('common.cancel') }}</PclButton>
+          <PclButton variant="highlight" icon="download" :disabled="!confirmEntries.some((entry:any) => entry.checked && entry.versionId)" @click="confirmDownload">{{ t('pcl.resourceDownload.start') }}</PclButton>
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -105,6 +105,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -119,6 +120,7 @@ import { waitForTask } from '../../composables/useTaskEvents';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const props = defineProps<{ instanceId: string; instanceName?: string; kind: string }>();
+const { t } = useI18n();
 const provider = ref('modrinth');
 const providerCatalog = ref<any[]>([]);
 const providerOptions = computed(() => providerCatalog.value
@@ -144,7 +146,7 @@ const instanceVersion = ref('');
 const instanceLoaders = ref<string[]>([]);
 const instanceLoaderLabel = ref('');
 
-const kindLabel = computed(() => ({ mods: '模组', resourcepacks: '资源包', shaderpacks: '光影包', datapacks: '数据包', worlds: '世界', texturepacks: '材质包' } as Record<string, string>)[props.kind] || props.kind);
+const kindLabel = computed(() => t(`resource.kinds.${props.kind}`, props.kind));
 const selectedList = computed(() => Object.values(selected));
 
 function scrollResultsToTop() {
@@ -296,7 +298,7 @@ async function toggleProject(project: any, enabled: boolean) {
     const entry = selected[project.projectId];
     if (!entry) return;
     entry.versionOptions = versions.map((version: any) => ({
-      label: `${version.versionNumber || version.name || version.versionId || '版本'} ${version.releaseType ? `· ${version.releaseType}` : ''}`,
+      label: `${version.versionNumber || version.name || version.versionId || t('resource.version')} ${version.releaseType ? `· ${version.releaseType}` : ''}`,
       value: String(version.versionId || version.id || ''),
     }));
     entry.rawVersions = versions;
@@ -381,7 +383,7 @@ async function confirmDownload() {
   const waits: Promise<void>[] = [];
   for (const entry of entries) {
     entry.state = 'queued';
-    entry.status = '等待下载';
+    entry.status = t('pcl.resourceDownload.waitingDownload');
     try {
       const task: any = await execute('neo.task.start', {
         // Dependencies are represented as separate checked entries above. A
@@ -411,7 +413,7 @@ async function confirmDownload() {
           entry.progress = total > 0 ? current / total : entry.progress;
         }).then(snapshot => {
           entry.state = String(snapshot?.state || entry.state);
-          entry.status = snapshot?.state === 'succeeded' ? '下载完成' : (snapshot?.error || '下载失败');
+          entry.status = snapshot?.state === 'succeeded' ? t('pcl.resourceDownload.downloaded') : (snapshot?.error || t('pcl.resourceDownload.downloadFailed'));
         }).catch(exception => {
           entry.state = 'failed';
           entry.status = exception instanceof Error ? exception.message : String(exception);

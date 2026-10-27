@@ -7,8 +7,8 @@
           <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
           <PclHint v-if="notice" theme="blue" closable @close="notice = ''">{{ notice }}</PclHint>
 
-          <PclCard v-if="isInstance && sectionOverrideGroups.length" title="继承全局设置">
-            <p class="pcl-muted">启用下列项目以使用当前实例的独立设置；关闭后恢复跟随全局。</p>
+          <PclCard v-if="isInstance && sectionOverrideGroups.length" :title="t('pcl.auto2.kc5133a8b25')">
+            <p class="pcl-muted">{{ t('pcl.auto2.k068fc09151') }}</p>
             <div class="pcl-check-grid">
               <PclCheckbox v-for="item in sectionOverrideGroups" :key="item.key" :model-value="bool(item.key)"
                 :label="item.label" @update:model-value="save(item.key, $event)" />
@@ -20,49 +20,49 @@
           </div>
 
           <div v-show="section === 'launch'" class="pcl-settings-section">
-            <PclCard title="启动选项">
+            <PclCard :title="t('pcl.auto2.k6c4942326d')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">默认实例隔离</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k2badbf857a') }}</span>
                 <div class="pcl-form-row__control">
-                  <PclSelect :model-value="'isolated'" :options="[{ label: '隔离可安装模组的实例', value: 'isolated' }]" disabled />
+                  <PclSelect :model-value="'isolated'" :options="[{ label: t('pcl.auto2.ka16174eb79'), value: 'isolated' }]" disabled />
                 </div>
-                <span class="pcl-form-row__hint">Luna 实例默认使用独立目录</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k8235323562') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">游戏窗口标题</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k4ebf21d7b3') }}</span>
                 <div class="pcl-form-row__control">
-                  <PclInput :model-value="String(val('WindowTitle', '默认（实例名）'))" disabled />
+                  <PclInput :model-value="String(val('WindowTitle', t('pcl.auto2.k8be3944d58')))" disabled />
                 </div>
-                <span class="pcl-form-row__hint">实例级设置</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k1c6d2e1081') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">启动器可见性</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k95b22c4d07') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="bool('CloseAfterLaunch') ? 'close' : 'keep'"
-                    :options="[{ label: '保持启动器可见', value: 'keep' }, { label: '启动后关闭启动器', value: 'close' }]"
+                    :options="[{ label: t('pcl.auto2.k46f719b4c5'), value: 'keep' }, { label: t('pcl.auto2.k80c80f7e28'), value: 'close' }]"
                     @update:model-value="save('CloseAfterLaunch', $event === 'close')"
                   />
                 </div>
-                <span class="pcl-form-row__hint">启动成功后</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k387efacc97') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">游戏结束之后</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k86a6775402') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="bool('QuitAfterGameStop') ? 'quit' : 'keep'"
-                    :options="[{ label: '保持启动器打开', value: 'keep' }, { label: '退出启动器', value: 'quit' }]"
+                    :options="[{ label: t('pcl.auto2.k5b096363ee'), value: 'keep' }, { label: t('pcl.auto2.kf7e6a52e54'), value: 'quit' }]"
                     @update:model-value="save('QuitAfterGameStop', $event === 'quit')"
                   />
                 </div>
-                <span class="pcl-form-row__hint">客户端退出后</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k4f1fb55573') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">窗口大小</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.ka599946fe1') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect :model-value="windowMode" :options="windowOptions" @update:model-value="setWindowMode" style="width: 150px" />
                   <template v-if="windowMode === 'custom'">
@@ -83,15 +83,15 @@
                     />
                   </template>
                 </div>
-                <span class="pcl-form-row__hint">{{ windowMode === 'maximized' ? '启动后最大化' : '像素' }}</span>
+                <span class="pcl-form-row__hint">{{ windowMode === 'maximized' ? t('pcl.auto2.k84e78ef1da') : t('pcl.auto2.k3edaf9c3ff') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">控制台显示</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k77926b126a') }}</span>
                 <div class="pcl-form-row__control pcl-check-row">
-                  <PclCheckbox :model-value="bool('ShowConsole')" label="显示控制台" @update:model-value="save('ShowConsole', $event)" />
-                  <PclCheckbox :model-value="bool('AutoCloseConsole')" label="正常退出后关闭" @update:model-value="save('AutoCloseConsole', $event)" />
-                  <PclCheckbox :model-value="bool('ShowConsoleOnError')" label="出错时显示" @update:model-value="save('ShowConsoleOnError', $event)" />
+                  <PclCheckbox :model-value="bool('ShowConsole')" :label="t('pcl.auto2.kd6dca20f52')" @update:model-value="save('ShowConsole', $event)" />
+                  <PclCheckbox :model-value="bool('AutoCloseConsole')" :label="t('pcl.auto2.kf7ef0f5cdc')" @update:model-value="save('AutoCloseConsole', $event)" />
+                  <PclCheckbox :model-value="bool('ShowConsoleOnError')" :label="t('pcl.auto2.k522faf5a0b')" @update:model-value="save('ShowConsoleOnError', $event)" />
                 </div>
               </div>
             </PclCard>
@@ -99,21 +99,17 @@
           </div>
 
           <div v-show="section === 'memory'" class="pcl-settings-section">
-            <PclCard title="游戏内存">
-              <PclHint v-if="maxMem < 2048" theme="yellow">最大内存低于 2 GiB，部分整合包可能无法启动。</PclHint>
+            <PclCard :title="t('pcl.auto2.k7d6742783a')">
+              <PclHint v-if="maxMem < 2048" theme="yellow">{{ t('pcl.auto2.kb9999f751b') }}</PclHint>
               <div class="pcl-choice-row">
-                <PclRadio :model-value="memoryMode" value="auto" label="自动配置" @update:model-value="onMemoryMode" />
-                <PclRadio :model-value="memoryMode" value="custom" label="自定义" @update:model-value="onMemoryMode" />
-                <span class="pcl-form-row__hint">自动配置会设为 512 MiB – 4 GiB</span>
+                <PclRadio :model-value="memoryMode" value="auto" :label="t('pcl.auto2.k716e01ff80')" @update:model-value="onMemoryMode" />
+                <PclRadio :model-value="memoryMode" value="custom" :label="t('pcl.auto2.kc493338e8c')" @update:model-value="onMemoryMode" />
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k5a65c23c82') }}</span>
               </div>
 
               <div class="pcl-memory-live-head">
-                <span>已使用内存 / 已安装内存</span>
-                <span class="pcl-memory-live-right">
-                  游戏分配
-                  <span class="pcl-memory-live-dot" />
-                  每 2 秒
-                </span>
+                <span>{{ t('pcl.auto2.ke2dadf543a') }}</span>
+                <span class="pcl-memory-live-right">{{ t('pcl.auto2.kec461a8f29') }}<span class="pcl-memory-live-dot" />{{ t('pcl.auto2.k06df5e4583') }}</span>
               </div>
               <div class="pcl-memory-bar">
                 <span class="pcl-memory-bar__used" :style="{ width: `${memoryUsedPercent}%` }" />
@@ -125,13 +121,13 @@
                 <strong>{{ formatMib(maxMem) }}</strong>
               </div>
               <div class="pcl-memory-legend">
-                <span><b>系统占用</b>{{ memoryUsedPercent.toFixed(1) }}%</span>
-                <span><b>最小</b>{{ formatMib(draftNumber('MinMemAlloc', 512)) }}</span>
-                <span><b>最大</b>{{ formatMib(draftNumber('MaxMemAlloc', 4096)) }}</span>
+                <span><b>{{ t('pcl.auto2.k97ebe06e74') }}</b>{{ memoryUsedPercent.toFixed(1) }}%</span>
+                <span><b>{{ t('pcl.auto2.k31793b6729') }}</b>{{ formatMib(draftNumber('MinMemAlloc', 512)) }}</span>
+                <span><b>{{ t('pcl.auto2.ked690ebb15') }}</b>{{ formatMib(draftNumber('MaxMemAlloc', 4096)) }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">最小内存</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kccb8f3efaa') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSlider
                     :model-value="draftNumber('MinMemAlloc', 512)"
@@ -144,11 +140,11 @@
                     @change="save('MinMemAlloc', $event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">MiB</span>
+                <span class="pcl-form-row__hint">{{ t('ui.memoryUnit') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">最大内存</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k1f4bebe9b9') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSlider
                     :model-value="draftNumber('MaxMemAlloc', 4096)"
@@ -161,22 +157,22 @@
                     @change="save('MaxMemAlloc', $event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">MiB</span>
+                <span class="pcl-form-row__hint">{{ t('ui.memoryUnit') }}</span>
               </div>
             </PclCard>
 
           </div>
 
           <div v-show="section === 'advanced'" class="pcl-settings-section">
-            <PclCard title="高级启动选项">
+            <PclCard :title="t('pcl.auto2.k86e9bcfc62')">
               <div class="pcl-form-row pcl-form-row--top">
-                <span class="pcl-form-row__label">JVM 参数</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kb001801f13') }}</span>
                 <div class="pcl-form-row__control pcl-form-row__control--column">
                   <PclInput
                     multiline
                     :rows="4"
                     :model-value="draftValue('JvmArgs', '')"
-                    placeholder="留空使用 Luna 的默认参数"
+                    :placeholder="t('pcl.auto2.k3496cb95b0')"
                     @update:model-value="drafts.JvmArgs = $event"
                     @blur="save('JvmArgs', drafts.JvmArgs)"
                   />
@@ -184,11 +180,11 @@
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">启动前命令</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k7e026da625') }}</span>
                 <div class="pcl-form-row__control">
                   <PclInput
                     :model-value="draftValue('PreLaunchCommand', '')"
-                    placeholder="在启动游戏前执行"
+                    :placeholder="t('pcl.auto2.k7296ad4897')"
                     @update:model-value="drafts.PreLaunchCommand = $event"
                     @blur="save('PreLaunchCommand', drafts.PreLaunchCommand)"
                   />
@@ -196,11 +192,11 @@
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">包装命令</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k49a71399fa') }}</span>
                 <div class="pcl-form-row__control">
                   <PclInput
                     :model-value="draftValue('WrapperCommand', '')"
-                    placeholder="例如自定义启动包装器"
+                    :placeholder="t('pcl.auto2.kc5c2ba325b')"
                     @update:model-value="drafts.WrapperCommand = $event"
                     @blur="save('WrapperCommand', drafts.WrapperCommand)"
                   />
@@ -208,11 +204,11 @@
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">退出后命令</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kfa4f7c58eb') }}</span>
                 <div class="pcl-form-row__control">
                   <PclInput
                     :model-value="draftValue('PostExitCommand', '')"
-                    placeholder="游戏退出后执行"
+                    :placeholder="t('pcl.auto2.kc80ce0c4e5')"
                     @update:model-value="drafts.PostExitCommand = $event"
                     @blur="save('PostExitCommand', drafts.PostExitCommand)"
                   />
@@ -220,22 +216,22 @@
               </div>
 
               <div class="pcl-check-grid">
-                <PclCheckbox :model-value="bool('UseNativeGLFW')" label="使用系统 GLFW" @update:model-value="save('UseNativeGLFW', $event)" />
-                <PclCheckbox :model-value="bool('UseNativeOpenAL')" label="使用系统 OpenAL" @update:model-value="save('UseNativeOpenAL', $event)" />
-                <PclCheckbox :model-value="bool('UseDiscreteGpu')" label="要求使用高性能显卡" @update:model-value="save('UseDiscreteGpu', $event)" />
-                <PclCheckbox :model-value="bool('OnlineFixes')" label="旧版本在线服务修复" @update:model-value="save('OnlineFixes', $event)" />
-                <PclCheckbox :model-value="bool('ShowGameTime')" label="显示游戏时间" @update:model-value="save('ShowGameTime', $event)" />
-                <PclCheckbox :model-value="bool('RecordGameTime')" label="记录游戏时间" @update:model-value="save('RecordGameTime', $event)" />
+                <PclCheckbox :model-value="bool('UseNativeGLFW')" :label="t('pcl.auto2.kb6565ef62e')" @update:model-value="save('UseNativeGLFW', $event)" />
+                <PclCheckbox :model-value="bool('UseNativeOpenAL')" :label="t('pcl.auto2.k7377d6632f')" @update:model-value="save('UseNativeOpenAL', $event)" />
+                <PclCheckbox :model-value="bool('UseDiscreteGpu')" :label="t('pcl.auto2.k3ddf18f61b')" @update:model-value="save('UseDiscreteGpu', $event)" />
+                <PclCheckbox :model-value="bool('OnlineFixes')" :label="t('pcl.auto2.k29eb9b95d0')" @update:model-value="save('OnlineFixes', $event)" />
+                <PclCheckbox :model-value="bool('ShowGameTime')" :label="t('pcl.auto2.kff9e4486e9')" @update:model-value="save('ShowGameTime', $event)" />
+                <PclCheckbox :model-value="bool('RecordGameTime')" :label="t('pcl.auto2.k19241e920e')" @update:model-value="save('RecordGameTime', $event)" />
               </div>
 
-              <PclHint theme="blue" class="pcl-advanced-hint">更多实例专属的 JVM、窗口和启动参数可以在实例设置中找到。</PclHint>
+              <PclHint theme="blue" class="pcl-advanced-hint">{{ t('pcl.auto2.k49395925fa') }}</PclHint>
             </PclCard>
           </div>
 
           <div v-show="section === 'download-settings'" class="pcl-settings-section">
-            <PclCard title="下载引擎与镜像">
+            <PclCard :title="t('pcl.auto2.k6ebe1abb5d')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">下载引擎</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k1165baa252') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="num('DownloadBackend', 2)"
@@ -243,10 +239,10 @@
                     @update:model-value="save('DownloadBackend', $event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">控制资源、依赖和整合包下载方式</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k2a2e0161b1') }}</span>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">文件下载源</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k64327d356b') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="mirrorType"
@@ -254,24 +250,24 @@
                     @update:model-value="saveMirrorType($event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">Minecraft 资源与依赖</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k01b7899496') }}</span>
               </div>
 
               <template v-if="mirrorType === 2">
-                <PclHint theme="blue" class="pcl-advanced-hint">自定义镜像需要提供兼容 Mojang / Maven 路径的地址；留空的地址会按主地址的 BMCLAPI 目录结构补全。</PclHint>
+                <PclHint theme="blue" class="pcl-advanced-hint">{{ t('pcl.auto2.kccbd1ffb95') }}</PclHint>
                 <div class="pcl-form-row">
-                  <span class="pcl-form-row__label">版本元数据地址</span>
+                  <span class="pcl-form-row__label">{{ t('pcl.auto2.kdf4e39f071') }}</span>
                   <div class="pcl-form-row__control">
                     <PclInput
                       :model-value="draftValue('MetaURLOverride', '')"
-                      placeholder="留空使用官方元数据地址"
+                      :placeholder="t('pcl.auto2.k1cec1f1b79')"
                       @update:model-value="drafts.MetaURLOverride = $event"
                       @blur="save('MetaURLOverride', drafts.MetaURLOverride)"
                     />
                   </div>
                 </div>
                 <div class="pcl-form-row">
-                  <span class="pcl-form-row__label">Mojang 下载主地址</span>
+                  <span class="pcl-form-row__label">{{ t('pcl.auto2.k2fa65ccaca') }}</span>
                   <div class="pcl-form-row__control">
                     <PclInput
                       :model-value="draftValue('MojangDownloadsMirrorURL', '')"
@@ -282,33 +278,33 @@
                   </div>
                 </div>
                 <div class="pcl-form-row">
-                  <span class="pcl-form-row__label">Libraries Maven 地址</span>
+                  <span class="pcl-form-row__label">{{ t('pcl.auto2.kc0ad229574') }}</span>
                   <div class="pcl-form-row__control">
                     <PclInput
                       :model-value="draftValue('LibrariesURL', '')"
-                      placeholder="留空自动使用主地址 /maven/"
+                      :placeholder="t('pcl.auto2.k041dea94f8')"
                       @update:model-value="drafts.LibrariesURL = $event"
                       @blur="save('LibrariesURL', drafts.LibrariesURL)"
                     />
                   </div>
                 </div>
                 <div class="pcl-form-row">
-                  <span class="pcl-form-row__label">资源对象地址</span>
+                  <span class="pcl-form-row__label">{{ t('pcl.auto2.k0e1fb9c698') }}</span>
                   <div class="pcl-form-row__control">
                     <PclInput
                       :model-value="draftValue('ResourceURLOverride', '')"
-                      placeholder="留空自动使用主地址 /assets/"
+                      :placeholder="t('pcl.auto2.k3fe4026953')"
                       @update:model-value="drafts.ResourceURLOverride = $event"
                       @blur="save('ResourceURLOverride', drafts.ResourceURLOverride)"
                     />
                   </div>
                 </div>
                 <div class="pcl-form-row">
-                  <span class="pcl-form-row__label">旧版 Forge Libraries 地址</span>
+                  <span class="pcl-form-row__label">{{ t('pcl.auto2.kc776b5ccce') }}</span>
                   <div class="pcl-form-row__control">
                     <PclInput
                       :model-value="draftValue('LegacyFMLLibsURLOverride', '')"
-                      placeholder="留空跟随 Libraries Maven 地址"
+                      :placeholder="t('pcl.auto2.kecc137ec78')"
                       @update:model-value="drafts.LegacyFMLLibsURLOverride = $event"
                       @blur="save('LegacyFMLLibsURLOverride', drafts.LegacyFMLLibsURLOverride)"
                     />
@@ -317,7 +313,7 @@
               </template>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">Modrinth 镜像</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k639b8f8d30') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="draftNumber('ModrinthMirror', 0)"
@@ -327,7 +323,7 @@
                   <PclInput
                     v-if="draftNumber('ModrinthMirror', 0) === 2"
                     :model-value="draftValue('ModrinthMirrorURL', '')"
-                    placeholder="Modrinth 自定义 API 地址"
+                    :placeholder="t('pcl.auto2.kedac1dee52')"
                     @update:model-value="drafts.ModrinthMirrorURL = $event"
                     @blur="save('ModrinthMirrorURL', drafts.ModrinthMirrorURL)"
                   />
@@ -335,7 +331,7 @@
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">CurseForge 镜像</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kd3e7415b66') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="draftNumber('CurseForgeMirror', 0)"
@@ -345,7 +341,7 @@
                   <PclInput
                     v-if="draftNumber('CurseForgeMirror', 0) === 2"
                     :model-value="draftValue('CurseForgeMirrorURL', '')"
-                    placeholder="CurseForge 自定义 API 地址"
+                    :placeholder="t('pcl.auto2.k05899d2a38')"
                     @update:model-value="drafts.CurseForgeMirrorURL = $event"
                     @blur="save('CurseForgeMirrorURL', drafts.CurseForgeMirrorURL)"
                   />
@@ -353,7 +349,7 @@
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">最大下载线程</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kf1b19d21bf') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSlider
                     :model-value="draftNumber('PclDownloadThreadLimit', 8)"
@@ -364,11 +360,11 @@
                     @change="save('PclDownloadThreadLimit', $event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">每个下载任务 1–64 个连接</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k2e3f00b939') }}</span>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">下载速度限制</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k7b5aca21d4') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSlider
                     :model-value="draftNumber('PclDownloadSpeedLimitKBps', 0)"
@@ -380,263 +376,262 @@
                     @change="save('PclDownloadSpeedLimitKBps', $event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">0 表示不限速</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k71fd57e730') }}</span>
               </div>
 
-              <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" label="专用 .NET 下载引擎不可用时回退到 Qt 内置下载" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
+              <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" :label="t('pcl.auto2.k9d5b1f1173')" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
             </PclCard>
-            <PclCard title="下载任务">
+            <PclCard :title="t('pcl.auto2.k1ed8c078d6')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">同时处理的任务数</span>
-                <div class="pcl-form-row__control"><PclNumberInput label="同时处理的任务数" :model-value="draftNumber('NumberOfConcurrentTasks', 10)" :min="1" :max="99" @update:model-value="save('NumberOfConcurrentTasks', $event)" /></div>
-                <span class="pcl-form-row__hint">安装、更新和检查任务的总并发数</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.ka832ab6015') }}</span>
+                <div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.ka832ab6015')" :model-value="draftNumber('NumberOfConcurrentTasks', 10)" :min="1" :max="99" @update:model-value="save('NumberOfConcurrentTasks', $event)" /></div>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k7571a8cbc9') }}</span>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">同时下载的文件数</span>
-                <div class="pcl-form-row__control"><PclNumberInput label="同时下载的文件数" :model-value="draftNumber('NumberOfConcurrentDownloads', 6)" :min="1" :max="99" @update:model-value="save('NumberOfConcurrentDownloads', $event)" /></div>
-                <span class="pcl-form-row__hint">限制同时建立的下载连接</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.ka55f917b70') }}</span>
+                <div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.ka55f917b70')" :model-value="draftNumber('NumberOfConcurrentDownloads', 6)" :min="1" :max="99" @update:model-value="save('NumberOfConcurrentDownloads', $event)" /></div>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k15d325f0de') }}</span>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">失败重试次数</span>
-                <div class="pcl-form-row__control"><PclNumberInput label="失败重试次数" :model-value="draftNumber('NumberOfManualRetries', 1)" :min="0" :max="99" @update:model-value="save('NumberOfManualRetries', $event)" /></div>
-                <span class="pcl-form-row__hint">每个请求失败后的手动重试次数</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.ka9131cbf3c') }}</span>
+                <div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.ka9131cbf3c')" :model-value="draftNumber('NumberOfManualRetries', 1)" :min="0" :max="99" @update:model-value="save('NumberOfManualRetries', $event)" /></div>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.kf3191dd279') }}</span>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">请求超时</span>
-                <div class="pcl-form-row__control"><PclNumberInput label="请求超时" :model-value="draftNumber('RequestTimeout', 60)" :min="0" :max="99" @update:model-value="save('RequestTimeout', $event)" /></div>
-                <span class="pcl-form-row__hint">秒</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.ke41ce24cf7') }}</span>
+                <div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.ke41ce24cf7')" :model-value="draftNumber('RequestTimeout', 60)" :min="0" :max="99" @update:model-value="save('RequestTimeout', $event)" /></div>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.keb6aaba1a1') }}</span>
               </div>
             </PclCard>
 
-            <PclCard title="aria2 下载引擎">
+            <PclCard :title="t('pcl.auto2.k09ca00a842')">
               <div class="pcl-check-grid">
-                <PclCheckbox :model-value="bool('Aria2Enabled')" label="允许使用 aria2（下载引擎须选择 aria2）" @update:model-value="save('Aria2Enabled', $event)" />
-                <PclCheckbox :model-value="bool('Aria2AutoInstall')" label="缺少时自动下载 aria2" @update:model-value="save('Aria2AutoInstall', $event)" />
-                <PclCheckbox :model-value="bool('Aria2FallbackToQt')" label="aria2 不可用时回退到内置下载" @update:model-value="save('Aria2FallbackToQt', $event)" />
+                <PclCheckbox :model-value="bool('Aria2Enabled')" :label="t('pcl.auto2.kcc4cad514a')" @update:model-value="save('Aria2Enabled', $event)" />
+                <PclCheckbox :model-value="bool('Aria2AutoInstall')" :label="t('pcl.auto2.k6b79c51cad')" @update:model-value="save('Aria2AutoInstall', $event)" />
+                <PclCheckbox :model-value="bool('Aria2FallbackToQt')" :label="t('pcl.auto2.k303ee36411')" @update:model-value="save('Aria2FallbackToQt', $event)" />
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">aria2c 程序路径</span>
-                <div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2ExecutablePath', '')" placeholder="留空自动检测" @update:model-value="drafts.Aria2ExecutablePath = $event" @blur="save('Aria2ExecutablePath', drafts.Aria2ExecutablePath)" /><PclIconButton icon="folder-open" label="选择 aria2c" :size="28" :disabled="busy" @click="chooseFilePath('Aria2ExecutablePath', 'aria2c 可执行文件')" /></div>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kb9f4c716af') }}</span>
+                <div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2ExecutablePath', '')" :placeholder="t('pcl.auto2.kc073f7d55a')" @update:model-value="drafts.Aria2ExecutablePath = $event" @blur="save('Aria2ExecutablePath', drafts.Aria2ExecutablePath)" /><PclIconButton icon="folder-open" :label="t('pcl.auto2.k0323866759')" :size="28" :disabled="busy" @click="chooseFilePath('Aria2ExecutablePath', t('pcl.auto2.ke332de5306'))" /></div>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">下载器并发数</span>
-                <div class="pcl-form-row__control"><PclNumberInput label="aria2 并发下载数" :model-value="draftNumber('Aria2MaxConcurrentDownloads', 6)" :min="1" :max="128" :disabled="bool('Aria2FollowLauncherDownloadLimits')" @update:model-value="save('Aria2MaxConcurrentDownloads', $event)" /></div>
-                <span class="pcl-form-row__hint">aria2 同时下载任务数</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k32d4fcb63a') }}</span>
+                <div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.k26d00a6d80')" :model-value="draftNumber('Aria2MaxConcurrentDownloads', 6)" :min="1" :max="128" :disabled="bool('Aria2FollowLauncherDownloadLimits')" @update:model-value="save('Aria2MaxConcurrentDownloads', $event)" /></div>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k184120fd00') }}</span>
               </div>
-              <PclCheckbox :model-value="bool('Aria2FollowLauncherDownloadLimits')" label="跟随上面的启动器下载限制" @update:model-value="save('Aria2FollowLauncherDownloadLimits', $event)" />
+              <PclCheckbox :model-value="bool('Aria2FollowLauncherDownloadLimits')" :label="t('pcl.auto2.k219d3abd7a')" @update:model-value="save('Aria2FollowLauncherDownloadLimits', $event)" />
             </PclCard>
 
-            <PclCard title="aria2 传输参数" collapsible :open="true">
-              <div class="pcl-form-row"><span class="pcl-form-row__label">每台服务器连接数</span><div class="pcl-form-row__control"><PclNumberInput label="每台服务器连接数" :model-value="draftNumber('Aria2MaxConnectionPerServer', 8)" :min="1" :max="64" @update:model-value="save('Aria2MaxConnectionPerServer', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">分片数</span><div class="pcl-form-row__control"><PclNumberInput label="分片数" :model-value="draftNumber('Aria2Split', 8)" :min="1" :max="64" @update:model-value="save('Aria2Split', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">最小分片大小</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2MinSplitSize', '1M')" placeholder="例如 10M" @update:model-value="drafts.Aria2MinSplitSize = $event" @blur="save('Aria2MinSplitSize', drafts.Aria2MinSplitSize)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">文件分配方式</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('Aria2FileAllocation', 'none')" :options="[{ label: '不预分配', value: 'none' }, { label: '预分配', value: 'prealloc' }, { label: '截断', value: 'trunc' }, { label: 'falloc', value: 'falloc' }]" @update:model-value="save('Aria2FileAllocation', $event)" /></div></div>
-              <PclCheckbox :model-value="bool('Aria2Continue')" label="继续未完成的 aria2 下载" @update:model-value="save('Aria2Continue', $event)" />
-              <div class="pcl-form-row"><span class="pcl-form-row__label">RPC 端口</span><div class="pcl-form-row__control"><PclNumberInput label="RPC 端口" :model-value="draftNumber('Aria2RpcPort', 0)" :min="0" :max="65535" @update:model-value="save('Aria2RpcPort', $event)" /></div><span class="pcl-form-row__hint">0 表示随机端口</span></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">状态刷新间隔</span><div class="pcl-form-row__control"><PclNumberInput label="状态刷新间隔" :model-value="draftNumber('Aria2PollInterval', 500)" :min="250" :max="10000" @update:model-value="save('Aria2PollInterval', $event)" /></div><span class="pcl-form-row__hint">毫秒</span></div>
+            <PclCard :title="t('pcl.auto2.kd6b3cf622a')" collapsible :open="true">
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k9ccf3415b8') }}</span><div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.k9ccf3415b8')" :model-value="draftNumber('Aria2MaxConnectionPerServer', 8)" :min="1" :max="64" @update:model-value="save('Aria2MaxConnectionPerServer', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k35a288dea7') }}</span><div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.k35a288dea7')" :model-value="draftNumber('Aria2Split', 8)" :min="1" :max="64" @update:model-value="save('Aria2Split', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.kd5c81bf7ef') }}</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2MinSplitSize', '1M')" :placeholder="t('pcl.auto2.kcfafbaef6e')" @update:model-value="drafts.Aria2MinSplitSize = $event" @blur="save('Aria2MinSplitSize', drafts.Aria2MinSplitSize)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k5016a7bffb') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('Aria2FileAllocation', 'none')" :options="[{ label: t('pcl.auto2.ka56ac5dc51'), value: 'none' }, { label: t('pcl.auto2.k9e16271d26'), value: 'prealloc' }, { label: t('pcl.auto2.kce920fef83'), value: 'trunc' }, { label: 'falloc', value: 'falloc' }]" @update:model-value="save('Aria2FileAllocation', $event)" /></div></div>
+              <PclCheckbox :model-value="bool('Aria2Continue')" :label="t('pcl.auto2.k108a36d8d6')" @update:model-value="save('Aria2Continue', $event)" />
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k5f40f75c95') }}</span><div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.k5f40f75c95')" :model-value="draftNumber('Aria2RpcPort', 0)" :min="0" :max="65535" @update:model-value="save('Aria2RpcPort', $event)" /></div><span class="pcl-form-row__hint">{{ t('pcl.auto2.k8195cb3375') }}</span></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k3f6690e65a') }}</span><div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.k3f6690e65a')" :model-value="draftNumber('Aria2PollInterval', 500)" :min="250" :max="10000" @update:model-value="save('Aria2PollInterval', $event)" /></div><span class="pcl-form-row__hint">{{ t('pcl.auto2.kf3c3d56984') }}</span></div>
             </PclCard>
 
-            <PclCard title="aria2 代理" collapsible>
-              <PclCheckbox :model-value="bool('Aria2UseLauncherProxy')" label="使用启动器的代理设置" @update:model-value="save('Aria2UseLauncherProxy', $event)" />
-              <div class="pcl-form-row"><span class="pcl-form-row__label">代理类型</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('Aria2ProxyType', 'None')" :disabled="bool('Aria2UseLauncherProxy')" :options="[{ label: '不使用代理', value: 'None' }, { label: 'HTTP', value: 'HTTP' }, { label: 'SOCKS5', value: 'SOCKS5' }]" @update:model-value="save('Aria2ProxyType', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">地址 / 端口</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2ProxyAddr', '')" :disabled="ariaProxyDisabled" placeholder="127.0.0.1" @update:model-value="drafts.Aria2ProxyAddr = $event" @blur="save('Aria2ProxyAddr', drafts.Aria2ProxyAddr)" /><PclNumberInput label="aria2 代理端口" :model-value="draftNumber('Aria2ProxyPort', 8080)" :min="1" :max="65535" :disabled="ariaProxyDisabled" @update:model-value="save('Aria2ProxyPort', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">账号 / 密码</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2ProxyUser', '')" :disabled="ariaProxyDisabled" placeholder="可选" @update:model-value="drafts.Aria2ProxyUser = $event" @blur="save('Aria2ProxyUser', drafts.Aria2ProxyUser)" /><PclSecretInput label="代理密码" :configured="secretConfigured('Aria2ProxyPass')" :disabled="ariaProxyDisabled" :save="value => save('Aria2ProxyPass', value)" /></div></div>
-              <div class="pcl-form-row pcl-form-row--top"><span class="pcl-form-row__label">额外 aria2c 参数</span><div class="pcl-form-row__control pcl-form-row__control--column"><PclInput multiline :rows="3" :model-value="draftValue('Aria2ExtraArgs', '')" placeholder="每行一个参数，例如 --check-certificate=false" @update:model-value="drafts.Aria2ExtraArgs = $event" @blur="save('Aria2ExtraArgs', drafts.Aria2ExtraArgs)" /></div></div>
+            <PclCard :title="t('pcl.auto2.k319ee56426')" collapsible>
+              <PclCheckbox :model-value="bool('Aria2UseLauncherProxy')" :label="t('pcl.auto2.k48264472f0')" @update:model-value="save('Aria2UseLauncherProxy', $event)" />
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k6caded1529') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('Aria2ProxyType', 'None')" :disabled="bool('Aria2UseLauncherProxy')" :options="[{ label: t('pcl.auto2.k4f187022e0'), value: 'None' }, { label: 'HTTP', value: 'HTTP' }, { label: 'SOCKS5', value: 'SOCKS5' }]" @update:model-value="save('Aria2ProxyType', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.kdd39ea863c') }}</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2ProxyAddr', '')" :disabled="ariaProxyDisabled" placeholder="127.0.0.1" @update:model-value="drafts.Aria2ProxyAddr = $event" @blur="save('Aria2ProxyAddr', drafts.Aria2ProxyAddr)" /><PclNumberInput :label="t('pcl.auto2.kb2e8679398')" :model-value="draftNumber('Aria2ProxyPort', 8080)" :min="1" :max="65535" :disabled="ariaProxyDisabled" @update:model-value="save('Aria2ProxyPort', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.kbd05aec3ce') }}</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue('Aria2ProxyUser', '')" :disabled="ariaProxyDisabled" :placeholder="t('pcl.auto2.k53e32830a5')" @update:model-value="drafts.Aria2ProxyUser = $event" @blur="save('Aria2ProxyUser', drafts.Aria2ProxyUser)" /><PclSecretInput :label="t('pcl.auto2.kbd675552e9')" :configured="secretConfigured('Aria2ProxyPass')" :disabled="ariaProxyDisabled" :save="value => save('Aria2ProxyPass', value)" /></div></div>
+              <div class="pcl-form-row pcl-form-row--top"><span class="pcl-form-row__label">{{ t('pcl.auto2.k2f42122d58') }}</span><div class="pcl-form-row__control pcl-form-row__control--column"><PclInput multiline :rows="3" :model-value="draftValue('Aria2ExtraArgs', '')" :placeholder="t('pcl.auto2.k4eb33f3f06')" @update:model-value="drafts.Aria2ExtraArgs = $event" @blur="save('Aria2ExtraArgs', drafts.Aria2ExtraArgs)" /></div></div>
             </PclCard>
 
-            <PclCard title="第三方服务">
-              <div class="pcl-form-row"><span class="pcl-form-row__label">CurseForge 下载方式</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('CurseForgeDownloadBrowser', 'Embedded')" :options="[{ label: '内嵌浏览器', value: 'Embedded' }, { label: '系统浏览器', value: 'System' }, { label: '外部工具', value: 'External' }]" @update:model-value="save('CurseForgeDownloadBrowser', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">Modrinth Token</span><div class="pcl-form-row__control"><PclSecretInput label="Modrinth Token" :configured="secretConfigured('ModrinthToken')" :disabled="busy" :save="value => save('ModrinthToken', value)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">CurseForge API Key</span><div class="pcl-form-row__control"><PclSecretInput label="CurseForge API Key" :configured="secretConfigured('FlameKeyOverride')" :disabled="busy" :save="value => save('FlameKeyOverride', value)" /></div></div>
+            <PclCard :title="t('pcl.auto2.k5cd6bf739a')">
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.kf6e39cb4d2') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('CurseForgeDownloadBrowser', 'Embedded')" :options="[{ label: t('pcl.auto2.k46a01866fe'), value: 'Embedded' }, { label: t('pcl.auto2.kcb80f053de'), value: 'System' }, { label: t('pcl.auto2.k1a818fb254'), value: 'External' }]" @update:model-value="save('CurseForgeDownloadBrowser', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('ui.modrinthToken') }}</span><div class="pcl-form-row__control"><PclSecretInput :label="t('ui.modrinthToken')" :configured="secretConfigured('ModrinthToken')" :disabled="busy" :save="value => save('ModrinthToken', value)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('ui.curseforgeApiKey') }}</span><div class="pcl-form-row__control"><PclSecretInput :label="t('ui.curseforgeApiKey')" :configured="secretConfigured('FlameKeyOverride')" :disabled="busy" :save="value => save('FlameKeyOverride', value)" /></div></div>
             </PclCard>
           </div>
 
           <div v-show="section === 'paths'" class="pcl-settings-section">
-            <PclCard title="文件夹位置">
+            <PclCard :title="t('pcl.auto2.k0e567795b0')">
               <div v-for="item in pathSettings" :key="item.key" class="pcl-form-row">
                 <span class="pcl-form-row__label">{{ item.label }}</span>
-                <div class="pcl-form-row__control"><PclInput :model-value="draftValue(item.key, '')" :placeholder="'placeholder' in item ? item.placeholder : '输入目录路径'" @update:model-value="drafts[item.key] = $event" @blur="save(item.key, drafts[item.key])" /><PclIconButton icon="folder-open" :label="`选择${item.label}`" :size="28" :disabled="busy" @click="chooseDirectory(item.key, item.label)" /></div>
+                <div class="pcl-form-row__control"><PclInput :model-value="draftValue(item.key, '')" :placeholder="'placeholder' in item ? item.placeholder : t('pcl.setup.pathPlaceholder')" @update:model-value="drafts[item.key] = $event" @blur="save(item.key, drafts[item.key])" /><PclIconButton icon="folder-open" :label="t('pcl.setup.chooseNamed', { name: item.label })" :size="28" :disabled="busy" @click="chooseDirectory(item.key, item.label)" /></div>
               </div>
             </PclCard>
-            <PclCard title="下载目录行为">
-              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" label="递归监视下载目录" @update:model-value="save('DownloadsDirWatchRecursive', $event)" /><PclCheckbox :model-value="bool('MoveModsFromDownloadsDir')" label="将下载的模组移动到实例模组目录" @update:model-value="save('MoveModsFromDownloadsDir', $event)" /></div>
+            <PclCard :title="t('pcl.auto2.k0c3031d3cd')">
+              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" :label="t('pcl.auto2.k74948c07d1')" @update:model-value="save('DownloadsDirWatchRecursive', $event)" /><PclCheckbox :model-value="bool('MoveModsFromDownloadsDir')" :label="t('pcl.auto2.k375d153246')" @update:model-value="save('MoveModsFromDownloadsDir', $event)" /></div>
             </PclCard>
-            <PclCard title="外部工具路径">
-              <PclCheckbox  :model-value="bool('CurseForgeExternalToolEnabled')" label="允许使用 CurseForge 外部下载工具" @update:model-value="save('CurseForgeExternalToolEnabled', $event)" />
+            <PclCard :title="t('pcl.auto2.k6e09f08f81')">
+              <PclCheckbox  :model-value="bool('CurseForgeExternalToolEnabled')" :label="t('pcl.auto2.kba5e83b7b2')" @update:model-value="save('CurseForgeExternalToolEnabled', $event)" />
 
-              <div v-for="item in toolPathSettings" :key="item.key" class="pcl-form-row"><span class="pcl-form-row__label">{{ item.label }}</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue(item.key, '')" placeholder="可选" @update:model-value="drafts[item.key] = $event" @blur="save(item.key, drafts[item.key])" /><PclIconButton icon="file" :label="`选择${item.label}`" :size="28" :disabled="busy" @click="chooseFilePath(item.key, item.label)" /></div></div>
+              <div v-for="item in toolPathSettings" :key="item.key" class="pcl-form-row"><span class="pcl-form-row__label">{{ item.label }}</span><div class="pcl-form-row__control"><PclInput :model-value="draftValue(item.key, '')" :placeholder="t('pcl.auto2.k53e32830a5')" @update:model-value="drafts[item.key] = $event" @blur="save(item.key, drafts[item.key])" /><PclIconButton icon="file" :label="t('pcl.setup.chooseNamed', { name: item.label })" :size="28" :disabled="busy" @click="chooseFilePath(item.key, item.label)" /></div></div>
             </PclCard>
           </div>
 
           <div v-show="section === 'console'" class="pcl-settings-section">
-            <PclCard title="控制台输出">
-              <div class="pcl-form-row"><span class="pcl-form-row__label">最大保留行数</span><div class="pcl-form-row__control"><PclSlider :model-value="draftNumber('ConsoleMaxLines', 100000)" :min="100" :max="100000" :step="100" @update:model-value="drafts.ConsoleMaxLines = $event" @change="save('ConsoleMaxLines', $event)" /></div><span class="pcl-form-row__hint">{{ draftNumber('ConsoleMaxLines', 100000).toLocaleString() }} 行</span></div>
-              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('ConsoleOverflowStop')" label="日志溢出时停止输出" @update:model-value="save('ConsoleOverflowStop', $event)" /><PclCheckbox :model-value="bool('LogPrePostOutput')" label="记录启动前后输出" @update:model-value="save('LogPrePostOutput', $event)" /></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">控制台字体大小</span><div class="pcl-form-row__control"><PclNumberInput label="控制台字体大小" :model-value="draftNumber('ConsoleFontSize', 10)" :min="5" :max="72" @update:model-value="save('ConsoleFontSize', $event)" /></div><span class="pcl-form-row__hint">pt</span></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">配色方案</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('ConsoleColorScheme', 'Builtin Dark')" :options="consoleColorOptions" @update:model-value="save('ConsoleColorScheme', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">控制台字体</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('ConsoleFont')" :options="consoleFontOptions" @update:model-value="save('ConsoleFont', $event)" /><PclInput :model-value="draftValue('ConsoleFont', '')" placeholder="或输入自定义字体名称" @update:model-value="drafts.ConsoleFont = $event" @blur="save('ConsoleFont', drafts.ConsoleFont)" /></div></div>
-              <PclHint theme="blue">字体用于 C++ 游戏日志和服务器终端，配色用于 C++ 服务器终端。</PclHint>
-              <pre class="pcl-console-preview" :style="{ fontFamily: draftValue('ConsoleFont', 'monospace'), fontSize: `${draftNumber('ConsoleFontSize', 10)}pt` }">[12:00:00] [INFO] Minecraft 日志预览
-[12:00:01] [WARN] 示例警告信息</pre>
+            <PclCard :title="t('pcl.auto2.k3cfb31d332')">
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k1d0e36d2e0') }}</span><div class="pcl-form-row__control"><PclSlider :model-value="draftNumber('ConsoleMaxLines', 100000)" :min="100" :max="100000" :step="100" @update:model-value="drafts.ConsoleMaxLines = $event" @change="save('ConsoleMaxLines', $event)" /></div><span class="pcl-form-row__hint">{{ t('pcl.setup.lines', { count: draftNumber('ConsoleMaxLines', 100000).toLocaleString() }) }}</span></div>
+              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('ConsoleOverflowStop')" :label="t('pcl.auto2.kded97071fe')" @update:model-value="save('ConsoleOverflowStop', $event)" /><PclCheckbox :model-value="bool('LogPrePostOutput')" :label="t('pcl.auto2.kedb03b057e')" @update:model-value="save('LogPrePostOutput', $event)" /></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k27b3bf87b0') }}</span><div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.k27b3bf87b0')" :model-value="draftNumber('ConsoleFontSize', 10)" :min="5" :max="72" @update:model-value="save('ConsoleFontSize', $event)" /></div><span class="pcl-form-row__hint">{{ t('ui.pointUnit') }}</span></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.kc2aab6b7e9') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('ConsoleColorScheme', 'Builtin Dark')" :options="consoleColorOptions" @update:model-value="save('ConsoleColorScheme', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k3245f18624') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('ConsoleFont')" :options="consoleFontOptions" @update:model-value="save('ConsoleFont', $event)" /><PclInput :model-value="draftValue('ConsoleFont', '')" :placeholder="t('pcl.auto2.k0ef8d26ca8')" @update:model-value="drafts.ConsoleFont = $event" @blur="save('ConsoleFont', drafts.ConsoleFont)" /></div></div>
+              <PclHint theme="blue">{{ t('pcl.auto2.kfa81d58223') }}</PclHint>
+              <pre class="pcl-console-preview" :style="{ fontFamily: draftValue('ConsoleFont', 'monospace'), fontSize: `${draftNumber('ConsoleFontSize', 10)}pt` }">{{ t('pcl.auto2.kc36e1a4b33') }}</pre>
             </PclCard>
-            <PclCard v-if="!isInstance" title="日志上传">
+            <PclCard v-if="!isInstance" :title="t('pcl.auto2.k6be63dbd9f')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">上传服务</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.ke0d4c75d53') }}</span>
                 <div class="pcl-form-row__control"><PclSelect :model-value="draftNumber('PastebinType', 3)" :disabled="busy" :options="[{ label: 'mclo.gs', value: 3 }, { label: '0x0.st', value: 0 }, { label: 'paste.gg', value: 2 }, { label: 'hastebin', value: 1 }]" @update:model-value="save('PastebinType', $event)" /></div>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">自定义服务地址</span>
-                <div class="pcl-form-row__control"><PclInput :model-value="draftValue('PastebinCustomAPIBase', '')" placeholder="留空使用所选服务的默认地址" :disabled="busy" @update:model-value="drafts.PastebinCustomAPIBase = $event" /><PclButton size="sm" :disabled="busy" @click="savePasteUrl">保存</PclButton></div>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kc8fc6f804e') }}</span>
+                <div class="pcl-form-row__control"><PclInput :model-value="draftValue('PastebinCustomAPIBase', '')" :placeholder="t('pcl.auto2.ka3893e289f')" :disabled="busy" @update:model-value="drafts.PastebinCustomAPIBase = $event" /><PclButton size="sm" :disabled="busy" @click="savePasteUrl">{{ t('pcl.auto2.kfadf24dbc5') }}</PclButton></div>
               </div>
-              <PclHint theme="blue">自定义地址需兼容所选服务的 API。历史日志和实时控制台的「一键上传」共用此设置，上传前会显示目标地址并请求确认。</PclHint>
+              <PclHint theme="blue">{{ t('pcl.auto2.kb623f44173') }}</PclHint>
             </PclCard>
           </div>
 
           <div v-show="section === 'advanced-settings'" class="pcl-settings-section">
-            <PclCard title="资源文件校验">
+            <PclCard :title="t('pcl.auto2.k672450779d')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">校验方式</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k320fb2d05d') }}</span>
                 <div class="pcl-form-row__control"><PclSelect :model-value="draftNumber('AssetVerificationMode', 1)" :options="assetVerificationOptions" @update:model-value="save('AssetVerificationMode', $event)" /></div>
               </div>
               <p class="pcl-muted">{{ assetVerificationDescriptions[draftNumber('AssetVerificationMode', 1)] }}</p>
               <div v-if="draftNumber('AssetVerificationMode', 1) === 2" class="pcl-form-row">
-                <span class="pcl-form-row__label">缓存有效期</span>
-                <div class="pcl-form-row__control"><PclNumberInput label="缓存有效期" :model-value="draftNumber('AssetCacheExpiryDays', 7)" :min="1" :max="365" unit="天" @update:model-value="save('AssetCacheExpiryDays', $event)" /></div>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kf61c84d95c') }}</span>
+                <div class="pcl-form-row__control"><PclNumberInput :label="t('pcl.auto2.kf61c84d95c')" :model-value="draftNumber('AssetCacheExpiryDays', 7)" :min="1" :max="365" :unit="t('pcl.setup.days')" @update:model-value="save('AssetCacheExpiryDays', $event)" /></div>
               </div>
             </PclCard>
-            <PclCard v-if="isInstance" title="实例完整性白名单">
+            <PclCard v-if="isInstance" :title="t('pcl.auto2.k88cd2c41dc')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">信任状态</span>
-                <div class="pcl-form-row__control"><strong>{{ bool('AssetIntegrityTrusted') ? '已通过完整校验并信任' : '未加入白名单' }}</strong></div>
-                <span class="pcl-form-row__hint">信任后会跳过重复的资源哈希计算，缺少文件仍会自动修复</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k389f4e6753') }}</span>
+                <div class="pcl-form-row__control"><strong>{{ bool('AssetIntegrityTrusted') ? t('pcl.auto2.k0a9bd11e25') : t('pcl.auto2.k67ea0c37b8') }}</strong></div>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.kde492f2031') }}</span>
               </div>
               <div class="pcl-actions">
-                <PclButton variant="highlight" icon="shield-check" :disabled="busy" @click="verifyAndTrust">完整校验并加入白名单</PclButton>
-                <PclButton v-if="bool('AssetIntegrityTrusted')" variant="ghost" icon="x" :disabled="busy" @click="save('AssetIntegrityTrusted', false)">撤销白名单</PclButton>
+                <PclButton variant="highlight" icon="shield-check" :disabled="busy" @click="verifyAndTrust">{{ t('pcl.auto2.k2fd46d0f03') }}</PclButton>
+                <PclButton v-if="bool('AssetIntegrityTrusted')" variant="ghost" icon="x" :disabled="busy" @click="save('AssetIntegrityTrusted', false)">{{ t('pcl.auto2.kb614311d42') }}</PclButton>
               </div>
-              <PclHint theme="yellow">只有完整校验成功后才会写入白名单。更换游戏版本或怀疑文件被修改时，可以撤销后重新校验。</PclHint>
+              <PclHint theme="yellow">{{ t('pcl.auto2.kd65b7ff3b2') }}</PclHint>
             </PclCard>
-            <PclCard title="兼容性与渲染">
-              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('OnlineFixes')" label="启用旧版本在线服务修复" @update:model-value="save('OnlineFixes', $event)" /><PclCheckbox :model-value="bool('UseNativeGLFW')" label="使用系统 GLFW" @update:model-value="save('UseNativeGLFW', $event)" /><PclCheckbox :model-value="bool('UseNativeOpenAL')" label="使用系统 OpenAL" @update:model-value="save('UseNativeOpenAL', $event)" /><PclCheckbox :model-value="bool('UseDiscreteGpu')" label="要求使用高性能显卡" @update:model-value="save('UseDiscreteGpu', $event)" /><PclCheckbox :model-value="bool('EnableFeralGamemode')" label="启用 Feral GameMode（Linux）" @update:model-value="save('EnableFeralGamemode', $event)" /><PclCheckbox :model-value="bool('EnableMangoHud')" label="启用 MangoHud（Linux）" @update:model-value="save('EnableMangoHud', $event)" /><PclCheckbox :model-value="bool('UseZink')" label="使用 Zink 渲染（Linux）" @update:model-value="save('UseZink', $event)" /></div>
+            <PclCard :title="t('pcl.auto2.kd5a33bb7e7')">
+              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('OnlineFixes')" :label="t('pcl.auto2.k72587f73c0')" @update:model-value="save('OnlineFixes', $event)" /><PclCheckbox :model-value="bool('UseNativeGLFW')" :label="t('pcl.auto2.kb6565ef62e')" @update:model-value="save('UseNativeGLFW', $event)" /><PclCheckbox :model-value="bool('UseNativeOpenAL')" :label="t('pcl.auto2.k7377d6632f')" @update:model-value="save('UseNativeOpenAL', $event)" /><PclCheckbox :model-value="bool('UseDiscreteGpu')" :label="t('pcl.auto2.k3ddf18f61b')" @update:model-value="save('UseDiscreteGpu', $event)" /><PclCheckbox :model-value="bool('EnableFeralGamemode')" :label="t('pcl.auto2.k71a5c775a3')" @update:model-value="save('EnableFeralGamemode', $event)" /><PclCheckbox :model-value="bool('EnableMangoHud')" :label="t('pcl.auto2.k69c86767a7')" @update:model-value="save('EnableMangoHud', $event)" /><PclCheckbox :model-value="bool('UseZink')" :label="t('pcl.auto2.k5a5d182f09')" @update:model-value="save('UseZink', $event)" /></div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">GLFW 库文件</span>
-                <div class="pcl-form-row__control"><PclInput :disabled="!bool('UseNativeGLFW')" :model-value="draftValue('CustomGLFWPath')" placeholder="留空使用系统库" @update:model-value="drafts.CustomGLFWPath = $event" @blur="save('CustomGLFWPath', drafts.CustomGLFWPath)" /><PclIconButton icon="folder-open" label="选择GLFW 库文件" :size="28" :disabled="busy || !bool('UseNativeGLFW')" @click="chooseFilePath('CustomGLFWPath', 'GLFW 库文件')" /></div>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k57dc7ecf81') }}</span>
+                <div class="pcl-form-row__control"><PclInput :disabled="!bool('UseNativeGLFW')" :model-value="draftValue('CustomGLFWPath')" :placeholder="t('pcl.auto2.k5ae521723c')" @update:model-value="drafts.CustomGLFWPath = $event" @blur="save('CustomGLFWPath', drafts.CustomGLFWPath)" /><PclIconButton icon="folder-open" :label="t('pcl.auto2.k163290badb')" :size="28" :disabled="busy || !bool('UseNativeGLFW')" @click="chooseFilePath('CustomGLFWPath', t('pcl.auto2.k57dc7ecf81'))" /></div>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">OpenAL 库文件</span>
-                <div class="pcl-form-row__control"><PclInput :disabled="!bool('UseNativeOpenAL')" :model-value="draftValue('CustomOpenALPath')" placeholder="留空使用系统库" @update:model-value="drafts.CustomOpenALPath = $event" @blur="save('CustomOpenALPath', drafts.CustomOpenALPath)" /><PclIconButton icon="folder-open" label="选择OpenAL 库文件" :size="28" :disabled="busy || !bool('UseNativeOpenAL')" @click="chooseFilePath('CustomOpenALPath', 'OpenAL 库文件')" /></div>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k0c29921cb8') }}</span>
+                <div class="pcl-form-row__control"><PclInput :disabled="!bool('UseNativeOpenAL')" :model-value="draftValue('CustomOpenALPath')" :placeholder="t('pcl.auto2.k5ae521723c')" @update:model-value="drafts.CustomOpenALPath = $event" @blur="save('CustomOpenALPath', drafts.CustomOpenALPath)" /><PclIconButton icon="folder-open" :label="t('pcl.auto2.kf372315ecd')" :size="28" :disabled="busy || !bool('UseNativeOpenAL')" @click="chooseFilePath('CustomOpenALPath', t('pcl.auto2.k0c29921cb8'))" /></div>
               </div>
             </PclCard>
-            <PclCard title="游戏时间">
-              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('ShowGameTime')" label="显示游戏时间" @update:model-value="save('ShowGameTime', $event)" /><PclCheckbox v-if="!isInstance" :model-value="bool('ShowGlobalGameTime')" label="显示总游戏时间" @update:model-value="save('ShowGlobalGameTime', $event)" /><PclCheckbox v-if="!isInstance" :model-value="bool('ShowGameTimeWithoutDays')" label="不显示天数" @update:model-value="save('ShowGameTimeWithoutDays', $event)" /><PclCheckbox :model-value="bool('RecordGameTime')" label="记录游戏时间" @update:model-value="save('RecordGameTime', $event)" /></div>
+            <PclCard :title="t('pcl.auto2.k467ce31a84')">
+              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('ShowGameTime')" :label="t('pcl.auto2.kff9e4486e9')" @update:model-value="save('ShowGameTime', $event)" /><PclCheckbox v-if="!isInstance" :model-value="bool('ShowGlobalGameTime')" :label="t('pcl.auto2.k60f26bd0b9')" @update:model-value="save('ShowGlobalGameTime', $event)" /><PclCheckbox v-if="!isInstance" :model-value="bool('ShowGameTimeWithoutDays')" :label="t('pcl.auto2.k2ee9de6d49')" @update:model-value="save('ShowGameTimeWithoutDays', $event)" /><PclCheckbox :model-value="bool('RecordGameTime')" :label="t('pcl.auto2.k19241e920e')" @update:model-value="save('RecordGameTime', $event)" /></div>
             </PclCard>
           </div>
 
           <div v-show="section === 'game'" class="pcl-settings-section">
-            <PclCard title="资源与整合包">
+            <PclCard :title="t('pcl.auto2.kd4cbc9e6a2')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">安装行为</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k765b5418a7') }}</span>
                 <div class="pcl-form-row__control pcl-check-row">
                   <PclCheckbox
                     :model-value="!bool('ModDependenciesDisabled')"
-                    label="自动检查并安装必需前置"
+                    :label="t('pcl.auto2.k21941e05fb')"
                     @update:model-value="save('ModDependenciesDisabled', !$event)"
                   />
                   <PclCheckbox
                     :model-value="bool('GlobalDataPacksEnabled')"
-                    label="启用全局数据包"
+                    :label="t('pcl.auto2.ke3ac026340')"
                     @update:model-value="save('GlobalDataPacksEnabled', $event)"
                   />
                 </div>
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">全局数据包目录</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kec623c3f23') }}</span>
                 <div class="pcl-form-row__control">
                   <PclInput
                     :model-value="draftValue('GlobalDataPacksPath', '')"
-                    placeholder="输入目录路径"
+                    :placeholder="t('pcl.auto2.kf36e479c03')"
                     @update:model-value="drafts.GlobalDataPacksPath = $event"
                     @blur="save('GlobalDataPacksPath', drafts.GlobalDataPacksPath)"
                   />
-                  <PclIconButton icon="folder-open" label="选择全局数据包目录" :size="28" :disabled="busy" @click="chooseGlobalDataPacks" />
+                  <PclIconButton icon="folder-open" :label="t('pcl.auto2.k5f869fce49')" :size="28" :disabled="busy" @click="chooseGlobalDataPacks" />
                 </div>
               </div>
             </PclCard>
 
-            <PclCard title="稳定性">
+            <PclCard :title="t('pcl.auto2.kb040e698ea')">
               <div class="pcl-check-grid">
-                <PclCheckbox :model-value="bool('ModMetadataDisabled')" label="跳过模组元数据查询" @update:model-value="save('ModMetadataDisabled', $event)" />
-                <PclCheckbox :model-value="bool('SkipModpackUpdatePrompt')" label="跳过整合包更新提示" @update:model-value="save('SkipModpackUpdatePrompt', $event)" />
-                <PclCheckbox :model-value="bool('ShowModIncompat')" label="显示模组不兼容提示" @update:model-value="save('ShowModIncompat', $event)" />
-                <PclCheckbox :model-value="bool('FallbackMRBlockedMods')" label="Modrinth 受阻模组回退下载" @update:model-value="save('FallbackMRBlockedMods', $event)" />
+                <PclCheckbox :model-value="bool('ModMetadataDisabled')" :label="t('pcl.auto2.k6e4b7a0c56')" @update:model-value="save('ModMetadataDisabled', $event)" />
+                <PclCheckbox :model-value="bool('SkipModpackUpdatePrompt')" :label="t('pcl.auto2.kb444441195')" @update:model-value="save('SkipModpackUpdatePrompt', $event)" />
+                <PclCheckbox :model-value="bool('ShowModIncompat')" :label="t('pcl.auto2.k5d8dbaa02a')" @update:model-value="save('ShowModIncompat', $event)" />
+                <PclCheckbox :model-value="bool('FallbackMRBlockedMods')" :label="t('pcl.auto2.kbea2a5f6f6')" @update:model-value="save('FallbackMRBlockedMods', $event)" />
               </div>
             </PclCard>
           </div>
 
           <div v-show="section === 'network'" class="pcl-settings-section">
-            <PclCard v-if="isInstance" title="服务端">
-              <p class="pcl-muted">服务端登录限制、地址和自动加入设置位于实例工作区的“服务端”页。</p>
-              <PclHint theme="blue">当前页面只显示实例级服务端设置的入口说明，避免把启动器代理写进实例设置。</PclHint>
+            <PclCard v-if="isInstance" :title="t('pcl.auto2.k6aca62f330')">
+              <p class="pcl-muted">{{ t('pcl.auto2.kf1bf44c5a9') }}</p>
+              <PclHint theme="blue">{{ t('pcl.auto2.kbaa138bcf7') }}</PclHint>
             </PclCard>
 
             <template v-else>
-              <PclCard title="联机后端">
-                <template #actions><PclButton size="sm" icon="refresh-cw" :disabled="onlineBusy" @click="loadOnlineBackends(true)">刷新</PclButton></template>
-                <PclLoading v-if="onlineBusy" text="正在读取联机后端" inline />
+              <PclCard :title="t('pcl.auto2.k22db8c6e46')">
+                <template #actions><PclButton size="sm" icon="refresh-cw" :disabled="onlineBusy" @click="loadOnlineBackends(true)">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton></template>
+                <PclLoading v-if="onlineBusy" :text="t('pcl.auto2.ke4a515e814')" inline />
                 <div v-if="onlineBackends.length" class="pcl-tools-list">
-                  <PclListItem v-for="backend in onlineBackends" :key="backend.id" :title="backend.name || backend.id" :info="`${backend.installed ? (backend.version || '已安装') : '未安装'} · ${backend.running ? '进程运行中' : '进程未启动'}`">
+                  <PclListItem v-for="backend in onlineBackends" :key="backend.id" :title="backend.name || backend.id" :info="`${backend.installed ? (backend.version || t('pcl.auto2.keb88ff57c9')) : t('pcl.auto2.k6f7dc945ae')} · ${backend.running ? t('pcl.auto2.k9761f5d947') : t('pcl.auto2.k803638ec0a')}`">
                     <template #icon><PclIcon name="bubbles" :size="16" /></template>
                   </PclListItem>
                 </div>
-                <PclHint v-else-if="!onlineBusy" theme="yellow">没有读取到联机后端。请确认启动器附带了 Terracotta 或 YukariConnect，并到“工具 → 联机”创建房间或加入房间。</PclHint>
-                <PclHint theme="blue">联机控制、安装和房间操作使用与传统 C++ UI 相同的 multiplayer API，统一在“工具 → 联机”中管理；这里显示实时安装状态，避免保留不可用的 EasyTier 占位控件。</PclHint>
+                <PclHint v-else-if="!onlineBusy" theme="yellow">{{ t('pcl.auto2.kb9e6473b23') }}</PclHint>
+                <PclHint theme="blue">{{ t('pcl.auto2.k85f96ac696') }}</PclHint>
               </PclCard>
             </template>
           </div>
 
           <div v-show="section === 'cache'" class="pcl-settings-section">
-            <PclCard title="内建 Yggdrasil 缓存">
+            <PclCard :title="t('pcl.auto2.kab43b1565b')">
               <template #actions>
-                <PclButton size="sm" icon="refresh-cw" :disabled="cacheBusy" @click="loadCache(true)">刷新</PclButton>
+                <PclButton size="sm" icon="refresh-cw" :disabled="cacheBusy" @click="loadCache(true)">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton>
               </template>
-              <PclLoading v-if="cacheBusy" text="正在读取缓存服务" inline />
+              <PclLoading v-if="cacheBusy" :text="t('pcl.auto2.k3e6f013d61')" inline />
               <PclHint v-if="cacheError" theme="red" closable @close="cacheError = ''">{{ cacheError }}</PclHint>
               <div v-if="cacheState.stats" class="pcl-about-grid">
-                <span>服务状态</span><code>{{ cacheState.running ? '运行中' : '未运行' }}</code>
-                <span>元数据缓存</span><code>{{ cacheState.enabled && cacheState.configured ? '已启用' : '未启用' }}</code>
-                <span>账户快照缓存</span><code>{{ cacheState.accountCacheEnabled ? '已启用' : '未启用' }}</code>
-                <span>缓存条目</span><code>{{ cacheState.stats.entries ?? 0 }}</code>
-                <span>缓存大小</span><code>{{ formatBytes(cacheState.stats.bytes) }}</code>
-                <span>命中 / 未命中</span><code>{{ cacheState.stats.hit ?? 0 }} / {{ cacheState.stats.miss ?? 0 }}</code>
-                <span>元数据路径</span><code>{{ cacheState.metadataPath || '—' }}</code>
-                <span>纹理路径</span><code>{{ cacheState.texturesPath || '—' }}</code>
+                <span>{{ t('pcl.auto2.kd42da9e2ac') }}</span><code>{{ cacheState.running ? t('pcl.auto2.k5942497005') : t('pcl.auto2.kb2ba9634d9') }}</code>
+                <span>{{ t('pcl.auto2.kc1c23347ef') }}</span><code>{{ cacheState.enabled && cacheState.configured ? t('pcl.auto2.k25d2843150') : t('pcl.auto2.k8bb38ef00c') }}</code>
+                <span>{{ t('pcl.auto2.k31479ef943') }}</span><code>{{ cacheState.accountCacheEnabled ? t('pcl.auto2.k25d2843150') : t('pcl.auto2.k8bb38ef00c') }}</code>
+                <span>{{ t('pcl.auto2.ke4b9d92f14') }}</span><code>{{ cacheState.stats.entries ?? 0 }}</code>
+                <span>{{ t('pcl.auto2.kf05934a464') }}</span><code>{{ formatBytes(cacheState.stats.bytes) }}</code>
+                <span>{{ t('pcl.auto2.kbc10822e07') }}</span><code>{{ cacheState.stats.hit ?? 0 }} / {{ cacheState.stats.miss ?? 0 }}</code>
+                <span>{{ t('pcl.auto2.k121c44d74b') }}</span><code>{{ cacheState.metadataPath || '—' }}</code>
+                <span>{{ t('pcl.auto2.k78acda3988') }}</span><code>{{ cacheState.texturesPath || '—' }}</code>
               </div>
-              <PclHint v-else-if="!cacheBusy" theme="blue">缓存服务尚未启动。点击刷新后会读取并显示内建 Yggdrasil 服务状态。</PclHint>
+              <PclHint v-else-if="!cacheBusy" theme="blue">{{ t('pcl.auto2.kd9647d9b52') }}</PclHint>
               <div class="pcl-actions">
-                <PclButton variant="highlight" icon="trash-2" :disabled="cacheBusy || !cacheState.running" @click="purgeYggdrasilCache">清理 Yggdrasil 缓存</PclButton>
-                <PclButton icon="trash-2" :disabled="busy" @click="clearMetadataCache">清理启动器元数据缓存</PclButton>
+                <PclButton variant="highlight" icon="trash-2" :disabled="cacheBusy || !cacheState.running" @click="purgeYggdrasilCache">{{ t('pcl.auto2.keb4580d4ae') }}</PclButton>
+                <PclButton icon="trash-2" :disabled="busy" @click="clearMetadataCache">{{ t('pcl.auto2.kb7af0a1b98') }}</PclButton>
               </div>
             </PclCard>
 
-            <PclCard title="缓存路由">
+            <PclCard :title="t('pcl.auto2.kbeb14fa3dd')">
               <div v-if="cacheRoutes.length" class="pcl-tools-list">
-                <PclListItem v-for="route in cacheRoutes" :key="route.id" :title="route.name || route.id" :info="`${route.listen_prefix || route.listenPrefix || '—'} · ${route.enabled ? '启用' : '停用'}`">
+                <PclListItem v-for="route in cacheRoutes" :key="route.id" :title="route.name || route.id" :info="`${route.listen_prefix || route.listenPrefix || '—'} · ${route.enabled ? t('pcl.auto2.kd4e9ca3dd4') : t('pcl.auto2.kd989e55188')}`">
                   <template #icon><PclIcon name="layers" :size="16" /></template>
-                  <template #actions><span class="pcl-muted">TTL {{ route.ttl_seconds ?? route.ttlSeconds ?? 0 }} 秒</span></template>
+                  <template #actions><span class="pcl-muted">{{ t('pcl.setup.ttl', { value: route.ttl_seconds ?? route.ttlSeconds ?? 0 }) }}</span></template>
                 </PclListItem>
               </div>
-              <div v-else class="pcl-empty pcl-empty--compact">当前没有已配置的缓存路由。启用“本地服务缓存”后，启动器会自动配置元数据和纹理路由。</div>
+              <div v-else class="pcl-empty pcl-empty--compact">{{ t('pcl.auto2.kc6d728c26b') }}</div>
             </PclCard>
 
-            <PclCard title="Prism 元数据 HTTP 缓存">
+            <PclCard :title="t('pcl.auto2.k109dbaf249')">
               <div class="pcl-about-grid">
-                <span>缓存条目</span><code>{{ cacheState.http?.entries ?? '—' }}</code>
-                <span>缓存大小</span><code>{{ cacheState.http ? formatBytes(cacheState.http.bytes) : '—' }}</code>
-                <span>缓存分组</span><code>{{ cacheState.http?.bases ?? '—' }}</code>
-                <span>索引文件</span><code>{{ cacheState.http?.indexPath || '—' }}</code>
+                <span>{{ t('pcl.auto2.ke4b9d92f14') }}</span><code>{{ cacheState.http?.entries ?? '—' }}</code>
+                <span>{{ t('pcl.auto2.kf05934a464') }}</span><code>{{ cacheState.http ? formatBytes(cacheState.http.bytes) : '—' }}</code>
+                <span>{{ t('pcl.auto2.k39287df5e0') }}</span><code>{{ cacheState.http?.bases ?? '—' }}</code>
+                <span>{{ t('pcl.auto2.kfc7b7a21c5') }}</span><code>{{ cacheState.http?.indexPath || '—' }}</code>
               </div>
-              <PclHint theme="blue">这是启动器用于 Prism 元数据、资源目录和新闻等 HTTP 请求的本地缓存。元数据服务地址可在“下载与传输 → 自定义镜像 → 版本元数据地址”替换，缓存会按新的地址重新建立。</PclHint>
+              <PclHint theme="blue">{{ t('pcl.auto2.k45798cf477') }}</PclHint>
             </PclCard>
           </div>
 
@@ -646,89 +641,89 @@
 
           <div v-show="section === 'ui'" class="pcl-settings-section">
             <PclAppearancePanel />
-            <PclCard title="C++ 界面与实例列表" collapsible>
-              <PclHint theme="blue">这些选项用于 C++ 界面；PCL 风格的外观在上方设置。</PclHint>
-              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('MenuBarInsteadOfToolBar')" label="使用菜单栏代替工具栏" @update:model-value="save('MenuBarInsteadOfToolBar', $event)" /><PclCheckbox :model-value="bool('UseNewUI')" label="C++ 界面使用新版布局（重启生效）" @update:model-value="save('UseNewUI', $event)" /><PclCheckbox :model-value="bool('ShowNewsBar')" label="显示新闻栏" @update:model-value="save('ShowNewsBar', $event)" /><PclCheckbox :model-value="bool('StatusBarVisible')" label="显示状态栏" @update:model-value="save('StatusBarVisible', $event)" /><PclCheckbox :model-value="bool('ShowServerPreview')" label="显示服务器预览" @update:model-value="save('ShowServerPreview', $event)" /><PclCheckbox :model-value="bool('ServerPreviewDynamicWidth')" label="服务器预览自适应宽度" @update:model-value="save('ServerPreviewDynamicWidth', $event)" /><PclCheckbox :model-value="bool('ShowTerracottaToolBar')" label="显示 Terracotta 工具栏" @update:model-value="save('ShowTerracottaToolBar', $event)" /><PclCheckbox :model-value="bool('ShowYukariConnectToolBar')" label="显示 YukariConnect 工具栏" @update:model-value="save('ShowYukariConnectToolBar', $event)" /><PclCheckbox :model-value="bool('ShowTerracottaStatusBar')" label="显示 Terracotta 状态栏" @update:model-value="save('ShowTerracottaStatusBar', $event)" /><PclCheckbox :model-value="bool('ShowYukariConnectStatusBar')" label="显示 YukariConnect 状态栏" @update:model-value="save('ShowYukariConnectStatusBar', $event)" /></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">实例排序</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('InstSortMode', 'Name')" :options="[{ label: '按名称', value: 'Name' }, { label: '按最近启动', value: 'LastLaunch' }]" @update:model-value="save('InstSortMode', $event)" /></div></div>
-              <div class="pcl-form-row"><span class="pcl-form-row__label">实例重命名</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('InstRenamingMode', 'AskEverytime')" :options="[{ label: '每次询问', value: 'AskEverytime' }, { label: '始终同步文件夹名', value: 'PhysicalDir' }, { label: '只改显示名称', value: 'MetadataOnly' }]" @update:model-value="save('InstRenamingMode', $event)" /></div></div>
+            <PclCard :title="t('pcl.auto2.k119e538904')" collapsible>
+              <PclHint theme="blue">{{ t('pcl.auto2.k4bc53f2a29') }}</PclHint>
+              <div class="pcl-check-grid"><PclCheckbox :model-value="bool('MenuBarInsteadOfToolBar')" :label="t('pcl.auto2.kcfe01d2e68')" @update:model-value="save('MenuBarInsteadOfToolBar', $event)" /><PclCheckbox :model-value="bool('UseNewUI')" :label="t('pcl.auto2.kfd0f0be669')" @update:model-value="save('UseNewUI', $event)" /><PclCheckbox :model-value="bool('ShowNewsBar')" :label="t('pcl.auto2.kbb3e9b3130')" @update:model-value="save('ShowNewsBar', $event)" /><PclCheckbox :model-value="bool('StatusBarVisible')" :label="t('pcl.auto2.ka80d0756b7')" @update:model-value="save('StatusBarVisible', $event)" /><PclCheckbox :model-value="bool('ShowServerPreview')" :label="t('pcl.auto2.k7fc810e95d')" @update:model-value="save('ShowServerPreview', $event)" /><PclCheckbox :model-value="bool('ServerPreviewDynamicWidth')" :label="t('pcl.auto2.k7372f1409c')" @update:model-value="save('ServerPreviewDynamicWidth', $event)" /><PclCheckbox :model-value="bool('ShowTerracottaToolBar')" :label="t('pcl.auto2.kbf6344c295')" @update:model-value="save('ShowTerracottaToolBar', $event)" /><PclCheckbox :model-value="bool('ShowYukariConnectToolBar')" :label="t('pcl.auto2.k875aaa909c')" @update:model-value="save('ShowYukariConnectToolBar', $event)" /><PclCheckbox :model-value="bool('ShowTerracottaStatusBar')" :label="t('pcl.auto2.k13ab5bf5eb')" @update:model-value="save('ShowTerracottaStatusBar', $event)" /><PclCheckbox :model-value="bool('ShowYukariConnectStatusBar')" :label="t('pcl.auto2.ke107eb3edb')" @update:model-value="save('ShowYukariConnectStatusBar', $event)" /></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k0ac5a748d1') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('InstSortMode', 'Name')" :options="[{ label: t('pcl.auto2.k0ea96767da'), value: 'Name' }, { label: t('pcl.auto2.kf04b9a3f81'), value: 'LastLaunch' }]" @update:model-value="save('InstSortMode', $event)" /></div></div>
+              <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.kaa6f9f5c04') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="draftValue('InstRenamingMode', 'AskEverytime')" :options="[{ label: t('pcl.auto2.k393704c0f8'), value: 'AskEverytime' }, { label: t('pcl.auto2.ka2c67e7514'), value: 'PhysicalDir' }, { label: t('pcl.auto2.k570d7259cd'), value: 'MetadataOnly' }]" @update:model-value="save('InstRenamingMode', $event)" /></div></div>
             </PclCard>
 
           </div>
 
           <div v-show="section === 'language'" class="pcl-settings-section">
-            <PclCard title="语言">
+            <PclCard :title="t('pcl.auto2.kcd99b225a0')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">界面语言</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kd5d8edd12c') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect
                     :model-value="languageId"
                     :options="languageOptions"
-                    placeholder="跟随系统"
+                    :placeholder="t('pcl.auto2.kf4bbd91f79')"
                     @update:model-value="selectLanguage"
                   />
                 </div>
-                <PclButton icon="refresh-cw" :disabled="busy || languagesLoading" @click="loadLanguages(true)">刷新</PclButton>
+                <PclButton icon="refresh-cw" :disabled="busy || languagesLoading" @click="loadLanguages(true)">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton>
               </div>
-              <PclCheckbox :model-value="useSystemLocale" label="跟随系统语言" @update:model-value="setSystemLocale" />
-              <PclLoading v-if="languagesLoading" text="正在读取语言列表" inline />
+              <PclCheckbox :model-value="useSystemLocale" :label="t('pcl.auto2.k726bce844f')" @update:model-value="setSystemLocale" />
+              <PclLoading v-if="languagesLoading" :text="t('pcl.auto2.kffd7a06887')" inline />
             </PclCard>
 
             <div class="pcl-language-banner">
               <PclIcon name="earth" :size="190" class="pcl-language-banner__earth" />
               <div class="pcl-language-banner__copy">
-                <div class="pcl-language-banner__title">让 <b>Luna</b> 走向国际化。</div>
-                <p>Luna 正在持续补充翻译。你可以帮助改进术语、校对文案，或为新的语言提交完整的翻译文件。</p>
-                <p>翻译文件使用标准的 Qt 翻译格式，与启动器版本一起发布。</p>
-                <p>提交前请先阅读贡献指南，并在本地确认界面没有截断或错位。</p>
+                <div class="pcl-language-banner__title">{{ t('pcl.auto2.k12628589c6') }}<b>Luna</b>{{ t('pcl.auto2.k256bab05d0') }}</div>
+                <p>{{ t('pcl.auto2.k23e1871996') }}</p>
+                <p>{{ t('pcl.auto2.k2fd54e48a1') }}</p>
+                <p>{{ t('pcl.auto2.kf3d356c728') }}</p>
                 <div class="pcl-actions">
-                  <PclButton variant="highlight" icon="upload" @click="openUrl(projectUrl + '/pulls')">提交 Pull Request</PclButton>
-                  <PclButton icon="book-marked" @click="openUrl(docsUrl)">查看项目文档</PclButton>
+                  <PclButton variant="highlight" icon="upload" @click="openUrl(projectUrl + '/pulls')">{{ t('pcl.auto2.k5927da4a31') }}</PclButton>
+                  <PclButton icon="book-marked" @click="openUrl(docsUrl)">{{ t('pcl.auto2.k550fd49891') }}</PclButton>
                 </div>
               </div>
             </div>
           </div>
 
           <div v-show="section === 'misc'" class="pcl-settings-section">
-            <PclCard v-if="!isInstance" title="网络">
+            <PclCard v-if="!isInstance" :title="t('pcl.auto2.k0cbda6b524')">
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">代理类型</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k6caded1529') }}</span>
                 <div class="pcl-form-row__control">
                   <PclSelect v-model="proxy.type" :options="proxyTypeOptions" />
                 </div>
-                <span class="pcl-form-row__hint">不使用 / 系统 / HTTP / SOCKS5</span>
+                <span class="pcl-form-row__hint">{{ t('pcl.auto2.ke3fde22bff') }}</span>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">地址</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k67d2d7970f') }}</span>
                 <div class="pcl-form-row__control">
                   <PclInput v-model="proxy.host" placeholder="127.0.0.1" />
                 </div>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">端口</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.k6cbb7335b5') }}</span>
                 <div class="pcl-form-row__control">
                   <PclInput v-model.number="proxy.port" type="number" placeholder="7890" style="width: 110px" />
                 </div>
               </div>
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">账号 / 密码</span>
+                <span class="pcl-form-row__label">{{ t('pcl.auto2.kbd05aec3ce') }}</span>
                 <div class="pcl-form-row__control">
-                  <PclInput v-model="proxy.username" placeholder="可选" />
-                  <PclInput v-model="proxy.password" type="password" placeholder="可选" />
+                  <PclInput v-model="proxy.username" :placeholder="t('pcl.auto2.k53e32830a5')" />
+                  <PclInput v-model="proxy.password" type="password" :placeholder="t('pcl.auto2.k53e32830a5')" />
                 </div>
               </div>
               <div class="pcl-actions">
-                <PclButton variant="highlight" icon="save" :disabled="busy" @click="saveProxy">应用代理</PclButton>
-                <PclButton icon="network" :disabled="busy" @click="testProxy">测试连接</PclButton>
+                <PclButton variant="highlight" icon="save" :disabled="busy" @click="saveProxy">{{ t('pcl.auto2.kc249ff9d56') }}</PclButton>
+                <PclButton icon="network" :disabled="busy" @click="testProxy">{{ t('pcl.auto2.k10b7d8eccc') }}</PclButton>
               </div>
-              <PclHint theme="yellow">请勿填写不信任的代理地址。代理设置会同时作用于启动器请求和游戏下载。</PclHint>
+              <PclHint theme="yellow">{{ t('pcl.auto2.kab43ea5794') }}</PclHint>
               <div v-if="proxyTestResult" class="pcl-diagnostic">{{ proxyTestResult }}</div>
             </PclCard>
 
-            <PclCard title="调试选项" collapsible>
+            <PclCard :title="t('pcl.auto2.k1758690108')" collapsible>
               <div class="pcl-check-grid">
-                <PclCheckbox :model-value="bool('PclDownloadFallbackToQt')" label="专用 .NET 下载失败时回退 Qt" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
-                <PclCheckbox :model-value="bool('Aria2FallbackToQt')" label="Aria2 失败时回退 Qt" @update:model-value="save('Aria2FallbackToQt', $event)" />
-                <PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" label="递归监控下载目录" @update:model-value="save('DownloadsDirWatchRecursive', $event)" />
+                <PclCheckbox :model-value="bool('PclDownloadFallbackToQt')" :label="t('pcl.auto2.k30ad19d3a5')" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
+                <PclCheckbox :model-value="bool('Aria2FallbackToQt')" :label="t('pcl.auto2.ka8ffe0fe9c')" @update:model-value="save('Aria2FallbackToQt', $event)" />
+                <PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" :label="t('pcl.auto2.kbdd3825058')" @update:model-value="save('DownloadsDirWatchRecursive', $event)" />
               </div>
             </PclCard>
           </div>
@@ -743,10 +738,10 @@
                 </div>
               </div>
               <div class="pcl-about-grid">
-                <span>数据目录</span><code>{{ runtimeInfo.dataRoot || '—' }}</code>
-                <span>程序目录</span><code>{{ runtimeInfo.root || runtimeInfo.programRoot || '—' }}</code>
-                <span>API 版本</span><code>{{ runtimeInfo.apiVersion || runtimeInfo.capabilities?.apiVersion || '1' }}</code>
-                <span>能力</span><code>{{ (runtimeInfo.capabilities || []).join(' / ') || '—' }}</code>
+                <span>{{ t('pcl.auto2.k9742cd9ffb') }}</span><code>{{ runtimeInfo.dataRoot || '—' }}</code>
+                <span>{{ t('pcl.auto2.k8c27cb90e0') }}</span><code>{{ runtimeInfo.root || runtimeInfo.programRoot || '—' }}</code>
+                <span>{{ t('pcl.auto2.k5068de9911') }}</span><code>{{ runtimeInfo.apiVersion || runtimeInfo.capabilities?.apiVersion || '1' }}</code>
+                <span>{{ t('pcl.auto2.keb9d53ce7f') }}</span><code>{{ (runtimeInfo.capabilities || []).join(' / ') || '—' }}</code>
               </div>
               <div class="pcl-actions">
                 <PclButton icon="external-link" @click="openUrl(projectUrl)">{{ t('about.projectHome') }}</PclButton>
@@ -772,7 +767,7 @@
               >
                 <template #icon><PclIcon name="heart-filled" :size="18" /></template>
                 <template #actions>
-                  <PclButton size="sm" variant="ghost" icon="external-link" @click.stop="openUrl(credit.url)">打开</PclButton>
+                  <PclButton size="sm" variant="ghost" icon="external-link" @click.stop="openUrl(credit.url)">{{ t('pcl.auto2.k65fc81e161') }}</PclButton>
                 </template>
               </PclListItem>
             </PclCard>
@@ -781,80 +776,80 @@
               <div class="pcl-credit-tiles">
                 <span v-for="name in contributors" :key="name">{{ name }}</span>
               </div>
-              <p class="pcl-muted pcl-credit-note">以上为 Luna Neo UI 与上游项目的公开贡献者代表；完整名单见各项目仓库。</p>
+              <p class="pcl-muted pcl-credit-note">{{ t('pcl.auto2.k1c55d41283') }}</p>
             </PclCard>
 
             <PclCard :title="t('about.licenses')">
               <p class="pcl-muted">{{ t('about.licenseText') }}</p>
               <p class="pcl-muted">{{ t('about.pclIconCredit') }}</p>
               <div class="pcl-actions">
-                <PclButton icon="file-box" @click="openUrl(licenseUrl)">Luna Launcher GPL-3.0</PclButton>
-                <PclButton icon="file-box" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/blob/develop/LICENSE')">PrismLauncher 许可证</PclButton>
+                <PclButton icon="file-box" @click="openUrl(licenseUrl)">{{ t('ui.licenseLabel') }}</PclButton>
+                <PclButton icon="file-box" @click="openUrl('https://github.com/PrismLauncher/PrismLauncher/blob/develop/LICENSE')">{{ t('pcl.auto2.k2185d95c14') }}</PclButton>
                 <PclButton icon="file-box" @click="openUrl('https://lucide.dev/license')">{{ t('about.lucideLicense') }}</PclButton>
               </div>
             </PclCard>
           </div>
 
           <div v-show="section === 'update'" class="pcl-settings-section">
-            <PclCard title="更新设置">
+            <PclCard :title="t('pcl.auto2.k45f9954c5b')">
               <div class="pcl-check-grid">
-                <PclCheckbox :model-value="updateState.automatic" label="自动检查更新" @update:model-value="configureUpdate({ automatic: $event })" />
-                <PclCheckbox :model-value="updateState.beta" label="接收测试版更新" @update:model-value="configureUpdate({ beta: $event })" />
+                <PclCheckbox :model-value="updateState.automatic" :label="t('pcl.auto2.kf54e16b861')" @update:model-value="configureUpdate({ automatic: $event })" />
+                <PclCheckbox :model-value="updateState.beta" :label="t('pcl.auto2.k6d2e57a86f')" @update:model-value="configureUpdate({ beta: $event })" />
               </div>
               <div class="pcl-actions">
-                <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || updateChecking" @click="checkUpdate">{{ updateChecking ? '正在检查' : '检查更新' }}</PclButton>
-                <PclButton icon="folder-open" @click="openUpdateLog">查看更新日志</PclButton>
+                <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || updateChecking" @click="checkUpdate">{{ updateChecking ? t('pcl.auto2.k8872ba182f') : t('pcl.auto2.ka6df38586d') }}</PclButton>
+                <PclButton icon="folder-open" @click="openUpdateLog">{{ t('pcl.auto2.ka040e64bcf') }}</PclButton>
               </div>
-              <PclLoading v-if="updateChecking" text="正在检查更新" inline />
+              <PclLoading v-if="updateChecking" :text="t('pcl.auto2.kec43764508')" inline />
             </PclCard>
 
-            <PclCard v-if="updateCheck.available" title="发现新版本">
+            <PclCard v-if="updateCheck.available" :title="t('pcl.auto2.k01047404ef')">
               <div class="pcl-update-head">
                 <div class="pcl-update-icon">↑</div>
                 <div>
                   <div class="pcl-update-name">{{ updateCheck.versionName }} <span>{{ updateCheck.versionTag }}</span></div>
                   <div class="pcl-muted">{{ updateCheck.releaseTime }}</div>
                 </div>
-                <PclButton variant="accent" icon="download" :disabled="busy" @click="applyUpdate">安装</PclButton>
+                <PclButton variant="accent" icon="download" :disabled="busy" @click="applyUpdate">{{ t('pcl.auto2.k087db63ab1') }}</PclButton>
               </div>
               <pre v-if="updateCheck.releaseNotes" class="pcl-release-notes">{{ updateCheck.releaseNotes }}</pre>
             </PclCard>
 
-            <PclCard v-else-if="updateChecked" title="当前版本">
-              <p>已是最新版本。最近检查：{{ updateState.lastCheck || '刚刚' }}</p>
+            <PclCard v-else-if="updateChecked" :title="t('pcl.auto2.k46e66f6321')">
+              <p>{{ t('pcl.setup.upToDate', { time: updateState.lastCheck || t('pcl.auto2.k9e636642d6') }) }}</p>
             </PclCard>
 
-            <PclCard v-else title="更新状态">
+            <PclCard v-else :title="t('pcl.auto2.k69d14924ff')">
               <div class="pcl-about-grid">
-                <span>自动检查</span><code>{{ updateState.automatic ? '开启' : '关闭' }}</code>
-                <span>测试版通道</span><code>{{ updateState.beta ? '开启' : '关闭' }}</code>
-                <span>上次检查</span><code>{{ updateState.lastCheck || '—' }}</code>
+                <span>{{ t('pcl.auto2.k2f344bbb90') }}</span><code>{{ updateState.automatic ? t('pcl.auto2.k256783b7d4') : t('pcl.auto2.k6c14bd7f6f') }}</code>
+                <span>{{ t('pcl.auto2.k21c42fae0b') }}</span><code>{{ updateState.beta ? t('pcl.auto2.k256783b7d4') : t('pcl.auto2.k6c14bd7f6f') }}</code>
+                <span>{{ t('pcl.auto2.k6e85a9405c') }}</span><code>{{ updateState.lastCheck || '—' }}</code>
               </div>
             </PclCard>
           </div>
 
           <div v-show="section === 'feedback'" class="pcl-settings-section">
-            <PclCard title="提交反馈">
-              <p class="pcl-feedback-copy">在提交反馈之前，请先搜索是否已经存在相同的问题。请尽量附上启动日志、复现步骤和系统信息；不要提交包含账户令牌或私人路径的内容。</p>
-              <PclButton variant="highlight" icon="message-circle" @click="openUrl(projectUrl + '/issues')">前往反馈</PclButton>
+            <PclCard :title="t('pcl.auto2.k587d5249cb')">
+              <p class="pcl-feedback-copy">{{ t('pcl.auto2.k038b4c7f6e') }}</p>
+              <PclButton variant="highlight" icon="message-circle" @click="openUrl(projectUrl + '/issues')">{{ t('pcl.auto2.ke1b7172cbb') }}</PclButton>
             </PclCard>
-            <PclCard title="反馈进度">
-              <p class="pcl-muted">Luna Neo UI 的反馈会直接进入项目问题列表，提交时请附上复现步骤和相关日志。</p>
+            <PclCard :title="t('pcl.auto2.k4a3f0161ab')">
+              <p class="pcl-muted">{{ t('pcl.auto2.k6272578ef4') }}</p>
             </PclCard>
           </div>
 
           <div v-show="section === 'logs'" class="pcl-settings-section">
-            <PclCard title="日志操作">
+            <PclCard :title="t('pcl.auto2.k5d95f08cb5')">
               <div class="pcl-actions pcl-log-actions">
-                <PclButton variant="highlight" icon="folder-open" :disabled="busy" @click="openLogs">打开日志目录</PclButton>
-                <PclButton icon="scroll-text" :disabled="busy" @click="openUpdateLog">更新日志</PclButton>
-                <PclButton icon="download" :disabled="true" title="Luna 暂未提供日志导出为 ZIP 的操作">导出日志</PclButton>
-                <PclButton variant="red" icon="trash-2" :disabled="true" title="请在系统文件管理器中清理历史日志">清理历史日志</PclButton>
+                <PclButton variant="highlight" icon="folder-open" :disabled="busy" @click="openLogs">{{ t('pcl.auto2.ke153b1be0e') }}</PclButton>
+                <PclButton icon="scroll-text" :disabled="busy" @click="openUpdateLog">{{ t('pcl.auto2.k185368440e') }}</PclButton>
+                <PclButton icon="download" :disabled="true" :title="t('pcl.auto2.k347caf3067')">{{ t('pcl.auto2.k252fed9478') }}</PclButton>
+                <PclButton variant="red" icon="trash-2" :disabled="true" :title="t('pcl.auto2.k0ba9ee0d69')">{{ t('pcl.auto2.k886c7cf056') }}</PclButton>
               </div>
             </PclCard>
-            <PclCard title="最近的启动器更新日志">
+            <PclCard :title="t('pcl.auto2.k7815a67182')">
               <pre v-if="updateState.updateLog" class="pcl-log-tail">{{ updateState.updateLog }}</pre>
-              <div v-else class="pcl-empty">还没有可显示的更新日志。</div>
+              <div v-else class="pcl-empty">{{ t('pcl.auto2.k00ad5e6a6f') }}</div>
             </PclCard>
           </div>
         </div>
@@ -921,41 +916,41 @@ const onlineBackends = ref<any[]>([]), onlineBusy = ref(false);
 const isInstance = computed(() => props.scope.scope === 'instance');
 watch(() => props.initialSection, value => { if (value && value !== section.value) section.value = value; }, { immediate: true });
 const launcherGroups: PclNavGroup[] = [
-  { label: '游戏', items: [
-    { id: 'launch', label: '启动', icon: 'rocket', refresh: true },
+  { label: t('pcl.auto2.k2305ee3ca3'), items: [
+    { id: 'launch', label: t('pcl.auto2.kebd26da421'), icon: 'rocket', refresh: true },
     { id: 'java', label: 'Java', icon: 'coffee', refresh: true },
-    { id: 'game', label: '资源与整合包', icon: 'book-marked', refresh: true },
-    { id: 'advanced', label: '高级启动', icon: 'tool-case' },
+    { id: 'game', label: t('pcl.auto2.kd4cbc9e6a2'), icon: 'book-marked', refresh: true },
+    { id: 'advanced', label: t('pcl.auto2.kb85853c3fc'), icon: 'tool-case' },
   ] },
-  { label: '工具', items: [
-    { id: 'network', label: '联机', icon: 'bubbles', refresh: true },
+  { label: t('pcl.auto2.ka72ef18d9a'), items: [
+    { id: 'network', label: t('pcl.auto2.k1d5e43605d'), icon: 'bubbles', refresh: true },
   ] },
-  { label: '启动器', items: [
-    { id: 'accounts', label: '账户管理', icon: 'user', refresh: true },
-    { id: 'ui', label: '个性化', icon: 'palette', refresh: true },
-    { id: 'language', label: '语言', icon: 'earth', refresh: true },
-    { id: 'misc', label: '网络代理', icon: 'monitor-cog', refresh: true },
-    { id: 'download-settings', label: '下载与传输', icon: 'download', refresh: true },
-    { id: 'cache', label: '缓存管理', icon: 'layers', refresh: true },
-    { id: 'paths', label: '路径与工具', icon: 'folder-cog', refresh: true },
-    { id: 'console', label: '控制台', icon: 'terminal', refresh: true },
-    { id: 'advanced-settings', label: '高级兼容性', icon: 'settings', refresh: true },
+  { label: t('pcl.auto2.ka992a7f81a'), items: [
+    { id: 'accounts', label: t('pcl.auto2.k9823d89dbc'), icon: 'user', refresh: true },
+    { id: 'ui', label: t('pcl.auto2.kcd4994e503'), icon: 'palette', refresh: true },
+    { id: 'language', label: t('pcl.auto2.kcd99b225a0'), icon: 'earth', refresh: true },
+    { id: 'misc', label: t('pcl.auto2.kb046fe277d'), icon: 'monitor-cog', refresh: true },
+    { id: 'download-settings', label: t('pcl.auto2.kbcf7016f51'), icon: 'download', refresh: true },
+    { id: 'cache', label: t('pcl.auto2.kc15668b86b'), icon: 'layers', refresh: true },
+    { id: 'paths', label: t('pcl.auto2.kf9b678c1d7'), icon: 'folder-cog', refresh: true },
+    { id: 'console', label: t('pcl.auto2.k5bd086d22a'), icon: 'terminal', refresh: true },
+    { id: 'advanced-settings', label: t('pcl.auto2.kd501b653be'), icon: 'settings', refresh: true },
   ] },
-  { label: '关于', items: [
-    { id: 'about', label: '软件信息', icon: 'info' },
-    { id: 'update', label: '软件更新', icon: 'refresh-cw' },
-    { id: 'feedback', label: '反馈', icon: 'message-circle', refresh: true },
-    { id: 'logs', label: '查看日志', icon: 'scroll-text' },
+  { label: t('pcl.auto2.kbed172efc9'), items: [
+    { id: 'about', label: t('pcl.auto2.k638d2df6e1'), icon: 'info' },
+    { id: 'update', label: t('pcl.auto2.k7e5ce811e8'), icon: 'refresh-cw' },
+    { id: 'feedback', label: t('pcl.auto2.k42a36e9497'), icon: 'message-circle', refresh: true },
+    { id: 'logs', label: t('pcl.auto2.kb923b26d33'), icon: 'scroll-text' },
   ] },
 ];
 const instanceGroups: PclNavGroup[] = [
-  { label: '实例设置', items: [
-    { id: 'launch', label: '启动选项', icon: 'rocket', refresh: true },
+  { label: t('pcl.auto2.k1836ba7e88'), items: [
+    { id: 'launch', label: t('pcl.auto2.k6c4942326d'), icon: 'rocket', refresh: true },
     { id: 'java', label: 'Java', icon: 'coffee', refresh: true },
-    { id: 'memory', label: '内存', icon: 'gauge', refresh: true },
-    { id: 'network', label: '服务端', icon: 'server', refresh: true },
-    { id: 'advanced', label: '高级', icon: 'tool-case' },
-    { id: 'advanced-settings', label: '兼容性与资源', icon: 'settings', refresh: true },
+    { id: 'memory', label: t('pcl.auto2.kd014ab7703'), icon: 'gauge', refresh: true },
+    { id: 'network', label: t('pcl.auto2.k6aca62f330'), icon: 'server', refresh: true },
+    { id: 'advanced', label: t('pcl.auto2.kc009d0ab82'), icon: 'tool-case' },
+    { id: 'advanced-settings', label: t('pcl.auto2.ke362c495b7'), icon: 'settings', refresh: true },
   ] },
 ];
 const groups = computed(() => {
@@ -969,30 +964,30 @@ const groups = computed(() => {
 });
 
 const windowOptions = [
-  { label: '默认', value: 'default' },
-  { label: '最大化', value: 'maximized' },
-  { label: '自定义尺寸', value: 'custom' },
+  { label: t('pcl.auto2.kc8d09cf955'), value: 'default' },
+  { label: t('pcl.auto2.kda2d806e5f'), value: 'maximized' },
+  { label: t('pcl.auto2.k1387e89231'), value: 'custom' },
 ];
 const mirrorOptions = [
-  { label: '官方源', value: 0 },
-  { label: 'BMCLAPI 镜像', value: 1 },
-  { label: '自定义镜像', value: 2 },
+  { label: t('pcl.auto2.k212e81e6d0'), value: 0 },
+  { label: t('pcl.auto2.kf0aba8a42d'), value: 1 },
+  { label: t('pcl.auto2.kfe7276cd17'), value: 2 },
 ];
 const downloadBackendOptions = [
-  { label: 'Qt 原生下载', value: 0 },
+  { label: t('pcl.auto2.ka626fe7700'), value: 0 },
   { label: 'Aria2', value: 1 },
-  { label: 'Luna .NET 下载器（NativeAOT）', value: 2 },
+  { label: t('pcl.auto2.k3ab6cb62c4'), value: 2 },
 ];
 const modApiMirrorOptions = [
-  { label: '官方源', value: 0 },
-  { label: 'MCIM 镜像', value: 1 },
-  { label: '自定义镜像', value: 2 },
+  { label: t('pcl.auto2.k212e81e6d0'), value: 0 },
+  { label: t('pcl.auto2.kc0fa397b56'), value: 1 },
+  { label: t('pcl.auto2.kfe7276cd17'), value: 2 },
 ];
 const proxyTypeOptions = [
-  { label: '不使用代理', value: 'None' },
-  { label: '跟随系统', value: 'Default' },
-  { label: 'HTTP 代理', value: 'HTTP' },
-  { label: 'SOCKS5 代理', value: 'SOCKS5' },
+  { label: t('pcl.auto2.k4f187022e0'), value: 'None' },
+  { label: t('pcl.auto2.kf4bbd91f79'), value: 'Default' },
+  { label: t('pcl.auto2.kd95ef5ba39'), value: 'HTTP' },
+  { label: t('pcl.auto2.k865df8bce7'), value: 'SOCKS5' },
 ];
 const ariaProxyDisabled = computed(() => busyOrFollowingProxy());
 function formatBytes(value: unknown): string {
@@ -1008,17 +1003,17 @@ function busyOrFollowingProxy() {
 const consoleColorOptions = computed(() => [...new Set([
   'Builtin Dark', 'Builtin Light', 'Builtin Solarized Dark', 'Builtin Solarized Light',
   'Builtin Tango Dark', 'Builtin Tango Light', draftValue('ConsoleColorScheme', 'Builtin Dark'),
-])].map(value => ({ label: value.replace('Builtin ', '内置 · '), value })));
+])].map(value => ({ label: value.replace('Builtin ', t('pcl.auto2.kacc7e7959f')), value })));
 const consoleFontOptions = computed(() => [...new Set([
   draftValue('ConsoleFont', 'Courier New'), 'Cascadia Mono', 'Consolas', 'Courier New', 'Menlo', 'Monospace',
 ])].filter(Boolean).map(value => ({ label: value, value })));
 const assetVerificationOptions = [
-  { label: '每次完整校验', value: 0 }, { label: '检查文件是否缺失或大小异常（推荐）', value: 1 },
-  { label: '使用有期限的缓存', value: 2 }, { label: '跳过校验', value: 3 },
+  { label: t('pcl.auto2.k1e3797b17e'), value: 0 }, { label: t('pcl.auto2.k06804c01de'), value: 1 },
+  { label: t('pcl.auto2.ka9f4add9d6'), value: 2 }, { label: t('pcl.auto2.k53b916d50c'), value: 3 },
 ];
 const assetVerificationDescriptions = [
-  '启动时校验 SHA-1，需要时联网修复资源。', '复用有效索引，只下载缺失或大小异常的资源；完整缓存可离线使用。',
-  '在有效期内使用缓存，到期后刷新索引。', '直接使用本地索引，适合已经确认资源文件完整的情况。',
+  t('pcl.auto2.k05a706cafd'), t('pcl.auto2.k9512244fb6'),
+  t('pcl.auto2.k941818ae16'), t('pcl.auto2.kc5d97cda92'),
 ];
 const languageOptions = computed(() => languages.value.map(item => ({
   label: item.name || item.id,
@@ -1027,21 +1022,21 @@ const languageOptions = computed(() => languages.value.map(item => ({
 
 const settingsMap = computed(() => new Map(props.settings.map(setting => [setting.key, setting])));
 const pathSettings = [
-  { key: 'InstanceDir', label: '实例文件夹', placeholder: '实例的默认存放位置' },
-  { key: 'CentralModsDir', label: '全局模组文件夹' },
-  { key: 'IconsDir', label: '图标文件夹' },
-  { key: 'DownloadsDir', label: '下载文件夹' },
-  { key: 'SkinsDir', label: '皮肤文件夹' },
-  { key: 'JavaDir', label: 'Java 文件夹' },
-  { key: 'FTBAppInstancesPath', label: 'FTB 实例文件夹' },
-  { key: 'JProfilerPath', label: 'JProfiler 文件夹' },
-  { key: 'MCEditPath', label: 'MCEdit 文件夹' },
+  { key: 'InstanceDir', label: t('pcl.auto2.k1252eac405'), placeholder: t('pcl.auto2.k1b269ad6f3') },
+  { key: 'CentralModsDir', label: t('pcl.auto2.k4250e081b4') },
+  { key: 'IconsDir', label: t('pcl.auto2.ka04545c951') },
+  { key: 'DownloadsDir', label: t('pcl.auto2.kaf0bdd1ea7') },
+  { key: 'SkinsDir', label: t('pcl.auto2.kc42aee88ea') },
+  { key: 'JavaDir', label: t('pcl.auto2.k325cea939e') },
+  { key: 'FTBAppInstancesPath', label: t('pcl.auto2.kcad8a90505') },
+  { key: 'JProfilerPath', label: t('pcl.auto2.k314accf461') },
+  { key: 'MCEditPath', label: t('pcl.auto2.ke756c0ecd0') },
 ] as const;
 const toolPathSettings = [
-  { key: 'Aria2ExecutablePath', label: 'aria2c 可执行文件' },
-  { key: 'CurseForgeExternalToolPath', label: 'CurseForge 外部工具' },
-  { key: 'JVisualVMPath', label: 'VisualVM 可执行文件' },
-  { key: 'JsonEditor', label: 'JSON 编辑器' },
+  { key: 'Aria2ExecutablePath', label: t('pcl.auto2.ke332de5306') },
+  { key: 'CurseForgeExternalToolPath', label: t('pcl.auto2.k6c0497a683') },
+  { key: 'JVisualVMPath', label: t('pcl.auto2.kfeee3cc659') },
+  { key: 'JsonEditor', label: t('pcl.auto2.kea37ad033c') },
 ] as const;
 function val(key: string, fallback: any = ''): any {
   const setting = settingsMap.value.get(key);
@@ -1071,20 +1066,20 @@ function formatMib(value: number): string {
   return `${Number.isInteger(gib) ? gib : gib.toFixed(1)} GiB`;
 }
 function formatSpeed(value: number): string {
-  if (!value) return '不限速';
+  if (!value) return t('pcl.auto2.k142ff5c090');
   return value >= 1024 ? `${(value / 1024).toFixed(value % 1024 ? 1 : 0)} MiB/s` : `${value} KiB/s`;
 }
 
-const applicationVersion = computed(() => String(runtimeInfo.value.applicationVersion || runtimeInfo.value.version || runtimeInfo.value.launcherVersion || '开发版本').trim());
+const applicationVersion = computed(() => String(runtimeInfo.value.applicationVersion || runtimeInfo.value.version || runtimeInfo.value.launcherVersion || t('pcl.auto2.kd9892e1d1d')).trim());
 const credits = [
-  { name: 'PrismLauncher', info: '实例格式与启动器核心兼容性来源', url: 'https://github.com/PrismLauncher/PrismLauncher' },
-  { name: 'PCL-CE 图标资源', info: '仅使用整理后的 Lucide SVG 图标资源，不使用其页面或业务代码', url: 'https://github.com/PCL-Community/PCL-CE' },
-  { name: 'BMCLAPI', info: 'Minecraft 下载镜像 API', url: 'https://bmclapidoc.bangbang93.com/' },
-  { name: 'MCIM', info: 'Modrinth 与 CurseForge 社区镜像', url: 'https://mod.mcimirror.top/docs' },
-  { name: 'Lucide', info: '线性 SVG 图标集', url: 'https://lucide.dev' },
-  { name: 'Qt', info: '启动器与元数据工具链', url: 'https://www.qt.io' },
+  { name: 'PrismLauncher', info: t('pcl.auto2.k53ca260e72'), url: 'https://github.com/PrismLauncher/PrismLauncher' },
+  { name: t('pcl.auto2.kc47f1374db'), info: t('pcl.auto2.k62b98f6a7e'), url: 'https://github.com/PCL-Community/PCL-CE' },
+  { name: 'BMCLAPI', info: t('pcl.auto2.kc6d1ce501d'), url: 'https://bmclapidoc.bangbang93.com/' },
+  { name: 'MCIM', info: t('pcl.auto2.k5ed7a01124'), url: 'https://mod.mcimirror.top/docs' },
+  { name: 'Lucide', info: t('pcl.auto2.k2582b2c5c1'), url: 'https://lucide.dev' },
+  { name: 'Qt', info: t('pcl.auto2.k9405b02a3e'), url: 'https://www.qt.io' },
 ];
-const contributors = ['Luna Neo UI', 'PrismLauncher', 'BMCLAPI', 'MCIM', 'Lucide', 'Qt', 'MCBBS 社区', 'Bangbang93', 'Pysio'];
+const contributors = ['Luna Neo UI', 'PrismLauncher', 'BMCLAPI', 'MCIM', 'Lucide', 'Qt', t('pcl.auto2.ka7146a67de'), 'Bangbang93', 'Pysio'];
 const projectUrl = 'https://github.com/AndreaFrederica/LunaLauncher';
 const licenseUrl = `${projectUrl}/blob/main/COPYING.md`;
 const docsUrl = 'https://lunalauncher.sirrus.cc';
@@ -1192,24 +1187,24 @@ async function savePasteUrl() {
   if (value) {
     try {
       if (!['http:', 'https:'].includes(new URL(value).protocol)) throw new Error();
-    } catch { error.value = '请输入有效的 HTTP 或 HTTPS 服务地址，或留空使用默认地址。'; return; }
+    } catch { error.value = t('pcl.auto2.k1bf0b9499a'); return; }
   }
   await save('PastebinCustomAPIBase', value);
 }
 async function chooseGlobalDataPacks() {
-  const selected = await pickPclDirectory({ title: '选择全局数据包目录' });
+  const selected = await pickPclDirectory({ title: t('pcl.auto2.k5f869fce49') });
   if (!selected) return;
   drafts.GlobalDataPacksPath = selected;
   save('GlobalDataPacksPath', selected);
 }
 async function chooseDirectory(key: string, label: string) {
-  const selected = await pickPclDirectory({ title: `选择${label}` });
+  const selected = await pickPclDirectory({ title: t('pcl.setup.chooseNamed', { name: label }) });
   if (!selected) return;
   drafts[key] = selected;
   await save(key, selected);
 }
 async function chooseFilePath(key: string, label: string) {
-  const selected = await pickPclFile({ title: `选择${label}` });
+  const selected = await pickPclFile({ title: t('pcl.setup.chooseNamed', { name: label }) });
   if (!selected) return;
   drafts[key] = selected;
   await save(key, selected);
@@ -1228,11 +1223,11 @@ const overrideGroups: Record<string, string[]> = {
 };
 const sectionOverrideGroups = computed(() => {
   const sections: Record<string, { key: string; label: string }[]> = {
-    launch: [{ key: 'OverrideWindow', label: '独立窗口设置' }, { key: 'OverrideConsole', label: '独立控制台行为' }, { key: 'OverrideMiscellaneous', label: '独立启动器行为' }],
-    memory: [{ key: 'OverrideMemory', label: '独立内存配置' }],
-    advanced: [{ key: 'OverrideCommands', label: '独立启动命令' }, { key: 'OverrideJavaArgs', label: '独立 JVM 参数' }],
-    'advanced-settings': [{ key: 'OverrideAssetVerification', label: '独立资源校验' }, { key: 'OverrideNativeWorkarounds', label: '独立原生库配置' },
-      { key: 'OverridePerformance', label: '独立性能选项' }, { key: 'OverrideLegacySettings', label: '独立旧版兼容选项' }, { key: 'OverrideGameTime', label: '独立游戏时间设置' }],
+    launch: [{ key: 'OverrideWindow', label: t('pcl.auto2.k6d35264835') }, { key: 'OverrideConsole', label: t('pcl.auto2.kc0c465ebf4') }, { key: 'OverrideMiscellaneous', label: t('pcl.auto2.k42b3c4070c') }],
+    memory: [{ key: 'OverrideMemory', label: t('pcl.auto2.k8952f181d8') }],
+    advanced: [{ key: 'OverrideCommands', label: t('pcl.auto2.k347f57b633') }, { key: 'OverrideJavaArgs', label: t('pcl.auto2.k132a0f71b7') }],
+    'advanced-settings': [{ key: 'OverrideAssetVerification', label: t('pcl.auto2.k38603922ea') }, { key: 'OverrideNativeWorkarounds', label: t('pcl.auto2.k1d8d0ba1d6') },
+      { key: 'OverridePerformance', label: t('pcl.auto2.k5921928fa7') }, { key: 'OverrideLegacySettings', label: t('pcl.auto2.k74dc0961a0') }, { key: 'OverrideGameTime', label: t('pcl.auto2.k38b6f73b0a') }],
   };
   return (sections[section.value] || []).filter(item => settingsMap.value.has(item.key));
 });
@@ -1265,11 +1260,11 @@ async function persistSetting(key: string, value: unknown): Promise<boolean> {
     // persistence. Verify it before reporting success so a stale backend or a
     // type conversion bug cannot leave the UI claiming that a setting applied.
     if (applied?.key === key && !applied.redacted && !sameSettingValue(applied.value, normalized)) {
-      throw new Error(`后端未应用设置 ${key}（返回值与请求不一致）`);
+      throw new Error(t('pcl.setup.notApplied', { key }));
     }
     if (!setting.redacted) drafts[key] = applied?.key === key ? applied.value : normalized;
-    notice.value = '设置已保存';
-    window.setTimeout(() => { if (notice.value === '设置已保存') notice.value = ''; }, 1800);
+    notice.value = t('pcl.auto2.kcb84a961b0');
+    window.setTimeout(() => { if (notice.value === t('pcl.auto2.kcb84a961b0')) notice.value = ''; }, 1800);
     emit('changed');
     return true;
   } catch (exception) {
@@ -1315,7 +1310,7 @@ async function verifyAndTrust() {
   try {
     await props.execute('instance.verify', { instance: props.scope.instance, trust: true });
     drafts.AssetIntegrityTrusted = true;
-    notice.value = '完整校验通过，实例已加入白名单';
+    notice.value = t('pcl.auto2.k772d16fa01');
     emit('changed');
   } catch (exception) {
     error.value = message(exception);
@@ -1338,17 +1333,17 @@ async function loadCache(force = false) {
     if (yggdrasilResult.status === 'rejected' && httpResult.status === 'rejected')
       cacheError.value = message(yggdrasilResult.reason);
     else if (yggdrasilResult.status === 'rejected')
-      cacheError.value = '内建 Yggdrasil 服务暂不可用，仍可管理启动器 HTTP 缓存。';
+      cacheError.value = t('pcl.auto2.k5a86d98bca');
   } finally {
     cacheBusy.value = false;
   }
 }
 async function purgeYggdrasilCache() {
-  if (!window.confirm('确定清理内建 Yggdrasil 的全部元数据和纹理缓存吗？')) return;
+  if (!window.confirm(t('pcl.auto2.k8680dc4e80'))) return;
   cacheBusy.value = true;
   try {
     await props.execute('yggdrasil.cache.purge', { confirm: true });
-    notice.value = 'Yggdrasil 缓存已清理';
+    notice.value = t('pcl.auto2.kd4a34f3220');
     await loadCache(true);
   } catch (exception) {
     cacheError.value = message(exception);
@@ -1357,10 +1352,10 @@ async function purgeYggdrasilCache() {
   }
 }
 async function clearMetadataCache() {
-  if (!window.confirm('确定清理启动器 HTTP 元数据缓存吗？')) return;
+  if (!window.confirm(t('pcl.auto2.k0c2737f9ba'))) return;
   try {
     await props.execute('launcher.cache.clear', { confirm: true });
-    notice.value = '启动器元数据缓存已清理';
+    notice.value = t('pcl.auto2.kdc0ba46d10');
     await loadCache(true);
   } catch (exception) {
     cacheError.value = message(exception);
@@ -1390,7 +1385,7 @@ async function selectLanguage(id: string | number) {
     const result = await props.execute('language.select', { language: String(id) });
     languageId.value = result?.selected || String(id);
     setNeoLocale(localeFromLauncherLanguage(languageId.value));
-    notice.value = '语言已更新';
+    notice.value = t('pcl.auto2.k2b01d892c2');
     emit('changed');
   } catch (exception) {
     error.value = message(exception);
@@ -1437,8 +1432,8 @@ async function checkUpdate() {
   try {
     updateCheck.value = await props.execute('launcher.update.check');
     updateChecked.value = true;
-    if (updateCheck.value?.available) notice.value = `发现新版本 ${updateCheck.value.versionName || ''}`;
-    else notice.value = '当前已是最新版本';
+    if (updateCheck.value?.available) notice.value = t('pcl.setup.newVersion', { version: updateCheck.value.versionName || '' });
+    else notice.value = t('pcl.auto2.kdb620f1761');
     await loadUpdate();
   } catch (exception) {
     error.value = message(exception);
@@ -1451,7 +1446,7 @@ async function applyUpdate() {
   error.value = '';
   try {
     await props.execute('launcher.update.apply', { versionTag: updateCheck.value.versionTag });
-    notice.value = '更新程序已启动，请按提示完成安装';
+    notice.value = t('pcl.auto2.k7d8ec88815');
   } catch (exception) {
     error.value = message(exception);
   }
@@ -1479,7 +1474,7 @@ async function saveProxy() {
       password: proxy.password,
     });
     proxy.type = result.type || proxy.type;
-    notice.value = '代理设置已应用';
+    notice.value = t('pcl.auto2.k7be2e7e740');
   } catch (exception) {
     error.value = message(exception);
   }
@@ -1489,10 +1484,10 @@ async function testProxy() {
   try {
     const result = await props.execute('network.proxy.test', { url: proxyTestUrl.value, timeoutMs: 10000 });
     proxyTestResult.value = result?.status
-      ? `连接成功：HTTP ${result.status}，耗时 ${result.timeMs ?? '—'} ms`
-      : `连接成功：${JSON.stringify(result)}`;
+      ? t('pcl.setup.connectionSuccessHttp', { status: result.status, time: result.timeMs ?? '—' })
+      : t('pcl.setup.connectionSuccess', { value: JSON.stringify(result) });
   } catch (exception) {
-    proxyTestResult.value = `连接失败：${message(exception)}`;
+    proxyTestResult.value = t('pcl.setup.connectionFailed', { error: message(exception) });
   }
 }
 async function openUrl(url: string) {
@@ -1513,7 +1508,7 @@ async function openLogs() {
   try {
     const info = runtimeInfo.value.dataRoot ? runtimeInfo.value : await props.execute('runtime.info');
     const root = info.dataRoot || info.root;
-    if (!root) throw new Error('无法读取日志目录');
+    if (!root) throw new Error(t('pcl.auto2.k83bd4d1767'));
     await openPath(`${root}/logs`);
   } catch (exception) {
     error.value = message(exception);

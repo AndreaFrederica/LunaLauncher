@@ -3,7 +3,7 @@
     <aside class="pcl-page-nav pcl-tools-nav">
       <div class="pcl-tools-title">
         <PclIcon name="tool-case" :size="19" />
-        <span>工具</span>
+        <span>{{ t('pcl.auto2.ka72ef18d9a') }}</span>
       </div>
       <template v-for="group in itemGroups" :key="group.label">
         <div class="pcl-tools-group">{{ group.label }}</div>
@@ -21,7 +21,7 @@
       </template>
       <div class="pcl-tools-hint">
         <PclIcon name="info" :size="15" />
-        <span>任务、下载和实例状态实时读取启动器；服务器查询使用 mcsrvstat.us。</span>
+        <span>{{ t('pcl.auto2.kaf33a4dbeb') }}</span>
       </div>
     </aside>
 
@@ -32,15 +32,15 @@
               <h1>{{ current.label }}</h1>
               <p>{{ current.description }}</p>
             </div>
-            <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="reload">刷新</PclButton>
+            <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="reload">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton>
           </div>
 
           <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
           <div v-show="isMultiplayerSection" class="pcl-tools-stack">
-            <PclCard title="P2P 联机">
+            <PclCard :title="t('pcl.auto2.k85bca71c6c')">
               <template #actions>
-                <PclButton size="sm" icon="refresh-cw" :disabled="backendBusy" @click="refreshBackend">刷新</PclButton>
+                <PclButton size="sm" icon="refresh-cw" :disabled="backendBusy" @click="refreshBackend">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton>
               </template>
 
               <div v-if="section === 'multiplayer'" class="pcl-backend-tabs">
@@ -52,33 +52,33 @@
                   @click="selectBackend(item.id)"
                 >
                   <strong>{{ item.name }}</strong>
-                  <span>{{ item.installed ? (item.version || '已安装') : '未安装' }} · {{ item.processRunning ? '进程运行中' : '进程未启动' }}</span>
+                  <span>{{ item.installed ? (item.version || t('pcl.auto2.keb88ff57c9')) : t('pcl.auto2.k6f7dc945ae') }} · {{ item.processRunning ? t('pcl.auto2.k9761f5d947') : t('pcl.auto2.k803638ec0a') }}</span>
                 </button>
               </div>
-              <div v-if="!backends.length" class="pcl-tools-muted">正在读取联机后端…</div>
+              <div v-if="!backends.length" class="pcl-tools-muted">{{ t('pcl.auto2.ka5bc709136') }}</div>
 
-              <PclLoading v-if="backendBusy" text="正在处理联机请求" inline />
+              <PclLoading v-if="backendBusy" :text="t('pcl.auto2.k8fde84e9ec')" inline />
               <PclHint v-if="backendError" theme="red" closable @close="backendError = ''">{{ backendError }}</PclHint>
 
               <template v-if="backendStatus">
                 <div class="pcl-backend-head">
                   <div>
                     <strong>{{ selectedBackend?.name || backendStatus.name || backend }}</strong>
-                    <span>{{ backendStatus.version || '未知版本' }} · {{ backendStatus.available ? '后端可用' : '后端未响应' }}</span>
+                    <span>{{ backendStatus.version || t('pcl.auto2.k59b35caf64') }} · {{ backendStatus.available ? t('pcl.auto2.k4dd55b4dad') : t('pcl.auto2.k8a036450ac') }}</span>
                   </div>
                   <div class="pcl-actions">
                     <PclButton size="sm" icon="download" :disabled="backendBusy" @click="installBackend">
-                      {{ backendStatus.installed ? '检查更新' : '安装后端' }}
+                      {{ backendStatus.installed ? t('pcl.auto2.ka6df38586d') : t('pcl.auto2.k4246ff8817') }}
                     </PclButton>
-                    <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="backendBusy" @click="refreshBackend">刷新状态</PclButton>
+                    <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="backendBusy" @click="refreshBackend">{{ t('pcl.auto2.k7cc7f07a2c') }}</PclButton>
                   </div>
                 </div>
 
                 <div v-if="backendState" class="pcl-backend-state">
                   <span class="pcl-backend-pill" :class="`pcl-backend-pill--${backendState.state}`">{{ stateLabel(backendState.state) }}</span>
-                  <span v-if="backendState.room">房间码 <b>{{ backendState.room }}</b></span>
-                  <span v-if="backendState.url">连接地址 <b>{{ backendState.url }}</b></span>
-                  <span v-if="backendState.difficulty && backendState.difficulty !== 'unknown'">难度 {{ backendState.difficulty }}</span>
+                  <span v-if="backendState.room">{{ t('pcl.auto2.ke007bf989b') }}<b>{{ backendState.room }}</b></span>
+                  <span v-if="backendState.url">{{ t('pcl.auto2.kc5c1437268') }}<b>{{ backendState.url }}</b></span>
+                  <span v-if="backendState.difficulty && backendState.difficulty !== 'unknown'">{{ t('pcl.tools.difficulty', { value: backendState.difficulty }) }}</span>
                 </div>
 
                 <div v-if="backendProfiles.length" class="pcl-backend-profiles">
@@ -93,62 +93,60 @@
                 </div>
 
                 <div class="pcl-backend-mode">
-                  <button type="button" :class="{ active: backendMode === 'host' }" @click="backendMode = 'host'">创建房间</button>
-                  <button type="button" :class="{ active: backendMode === 'guest' }" @click="backendMode = 'guest'">加入房间</button>
+                  <button type="button" :class="{ active: backendMode === 'host' }" @click="backendMode = 'host'">{{ t('pcl.auto2.k1688ee1b95') }}</button>
+                  <button type="button" :class="{ active: backendMode === 'guest' }" @click="backendMode = 'guest'">{{ t('pcl.auto2.k1884a60e03') }}</button>
                 </div>
                 <div class="pcl-tools-server-form">
-                  <PclInput v-model="playerName" placeholder="玩家名" @enter="startBackend" />
-                  <PclInput v-if="backendMode === 'guest'" v-model="roomCode" placeholder="邀请码" @enter="startBackend" />
+                  <PclInput v-model="playerName" :placeholder="t('pcl.auto2.kbe060c571f')" @enter="startBackend" />
+                  <PclInput v-if="backendMode === 'guest'" v-model="roomCode" :placeholder="t('pcl.auto2.ka8e3e28d45')" @enter="startBackend" />
                   <PclButton variant="highlight" icon="play" :disabled="backendBusy || !playerName.trim() || (backendMode === 'guest' && !roomCode.trim())" @click="startBackend">
-                    {{ backendMode === 'host' ? '创建房间' : '加入房间' }}
+                    {{ backendMode === 'host' ? t('pcl.auto2.k1688ee1b95') : t('pcl.auto2.k1884a60e03') }}
                   </PclButton>
                 </div>
                 <div class="pcl-actions">
-                  <PclButton variant="red" icon="power" :disabled="backendBusy || !backendState" @click="stopBackend">停止联机</PclButton>
-                  <PclButton v-if="backend === 'yukari'" variant="ghost" icon="rotate-ccw" :disabled="backendBusy" @click="retryBackend">重试异常</PclButton>
-                  <PclButton variant="ghost" icon="scroll-text" :disabled="backendBusy" @click="loadBackendLog">读取日志</PclButton>
+                  <PclButton variant="red" icon="power" :disabled="backendBusy || !backendState" @click="stopBackend">{{ t('pcl.auto2.k3534d5e04b') }}</PclButton>
+                  <PclButton v-if="backend === 'yukari'" variant="ghost" icon="rotate-ccw" :disabled="backendBusy" @click="retryBackend">{{ t('pcl.auto2.ke3edcec638') }}</PclButton>
+                  <PclButton variant="ghost" icon="scroll-text" :disabled="backendBusy" @click="loadBackendLog">{{ t('pcl.auto2.k81b80861ae') }}</PclButton>
                 </div>
               </template>
 
-              <PclHint theme="blue">
-                Terracotta 与 YukariConnect 是两套独立的 P2P 联机后端。创建房间前请先启动本地 Minecraft 服务端或局域网世界；加入房间需要对方提供的邀请码。
-              </PclHint>
+              <PclHint theme="blue">{{ t('pcl.auto2.k67933c3fbd') }}</PclHint>
             </PclCard>
 
-            <PclCard title="联机日志">
+            <PclCard :title="t('pcl.auto2.ka5588822ba')">
               <template #actions>
-                <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="backendBusy" @click="loadBackendLog">刷新</PclButton>
+                <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="backendBusy" @click="loadBackendLog">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton>
               </template>
               <pre v-if="backendLog" class="pcl-tools-pre">{{ backendLog }}</pre>
-              <p v-else class="pcl-tools-muted">读取联机后端自己的日志缓冲区。</p>
+              <p v-else class="pcl-tools-muted">{{ t('pcl.auto2.k25a176bd86') }}</p>
             </PclCard>
           </div>
 
           <div v-show="section === 'tasks'" class="pcl-tools-grid">
-            <PclCard title="任务管理">
+            <PclCard :title="t('pcl.auto2.kff5e8b99ae')">
               <template #actions>
-                <PclIconButton icon="refresh-cw" label="刷新任务" :size="24" :disabled="busy" @click="loadTasks" />
+                <PclIconButton icon="refresh-cw" :label="t('pcl.auto2.k040f050b56')" :size="24" :disabled="busy" @click="loadTasks" />
               </template>
-              <PclLoading v-if="loading" text="正在读取任务" inline />
+              <PclLoading v-if="loading" :text="t('pcl.auto2.k98ffc767ac')" inline />
               <div class="pcl-tools-list">
                 <PclListItem
                   v-for="task in tasks"
                   :key="task.id || task.gid"
-                  :title="task.name || task.title || task.id || '后台任务'"
-                  :info="`${task.status || task.state || '运行中'} · ${task.progress ?? task.completedLength ?? 0}${task.total ? ` / ${task.total}` : ''}`"
+                  :title="task.name || task.title || task.id || t('pcl.auto2.ka69c7932c0')"
+                  :info="`${task.status || task.state || t('pcl.auto2.k5942497005')} · ${task.progress ?? task.completedLength ?? 0}${task.total ? ` / ${task.total}` : ''}`"
                 >
                   <template #icon><PclIcon :name="task.running === false ? 'circle-check' : 'download'" :size="16" /></template>
                   <template #actions>
-                    <PclButton size="sm" variant="red" :disabled="busy || task.running === false" @click.stop="cancelTask(task)">取消</PclButton>
+                    <PclButton size="sm" variant="red" :disabled="busy || task.running === false" @click.stop="cancelTask(task)">{{ t('pcl.auto2.k4d0b4688c7') }}</PclButton>
                   </template>
                 </PclListItem>
-                <div v-if="!tasks.length" class="pcl-empty pcl-empty--compact">当前没有任务。</div>
+                <div v-if="!tasks.length" class="pcl-empty pcl-empty--compact">{{ t('pcl.auto2.kaa28d0a2c2') }}</div>
               </div>
             </PclCard>
 
-            <PclCard title="下载队列">
+            <PclCard :title="t('pcl.auto2.kcc2b1baf1b')">
               <template #actions>
-                <PclButton size="sm" variant="ghost" icon="trash-2" :disabled="busy" @click="clearDownloads">清理已完成</PclButton>
+                <PclButton size="sm" variant="ghost" icon="trash-2" :disabled="busy" @click="clearDownloads">{{ t('pcl.auto2.k149b3c638f') }}</PclButton>
               </template>
               <div class="pcl-tools-list">
                 <PclListItem
@@ -159,47 +157,47 @@
                 >
                   <template #icon><PclIcon name="download" :size="16" /></template>
                   <template #actions>
-                    <PclButton size="sm" variant="red" :disabled="busy" @click.stop="cancelDownload(download)">取消</PclButton>
+                    <PclButton size="sm" variant="red" :disabled="busy" @click.stop="cancelDownload(download)">{{ t('pcl.auto2.k4d0b4688c7') }}</PclButton>
                   </template>
                 </PclListItem>
-                <div v-if="!downloads.length" class="pcl-empty pcl-empty--compact">没有下载项。</div>
+                <div v-if="!downloads.length" class="pcl-empty pcl-empty--compact">{{ t('pcl.auto2.k8b449eafb9') }}</div>
               </div>
             </PclCard>
           </div>
 
-          <PclCard v-show="section === 'logs'" title="运行日志">
+          <PclCard v-show="section === 'logs'" :title="t('pcl.auto2.ka8ce402665')">
             <template #actions>
-              <span class="pcl-tools-muted">选择实例后进入控制台</span>
+              <span class="pcl-tools-muted">{{ t('pcl.auto2.ka0360c967e') }}</span>
             </template>
             <div class="pcl-tools-list">
               <PclListItem
                 v-for="instance in instances"
                 :key="instance.id"
                 :title="instance.name"
-                :info="instance.running ? '客户端运行中' : '未运行'"
+                :info="instance.running ? t('pcl.auto2.k1ca6d09614') : t('pcl.auto2.kb2ba9634d9')"
                 @click="emit('open-instance', instance)"
               >
                 <template #icon><PclIcon name="scroll-text" :size="16" /></template>
                 <template #actions><PclIcon name="chevron-right" :size="14" /></template>
               </PclListItem>
-              <div v-if="!instances.length" class="pcl-empty pcl-empty--compact">没有可显示的实例。</div>
+              <div v-if="!instances.length" class="pcl-empty pcl-empty--compact">{{ t('pcl.auto2.k641554a729') }}</div>
             </div>
           </PclCard>
 
-          <PclCard v-show="section === 'scheduler'" title="API 调度分析">
+          <PclCard v-show="section === 'scheduler'" :title="t('pcl.auto2.ka424d76c91')">
             <template #actions>
-              <PclButton size="sm" icon="refresh-cw" @click="loadStats">刷新</PclButton>
+              <PclButton size="sm" icon="refresh-cw" @click="loadStats">{{ t('pcl.auto2.k38108eaa1d') }}</PclButton>
             </template>
             <div v-if="backendScheduler" class="pcl-scheduler-summary">
-              <span>模式 <b>{{ backendScheduler.mode }}</b></span>
-              <span>读并发 <b>{{ backendScheduler.activeReads }} / {{ backendScheduler.readLanes }}</b></span>
-              <span>写活跃 <b>{{ backendScheduler.writeActive ? '是' : '否' }}</b></span>
-              <span>排队 <b>{{ backendScheduler.queued }}</b></span>
-              <span>已完成 <b>{{ backendScheduler.completedReads }} 读 / {{ backendScheduler.completedWrites }} 写</b></span>
+              <span>{{ t('pcl.auto2.k9e3cc3588b') }}<b>{{ backendScheduler.mode }}</b></span>
+              <span>{{ t('pcl.auto2.k150f863ec9') }}<b>{{ backendScheduler.activeReads }} / {{ backendScheduler.readLanes }}</b></span>
+              <span>{{ t('pcl.auto2.kfce40d582f') }}<b>{{ backendScheduler.writeActive ? t('pcl.auto2.k30160a21b9') : t('pcl.auto2.k8bf5c10ad9') }}</b></span>
+              <span>{{ t('pcl.auto2.k3561092d01') }}<b>{{ backendScheduler.queued }}</b></span>
+              <span>{{ t('pcl.auto2.k6666f97c70') }}<b>{{ t('pcl.tools.readWrite', { reads: backendScheduler.completedReads, writes: backendScheduler.completedWrites }) }}</b></span>
             </div>
             <div v-if="stats.length" class="pcl-stats-table">
               <div class="pcl-stats-row pcl-stats-row--head">
-                <span>操作</span><span>调用</span><span>缓存</span><span>平均</span><span>最大</span><span>慢请求</span>
+                <span>{{ t('pcl.auto2.kf3ea6d345e') }}</span><span>{{ t('pcl.auto2.kb1fb011bbf') }}</span><span>{{ t('pcl.auto2.k6cdba4aad0') }}</span><span>{{ t('pcl.auto2.kd1454ec022') }}</span><span>{{ t('pcl.auto2.ked690ebb15') }}</span><span>{{ t('pcl.auto2.k5d288b64ca') }}</span>
               </div>
               <div v-for="row in stats" :key="row.operation" class="pcl-stats-row">
                 <span class="pcl-stats-op">{{ row.operation }}</span>
@@ -210,46 +208,44 @@
                 <span :class="{ 'pcl-stats-slow': row.slow }">{{ row.slow }}</span>
               </div>
             </div>
-            <div v-else class="pcl-empty pcl-empty--compact">还没有 API 调用统计。</div>
-            <PclHint theme="blue">
-              当前是安全优先的优先级串行队列：短读优先、写操作独占。读线程因 Qt 线程亲和性已停用；超过 900 ms 的请求会在开发者控制台输出 `[launcher-api] slow`。
-            </PclHint>
+            <div v-else class="pcl-empty pcl-empty--compact">{{ t('pcl.auto2.kf8162c2e06') }}</div>
+            <PclHint theme="blue">{{ t('pcl.auto2.kb94f225518') }}</PclHint>
           </PclCard>
 
           <div v-show="section === 'authlib' || section === 'nide8auth'" class="pcl-tools-stack">
             <PclCard :title="section === 'authlib' ? 'authlib-injector' : 'Nide8Auth'">
               <template #actions>
-                <PclButton size="sm" icon="refresh-cw" :disabled="helperBusy" @click="loadHelper(helperKey(section))">刷新状态</PclButton>
+                <PclButton size="sm" icon="refresh-cw" :disabled="helperBusy" @click="loadHelper(helperKey(section))">{{ t('pcl.auto2.k7cc7f07a2c') }}</PclButton>
               </template>
-              <PclLoading v-if="helperBusy" text="正在处理认证组件" inline />
+              <PclLoading v-if="helperBusy" :text="t('pcl.auto2.k442a88def5')" inline />
               <div v-if="helperStatus[helperKey(section)]" class="pcl-helper-status">
                 <span class="pcl-local-status__dot" :class="{ ok: helperStatus[helperKey(section)].installed }" />
                 <div>
-                  <strong>{{ helperStatus[helperKey(section)].installed ? '已安装' : '未安装' }} <template v-if="helperStatus[helperKey(section)].version">· {{ helperStatus[helperKey(section)].version }}</template></strong>
-                  <small>{{ helperStatus[helperKey(section)].path || '尚未读取路径' }}</small>
+                  <strong>{{ helperStatus[helperKey(section)].installed ? t('pcl.auto2.keb88ff57c9') : t('pcl.auto2.k6f7dc945ae') }} <template v-if="helperStatus[helperKey(section)].version">· {{ helperStatus[helperKey(section)].version }}</template></strong>
+                  <small>{{ helperStatus[helperKey(section)].path || t('pcl.auto2.ka006ba4bcc') }}</small>
                   <small v-if="helperStatus[helperKey(section)].error" class="pcl-helper-error">{{ helperStatus[helperKey(section)].error }}</small>
                 </div>
               </div>
               <div class="pcl-actions">
-                <PclButton variant="highlight" icon="download" :disabled="helperBusy" @click="installHelper(helperKey(section))">{{ helperStatus[helperKey(section)]?.installed ? '重新安装' : '安装组件' }}</PclButton>
-                <PclButton variant="red" icon="trash-2" :disabled="helperBusy || !helperStatus[helperKey(section)]?.installed" @click="removeHelper(helperKey(section))">删除组件</PclButton>
+                <PclButton variant="highlight" icon="download" :disabled="helperBusy" @click="installHelper(helperKey(section))">{{ helperStatus[helperKey(section)]?.installed ? t('pcl.auto2.k11dfe8d875') : t('pcl.auto2.ke72533139c') }}</PclButton>
+                <PclButton variant="red" icon="trash-2" :disabled="helperBusy || !helperStatus[helperKey(section)]?.installed" @click="removeHelper(helperKey(section))">{{ t('pcl.auto2.k42527a1700') }}</PclButton>
               </div>
-              <PclHint theme="blue">认证组件用于第三方 Yggdrasil 账户登录。安装后由启动器在启动对应账户时自动注入。</PclHint>
+              <PclHint theme="blue">{{ t('pcl.auto2.k367d7f0227') }}</PclHint>
             </PclCard>
           </div>
 
           <div v-show="section === 'test'" class="pcl-tools-grid">
-            <PclCard title="API 测试">
+            <PclCard :title="t('pcl.auto2.k053423283a')">
               <template #actions>
-                <PclButton size="sm" variant="highlight" :disabled="busy" @click="loadApi">检查能力</PclButton>
+                <PclButton size="sm" variant="highlight" :disabled="busy" @click="loadApi">{{ t('pcl.auto2.kd6f4400a65') }}</PclButton>
               </template>
               <pre v-if="apiInfo" class="pcl-tools-pre">{{ JSON.stringify(apiInfo, null, 2) }}</pre>
-              <p v-else class="pcl-tools-muted">检查后端接口是否可用。</p>
+              <p v-else class="pcl-tools-muted">{{ t('pcl.auto2.kecafcd94a3') }}</p>
             </PclCard>
 
-            <PclCard title="皮肤与头像预览">
+            <PclCard :title="t('pcl.auto2.k073fc7dca9')">
               <div class="pcl-tools-skin-form">
-                <PclInput v-model="skinUrl" placeholder="皮肤图片 URL" />
+                <PclInput v-model="skinUrl" :placeholder="t('pcl.auto2.k9303fdecda')" />
                 <PclSelect v-model="avatarSize" :options="[64, 128, 256, 512].map(value => ({ label: `${value}px`, value }))" />
                 <PclSelect v-model="skinVariant" :options="[{ label: 'Classic', value: 'classic' }, { label: 'Slim', value: 'slim' }]" />
               </div>
@@ -257,46 +253,46 @@
                 <PclIcon v-if="!skinUrl" name="user" :size="28" />
               </div>
               <div class="pcl-actions">
-                <PclButton size="sm" :disabled="!skinUrl" @click="skinPreview = skinUrl">预览头像</PclButton>
-                <PclButton size="sm" variant="ghost" :disabled="!skinPreview" @click="saveSkinPreview">保存预览</PclButton>
+                <PclButton size="sm" :disabled="!skinUrl" @click="skinPreview = skinUrl">{{ t('pcl.auto2.k757d1feec9') }}</PclButton>
+                <PclButton size="sm" variant="ghost" :disabled="!skinPreview" @click="saveSkinPreview">{{ t('pcl.auto2.kfce6a29edb') }}</PclButton>
               </div>
-              <img v-if="skinPreview" :src="skinPreview" class="pcl-tools-skin-image" alt="皮肤预览" />
-              <p class="pcl-tools-muted">当前预览：{{ avatarSize }}px · {{ skinVariant }}</p>
+              <img v-if="skinPreview" :src="skinPreview" class="pcl-tools-skin-image" :alt="t('pcl.auto2.kb1dc96e46a')" />
+              <p class="pcl-tools-muted">{{ t('pcl.tools.previewInfo', { size: avatarSize, variant: skinVariant }) }}</p>
             </PclCard>
 
-            <PclCard title="服务器查询">
+            <PclCard :title="t('pcl.auto2.k252d4b7132')">
               <div class="pcl-tools-server-form">
-                <PclInput v-model="testServer" placeholder="服务器地址" />
-                <PclButton size="sm" icon="search" :disabled="!testServer" @click="queryServer(testServer)">查询</PclButton>
+                <PclInput v-model="testServer" :placeholder="t('pcl.auto2.k2eb291f695')" />
+                <PclButton size="sm" icon="search" :disabled="!testServer" @click="queryServer(testServer)">{{ t('pcl.auto2.k711363c424') }}</PclButton>
               </div>
-              <p v-if="serverStatus" class="pcl-tools-muted">{{ serverStatus.name || testServer }} · {{ serverStatus.players ?? 0 }} 人在线{{ serverStatus.latency ? ` · ${serverStatus.latency} ms` : '' }}</p>
+              <p v-if="serverStatus" class="pcl-tools-muted">{{ t('pcl.tools.serverInfo', { name: serverStatus.name || testServer, players: serverStatus.players ?? 0, latency: serverStatus.latency ? ` · ${serverStatus.latency} ms` : '' }) }}</p>
             </PclCard>
 
-            <PclCard title="URL / 网络请求">
+            <PclCard :title="t('pcl.auto2.k4ecb8e7481')">
               <template #actions>
-                <PclButton size="sm" icon="external-link" :disabled="urlTesting || !testUrl" @click="testUrlRequest">测试</PclButton>
+                <PclButton size="sm" icon="external-link" :disabled="urlTesting || !testUrl" @click="testUrlRequest">{{ t('pcl.auto2.k0b5d7ed54b') }}</PclButton>
               </template>
               <PclInput v-model="testUrl" placeholder="https://example.com" />
               <p v-if="urlResult" class="pcl-tools-muted">{{ urlResult }}</p>
             </PclCard>
 
-            <PclCard title="文件哈希">
+            <PclCard :title="t('pcl.auto2.k329b62253a')">
               <template #actions>
-                <PclButton size="sm" icon="shield-check" :disabled="!hashText" @click="hashTextValue">计算 SHA-256</PclButton>
+                <PclButton size="sm" icon="shield-check" :disabled="!hashText" @click="hashTextValue">{{ t('pcl.auto2.kf49414f981') }}</PclButton>
               </template>
-              <PclInput v-model="hashText" multiline :rows="4" placeholder="粘贴文本内容进行哈希测试" />
+              <PclInput v-model="hashText" multiline :rows="4" :placeholder="t('pcl.auto2.k9a2fca6df1')" />
               <p v-if="hashResult" class="pcl-tools-pre pcl-tools-hash">{{ hashResult }}</p>
             </PclCard>
 
-            <PclCard title="成就文本预览">
+            <PclCard :title="t('pcl.auto2.k091937e96d')">
               <template #actions>
-                <PclButton size="sm" variant="ghost" icon="save" @click="saveAchievement">保存</PclButton>
+                <PclButton size="sm" variant="ghost" icon="save" @click="saveAchievement">{{ t('pcl.auto2.kfadf24dbc5') }}</PclButton>
               </template>
-              <PclInput v-model="achievementTitle" placeholder="成就标题" />
-              <PclInput v-model="achievementLine" placeholder="第一行文本" />
+              <PclInput v-model="achievementTitle" :placeholder="t('pcl.auto2.k11ac30f788')" />
+              <PclInput v-model="achievementLine" :placeholder="t('pcl.auto2.kbc7f02ea9e')" />
               <div class="pcl-tools-achievement">
-                <strong>{{ achievementTitle || '成就标题' }}</strong>
-                <span>{{ achievementLine || '成就描述' }}</span>
+                <strong>{{ achievementTitle || t('pcl.auto2.k11ac30f788') }}</strong>
+                <span>{{ achievementLine || t('pcl.auto2.kf138df7b79') }}</span>
               </div>
             </PclCard>
           </div>
@@ -306,6 +302,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
@@ -323,18 +321,18 @@ const props = defineProps<{ busy: boolean; execute: Execute; selected?: any; ins
 const emit = defineEmits<{ refresh: []; 'open-instance': [instance: any] }>();
 
 const itemGroups = [
-  { label: '实用工具', items: [
-    { id: 'multiplayer', label: '联机', icon: 'earth', description: '打开联机工具和服务器连接功能。' },
-    { id: 'tasks', label: '任务管理', icon: 'list', description: '查看后台任务和下载队列。' },
-    { id: 'logs', label: '日志查看', icon: 'scroll-text', description: '快速进入实例控制台和历史日志。' },
-    { id: 'scheduler', label: '调度分析', icon: 'gauge', description: '查看 API 排队、缓存命中与耗时。' },
-    { id: 'test', label: '工具测试', icon: 'flask-conical', description: '检查工具能力和 API 连接状态。' },
+  { label: t('pcl.auto2.k894f1c3e8d'), items: [
+    { id: 'multiplayer', label: t('pcl.auto2.k1d5e43605d'), icon: 'earth', description: t('pcl.auto2.kccf2623767') },
+    { id: 'tasks', label: t('pcl.auto2.kff5e8b99ae'), icon: 'list', description: t('pcl.auto2.ke31d997706') },
+    { id: 'logs', label: t('pcl.auto2.ka9706f8c7f'), icon: 'scroll-text', description: t('pcl.auto2.k6ca5b1e7ba') },
+    { id: 'scheduler', label: t('pcl.auto2.kc13a522bb1'), icon: 'gauge', description: t('pcl.auto2.k3c52f688ed') },
+    { id: 'test', label: t('pcl.auto2.k6c5c08c370'), icon: 'flask-conical', description: t('pcl.auto2.kc572d9f9cc') },
   ] },
-  { label: '外挂组件', items: [
-    { id: 'yukari', label: 'YukariConnect', icon: 'globe', description: '管理 YukariConnect P2P 联机后端、房间与日志。' },
-    { id: 'terracotta', label: 'Terracotta', icon: 'network', description: '管理 Terracotta P2P 联机后端、房间与日志。' },
-    { id: 'authlib', label: 'authlib-injector', icon: 'shield-check', description: '管理 Yggdrasil 认证注入组件。' },
-    { id: 'nide8auth', label: 'Nide8Auth', icon: 'key-round', description: '管理 Nide8Auth 认证组件。' },
+  { label: t('pcl.auto2.k726090c5c4'), items: [
+    { id: 'yukari', label: 'YukariConnect', icon: 'globe', description: t('pcl.auto2.k24d2a8fe1f') },
+    { id: 'terracotta', label: 'Terracotta', icon: 'network', description: t('pcl.auto2.k215c9d6ce4') },
+    { id: 'authlib', label: 'authlib-injector', icon: 'shield-check', description: t('pcl.auto2.keac13be806') },
+    { id: 'nide8auth', label: 'Nide8Auth', icon: 'key-round', description: t('pcl.auto2.k2e152edae1') },
   ] },
 ];
 const items = itemGroups.flatMap(group => group.items);
@@ -375,11 +373,11 @@ function message(value: unknown) {
 
 function stateLabel(state: string) {
   const labels: Record<string, string> = {
-    waiting: '等待中', 'host-scanning': '正在扫描房间', 'host-starting': '正在创建房间',
-    'host-ok': '房间已创建', 'guest-connecting': '正在连接房主', 'guest-starting': '正在加入房间',
-    'guest-ok': '已加入房间', exception: '发生异常',
+    waiting: t('pcl.auto2.kbd3488d0a9'), 'host-scanning': t('pcl.auto2.k5f1f1ae10b'), 'host-starting': t('pcl.auto2.k03c625d2d1'),
+    'host-ok': t('pcl.auto2.kf79b86a571'), 'guest-connecting': t('pcl.auto2.ka5c84f5771'), 'guest-starting': t('pcl.auto2.k8c20e1cda9'),
+    'guest-ok': t('pcl.auto2.kf71c183251'), exception: t('pcl.auto2.k20a0c1a2c0'),
   };
-  return labels[state] || state || '未知状态';
+  return labels[state] || state || t('pcl.auto2.k4e72a1ffe5');
 }
 
 function readPreference(key: string, fallback: string) {
@@ -583,7 +581,7 @@ async function testUrlRequest() {
     const response = await fetch(testUrl.value, { method: 'HEAD' });
     urlResult.value = `HTTP ${response.status} ${response.statusText} · ${Math.round(performance.now() - start)} ms`;
   } catch (exception) {
-    urlResult.value = `请求失败：${message(exception)}`;
+    urlResult.value = t('pcl.tools.requestFailed', { error: message(exception) });
   } finally {
     urlTesting.value = false;
   }
@@ -615,7 +613,7 @@ async function installHelper(helper: string) {
   finally { helperBusy.value = false; }
 }
 async function removeHelper(helper: string) {
-  if (!window.confirm(`确定删除 ${helper} 吗？`)) return;
+  if (!window.confirm(t('pcl.tools.confirmDelete', { name: helper }))) return;
   helperBusy.value = true;
   try { helperStatus.value[helper] = await props.execute('authentication.helper.remove', { helper, confirm: true }); }
   catch (exception) { helperStatus.value[helper] = { error: message(exception) }; }

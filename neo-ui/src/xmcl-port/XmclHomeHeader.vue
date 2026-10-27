@@ -4,22 +4,24 @@
       <div class="header-primary-row">
         <span class="home-title">{{ selected?.name || 'Minecraft' }}<small v-if="selected?.runtime?.minecraft"> {{ selected.runtime.minecraft }}</small></span>
         <div class="header-spacer" />
-        <button class="header-action" aria-label="打开实例目录" @click="emit('open-folder')"><span class="material-icons">folder_open</span></button>
-        <button class="header-action" aria-label="实例设置" @click="emit('settings')"><span class="material-icons">tune</span></button>
-        <button id="launch-button" class="header-launch" :disabled="!selected || selected.running" @click="emit('launch')"><span class="material-icons">play_arrow</span>启动</button>
+        <button class="header-action" :aria-label="t('xmcl.header.openFolder')" @click="emit('open-folder')"><span class="material-icons">folder_open</span></button>
+        <button class="header-action" :aria-label="t('xmcl.header.settings')" @click="emit('settings')"><span class="material-icons">tune</span></button>
+        <button id="launch-button" class="header-launch" :disabled="!selected || selected.running" @click="emit('launch')"><span class="material-icons">play_arrow</span>{{ t('xmcl.header.launch') }}</button>
       </div>
       <div class="header-extension" role="tablist">
         <button v-for="item in tabs" :key="item.id" class="header-tab" :class="{ active: tab === item.id }" role="tab" :aria-selected="tab === item.id" @click="emit('tab', item.id)">{{ item.label }}</button>
       </div>
     </div>
-    <div v-if="dragover" class="drop-zone" @dragenter="overcount++" @dragleave="overcount--" @drop.prevent="drop"><div :class="{ hot: overcount > 0 }"><span class="material-icons">save_alt</span><span>将整合包拖放到这里导入</span></div></div>
+    <div v-if="dragover" class="drop-zone" @dragenter="overcount++" @dragleave="overcount--" @drop.prevent="drop"><div :class="{ hot: overcount > 0 }"><span class="material-icons">save_alt</span><span>{{ t('xmcl.header.dropPack') }}</span></div></div>
   </header>
 </template>
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 defineProps<{ selected: any; tab: string; compact?: boolean; dragover?: boolean }>();
 const emit = defineEmits<{ settings: []; launch: []; 'open-folder': []; tab: [tab: string]; drop: [files: FileList | null] }>();
-const tabs = [{ id: 'home', label: '概览' }, { id: 'mods', label: '模组' }, { id: 'resourcepacks', label: '资源包' }, { id: 'shaderpacks', label: '光影' }, { id: 'save', label: '世界' }];
+const { t } = useI18n();
+const tabs = [{ id: 'home', label: t('xmcl.header.overview') }, { id: 'mods', label: t('xmcl.header.mods') }, { id: 'resourcepacks', label: t('xmcl.header.resourcepacks') }, { id: 'shaderpacks', label: t('xmcl.header.shaders') }, { id: 'save', label: t('xmcl.header.worlds') }];
 const overcount = ref(0);
 function drop(e: DragEvent) { overcount.value = 0; emit('drop', e.dataTransfer?.files || null); }
 </script>

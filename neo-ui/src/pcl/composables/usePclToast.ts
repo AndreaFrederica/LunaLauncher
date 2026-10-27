@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import { i18n } from '../../i18n';
 
 export type PclToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -15,10 +16,10 @@ let nextToastId = 0;
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
 const titles: Record<PclToastType, string> = {
-  success: '操作完成',
-  error: '操作失败',
-  warning: '请注意',
-  info: '提示',
+  success: i18n.global.t('pcl.toast.success'),
+  error: i18n.global.t('pcl.toast.error'),
+  warning: i18n.global.t('pcl.toast.warning'),
+  info: i18n.global.t('pcl.toast.info'),
 };
 
 export function showPclToast(options: {

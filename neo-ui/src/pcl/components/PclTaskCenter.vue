@@ -3,16 +3,16 @@
     <q-card class="pcl-dialog pcl-task-center">
       <q-card-section class="pcl-task-center__head">
         <div>
-          <div class="pcl-kicker">TASKS</div>
-          <h3>任务中心</h3>
-          <p>查看安装、下载和启动任务，取消不需要的任务。</p>
+          <div class="pcl-kicker">{{ t('ui.tasks') }}</div>
+          <h3>{{ t('tasks.title') }}</h3>
+          <p>{{ t('tasks.description') }}</p>
         </div>
-        <PclButton size="sm" icon="refresh-cw" :disabled="loading" @click="load">刷新</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="loading" @click="load">{{ t('common.refresh') }}</PclButton>
       </q-card-section>
 
       <q-card-section class="pcl-task-center__body">
         <div v-if="activeDownloads.length" class="pcl-task-downloads">
-          <div class="pcl-task-downloads__head">正在执行 · {{ activeDownloadCount }} 项<template v-if="activeDownloadCount > activeDownloads.length">（展示前 {{ activeDownloads.length }} 项）</template></div>
+          <div class="pcl-task-downloads__head">{{ t('tasks.runningCount', { count: activeDownloadCount }) }}<template v-if="activeDownloadCount > activeDownloads.length">{{ t('tasks.showingFirst', { count: activeDownloads.length }) }}</template></div>
           <div v-for="row in activeDownloads" :key="row.id" class="pcl-task-downloads__row">
             <span class="pcl-task-downloads__name">{{ row.label }}</span>
             <span class="pcl-task-downloads__meta">{{ row.percent }}<template v-if="row.rate"> · {{ formatRate(row.rate) }}</template></span>
@@ -29,19 +29,19 @@
               <span :style="{ width: `${percent(task)}%` }" />
             </div>
             <div class="pcl-task-row__meta">
-              <span>{{ task.status || task.details || task.error || '等待任务状态…' }}</span>
+              <span>{{ task.status || task.details || task.error || t('tasks.waiting') }}</span>
               <span v-if="task.transferRate">{{ formatRate(task.transferRate) }}</span>
             </div>
             <div class="pcl-task-row__meta">
               <span>{{ taskStats(task).summary }}</span>
-              <PclButton v-if="!task.finished" size="sm" variant="ghost" icon="x" @click="cancel(task)">取消</PclButton>
+              <PclButton v-if="!task.finished" size="sm" variant="ghost" icon="x" @click="cancel(task)">{{ t('common.cancel') }}</PclButton>
             </div>
           </div>
         </div>
         <div v-show="!tasks.length" class="pcl-empty">
           <PclIcon name="assignment" :size="34" />
-          <strong>{{ loading ? '正在读取任务' : '没有正在执行的任务' }}</strong>
-          <span>安装和启动任务会显示在这里。</span>
+          <strong>{{ loading ? t('tasks.loading') : t('tasks.empty') }}</strong>
+          <span>{{ t('tasks.emptyHint') }}</span>
         </div>
       </q-card-section>
     </q-card>
@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from './PclButton.vue';
 import PclIcon from './PclIcon.vue';
 import { subscribeTaskSnapshots } from '../composables/useTaskEvents';
@@ -59,6 +60,7 @@ const props = defineProps<{
   modelValue: boolean;
   execute: (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 }>();
+const { t } = useI18n();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
 const tasks = ref<any[]>([]);
 const loading = ref(false);
@@ -109,26 +111,26 @@ function formatRate(value: unknown) {
 }
 function operationLabel(operation: string) {
   const labels: Record<string, string> = {
-    'modpack.install': '整合包安装',
-    'instance.import': '实例导入',
-    'instance.create': '创建实例',
-    'instance.update': '实例更新',
-    'instance.special-loader.install': '特殊加载器安装',
-    'resource.install': '资源安装',
-    'resource.install-version': '资源安装',
-    'resource.install-with-dependencies': '资源及依赖安装',
-    'instance.component.set-version': '组件安装',
-    'java.install': 'Java 安装',
-    'account.login': '账户登录',
-    'account.refresh': '账户刷新',
-    'instance.launch': '启动游戏',
-    'instance.export': '导出实例',
-    'server.start': '启动服务端',
+    'modpack.install': t('tasks.operations.modpackInstall'),
+    'instance.import': t('tasks.operations.instanceImport'),
+    'instance.create': t('tasks.operations.instanceCreate'),
+    'instance.update': t('tasks.operations.instanceUpdate'),
+    'instance.special-loader.install': t('tasks.operations.specialLoader'),
+    'resource.install': t('tasks.operations.resourceInstall'),
+    'resource.install-version': t('tasks.operations.resourceInstall'),
+    'resource.install-with-dependencies': t('tasks.operations.resourceWithDependencies'),
+    'instance.component.set-version': t('tasks.operations.componentInstall'),
+    'java.install': t('tasks.operations.javaInstall'),
+    'account.login': t('tasks.operations.accountLogin'),
+    'account.refresh': t('tasks.operations.accountRefresh'),
+    'instance.launch': t('tasks.operations.launch'),
+    'instance.export': t('tasks.operations.export'),
+    'server.start': t('tasks.operations.serverStart'),
   };
   return labels[operation] || operation;
 }
 function stateLabel(state: string) {
-  return (({ queued: '排队中', running: '进行中', succeeded: '已完成', failed: '失败', cancelled: '已取消', canceled: '已取消', aborted: '已中止', completed: '已完成', interrupted: '已中断' } as Record<string, string>)[state] || state || '未知');
+  return (({ queued: t('tasks.states.queued'), running: t('tasks.states.running'), succeeded: t('tasks.states.succeeded'), failed: t('tasks.states.failed'), cancelled: t('tasks.states.cancelled'), canceled: t('tasks.states.cancelled'), aborted: t('tasks.states.aborted'), completed: t('tasks.states.succeeded'), interrupted: t('tasks.states.interrupted') } as Record<string, string>)[state] || state || t('tasks.states.unknown'));
 }
 
 watch(() => props.modelValue, value => {

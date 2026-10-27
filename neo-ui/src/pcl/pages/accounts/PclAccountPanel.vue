@@ -14,58 +14,58 @@
         </div>
         <div class="pcl-account-copy">
           <strong>
-            {{ account.profileName || account.displayName || '未命名账户' }}
-            <em v-if="account.default">默认</em>
-            <em v-if="account.cacheAvailable" class="cached">已缓存</em>
-            <em v-else-if="account.cacheState === 'not-cached'">未缓存</em>
+            {{ account.profileName || account.displayName || t('account.unnamed') }}
+            <em v-if="account.default">{{ t('account.default') }}</em>
+            <em v-if="account.cacheAvailable" class="cached">{{ t('account.cached') }}</em>
+            <em v-else-if="account.cacheState === 'not-cached'">{{ t('account.notCached') }}</em>
           </strong>
-          <small>{{ accountTypeLabel(account) }} · {{ accountStateLabel(account) }} · 缓存：{{ cacheStateLabel(account) }}</small>
+          <small>{{ accountTypeLabel(account) }} · {{ accountStateLabel(account) }} · {{ t('account.cache') }}: {{ cacheStateLabel(account) }}</small>
         </div>
         <div class="pcl-account-actions" @click.stop>
-          <PclIconButton icon="move-up" label="上移" :size="24" :disabled="busy" @click="move(account, -1)" />
-          <PclIconButton icon="move-down" label="下移" :size="24" :disabled="busy" @click="move(account, 1)" />
-          <PclIconButton icon="circle-check" label="设为默认" :size="24" :disabled="busy || account.default" @click="setDefault(account)" />
-          <PclIconButton icon="trash-2" label="移除账户" :size="24" danger :disabled="busy" @click="remove(account)" />
+          <PclIconButton icon="move-up" :label="t('account.moveUp')" :size="24" :disabled="busy" @click="move(account, -1)" />
+          <PclIconButton icon="move-down" :label="t('account.moveDown')" :size="24" :disabled="busy" @click="move(account, 1)" />
+          <PclIconButton icon="circle-check" :label="t('account.setDefault')" :size="24" :disabled="busy || account.default" @click="setDefault(account)" />
+          <PclIconButton icon="trash-2" :label="t('account.removeAccount')" :size="24" danger :disabled="busy" @click="remove(account)" />
         </div>
       </div>
     </div>
 
     <PclCard v-if="profile" :title="profile.name" class="pcl-profile-card">
       <template #actions>
-        <span class="pcl-profile-state">{{ profile.state }} · {{ profile.canPlayMinecraft ? '可以启动 Minecraft' : '无法启动 Minecraft' }}</span>
+        <span class="pcl-profile-state">{{ profile.state }} · {{ profile.canPlayMinecraft ? t('account.canPlay') : t('account.cannotPlay') }}</span>
       </template>
       <div class="pcl-profile-grid">
         <div class="pcl-profile-skin">
           <PclSkinPreview v-if="profile.skin?.url" :src="profile.skin.url" />
-          <div v-else class="pcl-skin-empty">没有已装备皮肤</div>
+          <div v-else class="pcl-skin-empty">{{ t('account.skinEquipped') }}</div>
 
           <label class="pcl-field">
-            <span>皮肤 PNG 路径</span>
+            <span>{{ t('account.skinPath') }}</span>
             <div class="pcl-field-row">
-              <PclInput v-model="skinPath" placeholder="D:\皮肤\skin.png" />
-              <PclIconButton icon="folder-open" label="选择皮肤 PNG" :size="28" :disabled="busy" @click="chooseSkinFile" />
-              <PclButton icon="file-input" :disabled="busy || !skinPath" @click="installSkin">导入</PclButton>
+              <PclInput v-model="skinPath" placeholder="D:\skins\skin.png" />
+              <PclIconButton icon="folder-open" :label="t('account.chooseSkin')" :size="28" :disabled="busy" @click="chooseSkinFile" />
+              <PclButton icon="file-input" :disabled="busy || !skinPath" @click="installSkin">{{ t('account.import') }}</PclButton>
             </div>
           </label>
 
           <div class="pcl-field-row">
             <label class="pcl-field">
-              <span>本地皮肤</span>
-              <PclSelect v-model="skinName" :options="skinNames" placeholder="选择皮肤" />
+              <span>{{ t('account.localSkin') }}</span>
+              <PclSelect v-model="skinName" :options="skinNames" :placeholder="t('account.chooseSkinName')" />
             </label>
             <label class="pcl-field pcl-field--narrow">
-              <span>模型</span>
+              <span>{{ t('account.model') }}</span>
               <PclSelect v-model="variant" :options="variantOptions" />
             </label>
           </div>
           <div class="pcl-actions">
-            <PclButton variant="highlight" icon="upload" :disabled="busy || !skinName" @click="uploadSkin">上传并装备</PclButton>
-            <PclButton variant="red" icon="rotate-ccw" :disabled="busy" @click="resetSkin">重置远程皮肤</PclButton>
+            <PclButton variant="highlight" icon="upload" :disabled="busy || !skinName" @click="uploadSkin">{{ t('account.uploadEquip') }}</PclButton>
+            <PclButton variant="red" icon="rotate-ccw" :disabled="busy" @click="resetSkin">{{ t('account.resetRemote') }}</PclButton>
           </div>
         </div>
 
         <div class="pcl-profile-capes">
-          <h3>披风</h3>
+          <h3>{{ t('account.cape') }}</h3>
           <PclListItem
             v-for="cape in profile.capes || []"
             :key="cape.id"
@@ -78,40 +78,40 @@
               <PclIcon :name="cape.current ? 'circle-check' : 'minus'" :size="15" :class="{ 'pcl-cape-current': cape.current }" />
             </template>
           </PclListItem>
-          <div v-if="!profile.capes?.length" class="pcl-empty pcl-empty--compact">没有可用披风。</div>
-          <PclButton variant="ghost" icon="x" :disabled="busy" @click="chooseCape('')">移除披风</PclButton>
+          <div v-if="!profile.capes?.length" class="pcl-empty pcl-empty--compact">{{ t('account.noCapes') }}</div>
+          <PclButton variant="ghost" icon="x" :disabled="busy" @click="chooseCape('')">{{ t('account.removeCape') }}</PclButton>
 
-          <h3>本地皮肤库</h3>
+          <h3>{{ t('account.skinLibrary') }}</h3>
           <PclListItem v-for="skin in skins" :key="skin.name || skin.path" :title="skin.name || skin.path">
             <template #icon><PclIcon name="image" :size="16" /></template>
             <template #actions>
-              <PclIconButton icon="trash-2" label="删除皮肤" :size="24" danger :disabled="busy" @click.stop="deleteSkin(skin)" />
+              <PclIconButton icon="trash-2" :label="t('account.deleteSkin')" :size="24" danger :disabled="busy" @click.stop="deleteSkin(skin)" />
             </template>
           </PclListItem>
-          <div v-if="!skins.length" class="pcl-empty pcl-empty--compact">本地皮肤库为空。</div>
+          <div v-if="!skins.length" class="pcl-empty pcl-empty--compact">{{ t('account.emptySkinLibrary') }}</div>
         </div>
       </div>
     </PclCard>
 
-    <PclCard v-if="selectedAccount" title="认证配置">
-      <PclHint theme="blue">可修改认证地址和服务参数，密码不会通过此接口回显。</PclHint>
+    <PclCard v-if="selectedAccount" :title="t('account.authConfig')">
+      <PclHint theme="blue">{{ t('account.authHint') }}</PclHint>
       <div v-if="selectedAccount.type === 'yggdrasil'" class="pcl-config-grid">
-        <label class="pcl-field"><span>认证 URL</span><PclInput v-model="config.authUrl" placeholder="https://..." /></label>
-        <label class="pcl-field"><span>会话 URL</span><PclInput v-model="config.sessionUrl" placeholder="https://..." /></label>
-        <label class="pcl-field"><span>服务名称</span><PclInput v-model="config.sourceName" placeholder="显示名称" /></label>
-        <label class="pcl-field"><span>令牌类型</span><PclSelect v-model="config.tokenType" :options="tokenTypeOptions" /></label>
-        <label class="pcl-field"><span>Authenticate endpoint</span><PclInput v-model="config.authenticateEndpoint" /></label>
-        <label class="pcl-field"><span>Refresh endpoint</span><PclInput v-model="config.refreshEndpoint" /></label>
-        <label class="pcl-field"><span>Validate endpoint</span><PclInput v-model="config.validateEndpoint" /></label>
-        <label class="pcl-field"><span>Profile endpoint</span><PclInput v-model="config.profileEndpoint" /></label>
-        <label class="pcl-field"><span>OAuth token endpoint</span><PclInput v-model="config.oauthTokenEndpoint" /></label>
+        <label class="pcl-field"><span>{{ t('account.authUrl') }}</span><PclInput v-model="config.authUrl" placeholder="https://..." /></label>
+        <label class="pcl-field"><span>{{ t('account.sessionUrl') }}</span><PclInput v-model="config.sessionUrl" :placeholder="t('account.displayName')" /></label>
+        <label class="pcl-field"><span>{{ t('account.serviceName') }}</span><PclInput v-model="config.sourceName" :placeholder="t('account.displayName')" /></label>
+        <label class="pcl-field"><span>{{ t('account.tokenType') }}</span><PclSelect v-model="config.tokenType" :options="tokenTypeOptions" /></label>
+        <label class="pcl-field"><span>{{ t('ui.authenticateEndpoint') }}</span><PclInput v-model="config.authenticateEndpoint" /></label>
+        <label class="pcl-field"><span>{{ t('ui.refreshEndpoint') }}</span><PclInput v-model="config.refreshEndpoint" /></label>
+        <label class="pcl-field"><span>{{ t('ui.validateEndpoint') }}</span><PclInput v-model="config.validateEndpoint" /></label>
+        <label class="pcl-field"><span>{{ t('ui.profileEndpoint') }}</span><PclInput v-model="config.profileEndpoint" /></label>
+        <label class="pcl-field"><span>{{ t('ui.oauthTokenEndpoint') }}</span><PclInput v-model="config.oauthTokenEndpoint" /></label>
       </div>
       <div v-else-if="selectedAccount.type === 'unified-pass'" class="pcl-config-grid">
-        <label class="pcl-field"><span>UnifiedPass Server ID</span><PclInput v-model="config.serverId" /></label>
-        <label class="pcl-field"><span>API Base URL</span><PclInput v-model="config.baseUrl" /></label>
+        <label class="pcl-field"><span>{{ t('ui.unifiedPassServerId') }}</span><PclInput v-model="config.serverId" /></label>
+        <label class="pcl-field"><span>{{ t('ui.apiBaseUrl') }}</span><PclInput v-model="config.baseUrl" /></label>
       </div>
       <div class="pcl-actions">
-        <PclButton variant="highlight" icon="save" :disabled="busy" @click="saveConfig">保存认证配置</PclButton>
+        <PclButton variant="highlight" icon="save" :disabled="busy" @click="saveConfig">{{ t('account.saveAuth') }}</PclButton>
       </div>
     </PclCard>
 
@@ -121,6 +121,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclAccountAvatar from '../../components/PclAccountAvatar.vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
@@ -134,6 +135,7 @@ import PclSkinPreview from './PclSkinPreview.vue';
 import { pickPclFile } from '../../composables/usePclFileDialog';
 
 const props = defineProps<{ accounts: any[]; busy: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any> }>();
+const { t } = useI18n();
 const emit = defineEmits<{ changed: [] }>();
 
 const selected = ref(''), selectedAccount = ref<any>(null), profile = ref<any>(null), skins = ref<any[]>([]);
@@ -151,24 +153,24 @@ function accountRef(account: any) { return String(account?.internalId || account
 function initial(account: any) { return String(account?.profileName || account?.displayName || '?').slice(0, 1).toUpperCase(); }
 function accountTypeLabel(account: any) {
   const type = String(account?.type || '').toLowerCase();
-  if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft 账户';
+  if (type.includes('msa') || type.includes('microsoft')) return t('account.microsoftAccount');
   if (type.includes('ygg')) {
-    const server = account?.yggdrasil?.displayName || account?.yggdrasil?.sourceName || account?.authServer?.displayName || account?.authServerName || '第三方认证';
-    return `第三方认证账户 · ${server}`;
+    const server = account?.yggdrasil?.displayName || account?.yggdrasil?.sourceName || account?.authServer?.displayName || account?.authServerName || t('account.thirdParty');
+    return `${t('account.thirdParty')} · ${server}`;
   }
   if (type.includes('unified')) {
     const server = account?.unifiedPass?.displayName || account?.unifiedPass?.serverName || account?.unifiedPass?.serverId || account?.authServer?.displayName || account?.authServerName || 'UnifiedPass';
-    return `UnifiedPass 账户 · ${server}`;
+    return `UnifiedPass account · ${server}`;
   }
-  return '离线账户';
+  return t('account.offlineAccountLabel');
 }
 function accountStateLabel(account: any) {
   const state = String(account?.stateName || '').toLowerCase();
-  return ({ online: '在线', working: '登录中', offline: '离线', expired: '已过期', errored: '错误', disabled: '已禁用', gone: '已失效', unchecked: '未检查' } as any)[state] || (account?.stateName || '未检查');
+  return ({ online: t('account.online'), working: t('account.loggingIn'), offline: t('account.offline'), expired: t('account.expired'), errored: t('account.error'), disabled: t('account.disabledStatus'), gone: t('account.gone'), unchecked: t('account.unchecked') } as any)[state] || (account?.stateName || t('account.unchecked'));
 }
 function cacheStateLabel(account: any) {
   const state = String(account?.cacheState || 'unknown');
-  return ({ cached: '已缓存', 'not-cached': '未缓存', unknown: '检查中' } as any)[state] || '未知';
+  return ({ cached: t('account.cached'), 'not-cached': t('account.notCached'), unknown: t('account.checking') } as any)[state] || t('account.unknown');
 }
 
 async function attempt(action: () => Promise<any>) {
@@ -200,7 +202,7 @@ async function move(account: any, delta: number) { await attempt(async () => { a
 async function setDefault(account: any) { await attempt(async () => { await props.execute('account.set-default', { account: accountRef(account) }); emit('changed'); }); }
 async function remove(account: any) { await attempt(async () => { await props.execute('account.remove', { account: accountRef(account), confirm: true }); profile.value = null; selected.value = ''; emit('changed'); }); }
 async function chooseSkinFile() {
-  const selected = await pickPclFile({ title: '选择皮肤 PNG', filters: [{ name: 'PNG 图片', extensions: ['png'] }] });
+  const selected = await pickPclFile({ title: t('account.chooseSkin'), filters: [{ name: t('account.pngImage'), extensions: ['png'] }] });
   if (selected) skinPath.value = selected;
 }
 

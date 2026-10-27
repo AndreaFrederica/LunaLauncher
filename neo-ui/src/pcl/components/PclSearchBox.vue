@@ -5,12 +5,12 @@
       class="pcl-search-box__input"
       type="text"
       :value="modelValue"
-      :placeholder="placeholder"
+      :placeholder="placeholder || t('search.placeholder')"
       :disabled="disabled"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       @keydown.enter="emit('search', modelValue)"
     />
-    <button v-if="modelValue" type="button" class="pcl-search-box__clear" aria-label="清除搜索" @click="clear">
+    <button v-if="modelValue" type="button" class="pcl-search-box__clear" :aria-label="t('search.clear')" @click="clear">
       <PclIcon name="x" :size="14" />
     </button>
   </div>
@@ -18,6 +18,8 @@
 
 <script setup lang="ts">
 import PclIcon from './PclIcon.vue';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 
 withDefaults(defineProps<{
   modelValue?: string;
@@ -25,7 +27,7 @@ withDefaults(defineProps<{
   disabled?: boolean;
 }>(), {
   modelValue: '',
-  placeholder: '搜索',
+  placeholder: '',
   disabled: false,
 });
 

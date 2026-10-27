@@ -13,7 +13,7 @@
       @keydown.up.prevent="move(-1)"
       @keydown.enter.prevent="chooseActive"
     >
-      <span class="pcl-select__value" :class="{ placeholder: !selectedOption }">{{ selectedOption?.label || placeholder }}</span>
+      <span class="pcl-select__value" :class="{ placeholder: !selectedOption }">{{ selectedOption?.label || effectivePlaceholder }}</span>
       <PclIcon name="chevron-left" :size="12" class="pcl-select__chevron" :class="{ open }" />
     </button>
     <Teleport to="body">
@@ -41,6 +41,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclIcon from './PclIcon.vue';
 
 type RawOption = string | number | { label: string; value: string | number; disabled?: boolean };
@@ -55,12 +56,14 @@ const props = withDefaults(defineProps<{
 }>(), {
   modelValue: '',
   options: () => [],
-  placeholder: '请选择',
+  placeholder: '',
   disabled: false,
   ariaLabel: '',
 });
 
 const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>();
+const { t } = useI18n();
+const effectivePlaceholder = computed(() => props.placeholder || t('dialog.choose'));
 const root = ref<HTMLElement | null>(null);
 const menu = ref<HTMLElement | null>(null);
 const open = ref(false);

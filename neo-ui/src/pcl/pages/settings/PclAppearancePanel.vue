@@ -2,93 +2,93 @@
   <div class="pcl-appearance">
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
-    <PclCard title="界面外观">
+    <PclCard :title="t('pcl.auto2.k3cb108966b')">
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">PCL Style 预设</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k801c1d7a50') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect :model-value="preferences.pclStylePreset" :options="pclStylePresetOptions" @update:model-value="selectPclPreset" />
         </div>
-        <span class="pcl-form-row__hint">仅影响 PCL Style 的子设置</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.ka4483ddba9') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">界面风格</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k568704e735') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.shell" :options="shellOptions" />
         </div>
-        <span class="pcl-form-row__hint">PCL Style外观 / Neo 原生外观</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.ka4da30d951') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">导航栏布局</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.kbd6b0b793d') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclNavLayout" :options="navLayoutOptions" />
         </div>
-        <span class="pcl-form-row__hint">PCL 侧栏或 MMC Classic 实例面板</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k019755f952') }}</span>
       </div>
       <template v-if="preferences.pclNavLayout === 'mmc-classic'">
         <div class="pcl-form-row">
-          <span class="pcl-form-row__label">Classic 面板位置</span>
+          <span class="pcl-form-row__label">{{ t('pcl.auto2.kc9d3af0140') }}</span>
           <div class="pcl-form-row__control">
             <PclSelect v-model="preferences.pclClassicSide" :options="classicSideOptions" />
           </div>
-          <span class="pcl-form-row__hint">左侧或右侧</span>
+          <span class="pcl-form-row__hint">{{ t('pcl.auto2.k0d247203bd') }}</span>
         </div>
         <div class="pcl-form-row">
-          <span class="pcl-form-row__label">Classic 大图标</span>
+          <span class="pcl-form-row__label">{{ t('pcl.auto2.k4c0c01ba00') }}</span>
           <div class="pcl-form-row__control">
             <PclSelect v-model="preferences.pclClassicIconSize" :options="classicIconOptions" />
           </div>
-          <span class="pcl-form-row__hint">显示当前实例封面</span>
+          <span class="pcl-form-row__hint">{{ t('pcl.auto2.k82607c19ac') }}</span>
         </div>
       </template>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">颜色模式</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.kb9f0a68d24') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.theme" :options="themeOptions" />
         </div>
-        <span class="pcl-form-row__hint">深色 / 浅色 / 跟随系统</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k05debddfa6') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">界面密度</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.kc2fd3fcdd3') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.density" :options="densityOptions" />
         </div>
-        <span class="pcl-form-row__hint">影响列表和卡片间距</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k868adb3546') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">背景样式</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k812c67106b') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.background" :options="backgroundOptions" />
         </div>
-        <span class="pcl-form-row__hint">渐变或纯色</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k2fb2244bcd') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">界面动效</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k44fe65399d') }}</span>
         <div class="pcl-form-row__control">
-          <PclCheckbox v-model="preferences.animations" label="启用页面与控件动画" />
+          <PclCheckbox v-model="preferences.animations" :label="t('pcl.auto2.k186b0dbbed')" />
         </div>
-        <span class="pcl-form-row__hint">关闭后立即切换</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k60f0ddc680') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">加载动画</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k1ee93134f2') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclLoadingAnimation" :options="loadingAnimationOptions" />
         </div>
-        <span class="pcl-form-row__hint">版本列表、资源列表、Java 扫描和任务加载都会使用</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.kafa5fbe627') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">页面进入时刷新</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k785c90db9e') }}</span>
         <div class="pcl-form-row__control">
-          <PclCheckbox v-model="preferences.pclAutoRefreshOnPageOpen" label="自动加载资源目录最新数据" />
+          <PclCheckbox v-model="preferences.pclAutoRefreshOnPageOpen" :label="t('pcl.auto2.k08799dfbdd')" />
         </div>
-        <span class="pcl-form-row__hint">打开模组、整合包、数据包、资源包和光影包页面时生效</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k9bef92f3a5') }}</span>
       </div>
 
       <div class="pcl-appearance-preview" :class="{ light: preferences.theme === 'light' }">
         <div class="pcl-appearance-preview__bar">
           <span class="pcl-appearance-preview__logo"><img :src="lunaLogo" alt="Luna Launcher" /></span>
-          <span class="pcl-appearance-preview__nav"><i />启动</span>
-          <span class="pcl-appearance-preview__nav active"><i />下载</span>
-          <span class="pcl-appearance-preview__nav"><i />设置</span>
+          <span class="pcl-appearance-preview__nav"><i />{{ t('pcl.auto2.kebd26da421') }}</span>
+          <span class="pcl-appearance-preview__nav active"><i />{{ t('pcl.auto2.k2b9d013177') }}</span>
+          <span class="pcl-appearance-preview__nav"><i />{{ t('pcl.auto2.k7debf9cb03') }}</span>
         </div>
         <div class="pcl-appearance-preview__body">
           <div class="pcl-appearance-preview__side"><i /><i /><i /><i /></div>
@@ -97,156 +97,156 @@
       </div>
 
       <div class="pcl-actions">
-        <PclButton icon="rotate-ccw" @click="reset">恢复默认外观</PclButton>
+        <PclButton icon="rotate-ccw" @click="reset">{{ t('pcl.auto2.k73a911c5ba') }}</PclButton>
       </div>
     </PclCard>
 
-    <PclCard title="主题色">
+    <PclCard :title="t('pcl.auto2.k90b878eaa4')">
       <div class="pcl-accent-row">
         <div>
-          <strong>强调色</strong>
-          <small>按钮、链接、选中项、进度条和标题栏高亮都会跟随这个颜色。</small>
+          <strong>{{ t('pcl.auto2.k6f67371e05') }}</strong>
+          <small>{{ t('pcl.auto2.k955ef92a45') }}</small>
         </div>
         <div class="pcl-accent-preview" aria-hidden="true">
           <span class="pcl-accent-preview__bar" />
-          <span class="pcl-accent-preview__button">启动游戏</span>
+          <span class="pcl-accent-preview__button">{{ t('pcl.auto2.ke05557937a') }}</span>
           <span class="pcl-accent-preview__dot" />
         </div>
       </div>
       <PclColorPicker v-model="preferences.pclAccentColor" />
-      <PclHint theme="blue">推荐色包含 PCL 猫蓝、薄荷、翠绿、琥珀、绯红、紫罗兰、樱花和石墨；也可以直接输入 6 位十六进制颜色。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.k4b93c0d33c') }}</PclHint>
     </PclCard>
 
-    <PclCard title="字体">
+    <PclCard :title="t('pcl.auto2.kb50d4d8352')">
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">界面字体</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.ke809454466') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclFont" :options="fontOptions" />
         </div>
-        <span class="pcl-form-row__hint">只作用于 PCL 外观</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k84e49b65d1') }}</span>
       </div>
-      <PclHint theme="blue">字体会应用到 PCL 外观的导航、卡片、按钮、输入框和对话框；切回 Neo 原生外观不受影响。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.ked9a1fb76d') }}</PclHint>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">基准字体大小</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k5230f6d1f1') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclBaseFontSize" :options="baseFontOptions" />
         </div>
-        <span class="pcl-form-row__hint">影响 PCL 界面的整体文字大小</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k26cad9d136') }}</span>
       </div>
       <div class="pcl-font-sample" :class="{ serif: preferences.pclFont === 'simsun' }">
         <strong>Minecraft 1.21.11</strong>
-        <span>启动游戏 · 下载 · 设置 · 工具</span>
+        <span>{{ t('pcl.auto2.k5ebdf7c69e') }}</span>
         <small>ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789</small>
       </div>
     </PclCard>
 
-    <PclCard title="背景图片">
+    <PclCard :title="t('pcl.auto2.k8c84186614')">
       <input ref="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="pcl-hidden-file" @change="onBackgroundFile" />
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">背景图片</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k8c84186614') }}</span>
         <div class="pcl-form-row__control pcl-background-actions">
-          <PclButton size="sm" icon="image" @click="chooseBackground">选择图片</PclButton>
-          <PclButton v-if="preferences.pclBackgroundImage" size="sm" variant="ghost" icon="trash-2" @click="clearBackground">清除</PclButton>
+          <PclButton size="sm" icon="image" @click="chooseBackground">{{ t('pcl.auto2.k18104edf89') }}</PclButton>
+          <PclButton v-if="preferences.pclBackgroundImage" size="sm" variant="ghost" icon="trash-2" @click="clearBackground">{{ t('pcl.auto2.k7b15e5e8e7') }}</PclButton>
         </div>
-        <span class="pcl-form-row__hint">{{ preferences.pclBackgroundImageName || 'PNG / JPEG / WebP，最大 1.4 MB' }}</span>
+        <span class="pcl-form-row__hint">{{ preferences.pclBackgroundImageName || t('pcl.auto2.kf15863559a') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">不透明度</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.kb4efb6cdcf') }}</span>
         <div class="pcl-form-row__control">
           <input v-model.number="preferences.pclBackgroundOpacity" class="pcl-range" type="range" min="0.05" max="1" step="0.05" :disabled="!preferences.pclBackgroundImage" />
         </div>
         <span class="pcl-form-row__hint">{{ Math.round(preferences.pclBackgroundOpacity * 100) }}%</span>
       </div>
       <div v-if="preferences.pclBackgroundImage" class="pcl-background-preview" :style="{ backgroundImage: `url(${preferences.pclBackgroundImage})`, opacity: preferences.pclBackgroundOpacity }" />
-      <PclHint theme="blue">图片会作为启动页、实例页和设置页的页面背景，卡片与导航保持不透明；图片保存在本机 localStorage，不上传。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.k6ffb1c3811') }}</PclHint>
     </PclCard>
 
-    <PclCard title="背景音乐">
+    <PclCard :title="t('pcl.auto2.kd77bcb52c1')">
       <input ref="musicFile" type="file" accept="audio/*" class="pcl-hidden-file" @change="onMusicFile" />
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">音乐文件</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k46ff734544') }}</span>
         <div class="pcl-form-row__control pcl-background-actions">
-          <PclButton size="sm" icon="music" @click="chooseMusic">选择音乐</PclButton>
-          <PclButton v-if="pclMusic.loaded" size="sm" icon="play" @click="togglePclMusic">{{ pclMusic.playing ? '暂停' : '播放' }}</PclButton>
-          <PclButton v-if="pclMusic.loaded" size="sm" variant="ghost" icon="trash-2" @click="removePclMusic">移除</PclButton>
+          <PclButton size="sm" icon="music" @click="chooseMusic">{{ t('pcl.auto2.k47261a4981') }}</PclButton>
+          <PclButton v-if="pclMusic.loaded" size="sm" icon="play" @click="togglePclMusic">{{ pclMusic.playing ? t('pcl.auto2.k130448bce6') : t('pcl.auto2.k21925350de') }}</PclButton>
+          <PclButton v-if="pclMusic.loaded" size="sm" variant="ghost" icon="trash-2" @click="removePclMusic">{{ t('pcl.auto2.k2f752c005e') }}</PclButton>
         </div>
-        <span class="pcl-form-row__hint">{{ pclMusic.name || 'MP3 / OGG / WAV，最大 30 MB' }}</span>
+        <span class="pcl-form-row__hint">{{ pclMusic.name || t('pcl.auto2.k5ecfcb94f2') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">音量</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k1aa999a596') }}</span>
         <div class="pcl-form-row__control">
           <input class="pcl-range" type="range" min="0" max="1" step="0.05" :value="pclMusic.volume" :disabled="!pclMusic.loaded" @input="onMusicVolume" />
         </div>
         <span class="pcl-form-row__hint">{{ Math.round(pclMusic.volume * 100) }}%</span>
       </div>
       <PclHint v-if="pclMusic.error" theme="red" closable @close="pclMusic.error = ''">{{ pclMusic.error }}</PclHint>
-      <PclHint theme="blue">音乐保存在本机 IndexedDB，不写入 localStorage；切换页面时保持播放。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.kb423e54435') }}</PclHint>
     </PclCard>
 
-    <PclCard title="主页卡片">
+    <PclCard :title="t('pcl.auto2.kf1da7b1ad5')">
       <div class="pcl-check-grid">
-        <PclCheckbox v-model="preferences.pclHomeShowInstances" label="显示全部实例面板" />
-        <PclCheckbox v-model="preferences.pclHomeShowServers" label="显示当前实例服务器" />
-        <PclCheckbox v-model="preferences.pclHomeSwitchOnQuickLaunch" label="双击启动时切换当前实例" />
+        <PclCheckbox v-model="preferences.pclHomeShowInstances" :label="t('pcl.auto2.k408dd99bac')" />
+        <PclCheckbox v-model="preferences.pclHomeShowServers" :label="t('pcl.auto2.ka071286fa0')" />
+        <PclCheckbox v-model="preferences.pclHomeSwitchOnQuickLaunch" :label="t('pcl.auto2.k9369dff72a')" />
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例面板排列</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.kd9f204c974') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceLayout" :options="instanceLayoutOptions" />
         </div>
-        <span class="pcl-form-row__hint">网格或单列列表</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.kf79883cc98') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例面板行数</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k7300be4dff') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceRows" :options="instanceRowOptions" />
         </div>
-        <span class="pcl-form-row__hint">超出后滚动</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k521663e186') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例文字位置</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k0150261ae5') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceTextPosition" :options="instanceTextPositionOptions" />
         </div>
-        <span class="pcl-form-row__hint">图标右侧或图标下方</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.kb4a979a814') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例面板字号</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k93327129af') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceFontSize" :options="instanceFontOptions" />
         </div>
-        <span class="pcl-form-row__hint">实例名称和副标题字号</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k31121bacba') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例面板宽度</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k0bb26cb213') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceWidth" :options="instanceWidthOptions" />
         </div>
-        <span class="pcl-form-row__hint">占右侧内容区宽度</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.kacfb1c89cf') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例分类方式</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k74a387ad56') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceGrouping" :options="instanceGroupingOptions" />
         </div>
-        <span class="pcl-form-row__hint">平铺或按 MMC 分组显示</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.kdd35dc2385') }}</span>
       </div>
       <div class="pcl-form-row">
-        <span class="pcl-form-row__label">实例排序方式</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.k66b117ecd1') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceSort" :options="instanceSortOptions" />
         </div>
-        <span class="pcl-form-row__hint">手动排序可拖拽调整</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k8fb1fe0396') }}</span>
       </div>
       <div v-if="preferences.pclHomeInstanceLayout === 'grid'" class="pcl-form-row">
-        <span class="pcl-form-row__label">实例面板列数</span>
+        <span class="pcl-form-row__label">{{ t('pcl.auto2.kf55c6c4f72') }}</span>
         <div class="pcl-form-row__control">
           <PclSelect v-model="preferences.pclHomeInstanceColumns" :options="instanceColumnOptions" />
         </div>
-        <span class="pcl-form-row__hint">每行显示的实例数量</span>
+        <span class="pcl-form-row__hint">{{ t('pcl.auto2.k6b7572954f') }}</span>
       </div>
       <div class="pcl-home-order">
-        <div class="pcl-home-order__title">首页卡片顺序</div>
+        <div class="pcl-home-order__title">{{ t('pcl.auto2.kda3e2743dd') }}</div>
         <div v-for="(item, index) in homeOrderItems" :key="item.key" class="pcl-home-order__row">
           <span>{{ item.label }}</span>
           <div>
@@ -257,53 +257,53 @@
       </div>
       <div v-for="(card, index) in preferences.pclHomeCards" :key="card.id" class="pcl-home-editor">
         <div class="pcl-home-editor__head">
-          <strong>卡片 {{ index + 1 }}</strong>
-          <PclButton size="sm" variant="ghost" icon="trash-2" @click="removeHomeCard(card.id)">删除</PclButton>
+          <strong>{{ t('pcl.appearance.card', { index: index + 1 }) }}</strong>
+          <PclButton size="sm" variant="ghost" icon="trash-2" @click="removeHomeCard(card.id)">{{ t('pcl.auto2.k3755f56f2f') }}</PclButton>
         </div>
-        <PclInput v-model="card.title" placeholder="卡片标题" />
-        <PclInput v-model="card.content" multiline :rows="2" placeholder="卡片内容" />
+        <PclInput v-model="card.title" :placeholder="t('pcl.auto2.k14987b310c')" />
+        <PclInput v-model="card.content" multiline :rows="2" :placeholder="t('pcl.auto2.kc72b6a2a9e')" />
       </div>
-      <div v-if="!preferences.pclHomeCards.length" class="pcl-empty pcl-empty--compact">还没有主页卡片。</div>
+      <div v-if="!preferences.pclHomeCards.length" class="pcl-empty pcl-empty--compact">{{ t('pcl.auto2.k72526c8ca3') }}</div>
       <div class="pcl-actions">
-        <PclButton size="sm" icon="plus" @click="addHomeCard">添加卡片</PclButton>
+        <PclButton size="sm" icon="plus" @click="addHomeCard">{{ t('pcl.auto2.kab89692a67') }}</PclButton>
       </div>
-      <PclHint theme="blue">卡片显示在 PCL 启动页右上角，可以用来放公告、服务器地址或使用提示。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.k32e45be482') }}</PclHint>
     </PclCard>
 
-    <PclCard title="标题栏">
+    <PclCard :title="t('pcl.auto2.ke8bef90efb')">
       <div class="pcl-check-grid">
-        <PclCheckbox v-model="preferences.pclTitleLogo" label="显示 LunaLauncher 文字" />
-        <PclCheckbox v-model="preferences.pclTitleBadge" label="显示 NEOUI 副标题" />
-        <PclCheckbox v-model="preferences.pclLaunchAnimation" label="启用 PCL 启动过渡动画" />
-        <PclCheckbox v-model="preferences.pclClearLaunchLogOnStart" label="每次启动时清除历史启动日志" />
-        <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" label="启动日志自动滚动到底部" />
-        <PclCheckbox v-model="preferences.pclEditCurrentInWindow" label="当前实例也用独立编辑窗口" />
+        <PclCheckbox v-model="preferences.pclTitleLogo" :label="t('pcl.auto2.k06206d6e5a')" />
+        <PclCheckbox v-model="preferences.pclTitleBadge" :label="t('pcl.auto2.k4b5ce9f21e')" />
+        <PclCheckbox v-model="preferences.pclLaunchAnimation" :label="t('pcl.auto2.k8eb55365e3')" />
+        <PclCheckbox v-model="preferences.pclClearLaunchLogOnStart" :label="t('pcl.auto2.ke51a90b26f')" />
+        <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" :label="t('pcl.auto2.k731cff1a1b')" />
+        <PclCheckbox v-model="preferences.pclEditCurrentInWindow" :label="t('pcl.auto2.k61a28ec924')" />
       </div>
-      <PclHint theme="blue">只修改 PCL 外观顶部标题栏，不影响窗口按钮、导航和内容区。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.ke51c7fd2cd') }}</PclHint>
     </PclCard>
 
-    <PclCard title="启动页浮动按钮">
+    <PclCard :title="t('pcl.auto2.kbc4abdc526')">
       <div class="pcl-check-grid">
-        <PclCheckbox v-model="preferences.pclFloatTasks" label="任务中心" />
-        <PclCheckbox v-model="preferences.pclFloatLog" label="启动日志" />
-        <PclCheckbox v-model="preferences.pclFloatRefresh" label="刷新按钮" />
-        <PclCheckbox v-model="preferences.pclFloatMusic" label="背景音乐" />
+        <PclCheckbox v-model="preferences.pclFloatTasks" :label="t('pcl.auto2.kf692ff9ec5')" />
+        <PclCheckbox v-model="preferences.pclFloatLog" :label="t('pcl.auto2.k8ad868abbc')" />
+        <PclCheckbox v-model="preferences.pclFloatRefresh" :label="t('pcl.auto2.kd3978de624')" />
+        <PclCheckbox v-model="preferences.pclFloatMusic" :label="t('pcl.auto2.kd77bcb52c1')" />
       </div>
-      <PclHint theme="blue">关闭后不会在 PCL 启动页右侧显示对应浮动按钮，功能仍可从页面内进入。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.auto2.ke7d1f96aed') }}</PclHint>
     </PclCard>
 
-    <PclCard title="Web UI 加载">
-      <p class="pcl-appearance-copy">设置启动界面、扫描目录和是否记住上次选择，也可以切换到独立 Web UI。</p>
+    <PclCard :title="t('pcl.auto2.k8f18baab83')">
+      <p class="pcl-appearance-copy">{{ t('pcl.auto2.ka7be7a3347') }}</p>
       <div class="pcl-actions">
-        <PclButton variant="highlight" icon="layout-dashboard" @click="openWebUiManager">加载设置与界面管理</PclButton>
+        <PclButton variant="highlight" icon="layout-dashboard" @click="openWebUiManager">{{ t('pcl.auto2.k15e516c7b8') }}</PclButton>
       </div>
     </PclCard>
 
-    <PclCard title="功能隐藏">
-      <p class="pcl-appearance-copy">隐藏不常用的页面入口。隐藏只影响导航，不会删除实例、设置或下载内容；随时可以在这里恢复。</p>
+    <PclCard :title="t('pcl.auto2.k6003ab3029')">
+      <p class="pcl-appearance-copy">{{ t('pcl.auto2.k6be310b560') }}</p>
       <div class="pcl-hide-groups">
         <div class="pcl-hide-group">
-          <h4>设置页</h4>
+          <h4>{{ t('pcl.auto2.kf4c7977e73') }}</h4>
           <PclCheckbox
             v-for="feature in setupFeatures"
             :key="feature.id"
@@ -313,7 +313,7 @@
           />
         </div>
         <div class="pcl-hide-group">
-          <h4>下载页</h4>
+          <h4>{{ t('pcl.auto2.kd1bf0f4018') }}</h4>
           <PclCheckbox
             v-for="feature in downloadFeatures"
             :key="feature.id"
@@ -324,18 +324,20 @@
         </div>
       </div>
       <div class="pcl-actions">
-        <PclButton icon="rotate-ccw" @click="resetPclFeatures">恢复全部入口</PclButton>
+        <PclButton icon="rotate-ccw" @click="resetPclFeatures">{{ t('pcl.auto2.k94468fe606') }}</PclButton>
       </div>
     </PclCard>
 
-    <PclCard title="PCL 主题说明">
-      <p class="pcl-appearance-copy">PCL Style外观使用 CatBlue 配色：标题栏、选中条和强调色固定为 #2a80e3，深浅模式共用同一套色阶。</p>
-      <p class="pcl-appearance-copy pcl-muted">如果你希望调整强调色，请切换到 Neo 原生外观后使用原有外观设置。</p>
+    <PclCard :title="t('pcl.auto2.kf29e0171e6')">
+      <p class="pcl-appearance-copy">{{ t('pcl.auto2.k81749e6f2a') }}</p>
+      <p class="pcl-appearance-copy pcl-muted">{{ t('pcl.auto2.k1b551f758e') }}</p>
     </PclCard>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, ref } from 'vue';
 import lunaLogo from '../../../assets/luna-launcher.png';
 import PclCard from '../../components/PclCard.vue';
@@ -386,7 +388,7 @@ function onBackgroundFile(event: Event) {
   input.value = '';
   if (!file) return;
   if (file.size > 1_400_000) {
-    error.value = '背景图片过大（超过 1.4 MB），请压缩后再选择。';
+    error.value = t('pcl.auto2.kd2a56a402e');
     return;
   }
   const reader = new FileReader();
@@ -396,17 +398,17 @@ function onBackgroundFile(event: Event) {
     error.value = '';
     persistNeoUiPreferences();
   };
-  reader.onerror = () => { error.value = '读取背景图片失败。'; };
+  reader.onerror = () => { error.value = t('pcl.auto2.k25ff2e16db'); };
   reader.readAsDataURL(file);
 }
 
 const homeOrderItems = computed(() => {
   const items = [
-    { key: 'hint', label: 'Neo UI 提示' },
-    ...preferences.pclHomeCards.map(card => ({ key: `custom:${card.id}`, label: card.title || '自定义卡片' })),
-    { key: 'log', label: '启动日志' },
-    { key: 'instances', label: '全部实例' },
-    { key: 'servers', label: '当前实例服务器' },
+    { key: 'hint', label: t('pcl.auto2.k096047b598') },
+    ...preferences.pclHomeCards.map(card => ({ key: `custom:${card.id}`, label: card.title || t('pcl.auto2.kced8d0f34e') })),
+    { key: 'log', label: t('pcl.auto2.k8ad868abbc') },
+    { key: 'instances', label: t('pcl.auto2.k9d2dba1a26') },
+    { key: 'servers', label: t('pcl.auto2.kb2cfd67505') },
   ];
   const valid = new Set(items.map(item => item.key));
   const ordered = preferences.pclHomeCardOrder.filter(key => valid.has(key));
@@ -427,7 +429,7 @@ function selectPclPreset(value: string) {
 function addHomeCard() {
   preferences.pclHomeCards.push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    title: '新卡片',
+    title: t('pcl.auto2.kef4fd94620'),
     content: '',
   });
   persistNeoUiPreferences();
@@ -444,16 +446,16 @@ function clearBackground() {
   persistNeoUiPreferences();
 }
 const pclStylePresetOptions = [
-  { label: 'Luna Neo（默认）', value: 'luna-neo' },
+  { label: t('pcl.auto2.ka6dc467052'), value: 'luna-neo' },
   { label: 'PCL', value: 'pcl' },
 ];
 const navLayoutOptions = [
-  { label: 'PCL 侧栏', value: 'pcl' },
+  { label: t('pcl.auto2.ka4421ee0b9'), value: 'pcl' },
   { label: 'MMC Classic', value: 'mmc-classic' },
 ];
 const classicSideOptions = [
-  { label: '左侧', value: 'left' },
-  { label: '右侧', value: 'right' },
+  { label: t('pcl.auto2.k440495fc2d'), value: 'left' },
+  { label: t('pcl.auto2.k1e4e7a177d'), value: 'right' },
 ];
 const classicIconOptions = [
   { label: '64 px', value: 64 },
@@ -463,26 +465,26 @@ const classicIconOptions = [
   { label: '160 px', value: 160 },
 ];
 const shellOptions = [
-  { label: 'PCL Style外观', value: 'pcl' },
-  { label: 'Neo UI 原生外观', value: 'neo' },
+  { label: t('pcl.auto2.k67cf30199a'), value: 'pcl' },
+  { label: t('pcl.auto2.k453b088186'), value: 'neo' },
 ];
 const themeOptions = [
-  { label: '深色', value: 'dark' },
-  { label: '浅色', value: 'light' },
-  { label: '跟随系统', value: 'system' },
+  { label: t('pcl.auto2.k30b2c979ac'), value: 'dark' },
+  { label: t('pcl.auto2.k80ec9e2b1b'), value: 'light' },
+  { label: t('pcl.auto2.kf4bbd91f79'), value: 'system' },
 ];
 const densityOptions = [
-  { label: '舒适', value: 'comfortable' },
-  { label: '紧凑', value: 'compact' },
+  { label: t('pcl.auto2.kb97c3bc09e'), value: 'comfortable' },
+  { label: t('pcl.auto2.kc837edc258'), value: 'compact' },
 ];
 const backgroundOptions = [
-  { label: '渐变背景', value: 'gradient' },
-  { label: '纯色背景', value: 'solid' },
+  { label: t('pcl.auto2.k6fd96f07e8'), value: 'gradient' },
+  { label: t('pcl.auto2.ke139ab0c18'), value: 'solid' },
 ];
 const loadingAnimationOptions = [
-  { label: 'Luna 转圈', value: 'luna-spinner' },
-  { label: 'PCL 镐子', value: 'pcl-pickaxe' },
-  { label: '横向加载条', value: 'pcl-bar' },
+  { label: t('pcl.auto2.kb71ec0b422'), value: 'luna-spinner' },
+  { label: t('pcl.auto2.k490a4502f2'), value: 'pcl-pickaxe' },
+  { label: t('pcl.auto2.k722c032691'), value: 'pcl-bar' },
 ];
 const instanceWidthOptions = [
   { label: '60%', value: 60 },
@@ -492,48 +494,48 @@ const instanceWidthOptions = [
   { label: '100%', value: 100 },
 ];
 const instanceLayoutOptions = [
-  { label: '网格', value: 'grid' },
-  { label: '单列列表', value: 'list' },
+  { label: t('pcl.auto2.kcd1bbb1239'), value: 'grid' },
+  { label: t('pcl.auto2.ke94a88a32b'), value: 'list' },
 ];
 const instanceGroupingOptions = [
-  { label: '平铺显示', value: 'flat' },
-  { label: 'MMC 分组', value: 'grouped' },
+  { label: t('pcl.auto2.kbf3327d8de'), value: 'flat' },
+  { label: t('pcl.auto2.k44c1c6bab7'), value: 'grouped' },
 ];
 const instanceSortOptions = [
-  { label: '手动排序（可拖拽）', value: 'manual' },
-  { label: '按名称自动排序', value: 'name' },
-  { label: '按版本自动排序', value: 'version' },
+  { label: t('pcl.auto2.kc8b7b63a05'), value: 'manual' },
+  { label: t('pcl.auto2.k8065cff0a2'), value: 'name' },
+  { label: t('pcl.auto2.k265250b276'), value: 'version' },
 ];
 const instanceColumnOptions = [
-  { label: '自动（按宽度）', value: 'auto' },
-  { label: '1 列', value: 1 },
-  { label: '2 列', value: 2 },
-  { label: '3 列', value: 3 },
-  { label: '4 列', value: 4 },
-  { label: '5 列', value: 5 },
-  { label: '6 列', value: 6 },
-  { label: '7 列', value: 7 },
-  { label: '8 列', value: 8 },
-  { label: '10 列', value: 10 },
+  { label: t('pcl.auto2.k2907c13b04'), value: 'auto' },
+  { label: t('pcl.auto2.k620e6129cf'), value: 1 },
+  { label: t('pcl.auto2.k1e7e0fdbaa'), value: 2 },
+  { label: t('pcl.auto2.kf32016d001'), value: 3 },
+  { label: t('pcl.auto2.k2a5c49468f'), value: 4 },
+  { label: t('pcl.auto2.k57d6fb6ef9'), value: 5 },
+  { label: t('pcl.auto2.kf90d03d8d0'), value: 6 },
+  { label: t('pcl.auto2.ka03a27317c'), value: 7 },
+  { label: t('pcl.auto2.k5a2ec4199e'), value: 8 },
+  { label: t('pcl.auto2.k68c3715fb2'), value: 10 },
 ];
 const instanceTextPositionOptions = [
-  { label: '图标右侧', value: 'beside' },
-  { label: '图标下方（MMC）', value: 'below' },
+  { label: t('pcl.auto2.k381c24c2e7'), value: 'beside' },
+  { label: t('pcl.auto2.kb8b901d2ee'), value: 'below' },
 ];
 const instanceRowOptions = [
-  { label: '2 行', value: 2 },
-  { label: '3 行', value: 3 },
-  { label: '4 行', value: 4 },
-  { label: '5 行', value: 5 },
-  { label: '6 行', value: 6 },
-  { label: '8 行', value: 8 },
+  { label: t('pcl.auto2.kbf3fa26ef0'), value: 2 },
+  { label: t('pcl.auto2.kd60a2cddbc'), value: 3 },
+  { label: t('pcl.auto2.kb9af82b78e'), value: 4 },
+  { label: t('pcl.auto2.k5fc5b3f3a8'), value: 5 },
+  { label: t('pcl.auto2.k12eee8ee0d'), value: 6 },
+  { label: t('pcl.auto2.k0b6a6cd748'), value: 8 },
 ];
 const instanceFontOptions = [
   { label: '10 px', value: 10 },
   { label: '11 px', value: 11 },
   { label: '12 px', value: 12 },
   { label: '13 px', value: 13 },
-  { label: '14 px（默认）', value: 14 },
+  { label: t('pcl.auto2.kb52c0b7086'), value: 14 },
   { label: '15 px', value: 15 },
   { label: '16 px', value: 16 },
   { label: '18 px', value: 18 },
@@ -542,16 +544,16 @@ const baseFontOptions = [
   { label: '11 px', value: 11 },
   { label: '12 px', value: 12 },
   { label: '13 px', value: 13 },
-  { label: '14 px（默认）', value: 14 },
+  { label: t('pcl.auto2.kb52c0b7086'), value: 14 },
   { label: '15 px', value: 15 },
   { label: '16 px', value: 16 },
   { label: '18 px', value: 18 },
 ];
 const fontOptions = [
-  { label: '系统默认（Segoe UI / 微软雅黑）', value: 'system' },
-  { label: '微软雅黑 UI', value: 'yahei' },
-  { label: '等线 DengXian', value: 'dengxian' },
-  { label: '宋体 SimSun', value: 'simsun' },
+  { label: t('pcl.auto2.kaab0c72d2d'), value: 'system' },
+  { label: t('pcl.auto2.k85275a6427'), value: 'yahei' },
+  { label: t('pcl.auto2.k7791b0d498'), value: 'dengxian' },
+  { label: t('pcl.auto2.k24e636c047'), value: 'simsun' },
 ];
 async function openWebUiManager() {
   error.value = '';
@@ -594,7 +596,7 @@ function reset() {
     pclBackgroundMusicName: '',
     pclBackgroundMusicVolume: 0.35,
     pclBackgroundMusicEnabled: false,
-    pclHomeCards: [{ id: 'welcome', title: '欢迎回来', content: '在 设置 → 个性化 → 主页卡片 中编辑这张卡片。' }],
+    pclHomeCards: [{ id: 'welcome', title: t('pcl.auto2.ka5d9fdec5a'), content: t('pcl.auto2.k5d577eb245') }],
     pclHomeShowInstances: true,
     pclHomeShowServers: true,
     pclHomeSwitchOnQuickLaunch: false,

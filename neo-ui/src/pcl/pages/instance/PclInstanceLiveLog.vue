@@ -1,13 +1,13 @@
 <template>
   <div class="pcl-live-log">
-    <PclCard title="启动与实时日志">
+    <PclCard :title="t('liveLog.title')">
       <template #actions>
-        <PclCheckbox v-model="neoUiPreferences.pclLaunchLogAutoScroll" label="自动滚动" />
-        <LogUploadButton :instance="instance.id" name="实时控制台日志" :content="text" :execute="execute" :disabled="!text" pcl />
-        <PclButton size="sm" icon="trash-2" variant="ghost" :disabled="!lines.length" @click="lines = []">清空</PclButton>
-        <PclButton v-if="running" size="sm" variant="red" icon="power" @click="forceStop">强制停止</PclButton>
-        <PclButton v-else-if="launching" size="sm" variant="red" icon="x" @click="cancelLaunch">取消启动</PclButton>
-        <PclButton v-else size="sm" variant="highlight" icon="play" @click="launch">启动游戏</PclButton>
+        <PclCheckbox v-model="neoUiPreferences.pclLaunchLogAutoScroll" :label="t('liveLog.autoScroll')" />
+        <LogUploadButton :instance="instance.id" :name="t('liveLog.upload')" :content="text" :execute="execute" :disabled="!text" pcl />
+        <PclButton size="sm" icon="trash-2" variant="ghost" :disabled="!lines.length" @click="lines = []">{{ t('liveLog.clear') }}</PclButton>
+        <PclButton v-if="running" size="sm" variant="red" icon="power" @click="forceStop">{{ t('liveLog.forceStop') }}</PclButton>
+        <PclButton v-else-if="launching" size="sm" variant="red" icon="x" @click="cancelLaunch">{{ t('liveLog.cancelLaunch') }}</PclButton>
+        <PclButton v-else size="sm" variant="highlight" icon="play" @click="launch">{{ t('liveLog.launch') }}</PclButton>
       </template>
 
       <div class="pcl-live-log__status">
@@ -20,7 +20,7 @@
         <span :style="{ width: `${Math.round(progress * 100)}%` }" />
       </div>
 
-      <pre ref="logElement" class="pcl-live-log__console" aria-live="polite">{{ text || '连接实例控制台后，启动日志会显示在这里。' }}</pre>
+      <pre ref="logElement" class="pcl-live-log__console" aria-live="polite">{{ text || t('liveLog.empty') }}</pre>
     </PclCard>
 
     <PclLaunchProgressDialog
@@ -41,6 +41,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclLaunchProgressDialog from '../../components/PclLaunchProgressDialog.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
@@ -53,9 +54,10 @@ import { flattenTaskItems, taskActiveItems, taskProgressStats } from '../../comp
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: any; execute: Execute }>();
+const { t } = useI18n();
 
 const lines = ref<string[]>([]);
-const state = ref('正在连接控制台…');
+const state = ref(t('liveLog.connecting'));
 const connected = ref(false);
 const launching = ref(false);
 const launchDialogOpen = ref(false);
@@ -73,7 +75,7 @@ let subscriptionId = '';
 let unlistenStream: (() => void) | undefined;
 
 const text = computed(() => lines.value.join(''));
-const stateText = computed(() => running.value ? '客户端运行中' : state.value);
+const stateText = computed(() => running.value ? t('liveLog.running') : state.value);
 const launchDialogState = computed(() => {
   if (launching.value) return 'launching';
   if (launchError.value) return 'failed';
@@ -94,19 +96,19 @@ async function connect() {
     const result = await props.execute('instance.console.subscribe', { instance: props.instance.id });
     subscriptionId = String(result?.subscriptionId || '');
     connected.value = Boolean(subscriptionId);
-    state.value = connected.value ? '控制台已连接' : '控制台不可用';
+    state.value = connected.value ? t('liveLog.connected') : t('liveLog.unavailable');
     unlistenStream = await launcher.onStream((batch: any) => {
       if (!batch || batch.subscriptionId !== subscriptionId) return;
-      if (batch.dropped) void append(`[日志缓冲区已省略 ${batch.dropped} 条消息]\n`);
+      if (batch.dropped) void append(`${t('liveLog.dropped', { count: batch.dropped })}\n`);
       for (const event of batch.events || []) {
         if (event.kind === 'console.line') void append(String(event.text || '') + '\n');
         else if (event.kind === 'console.data') void append(new TextDecoder().decode(Uint8Array.from(atob(event.data), c => c.charCodeAt(0))));
         else if (event.kind === 'instance.state') {
-          state.value = event.running ? '客户端运行中' : '客户端已停止';
+          state.value = event.running ? t('liveLog.running') : t('instance.stopped');
           running.value = Boolean(event.running);
           if (!event.running) launching.value = false;
         } else if (event.kind === 'console.reset') {
-          state.value = event.available ? '控制台已连接' : '等待启动';
+          state.value = event.available ? t('liveLog.connected') : t('liveLog.waiting');
         }
       }
     });
@@ -124,7 +126,7 @@ async function launch() {
   launchDetails.value = '';
   launchChildren.value = [];
   progress.value = 0;
-  stage.value = '正在准备启动';
+  stage.value = t('liveLog.preparing');
   try {
     let task = await props.execute('neo.task.start', {
       operation: 'instance.launch',
@@ -144,13 +146,13 @@ async function launch() {
     launching.value = false;
     if (finished?.state === 'succeeded') {
       progress.value = 1;
-      stage.value = '游戏进程已启动';
+      stage.value = t('liveLog.started');
       running.value = true;
     } else if (finished?.state === 'cancelled') {
       launchCancelled.value = true;
-      stage.value = '启动已取消';
+      stage.value = t('liveLog.cancelled');
     } else {
-      launchError.value = finished?.error || '启动失败';
+      launchError.value = finished?.error || t('liveLog.failed');
       state.value = launchError.value;
     }
   } catch (exception) {
@@ -167,17 +169,17 @@ async function cancelLaunch() {
   if (currentTaskId) {
     try { await props.execute('neo.task.cancel', { taskId: currentTaskId }); } catch { /* Task may already be terminal. */ }
   }
-  stage.value = '已取消启动';
+  stage.value = t('liveLog.cancelledDone');
   cancelling.value = false;
 }
 
 async function forceStop() {
-  if (!window.confirm('强制停止会立即结束游戏进程，未保存的游戏进度可能丢失。继续吗？')) return;
+  if (!window.confirm(t('liveLog.forceStopConfirm'))) return;
   try {
     await props.execute('instance.kill', { instance: props.instance.id });
     running.value = false;
     launching.value = false;
-    state.value = '客户端已强制停止';
+    state.value = t('liveLog.forceStopped');
   } catch (exception) {
     state.value = exception instanceof Error ? exception.message : String(exception);
   }

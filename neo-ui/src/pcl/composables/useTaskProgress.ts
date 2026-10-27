@@ -1,3 +1,5 @@
+import { i18n } from '../../i18n';
+
 /** Shared presentation of legacy and Neo task snapshots. Units come from the backend. */
 export function taskState(item: any): string {
   const state = String(item?.state || '').toLowerCase();
@@ -16,7 +18,7 @@ export const isTaskItemFinished = (item: any): boolean => Boolean(item?.finished
   ['succeeded', 'failed', 'cancelled', 'interrupted', 'finished', 'skipped'].includes(taskState(item));
 export const isTaskItemActive = (item: any): boolean => !isTaskItemFinished(item) && taskState(item) === 'running';
 export const isTaskItemWaiting = (item: any): boolean => !isTaskItemFinished(item) && taskState(item) === 'waiting';
-export const taskItemLabel = (item: any): string => String(item?.source?.fileName || item?.label || item?.name || item?.status || item?.details || item?.type || '任务');
+export const taskItemLabel = (item: any): string => String(item?.source?.fileName || item?.label || item?.name || item?.status || item?.details || item?.type || i18n.global.t('tasks.title'));
 export const taskItemIsBytes = (item: any): boolean => item?.progressUnit === 'bytes' || item?.source?.kind === 'download';
 
 /** Prefer children to duplicated step summaries, and never deduplicate by a display name. */
@@ -51,13 +53,13 @@ export function formatTaskSize(value: unknown): string {
   return `${bytes.toFixed(index ? 1 : 0)} ${units[index]}`;
 }
 export const formatTaskRate = (value: unknown): string => number(value) > 0 ? `${formatTaskSize(value)}/s` : '';
-const states: Record<string, string> = { succeeded: '已完成', failed: '失败', cancelled: '已取消', interrupted: '已中断', waiting: '等待中', running: '进行中', finished: '已结束' };
+const states: Record<string, string> = { succeeded: i18n.global.t('tasks.states.succeeded'), failed: i18n.global.t('tasks.states.failed'), cancelled: i18n.global.t('tasks.states.cancelled'), interrupted: i18n.global.t('tasks.states.interrupted'), waiting: i18n.global.t('tasks.waiting'), running: i18n.global.t('tasks.states.running'), finished: i18n.global.t('pcl.tasks.finished') };
 export function taskItemProgressText(item: any): string {
   const state = taskState(item);
   if (state !== 'running') return states[state] || state;
   const total = taskItemTotal(item), current = taskItemCurrent(item);
-  if (taskItemIsBytes(item)) return total > 0 ? `${formatTaskSize(current)} / ${formatTaskSize(total)}` : `${formatTaskSize(current)} / 大小未知`;
-  return total > 0 ? `${Math.round(Math.min(1, current / total) * 100)}%` : '进行中';
+  if (taskItemIsBytes(item)) return total > 0 ? `${formatTaskSize(current)} / ${formatTaskSize(total)}` : `${formatTaskSize(current)} / ${i18n.global.t('pcl.tasks.unknownSize')}`;
+  return total > 0 ? `${Math.round(Math.min(1, current / total) * 100)}%` : i18n.global.t('tasks.states.running');
 }
 export function taskProgressStats(task: any, inputRows?: any[]) {
   const rows = inputRows || flattenTaskItems(task);
@@ -77,10 +79,10 @@ export function taskProgressStats(task: any, inputRows?: any[]) {
   // stage. A bounded visible list is never a replacement denominator.
   const total = taskItemTotal(task), current = taskItemCurrent(task);
   const percent = taskState(task) === 'succeeded' ? 100 : total > 0 ? Math.min(100, current / total * 100) : null;
-  const byteSummary = hasBytes ? `${formatTaskSize(currentBytes)} / ${unknownByteTotals ? '总大小待确定' : formatTaskSize(totalBytes)}` : '';
-  let summary = itemCount ? `已完成 ${completed} / ${itemCount}${authoritative || !task?.childrenTruncated ? '' : '（已显示项目）'}` : '等待任务进度…';
-  if (failed) summary += ` · 失败 ${failed}`;
-  if (cancelled) summary += ` · 已取消 ${cancelled}`;
+  const byteSummary = hasBytes ? `${formatTaskSize(currentBytes)} / ${unknownByteTotals ? i18n.global.t('pcl.tasks.unknownTotal') : formatTaskSize(totalBytes)}` : '';
+  let summary = itemCount ? i18n.global.t('pcl.tasks.summary', { completed, total: itemCount, suffix: authoritative || !task?.childrenTruncated ? '' : i18n.global.t('pcl.tasks.displayed') }) : i18n.global.t('tasks.waiting');
+  if (failed) summary += ` · ${i18n.global.t('tasks.states.failed')} ${failed}`;
+  if (cancelled) summary += ` · ${i18n.global.t('tasks.states.cancelled')} ${cancelled}`;
   return { percent, current, total, completed, failed, cancelled, active, waiting, itemCount,
     currentBytes, totalBytes, unknownByteTotals, hasBytes, byteSummary, summary };
 }

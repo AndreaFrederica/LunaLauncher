@@ -2,13 +2,13 @@
 <template>
   <div class="launcher-settings-panel">
     <q-tabs v-model="tab" align="left" outside-arrows mobile-arrows>
-      <q-tab name="general" label="常规与路径" icon="tune" />
-      <q-tab name="java" label="Java 管理" icon="code" />
-      <q-tab name="downloads" label="下载核心" icon="download" />
-      <q-tab name="mirrors" label="镜像与资源" icon="public" />
-      <q-tab name="integrations" label="认证与工具" icon="extension" />
-      <q-tab name="network" label="网络与界面" icon="settings" />
-      <q-tab name="qt" label="Qt 兼容设置" icon="desktop_windows" />
+      <q-tab name="general" :label="t('neo.auto2.k021a1cbe78')" icon="tune" />
+      <q-tab name="java" :label="t('neo.auto2.kfc95eae98d')" icon="code" />
+      <q-tab name="downloads" :label="t('neo.auto2.k2f85759474')" icon="download" />
+      <q-tab name="mirrors" :label="t('neo.auto2.k39acdd11d4')" icon="public" />
+      <q-tab name="integrations" :label="t('neo.auto2.ke12180a10c')" icon="extension" />
+      <q-tab name="network" :label="t('neo.auto2.k9e5f712974')" icon="settings" />
+      <q-tab name="qt" :label="t('neo.auto2.kbd52c2c514')" icon="desktop_windows" />
     </q-tabs>
 
     <div v-if="tab==='general'" class="q-mt-md">
@@ -21,46 +21,48 @@
     </div>
     <div v-else-if="tab==='downloads'" class="q-mt-md">
       <section class="settings-card">
-        <h6>下载核心</h6>
-        <q-select dark outlined emit-value map-options :model-value="value('DownloadBackend')" :options="backends" label="下载实现" @update:model-value="saveKey('DownloadBackend',$event)" />
-        <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" label="专用 .NET 下载失败时回退 Qt" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" label="专用 .NET 下载并发线程" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" label="专用 .NET 下载限速（KB/s，0 为不限）" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
+        <h6>{{ t('neo.auto2.k2f85759474') }}</h6>
+        <q-select dark outlined emit-value map-options :model-value="value('DownloadBackend')" :options="backends" :label="t('neo.auto2.kd21febb3dc')" @update:model-value="saveKey('DownloadBackend',$event)" />
+        <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" :label="t('neo.auto2.k30ad19d3a5')" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" :label="t('neo.auto2.kb0279be358')" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" :label="t('neo.auto2.k25d6c7e35d')" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
       </section>
       <section class="settings-card q-mt-md">
-        <h6>Aria2</h6>
-        <q-toggle dark :model-value="bool('Aria2Enabled')" label="启用 Aria2" @update:model-value="saveKey('Aria2Enabled',$event)" />
-        <q-toggle dark :model-value="bool('Aria2AutoInstall')" label="自动安装 Aria2" @update:model-value="saveKey('Aria2AutoInstall',$event)" />
-        <q-toggle dark :model-value="bool('Aria2FallbackToQt')" label="Aria2 失败时回退 Qt" @update:model-value="saveKey('Aria2FallbackToQt',$event)" />
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('Aria2MaxConcurrentDownloads')" label="最大并发下载" @update:model-value="saveKey('Aria2MaxConcurrentDownloads',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('Aria2MaxConnectionPerServer')" label="每服务器连接数" @update:model-value="saveKey('Aria2MaxConnectionPerServer',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('Aria2Split')" label="分段数" @update:model-value="saveKey('Aria2Split',Number($event))" /></div>
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined :model-value="text('Aria2MinSplitSize')" label="最小分段大小" @update:model-value="saveKey('Aria2MinSplitSize',$event)" /><q-input class="col" dark outlined :model-value="text('Aria2FileAllocation')" label="文件分配方式" @update:model-value="saveKey('Aria2FileAllocation',$event)" /><q-input class="col" dark outlined type="number" :model-value="number('Aria2RpcPort')" label="RPC 端口（0 自动）" @update:model-value="saveKey('Aria2RpcPort',Number($event))" /></div>
-        <q-toggle dark :model-value="bool('Aria2Continue')" label="断点续传" @update:model-value="saveKey('Aria2Continue',$event)" />
-        <q-input dark outlined type="textarea" autogrow :model-value="text('Aria2ExtraArgs')" label="Aria2 额外参数" @update:model-value="saveKey('Aria2ExtraArgs',$event)" />
-        <div class="row q-gutter-sm q-mt-md"><q-btn flat label="刷新 Aria2 队列" :disable="busy" @click="loadDownloads" /><q-btn flat label="清理已完成" :disable="busy" @click="clearDownloads" /></div>
-        <q-list v-if="downloads.length" bordered separator class="q-mt-md"><q-item v-for="item in downloads" :key="item.gid"><q-item-section><q-item-label>{{ item.name || item.gid }}</q-item-label><q-item-label caption>{{ item.status || item.state }} · {{ item.completedLength || 0 }} / {{ item.totalLength || 0 }}</q-item-label></q-item-section><q-item-section side><q-btn flat color="negative" label="取消" :disable="busy" @click="cancelDownload(item)" /></q-item-section></q-item></q-list>
+        <h6>{{ t('ui.aria2') }}</h6>
+        <q-toggle dark :model-value="bool('Aria2Enabled')" :label="t('neo.auto2.k10bfe990fe')" @update:model-value="saveKey('Aria2Enabled',$event)" />
+        <q-toggle dark :model-value="bool('Aria2AutoInstall')" :label="t('neo.auto2.k75ff090a68')" @update:model-value="saveKey('Aria2AutoInstall',$event)" />
+        <q-toggle dark :model-value="bool('Aria2FallbackToQt')" :label="t('neo.auto2.ka8ffe0fe9c')" @update:model-value="saveKey('Aria2FallbackToQt',$event)" />
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('Aria2MaxConcurrentDownloads')" :label="t('neo.auto2.kb8c414a7d8')" @update:model-value="saveKey('Aria2MaxConcurrentDownloads',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('Aria2MaxConnectionPerServer')" :label="t('neo.auto2.kafb366a11a')" @update:model-value="saveKey('Aria2MaxConnectionPerServer',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('Aria2Split')" :label="t('neo.auto2.k7c6534c94c')" @update:model-value="saveKey('Aria2Split',Number($event))" /></div>
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined :model-value="text('Aria2MinSplitSize')" :label="t('neo.auto2.k956f301756')" @update:model-value="saveKey('Aria2MinSplitSize',$event)" /><q-input class="col" dark outlined :model-value="text('Aria2FileAllocation')" :label="t('neo.auto2.k5016a7bffb')" @update:model-value="saveKey('Aria2FileAllocation',$event)" /><q-input class="col" dark outlined type="number" :model-value="number('Aria2RpcPort')" :label="t('neo.auto2.k681dccf8d5')" @update:model-value="saveKey('Aria2RpcPort',Number($event))" /></div>
+        <q-toggle dark :model-value="bool('Aria2Continue')" :label="t('neo.auto2.ka99f863cff')" @update:model-value="saveKey('Aria2Continue',$event)" />
+        <q-input dark outlined type="textarea" autogrow :model-value="text('Aria2ExtraArgs')" :label="t('neo.auto2.ka63811eb1f')" @update:model-value="saveKey('Aria2ExtraArgs',$event)" />
+        <div class="row q-gutter-sm q-mt-md"><q-btn flat :label="t('neo.auto2.k85b62254d1')" :disable="busy" @click="loadDownloads" /><q-btn flat :label="t('neo.auto2.k149b3c638f')" :disable="busy" @click="clearDownloads" /></div>
+        <q-list v-if="downloads.length" bordered separator class="q-mt-md"><q-item v-for="item in downloads" :key="item.gid"><q-item-section><q-item-label>{{ item.name || item.gid }}</q-item-label><q-item-label caption>{{ item.status || item.state }} · {{ item.completedLength || 0 }} / {{ item.totalLength || 0 }}</q-item-label></q-item-section><q-item-section side><q-btn flat color="negative" :label="t('neo.auto2.k4d0b4688c7')" :disable="busy" @click="cancelDownload(item)" /></q-item-section></q-item></q-list>
       </section>
       <SettingsPanel class="q-mt-lg" :settings="downloadSettings" category="all" :busy="busy" @save="save" @reset="reset" />
     </div>
     <div v-else-if="tab==='mirrors'" class="q-mt-md">
       <section class="settings-card">
-        <h6>游戏下载源</h6>
-        <q-select dark outlined emit-value map-options :model-value="number('DownloadMirrorType')" :options="mirrorTypes" label="Minecraft 资源与依赖" @update:model-value="saveKey('DownloadMirrorType',$event)" />
-        <q-banner v-if="number('DownloadMirrorType') === 2" class="bg-blue-grey-9 q-mt-md">自定义镜像需要提供兼容 Mojang / Maven 路径的地址；留空的地址会按主地址的 BMCLAPI 目录结构补全。</q-banner>
+        <h6>{{ t('neo.auto2.kc82dda0236') }}</h6>
+        <q-select dark outlined emit-value map-options :model-value="number('DownloadMirrorType')" :options="mirrorTypes" :label="t('neo.auto2.k01b7899496')" @update:model-value="saveKey('DownloadMirrorType',$event)" />
+        <q-banner v-if="number('DownloadMirrorType') === 2" class="bg-blue-grey-9 q-mt-md">{{ t('neo.auto2.kccbd1ffb95') }}</q-banner>
         <template v-if="number('DownloadMirrorType') === 2">
-          <q-input dark outlined v-model="mirrorDraft.MojangDownloadsMirrorURL" label="Mojang 下载主地址" hint="例如 https://mirror.example.com/" @blur="saveKey('MojangDownloadsMirrorURL',mirrorDraft.MojangDownloadsMirrorURL)" />
-          <q-input dark outlined v-model="mirrorDraft.LibrariesURL" label="Libraries Maven 地址（可选）" @blur="saveKey('LibrariesURL',mirrorDraft.LibrariesURL)" />
-          <q-input dark outlined v-model="mirrorDraft.ResourceURLOverride" label="资源对象地址（可选）" @blur="saveKey('ResourceURLOverride',mirrorDraft.ResourceURLOverride)" />
-          <q-input dark outlined v-model="mirrorDraft.LegacyFMLLibsURLOverride" label="旧版 Forge Libraries 地址（可选）" @blur="saveKey('LegacyFMLLibsURLOverride',mirrorDraft.LegacyFMLLibsURLOverride)" />
+          <q-input dark outlined v-model="mirrorDraft.MojangDownloadsMirrorURL" :label="t('neo.auto2.k2fa65ccaca')" :hint="t('neo.auto2.kd5d8edd12c')" @blur="saveKey('MojangDownloadsMirrorURL',mirrorDraft.MojangDownloadsMirrorURL)" />
+          <q-input dark outlined v-model="mirrorDraft.LibrariesURL" :label="t('neo.auto2.k3346e12074')" @blur="saveKey('LibrariesURL',mirrorDraft.LibrariesURL)" />
+          <q-input dark outlined v-model="mirrorDraft.ResourceURLOverride" :label="t('neo.auto2.ke322863a69')" @blur="saveKey('ResourceURLOverride',mirrorDraft.ResourceURLOverride)" />
+          <q-input dark outlined v-model="mirrorDraft.LegacyFMLLibsURLOverride" :label="t('neo.auto2.kce3f74d643')" @blur="saveKey('LegacyFMLLibsURLOverride',mirrorDraft.LegacyFMLLibsURLOverride)" />
         </template>
       </section>
       <SettingsPanel class="q-mt-lg" :settings="mirrorOtherSettings" category="all" :busy="busy" @save="save" @reset="reset" />
     </div>
-    <div v-else-if="tab==='integrations'" class="q-mt-md"><SettingsPanel :settings="settings" category="advanced" :busy="busy" @save="save" @reset="reset" /><q-banner class="bg-blue-grey-9 q-mt-lg">Yggdrasil 账户、预设和 authlib-injector 在“账户管理”中维护；这里保留认证辅助工具和外部工具设置。</q-banner><div class="row q-col-gutter-md q-mt-md"><q-select class="col" dark outlined v-model="helper" :options="['authlib-injector','nide8auth']" label="认证辅助工具" /><q-btn class="q-mt-sm" flat label="查看状态" :disable="busy" @click="helperStatus" /></div><div class="row q-col-gutter-md q-mt-md"><q-select class="col" dark outlined v-model="externalTool" :options="['jprofiler','jvisualvm','mcedit','curseforge']" label="外部工具" /><q-input class="col" dark outlined v-model="externalPath" label="工具路径" /><q-btn class="q-mt-sm" flat label="检查路径" :disable="busy || !externalPath" @click="externalCheck" /></div><q-list v-if="integrationResult" bordered class="q-mt-md"><q-item><q-item-section><pre>{{ JSON.stringify(integrationResult,null,2) }}</pre></q-item-section></q-item></q-list></div>
+    <div v-else-if="tab==='integrations'" class="q-mt-md"><SettingsPanel :settings="settings" category="advanced" :busy="busy" @save="save" @reset="reset" /><q-banner class="bg-blue-grey-9 q-mt-lg">{{ t('neo.auto2.kbe26e1af41') }}</q-banner><div class="row q-col-gutter-md q-mt-md"><q-select class="col" dark outlined v-model="helper" :options="['authlib-injector','nide8auth']" :label="t('neo.auto2.k34bc6b32e7')" /><q-btn class="q-mt-sm" flat :label="t('neo.auto2.k4785148aa3')" :disable="busy" @click="helperStatus" /></div><div class="row q-col-gutter-md q-mt-md"><q-select class="col" dark outlined v-model="externalTool" :options="['jprofiler','jvisualvm','mcedit','curseforge']" :label="t('neo.auto2.k1a818fb254')" /><q-input class="col" dark outlined v-model="externalPath" :label="t('neo.auto2.kebade72c21')" /><q-btn class="q-mt-sm" flat :label="t('neo.auto2.k63abb84f10')" :disable="busy || !externalPath" @click="externalCheck" /></div><q-list v-if="integrationResult" bordered class="q-mt-md"><q-item><q-item-section><pre>{{ JSON.stringify(integrationResult,null,2) }}</pre></q-item-section></q-item></q-list></div>
     <div v-else-if="tab==='network'" class="q-mt-md"><LauncherControlPanel :busy="busy" :execute="execute" /><SettingsPanel class="q-mt-lg" :settings="settings" category="network" :busy="busy" @save="save" @reset="reset" /></div>
     <div v-else class="q-mt-md"><LauncherControlPanel :busy="busy" :execute="execute" /><SettingsPanel class="q-mt-lg" :settings="settings" category="qt-ui" :busy="busy" @save="save" @reset="reset" /></div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, reactive, ref, watch } from 'vue';
 import SettingsPanel from './SettingsPanel.vue';
 import JavaPanel from './JavaPanel.vue';
@@ -68,8 +70,8 @@ import LauncherControlPanel from './LauncherControlPanel.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref('authlib-injector'),externalTool=ref('jprofiler'),externalPath=ref('');
-const backends=[{label:'Qt 原生下载',value:0},{label:'Aria2',value:1},{label:'专用多线程下载',value:2}];
-const mirrorTypes=[{label:'官方源',value:0},{label:'BMCLAPI 镜像',value:1},{label:'自定义镜像',value:2}];
+const backends=[{label:t('neo.auto2.ka626fe7700'),value:0},{label:'Aria2',value:1},{label:t('neo.auto2.k6a21c71e5f'),value:2}];
+const mirrorTypes=[{label:t('neo.auto2.k212e81e6d0'),value:0},{label:t('neo.auto2.kf0aba8a42d'),value:1},{label:t('neo.auto2.kfe7276cd17'),value:2}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);
 const mirrorKeys=new Set(['ModMetadataDisabled','ModDependenciesDisabled','SkipModpackUpdatePrompt','ModDownloadLoaders','OverrideModDownloadLoaders','CurseForgeDownloadBrowser','ShowModIncompat','FallbackMRBlockedMods','MetaURLOverride','ResourceURLOverride','DownloadMirrorType','ModrinthMirror','CurseForgeMirror','ModrinthMirrorURL','CurseForgeMirrorURL','LibrariesURL','LegacyFMLLibsURLOverride','MojangDownloadsMirrorURL','CFKeyOverride','FlameKeyOverride','ModrinthToken']);
 const mirrorControlKeys=new Set(['DownloadMirrorType','MojangDownloadsMirrorURL','LibrariesURL','ResourceURLOverride','LegacyFMLLibsURLOverride']);

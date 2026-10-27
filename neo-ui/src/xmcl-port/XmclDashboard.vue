@@ -2,41 +2,41 @@
   <section class="xmcl-dashboard">
     <header class="dashboard-header">
       <div>
-        <div class="eyebrow">LUNA LAUNCHER</div>
-        <h1>我的 Minecraft</h1>
-        <p>所有客户端集中在这里，选择实例后可以继续管理，或直接启动。</p>
+        <div class="eyebrow">{{ t('ui.launcherKicker') }}</div>
+        <h1>{{ t('xmcl.dashboard.title') }}</h1>
+        <p>{{ t('xmcl.dashboard.description') }}</p>
       </div>
       <div class="dashboard-actions">
         <q-btn flat round icon="refresh" :disable="busy" @click="emit('refresh')" />
-        <q-btn v-if="selectedIds.length" flat icon="close" :label="`清除选择 (${selectedIds.length})`" @click="selectedIds=[]" />
-        <q-btn v-if="selectedIds.length" color="positive" icon="play_arrow" label="批量启动" :disable="busy" @click="launchSelected" />
-        <q-btn color="primary" icon="add" label="添加实例" :disable="busy" @click="emit('add')" />
+        <q-btn v-if="selectedIds.length" flat icon="close" :label="t('xmcl.dashboard.clearSelection', { count: selectedIds.length })" @click="selectedIds=[]" />
+        <q-btn v-if="selectedIds.length" color="positive" icon="play_arrow" :label="t('xmcl.dashboard.batchLaunch')" :disable="busy" @click="launchSelected" />
+        <q-btn color="primary" icon="add" :label="t('xmcl.dashboard.add')" :disable="busy" @click="emit('add')" />
       </div>
     </header>
     <div class="dashboard-toolbar">
-      <q-input v-model="query" dark borderless dense class="dashboard-search" placeholder="搜索实例、版本或分组">
+      <q-input v-model="query" dark borderless dense class="dashboard-search" :placeholder="t('xmcl.dashboard.search')">
         <template #prepend><q-icon name="search" /></template>
       </q-input>
-      <q-btn-toggle v-model="filter" flat unelevated toggle-color="primary" :options="[{ label: '全部', value: 'all' }, { label: '运行中', value: 'running' }, { label: '最近使用', value: 'recent' }]" />
+      <q-btn-toggle v-model="filter" flat unelevated toggle-color="primary" :options="[{ label: t('xmcl.dashboard.all'), value: 'all' }, { label: t('xmcl.dashboard.running'), value: 'running' }, { label: t('xmcl.dashboard.recent'), value: 'recent' }]" />
       <span class="dashboard-count">{{ filtered.length }} / {{ instances.length }}</span>
     </div>
     <div v-if="!filtered.length" class="dashboard-empty">
       <span class="material-icons">sports_esports</span>
-      <h3>{{ instances.length ? '没有匹配的实例' : '还没有 Minecraft 实例' }}</h3>
-      <p>{{ instances.length ? '尝试修改搜索条件。' : '导入整合包、创建原版实例，或者从下载中心安装。' }}</p>
-      <q-btn color="primary" icon="add" label="添加实例" @click="emit('add')" />
+      <h3>{{ instances.length ? t('xmcl.dashboard.noMatch') : t('xmcl.dashboard.empty') }}</h3>
+      <p>{{ instances.length ? t('xmcl.dashboard.noMatchHint') : t('xmcl.dashboard.emptyHint') }}</p>
+      <q-btn color="primary" icon="add" :label="t('xmcl.dashboard.add')" @click="emit('add')" />
     </div>
     <div v-else class="dashboard-grid">
       <article v-for="instance in filtered" :key="instance.id" class="dashboard-card" :class="{ running: instance.running, selected: selectedIds.includes(instance.id) }" @click="emit('select', instance)">
         <div class="dashboard-art" :style="artStyle(instance)">
           <img :src="icons[instance.id] || fallback" :alt="instance.name" />
-          <div class="dashboard-art-meta"><q-checkbox :model-value="selectedIds.includes(instance.id)" dark dense keep-color color="primary" @click.stop="toggleSelected(instance)" /><q-badge v-if="instance.running" color="positive">运行中</q-badge><q-badge v-if="instance.group" color="dark">{{ instance.group }}</q-badge></div>
+          <div class="dashboard-art-meta"><q-checkbox :model-value="selectedIds.includes(instance.id)" dark dense keep-color color="primary" @click.stop="toggleSelected(instance)" /><q-badge v-if="instance.running" color="positive">{{ t('xmcl.dashboard.runningStatus') }}</q-badge><q-badge v-if="instance.group" color="dark">{{ instance.group }}</q-badge></div>
         </div>
         <div class="dashboard-card-body">
           <div class="dashboard-card-title"><strong>{{ instance.name }}</strong><q-icon v-if="instance.managed" name="cloud_done" color="primary" /></div>
-          <div class="dashboard-card-meta"><span>{{ instance.runtime?.minecraft || instance.minecraftVersion || 'Minecraft' }}</span><span>·</span><span>{{ instance.type || '客户端' }}</span></div>
+          <div class="dashboard-card-meta"><span>{{ instance.runtime?.minecraft || instance.minecraftVersion || 'Minecraft' }}</span><span>·</span><span>{{ instance.type || t('xmcl.dashboard.client') }}</span></div>
           <p v-if="instance.notes" class="dashboard-notes">{{ instance.notes }}</p>
-          <div class="dashboard-card-actions"><q-btn flat dense icon="tune" label="管理" @click.stop="emit('select', instance)" /><q-btn flat dense icon="check_box" :label="selectedIds.includes(instance.id) ? '已选择' : '选择'" @click.stop="toggleSelected(instance)" /><q-btn color="primary" dense :icon="instance.running ? 'stop' : 'play_arrow'" :label="instance.running ? '运行中' : '启动'" :disable="instance.running || busy" @click.stop="emit('launch', instance)" /></div>
+          <div class="dashboard-card-actions"><q-btn flat dense icon="tune" :label="t('xmcl.dashboard.manage')" @click.stop="emit('select', instance)" /><q-btn flat dense icon="check_box" :label="selectedIds.includes(instance.id) ? t('xmcl.dashboard.selected') : t('xmcl.dashboard.select')" @click.stop="toggleSelected(instance)" /><q-btn color="primary" dense :icon="instance.running ? 'stop' : 'play_arrow'" :label="instance.running ? t('xmcl.dashboard.runningStatus') : t('xmcl.dashboard.launch')" :disable="instance.running || busy" @click.stop="emit('launch', instance)" /></div>
         </div>
       </article>
     </div>
@@ -44,8 +44,10 @@
 </template>
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import fallback from './assets/minecraft.webp';
 const props = defineProps<{ instances: any[]; icons: Record<string, string>; busy: boolean }>();
+const { t } = useI18n();
 const emit = defineEmits<{ select: [instance: any]; launch: [instance: any]; 'batch-launch': [instances: any[]]; add: []; refresh: [] }>();
 const query = ref('');
 const filter = ref('all');

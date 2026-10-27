@@ -5,38 +5,40 @@
       <span><strong>Luna Launcher</strong><small>Neo UI</small></span>
     </div>
     <div class="sidebar__section">
-      <button class="sidebar-back-btn" aria-label="返回实例库" @click="emit('back')"><span class="material-icons">arrow_back</span></button>
-      <button class="sidebar-item" :class="{ active: page === 'accounts' }" aria-label="账户" @click="emit('navigate', 'accounts')"><span class="sidebar-item__content"><span class="material-icons">person</span><span class="sidebar-item__label">账户</span></span></button>
-      <button class="sidebar-item" :class="{ active: page === 'store' || page === 'pcl-download' }" aria-label="下载中心" @click="emit('navigate', 'pcl-download')"><span class="sidebar-item__content"><span class="material-icons">store</span><span class="sidebar-item__label">下载</span></span></button>
+      <button class="sidebar-back-btn" :aria-label="t('nav.back')" @click="emit('back')"><span class="material-icons">arrow_back</span></button>
+      <button class="sidebar-item" :class="{ active: page === 'accounts' }" :aria-label="t('nav.accounts')" @click="emit('navigate', 'accounts')"><span class="sidebar-item__content"><span class="material-icons">person</span><span class="sidebar-item__label">{{ t('nav.accounts') }}</span></span></button>
+      <button class="sidebar-item" :class="{ active: page === 'store' || page === 'pcl-download' }" :aria-label="t('nav.downloads')" @click="emit('navigate', 'pcl-download')"><span class="sidebar-item__content"><span class="material-icons">store</span><span class="sidebar-item__label">{{ t('nav.downloads') }}</span></span></button>
     </div>
     <div class="sidebar__divider" />
-    <div class="sidebar__instances" role="group" aria-label="实例">
+    <div class="sidebar__instances" role="group" :aria-label="t('nav.instances')">
       <div v-for="instance in instances" :key="instance.id" class="sidebar-instance" :class="{ dragging: dragging === instance.id }">
         <button class="sidebar-item sidebar-instance__button" :class="{ active: selected?.id === instance.id, running: instance.running }" :title="instance.name" draggable="true" @click="emit('select', instance)" @dblclick="emit('launch', instance)" @dragstart="dragging = instance.id" @dragend="dragging = ''" @drop.prevent="onDrop(instance)">
           <span class="sidebar-instance__indicator" />
           <span class="sidebar-instance__content"><img :src="icons[instance.id] || fallback" :alt="instance.name" draggable="false" /><span class="sidebar-instance__name">{{ instance.name }}</span><span v-if="instance.running" class="sidebar-instance__status"><span class="material-icons">play_arrow</span></span></span>
         </button>
       </div>
-      <button id="create-instance-button" class="sidebar-item sidebar-add" aria-label="添加实例" @click="emit('add')"><span class="sidebar-item__content"><span class="material-icons">add</span><span class="sidebar-item__label">新建实例</span></span></button>
+      <button id="create-instance-button" class="sidebar-item sidebar-add" :aria-label="t('nav.addInstance')" @click="emit('add')"><span class="sidebar-item__content"><span class="material-icons">add</span><span class="sidebar-item__label">{{ t('nav.addInstance') }}</span></span></button>
     </div>
     <div class="sidebar__divider" />
     <div class="sidebar__section sidebar__bottom">
-      <button class="sidebar-item" :class="{ active: page === 'multiplayer' }" aria-label="多人游戏" @click="emit('navigate', 'multiplayer')"><span class="sidebar-item__content"><span class="material-icons">hub</span><span class="sidebar-item__label">联机</span></span></button>
-      <button class="sidebar-item" :class="{ active: page === 'settings' || page === 'pcl-settings' }" aria-label="设置" @click="emit('navigate', 'pcl-settings')"><span class="sidebar-item__content"><span class="material-icons">settings</span><span class="sidebar-item__label">设置</span></span></button>
+      <button class="sidebar-item" :class="{ active: page === 'multiplayer' }" :aria-label="t('nav.multiplayer')" @click="emit('navigate', 'multiplayer')"><span class="sidebar-item__content"><span class="material-icons">hub</span><span class="sidebar-item__label">{{ t('nav.multiplayer') }}</span></span></button>
+      <button class="sidebar-item" :class="{ active: page === 'settings' || page === 'pcl-settings' }" :aria-label="t('nav.settings')" @click="emit('navigate', 'pcl-settings')"><span class="sidebar-item__content"><span class="material-icons">settings</span><span class="sidebar-item__label">{{ t('nav.settings') }}</span></span></button>
     </div>
     <div class="sidebar__pcl-launch">
-      <div class="sidebar__pcl-account"><span class="material-icons">account_circle</span><span><strong>离线账户</strong><small>准备就绪</small></span></div>
-      <button class="sidebar__pcl-launch-button" :disabled="!selected || selected.running" @click="selected && emit('launch', selected)"><span class="material-icons">play_arrow</span>{{ selected?.running ? '正在运行' : '启动游戏' }}</button>
-      <small class="sidebar__pcl-version">{{ selected?.runtime?.minecraft || selected?.minecraftVersion || '未选择实例' }}</small>
+      <div class="sidebar__pcl-account"><span class="material-icons">account_circle</span><span><strong>{{ t('nav.offlineAccount') }}</strong><small>{{ t('nav.ready') }}</small></span></div>
+      <button class="sidebar__pcl-launch-button" :disabled="!selected || selected.running" @click="selected && emit('launch', selected)"><span class="material-icons">play_arrow</span>{{ selected?.running ? t('nav.running') : t('nav.launch') }}</button>
+      <small class="sidebar__pcl-version">{{ selected?.runtime?.minecraft || selected?.minecraftVersion || t('nav.noInstance') }}</small>
     </div>
   </aside>
 </template>
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import fallback from './assets/minecraft.webp';
 import lunaLogo from '../assets/luna-launcher.png';
 defineProps<{ instances: any[]; selected: any; icons: Record<string, string>; page: string }>();
 const emit = defineEmits<{ navigate: [page: string]; select: [instance: any]; launch: [instance: any]; back: []; add: [] }>();
+const { t } = useI18n();
 const dragging = ref('');
 function onDrop(target: any) { if (dragging.value && dragging.value !== target.id) emit('select', target); dragging.value = ''; }
 </script>

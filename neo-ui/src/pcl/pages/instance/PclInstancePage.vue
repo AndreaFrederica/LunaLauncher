@@ -27,8 +27,8 @@
       </div>
 
       <div class="pcl-instance-actions">
-        <PclButton variant="highlight" icon="play" block :disabled="busy || instance.running" @click="emit('launch')">启动游戏</PclButton>
-        <PclButton icon="folder-open" block :disabled="busy" @click="emit('open-folder')">打开目录</PclButton>
+        <PclButton variant="highlight" icon="play" block :disabled="busy || instance.running" @click="emit('launch')">{{ t('instance.launch') }}</PclButton>
+        <PclButton icon="folder-open" block :disabled="busy" @click="emit('open-folder')">{{ t('instance.openFolder') }}</PclButton>
       </div>
     </aside>
 
@@ -40,7 +40,7 @@
               <p>{{ current.description }}</p>
             </div>
             <div class="pcl-actions">
-              <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">刷新</PclButton>
+              <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">{{ t('instance.refresh') }}</PclButton>
             </div>
           </div>
 
@@ -121,11 +121,11 @@
 
           <PclInstanceServers v-else-if="section === 'servers'" :instance="instance" :busy="busy" :execute="execute" />
 
-          <PclCard v-else-if="section === 'notes'" title="实例笔记">
-            <PclInput v-model="localNotes" multiline :rows="9" placeholder="记下这个实例的注意事项、整合包来源或联机信息…" />
+          <PclCard v-else-if="section === 'notes'" :title="t('pcl.auto2.kd66b6bca45')">
+            <PclInput v-model="localNotes" multiline :rows="9" :placeholder="t('instance.notesPlaceholder')" />
             <div class="pcl-actions">
-              <PclButton variant="highlight" icon="save" :disabled="busy" @click="emit('save-notes', localNotes)">保存笔记</PclButton>
-              <PclButton variant="ghost" icon="rotate-ccw" :disabled="busy" @click="localNotes = notes">还原</PclButton>
+              <PclButton variant="highlight" icon="save" :disabled="busy" @click="emit('save-notes', localNotes)">{{ t('instance.saveNotes') }}</PclButton>
+              <PclButton variant="ghost" icon="rotate-ccw" :disabled="busy" @click="localNotes = notes">{{ t('instance.restore') }}</PclButton>
             </div>
           </PclCard>
 
@@ -136,9 +136,9 @@
           <PclCard v-else :title="current.label">
             <div class="pcl-empty">
               <PclIcon name="tool-case" :size="38" />
-              <strong>{{ current.label }} 还没有对应的后端操作</strong>
-              <span>当前 Qt 页面需要新增实例级 API；此入口先保留，避免把功能藏到旧 UI 里。</span>
-              <PclButton icon="arrow-left" @click="section = 'overall'">返回概览</PclButton>
+              <strong>{{ current.label }} {{ t('instance.noBackend') }}</strong>
+              <span>{{ t('instance.apiNotice') }}</span>
+              <PclButton icon="arrow-left" @click="section = 'overall'">{{ t('instance.backOverview') }}</PclButton>
             </div>
           </PclCard>
         </div>
@@ -148,6 +148,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclIcon from '../../components/PclIcon.vue';
@@ -167,6 +168,7 @@ import fallback from '../../../xmcl-port/assets/minecraft.webp';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: any; details: any; icon?: string; components: any[]; settings?: any[]; componentError?: string; notes: string; busy: boolean; execute: Execute; consoleLines: string[]; consoleState: string; logFiles: any[]; fileLog: string }>();
+const { t } = useI18n();
 const emit = defineEmits<{
   launch: []; 'open-folder': []; settings: []; delete: []; 'change-icon': []; 'save-notes': [notes: string]; refresh: [];
   'connect-console': []; 'clear-console': []; 'read-log': [file: string]; 'component-enabled': [component: any, enabled: boolean];
@@ -176,50 +178,50 @@ const emit = defineEmits<{
 
 const navGroups = [
   {
-    label: '游戏本体',
+    label: t('pcl.auto2.kd6c5da9c81'),
     items: [
-      { id: 'overall', label: '概览', icon: 'layout-dashboard', description: '查看实例信息、备注和常用操作。' },
-      { id: 'live', label: '启动日志', icon: 'scroll-text', description: '启动游戏并查看实时控制台日志。' },
-      { id: 'memory', label: '内存', icon: 'gauge', description: '查看系统内存并调整此实例的内存分配。' },
-      { id: 'install', label: '修改', icon: 'download', description: '安装或更新 Minecraft 与加载器组件。' },
-      { id: 'export', label: '导出', icon: 'file-archive', description: '导出实例或制作整合包。' },
+      { id: 'overall', label: t('pcl.auto2.k5060421d15'), icon: 'layout-dashboard', description: t('pcl.auto2.k2daee9496a') },
+      { id: 'live', label: t('pcl.auto2.k8ad868abbc'), icon: 'scroll-text', description: t('pcl.auto2.kc7b9dd7040') },
+      { id: 'memory', label: t('pcl.auto2.kd014ab7703'), icon: 'gauge', description: t('pcl.auto2.k37a994a735') },
+      { id: 'install', label: t('pcl.auto2.kc9c77517fe'), icon: 'download', description: t('pcl.auto2.kbf376a6e82') },
+      { id: 'export', label: t('pcl.auto2.k188896795f'), icon: 'file-archive', description: t('pcl.auto2.kc54b4b046e') },
     ],
   },
   {
-    label: '实例设置',
+    label: t('pcl.auto2.k1836ba7e88'),
     items: [
-      { id: 'launch', label: '启动选项', icon: 'rocket', description: '调整此实例的窗口、控制台和启动行为。' },
-      { id: 'java', label: 'Java', icon: 'coffee', description: '选择此实例使用的 Java 和 JVM 参数。' },
-      { id: 'network', label: '网络代理', icon: 'server', description: '配置此实例使用的代理和联机设置。' },
-      { id: 'advanced', label: '高级', icon: 'tool-case', description: '渲染器、JVM 参数、游戏参数和启动前命令。' },
-      { id: 'advanced-settings', label: '其他设置', icon: 'settings', description: '查看此实例尚未单独布局的兼容性和高级设置。' },
+      { id: 'launch', label: t('pcl.auto2.k6c4942326d'), icon: 'rocket', description: t('pcl.auto2.k6af73797d2') },
+      { id: 'java', label: 'Java', icon: 'coffee', description: t('pcl.auto2.k518618f138') },
+      { id: 'network', label: t('pcl.auto2.kb046fe277d'), icon: 'server', description: t('pcl.auto2.ke6f0d7118c') },
+      { id: 'advanced', label: t('pcl.auto2.kc009d0ab82'), icon: 'tool-case', description: t('pcl.auto2.k32d383188b') },
+      { id: 'advanced-settings', label: t('pcl.auto2.k482e1ba326'), icon: 'settings', description: t('pcl.auto2.kd73fcdcfc0') },
     ],
   },
   {
-    label: '游戏资源',
+    label: t('pcl.auto2.k1694e79bf1'),
     items: [
-      { id: 'worlds', label: '存档', icon: 'earth', description: '管理存档、导入世界和导出备份。' },
-      { id: 'screenshots', label: '截图', icon: 'image', description: '浏览和管理游戏截图。' },
-      { id: 'mods', label: '模组', icon: 'puzzle', description: '管理已安装模组。' },
-      { id: 'coremods', label: '核心模组', icon: 'package', description: '管理核心模组。' },
-      { id: 'nilmods', label: 'NilMod', icon: 'package-plus', description: '管理 NilMod。' },
-      { id: 'resourcepacks', label: '资源包', icon: 'palette', description: '管理资源包。' },
-      { id: 'texturepacks', label: '材质包', icon: 'image', description: '管理旧版材质包。' },
-      { id: 'shaderpacks', label: '光影包', icon: 'sparkles', description: '管理光影包。' },
-      { id: 'datapacks', label: '数据包', icon: 'layers', description: '管理全局数据包。' },
-      { id: 'yesstevemodels', label: 'YSM模型', icon: 'shirt', description: '管理 Yes Steve Model 模型。' },
-      { id: 'customplayermodels', label: '自定义玩家模型', icon: 'user', description: '管理自定义玩家模型。' },
-      { id: 'schematics', label: '投影原理图', icon: 'grid-2x2', description: '管理投影原理图。' },
+      { id: 'worlds', label: t('pcl.auto2.k40e191bd7b'), icon: 'earth', description: t('pcl.auto2.ka14c52a0f6') },
+      { id: 'screenshots', label: t('pcl.auto2.k49830b4f74'), icon: 'image', description: t('pcl.auto2.kbca4e3744a') },
+      { id: 'mods', label: t('pcl.auto2.kda121cbcd9'), icon: 'puzzle', description: t('pcl.auto2.kf1eb3cbda7') },
+      { id: 'coremods', label: t('pcl.auto2.kaf20a2dc69'), icon: 'package', description: t('pcl.auto2.kd246f27a0d') },
+      { id: 'nilmods', label: 'NilMod', icon: 'package-plus', description: t('pcl.auto2.ka7df3b7943') },
+      { id: 'resourcepacks', label: t('pcl.auto2.k826f79355b'), icon: 'palette', description: t('pcl.auto2.k66e5a38a6e') },
+      { id: 'texturepacks', label: t('pcl.auto2.k9e4110cfdf'), icon: 'image', description: t('pcl.auto2.kc382ee2036') },
+      { id: 'shaderpacks', label: t('pcl.auto2.k71adc562a4'), icon: 'sparkles', description: t('pcl.auto2.k46f5776573') },
+      { id: 'datapacks', label: t('pcl.auto2.kf0e3fc625e'), icon: 'layers', description: t('pcl.auto2.kc84634681a') },
+      { id: 'yesstevemodels', label: t('pcl.auto2.k021e5eedff'), icon: 'shirt', description: t('pcl.auto2.k4ed50d1251') },
+      { id: 'customplayermodels', label: t('pcl.auto2.k59f7f631e1'), icon: 'user', description: t('pcl.auto2.kf8c74f6ae0') },
+      { id: 'schematics', label: t('pcl.auto2.k07144e9760'), icon: 'grid-2x2', description: t('pcl.auto2.k08727b36d8') },
     ],
   },
   {
-    label: '实例工具',
+    label: t('pcl.auto2.kd319f3bf2e'),
     items: [
-      { id: 'servers', label: '多人服务器', icon: 'network', description: '管理 servers.dat 多人服务器列表。' },
-      { id: 'notes', label: '笔记', icon: 'scroll-text', description: '记录实例备注。' },
-      { id: 'logs', label: '日志', icon: 'scroll', description: '查看实例日志文件。' },
-      { id: 'server', label: '服务端', icon: 'server', description: '管理服务端配置和终端。' },
-      { id: 'customui', label: '自定义 UI', icon: 'layout-list', description: 'Qt 版的自定义 UI 面板。' },
+      { id: 'servers', label: t('pcl.auto2.k9164a5508e'), icon: 'network', description: t('pcl.auto2.k87f7a40e4f') },
+      { id: 'notes', label: t('pcl.auto2.k697dbde096'), icon: 'scroll-text', description: t('pcl.auto2.ke7f355aca7') },
+      { id: 'logs', label: t('pcl.auto2.k4de50894b8'), icon: 'scroll', description: t('pcl.auto2.k1379420d73') },
+      { id: 'server', label: t('pcl.auto2.k6aca62f330'), icon: 'server', description: t('pcl.auto2.k327966cc1e') },
+      { id: 'customui', label: t('pcl.auto2.kfdda79752b'), icon: 'layout-list', description: t('pcl.auto2.k5ae2dd0973') },
     ],
   },
 ];

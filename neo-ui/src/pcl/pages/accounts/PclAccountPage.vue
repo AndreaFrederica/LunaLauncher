@@ -1,42 +1,42 @@
 <template>
   <section class="pcl-page pcl-account-page" :class="{ 'is-embedded': embedded }">
     <aside v-if="!embedded" class="pcl-page-nav">
-      <div class="pcl-page-nav__title"><span class="material-icons">person</span><span>账户</span></div>
-      <div class="pcl-page-nav__group">账户管理</div>
+      <div class="pcl-page-nav__title"><span class="material-icons">person</span><span>{{ t('account.account') }}</span></div>
+      <div class="pcl-page-nav__group">{{ t('account.management') }}</div>
       <button v-for="item in items" :key="item.id" class="pcl-page-nav__item" :class="{ active: section === item.id }" @click="openSection(item.id)">
         <PclIcon :name="item.icon" :size="18" /><span>{{ item.label }}</span>
       </button>
-      <div class="pcl-page-nav__hint"><span class="material-icons">info_outline</span><span>账户、皮肤和认证服务都由 Luna 后端缓存并持久化。</span></div>
+      <div class="pcl-page-nav__hint"><span class="material-icons">info_outline</span><span>{{ t('account.hint') }}</span></div>
     </aside>
     <main class="pcl-page-main">
-      <nav v-if="embedded" class="pcl-account-embedded-tabs" aria-label="账户管理">
+      <nav v-if="embedded" class="pcl-account-embedded-tabs" :aria-label="t('account.management')">
         <button v-for="item in items" :key="item.id" type="button" :class="{ active: section === item.id }" @click="openSection(item.id)">
           <PclIcon :name="item.icon" :size="16" /><span>{{ item.label }}</span>
         </button>
       </nav>
       <div v-show="section === 'profile'" class="pcl-account-section">
-        <PclCard title="账户">
+        <PclCard :title="t('account.account')">
           <template #actions>
-            <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin(offlineAccountAllowed ? 'offline' : 'microsoft')">添加账户</PclButton>
-            <PclIconButton icon="refresh-cw" label="刷新账户" :size="24" :disabled="busy || refreshing" @click="refreshAll" />
+            <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin(offlineAccountAllowed ? 'offline' : 'microsoft')">{{ t('account.add') }}</PclButton>
+            <PclIconButton icon="refresh-cw" :label="t('account.refresh')" :size="24" :disabled="busy || refreshing" @click="refreshAll" />
           </template>
           <PclAccountPanel v-if="accounts.length" :accounts="accounts" :busy="busy" :execute="execute" @changed="emit('changed')" />
           <div v-else class="pcl-empty pcl-account-empty">
             <PclIcon name="user" :size="40" />
-            <strong>还没有账户</strong>
-            <span>添加 Microsoft、离线或第三方认证账户后即可启动游戏。</span>
+            <strong>{{ t('account.empty') }}</strong>
+            <span>{{ t('account.emptyHint') }}</span>
             <div class="pcl-actions">
-              <PclButton v-if="offlineAccountAllowed" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('offline')">添加离线账户</PclButton>
-              <PclButton icon="cloud" :disabled="busy" @click="openLogin('microsoft')">Microsoft 登录</PclButton>
+              <PclButton v-if="offlineAccountAllowed" variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('offline')">{{ t('account.addOffline') }}</PclButton>
+              <PclButton icon="cloud" :disabled="busy" @click="openLogin('microsoft')">{{ t('account.microsoftLogin') }}</PclButton>
             </div>
           </div>
         </PclCard>
       </div>
 
       <div v-show="section === 'services'" class="pcl-account-section">
-      <PclCard title="认证服务">
+      <PclCard :title="t('account.services')">
         <template #actions>
-          <PclButton size="sm" variant="highlight" icon="circle-plus" @click="openPreset()">添加服务</PclButton>
+          <PclButton size="sm" variant="highlight" icon="circle-plus" @click="openPreset()">{{ t('account.addService') }}</PclButton>
         </template>
         <div class="pcl-account-service-list">
           <PclListItem
@@ -47,14 +47,14 @@
           >
             <template #icon><PclIcon name="shield-check" :size="18" /></template>
             <template #actions>
-              <PclButton v-if="preset.official" size="sm" variant="highlight" icon="account" @click.stop="openLogin('microsoft')">官方登录</PclButton>
-              <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="busy || testingPreset === preset.name" @click.stop="testPreset(preset, 'ping')">Ping</PclButton>
-              <PclButton size="sm" variant="ghost" icon="fact_check" :disabled="busy || testingPreset === preset.name" @click.stop="testPreset(preset, 'function')">功能测试</PclButton>
-              <PclButton v-if="!preset.builtin" size="sm" variant="ghost" icon="pencil" @click.stop="openPreset(preset)">编辑</PclButton>
-              <PclIconButton v-if="!preset.builtin" icon="trash-2" label="删除服务" :size="24" danger :disabled="busy" @click.stop="removePreset(preset)" />
+              <PclButton v-if="preset.official" size="sm" variant="highlight" icon="account" @click.stop="openLogin('microsoft')">{{ t('account.officialLogin') }}</PclButton>
+              <PclButton size="sm" variant="ghost" icon="refresh-cw" :disabled="busy || testingPreset === preset.name" @click.stop="testPreset(preset, 'ping')">{{ t('ui.ping') }}</PclButton>
+              <PclButton size="sm" variant="ghost" icon="fact_check" :disabled="busy || testingPreset === preset.name" @click.stop="testPreset(preset, 'function')">{{ t('account.functionTest') }}</PclButton>
+              <PclButton v-if="!preset.builtin" size="sm" variant="ghost" icon="pencil" @click.stop="openPreset(preset)">{{ t('account.edit') }}</PclButton>
+              <PclIconButton v-if="!preset.builtin" icon="trash-2" :label="t('account.deleteService')" :size="24" danger :disabled="busy" @click.stop="removePreset(preset)" />
             </template>
           </PclListItem>
-          <div v-if="!presets.length" class="pcl-empty">没有认证服务。</div>
+          <div v-if="!presets.length" class="pcl-empty">{{ t('account.noServices') }}</div>
         </div>
         <PclHint v-if="presetTest" :theme="presetTest.passed ? 'blue' : 'yellow'" closable @close="presetTest = null">
           {{ presetTest.name }} · {{ presetTest.message }}
@@ -63,162 +63,162 @@
         </PclHint>
       </PclCard>
 
-      <PclCard title="本地验证服务">
+      <PclCard :title="t('account.externalService')">
         <div class="pcl-local-status">
           <span class="pcl-local-status__dot" :class="{ ok: helper?.installed }" />
-          <strong>{{ helper ? (helper.installed ? '认证组件已安装' : '认证组件未安装') : helperChecked ? '认证组件状态未知' : '点击“检查认证组件”读取状态' }}</strong>
-          <span>由启动器按需启动</span>
+          <strong>{{ helper ? (helper.installed ? t('account.authInstalled') : t('account.authMissing')) : helperChecked ? t('account.authUnknown') : t('account.authCheckHint') }}</strong>
+          <span>{{ t('account.onDemand') }}</span>
         </div>
         <div class="pcl-form-row">
-          <span class="pcl-form-row__label">数据目录</span>
+            <span class="pcl-form-row__label">{{ t('account.dataRoot') }}</span>
           <div class="pcl-form-row__control">
             <code class="pcl-local-path">{{ localDataRoot || '—' }}</code>
           </div>
-          <PclButton size="sm" icon="folder-open" :disabled="!localDataRoot" @click="openLocalDir">打开</PclButton>
+          <PclButton size="sm" icon="folder-open" :disabled="!localDataRoot" @click="openLocalDir">{{ t('account.open') }}</PclButton>
         </div>
         <div class="pcl-local-network">
           <div class="pcl-local-network__head">
-            <strong>对外服务</strong>
-            <PclButton size="sm" variant="highlight" icon="save" :disabled="busy" @click="applyLocalService">应用并重启</PclButton>
+            <strong>{{ t('account.externalService') }}</strong>
+            <PclButton size="sm" variant="highlight" icon="save" :disabled="busy" @click="applyLocalService">{{ t('account.applyRestart') }}</PclButton>
           </div>
-          <PclCheckbox v-model="localExternal" label="允许局域网 / 外网连接" />
+          <PclCheckbox v-model="localExternal" :label="t('account.allowExternal')" />
           <div class="pcl-local-network__grid">
-            <label class="pcl-login-field"><span>监听端口</span><PclInput v-model="localPort" placeholder="25585" /></label>
-            <label class="pcl-login-field"><span>对外访问 URL</span><PclInput v-model="localPublicUrl" placeholder="http://192.168.1.10:25585" /></label>
+            <label class="pcl-login-field"><span>{{ t('account.listenPort') }}</span><PclInput v-model="localPort" placeholder="25585" /></label>
+            <label class="pcl-login-field"><span>{{ t('account.publicUrl') }}</span><PclInput v-model="localPublicUrl" placeholder="http://192.168.1.10:25585" /></label>
           </div>
-          <PclHint v-if="localExternal && !localPublicUrl" theme="yellow">开启对外服务前请填写客户端可访问的 HTTP URL。</PclHint>
+          <PclHint v-if="localExternal && !localPublicUrl" theme="yellow">{{ t('account.publicUrlHint') }}</PclHint>
         </div>
         <div class="pcl-check-grid">
-          <PclCheckbox :model-value="localBool('LocalServiceCache')" label="缓存游戏资源" @update:model-value="setLocalSetting('LocalServiceCache', $event)" />
-          <PclCheckbox :model-value="localBool('YggdrasilAccountCache')" label="缓存账户与皮肤" @update:model-value="setLocalSetting('YggdrasilAccountCache', $event)" />
+          <PclCheckbox :model-value="localBool('LocalServiceCache')" :label="t('account.cacheResources')" @update:model-value="setLocalSetting('LocalServiceCache', $event)" />
+          <PclCheckbox :model-value="localBool('YggdrasilAccountCache')" :label="t('account.cacheAccounts')" @update:model-value="setLocalSetting('YggdrasilAccountCache', $event)" />
         </div>
         <div class="pcl-local-users">
           <div class="pcl-local-users__head">
-            <strong>本地用户数据库</strong>
+            <strong>{{ t('account.localUsers') }}</strong>
             <div class="pcl-actions">
-              <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadLocalServiceStatus">刷新</PclButton>
-              <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLocalUser">添加用户</PclButton>
+              <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadLocalServiceStatus">{{ t('common.refresh') }}</PclButton>
+              <PclButton size="sm" variant="highlight" icon="user-plus" :disabled="busy" @click="openLocalUser">{{ t('account.addUser') }}</PclButton>
             </div>
           </div>
           <div v-if="localUsers.length" class="pcl-local-users__list">
             <div v-for="user in localUsers" :key="user.id" class="pcl-local-users__row">
               <PclIcon name="user" :size="16" />
               <span>{{ user.username }}</span>
-              <small>{{ user.enabled ? '启用' : '禁用' }}</small>
-              <PclIconButton icon="trash-2" label="删除用户" :size="22" danger :disabled="busy" @click="removeLocalUser(user)" />
+              <small>{{ user.enabled ? t('account.enabled') : t('account.disabled') }}</small>
+              <PclIconButton icon="trash-2" :label="t('account.deleteService')" :size="22" danger :disabled="busy" @click="removeLocalUser(user)" />
             </div>
           </div>
-          <div v-else class="pcl-empty pcl-empty--compact">还没有本地用户。</div>
+          <div v-else class="pcl-empty pcl-empty--compact">{{ t('account.noUsers') }}</div>
         </div>
         <PclHint theme="blue">
-          服务进程由 Luna 后端在登录或启动时按需拉起，退出启动器时自动停止。这里管理缓存策略、数据目录和认证组件状态。
+          {{ t('account.serviceHint') }}
         </PclHint>
         <div class="pcl-actions">
-          <PclButton variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('yggdrasil', true)">添加本地账户</PclButton>
-          <PclButton icon="shield-check" :disabled="busy" @click="checkAuthlib">检查认证组件</PclButton>
+          <PclButton variant="highlight" icon="user-plus" :disabled="busy" @click="openLogin('yggdrasil', true)">{{ t('account.addLocal') }}</PclButton>
+          <PclButton icon="shield-check" :disabled="busy" @click="checkAuthlib">{{ t('account.checkAuth') }}</PclButton>
         </div>
       </PclCard>
 
       </div>
       <div v-show="section === 'tools'" class="pcl-account-section">
-      <PclCard title="账户工具">
+      <PclCard :title="t('account.tools')">
         <div class="pcl-actions pcl-account-actions">
-          <PclButton variant="highlight" icon="refresh-cw" :disabled="busy" @click="refreshAll">刷新所有账户</PclButton>
-          <PclButton icon="shield-check" :disabled="busy" @click="checkAuthlib">检查认证组件</PclButton>
-          <PclButton icon="download" :disabled="busy" @click="installAuthlib">安装认证组件</PclButton>
+          <PclButton variant="highlight" icon="refresh-cw" :disabled="busy" @click="refreshAll">{{ t('account.refreshAll') }}</PclButton>
+          <PclButton icon="shield-check" :disabled="busy" @click="checkAuthlib">{{ t('account.checkAuth') }}</PclButton>
+          <PclButton icon="download" :disabled="busy" @click="installAuthlib">{{ t('account.installAuth') }}</PclButton>
         </div>
-        <p class="pcl-muted">{{ helper ? `认证组件：${helper.installed ? `已安装 ${helper.version || ''}` : '未安装'}` : '正在读取认证组件状态…' }}</p>
+        <p class="pcl-muted">{{ helper ? `Authentication component: ${helper.installed ? `Installed ${helper.version || ''}` : 'Not installed'}` : t('account.readingAuth') }}</p>
       </PclCard>
       </div>
     </main>
     <q-dialog v-model="loginShown">
       <q-card class="pcl-dialog pcl-login-dialog">
         <q-card-section>
-          <div class="pcl-kicker">账户登录</div>
-          <h3>添加账户</h3>
+          <div class="pcl-kicker">{{ t('account.login') }}</div>
+          <h3>{{ t('account.add') }}</h3>
         </q-card-section>
         <q-card-section class="pcl-login-body">
           <label class="pcl-login-field">
-            <span>登录方式</span>
+            <span>{{ t('account.loginMethod') }}</span>
             <PclSelect v-model="loginType" :options="loginTypes" />
           </label>
           <label class="pcl-login-field">
-            <span>{{ loginType === 'microsoft' ? '已有玩家名（可选）' : '玩家名 / 用户名' }}</span>
-            <PclInput v-model="loginForm.username" :placeholder="loginType === 'microsoft' ? '可选' : '请输入玩家名'" />
+            <span>{{ loginType === 'microsoft' ? t('account.playerNameOptional') : t('account.playerName') }}</span>
+            <PclInput v-model="loginForm.username" :placeholder="loginType === 'microsoft' ? t('account.optional') : t('account.enterPlayerName')" />
           </label>
           <template v-if="loginType === 'offline'">
             <label class="pcl-login-field">
-              <span>离线 UUID 模式</span>
+              <span>{{ t('account.offlineUuidMode') }}</span>
               <PclSelect v-model="loginForm.offlineUuidMode" :options="offlineUuidModes" />
             </label>
             <label v-if="loginForm.offlineUuidMode === 'custom'" class="pcl-login-field">
-              <span>自定义 UUID</span>
-              <PclInput v-model="loginForm.offlineUuid" placeholder="32 位十六进制 UUID" />
+              <span>{{ t('account.customUuid') }}</span>
+              <PclInput v-model="loginForm.offlineUuid" :placeholder="t('account.uuidPlaceholder')" />
             </label>
           </template>
           <label v-if="loginType === 'yggdrasil' || loginType === 'unified-pass'" class="pcl-login-field">
-            <span>密码</span>
-            <PclInput v-model="loginForm.password" type="password" placeholder="密码" />
+            <span>{{ t('account.password') }}</span>
+            <PclInput v-model="loginForm.password" type="password" :placeholder="t('account.password')" />
           </label>
           <template v-if="loginType === 'yggdrasil'">
             <label class="pcl-login-field">
-              <span>验证服务器</span>
+              <span>{{ t('account.authServer') }}</span>
               <PclSelect v-model="loginPreset" :options="loginPresetOptions" @update:model-value="applyLoginPreset" />
             </label>
-            <PclCheckbox v-model="loginForm.managedLocal" label="使用 Luna 本地验证服务器" @update:model-value="toggleManagedLocal" />
+            <PclCheckbox v-model="loginForm.managedLocal" :label="t('account.managedLocal')" @update:model-value="toggleManagedLocal" />
             <label v-if="!loginForm.managedLocal" class="pcl-login-field">
-              <span>认证 URL</span>
+              <span>{{ t('account.authUrl') }}</span>
               <PclInput v-model="loginForm.authUrl" placeholder="https://..." />
             </label>
             <label v-if="!loginForm.managedLocal" class="pcl-login-field">
-              <span>会话 URL</span>
+              <span>{{ t('account.sessionUrl') }}</span>
               <PclInput v-model="loginForm.sessionUrl" placeholder="https://..." />
             </label>
             <label class="pcl-login-field">
-              <span>服务名称（可选）</span>
-              <PclInput v-model="loginForm.sourceName" placeholder="显示名称" />
+              <span>{{ t('account.serviceNameOptional') }}</span>
+              <PclInput v-model="loginForm.sourceName" :placeholder="t('account.displayName')" />
             </label>
           </template>
           <template v-if="loginType === 'unified-pass'">
-            <label class="pcl-login-field"><span>Server ID</span><PclInput v-model="loginForm.serverId" placeholder="Server ID" /></label>
-            <label class="pcl-login-field"><span>API Base URL（可选）</span><PclInput v-model="loginForm.baseUrl" placeholder="https://..." /></label>
+            <label class="pcl-login-field"><span>{{ t('ui.serverId') }}</span><PclInput v-model="loginForm.serverId" :placeholder="t('ui.serverId')" /></label>
+            <label class="pcl-login-field"><span>{{ t('account.apiBase') }}</span><PclInput v-model="loginForm.baseUrl" placeholder="https://..." /></label>
           </template>
           <template v-if="loginType === 'microsoft'">
             <label class="pcl-login-field">
-              <span>Microsoft 登录方式</span>
+              <span>{{ t('account.microsoftMode') }}</span>
               <PclSelect v-model="loginForm.microsoftMode" :options="microsoftModes" />
             </label>
             <PclHint theme="blue">
-              {{ loginForm.microsoftMode === 'oauth' ? '会打开浏览器并在本地回调，无需手动输入代码。' : '会显示设备代码，需要在浏览器中输入。' }}
+              {{ loginForm.microsoftMode === 'oauth' ? 'The browser will open and return locally; no code is required.' : 'A device code will be shown for entry in the browser.' }}
             </PclHint>
             <label class="pcl-login-field">
-              <span>没有 Java 档案时创建的名称（可选）</span>
-              <PclInput v-model="loginForm.minecraftProfileName" placeholder="可选" />
+              <span>{{ t('account.profileName') }}</span>
+              <PclInput v-model="loginForm.minecraftProfileName" :placeholder="t('account.optional')" />
             </label>
           </template>
         </q-card-section>
         <div v-if="loginBusy" class="pcl-login-progress">
-          <div class="pcl-login-progress__head"><PclLoading inline /><span>{{ loginStatus || '正在检查登录状态…' }}</span></div>
+          <div class="pcl-login-progress__head"><PclLoading inline /><span>{{ loginStatus || t('account.checkingStatus') }}</span></div>
           <div v-for="step in loginSteps.slice(0, 8)" :key="step.id || step.label" class="pcl-login-progress__step">
             <span class="pcl-login-progress__dot" :class="step.state" />
-            <span>{{ step.label || step.status || '检查中' }}</span>
+            <span>{{ step.label || step.status || t('account.checking') }}</span>
             <small>{{ step.status || step.details || '' }}</small>
           </div>
         </div>
         <div v-if="loginDeviceUrl" class="pcl-login-device">
-          <div class="pcl-login-device__label">{{ loginDeviceCode ? '在浏览器中打开并输入代码' : '浏览器授权页面已打开' }}</div>
+          <div class="pcl-login-device__label">{{ loginDeviceCode ? t('account.browserCode') : t('account.browserOpened') }}</div>
           <code v-if="loginDeviceCode" class="pcl-login-device__code">{{ loginDeviceCode }}</code>
           <code class="pcl-login-device__url">{{ loginDeviceUrl }}</code>
           <div class="pcl-actions">
-            <PclButton size="sm" icon="external-link" @click="openDeviceUrl">打开浏览器</PclButton>
-            <PclButton v-if="loginDeviceCode" size="sm" icon="copy" @click="copyDeviceCode">复制代码</PclButton>
+            <PclButton size="sm" icon="external-link" @click="openDeviceUrl">{{ t('account.openBrowser') }}</PclButton>
+            <PclButton v-if="loginDeviceCode" size="sm" icon="copy" @click="copyDeviceCode">{{ t('account.copyCode') }}</PclButton>
           </div>
         </div>
         <PclHint v-if="loginError" theme="red" closable @close="loginError = ''">{{ loginError }}</PclHint>
         <q-card-actions align="right">
-          <PclButton variant="ghost" @click="cancelLogin">取消</PclButton>
+          <PclButton variant="ghost" @click="cancelLogin">{{ t('account.cancel') }}</PclButton>
           <PclButton variant="highlight" :disabled="busy || loginBusy || (!loginForm.username && loginType !== 'microsoft')" @click="submitLogin">
-            {{ loginBusy ? '等待登录' : '继续' }}
+            {{ loginBusy ? t('account.waitLogin') : t('account.continue') }}
           </PclButton>
         </q-card-actions>
       </q-card>
@@ -226,33 +226,33 @@
     <q-dialog v-model="presetShown">
       <q-card class="pcl-dialog">
         <q-card-section>
-          <div class="pcl-kicker">认证服务</div>
-          <h3>{{ editingPreset ? '编辑认证服务' : '添加认证服务' }}</h3>
+          <div class="pcl-kicker">{{ t('account.authService') }}</div>
+          <h3>{{ editingPreset ? t('account.editAuth') : t('account.addAuth') }}</h3>
         </q-card-section>
         <q-card-section class="pcl-login-body">
-          <label class="pcl-login-field"><span>服务名称</span><PclInput v-model="presetForm.name" placeholder="例如 LittleSkin" /></label>
-          <label class="pcl-login-field"><span>认证 URL</span><PclInput v-model="presetForm.authUrl" placeholder="https://..." /></label>
-          <label class="pcl-login-field"><span>会话 URL</span><PclInput v-model="presetForm.sessionUrl" placeholder="https://..." /></label>
+          <label class="pcl-login-field"><span>{{ t('account.serviceName') }}</span><PclInput v-model="presetForm.name" :placeholder="t('pcl.accountPage.serviceExample')" /></label>
+          <label class="pcl-login-field"><span>{{ t('account.authUrl') }}</span><PclInput v-model="presetForm.authUrl" placeholder="https://..." /></label>
+          <label class="pcl-login-field"><span>{{ t('account.sessionUrl') }}</span><PclInput v-model="presetForm.sessionUrl" placeholder="https://..." /></label>
         </q-card-section>
         <q-card-actions align="right">
-          <PclButton variant="ghost" @click="presetShown = false">取消</PclButton>
-          <PclButton variant="highlight" :disabled="busy || !presetForm.name || !presetForm.authUrl" @click="savePreset">保存</PclButton>
+          <PclButton variant="ghost" @click="presetShown = false">{{ t('account.cancel') }}</PclButton>
+          <PclButton variant="highlight" :disabled="busy || !presetForm.name || !presetForm.authUrl" @click="savePreset">{{ t('common.save') }}</PclButton>
         </q-card-actions>
       </q-card>
     </q-dialog>
     <q-dialog v-model="localUserShown">
       <q-card class="pcl-dialog">
         <q-card-section>
-          <div class="pcl-kicker">本地用户</div>
-          <h3>添加本地验证用户</h3>
+          <div class="pcl-kicker">{{ t('account.localUser') }}</div>
+          <h3>{{ t('account.addLocalUser') }}</h3>
         </q-card-section>
         <q-card-section class="pcl-login-body">
-          <label class="pcl-login-field"><span>用户名</span><PclInput v-model="localUserForm.username" placeholder="本地用户名" /></label>
-          <label class="pcl-login-field"><span>密码</span><PclInput v-model="localUserForm.password" type="password" placeholder="密码" /></label>
+          <label class="pcl-login-field"><span>{{ t('account.username') }}</span><PclInput v-model="localUserForm.username" :placeholder="t('account.username')" /></label>
+          <label class="pcl-login-field"><span>{{ t('account.password') }}</span><PclInput v-model="localUserForm.password" type="password" :placeholder="t('account.password')" /></label>
         </q-card-section>
         <q-card-actions align="right">
-          <PclButton variant="ghost" @click="localUserShown = false">取消</PclButton>
-          <PclButton variant="highlight" :disabled="busy || !localUserForm.username || !localUserForm.password" @click="createLocalUser">创建</PclButton>
+          <PclButton variant="ghost" @click="localUserShown = false">{{ t('account.cancel') }}</PclButton>
+          <PclButton variant="highlight" :disabled="busy || !localUserForm.username || !localUserForm.password" @click="createLocalUser">{{ t('account.create') }}</PclButton>
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -260,6 +260,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclAccountPanel from './PclAccountPanel.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
@@ -274,7 +275,8 @@ import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ accounts: any[]; busy: boolean; execute: Execute; embedded?: boolean }>();
 const emit = defineEmits<{ changed: []; 'cancel-login': [] }>();
-const items = [{ id: 'profile', label: '账户与皮肤', icon: 'user', description: '管理账户缓存、头像、皮肤和披风。' }, { id: 'services', label: '认证服务', icon: 'shield-check', description: '管理 Microsoft、Luna 本地验证和第三方认证服务。' }, { id: 'tools', label: '账户工具', icon: 'tool-case', description: '刷新账户状态并检查认证组件。' }];
+const { t } = useI18n();
+const items = computed(() => [{ id: 'profile', label: t('account.account'), icon: 'user', description: t('account.emptyHint') }, { id: 'services', label: t('account.services'), icon: 'shield-check', description: t('account.hint') }, { id: 'tools', label: t('account.tools'), icon: 'tool-case', description: t('account.refreshAll') }]);
 const section = ref('profile'), presets = ref<any[]>([]), helper = ref<any>(null), runtimeInfo = ref<any>({}), loginShown = ref(false), presetShown = ref(false), editingPreset = ref<any>(null), loginType = ref('microsoft');
 const presetTest = ref<any>(null), testingPreset = ref('');
 const loginBusy = ref(false), loginError = ref('');
@@ -284,21 +286,21 @@ const localSettings = ref<Record<string, any>>({}), localDataRoot = ref(''), hel
 const localExternal = ref(false), localPort = ref('25585'), localPublicUrl = ref(''), localUsers = ref<any[]>([]);
 const localUserShown = ref(false), localUserForm = reactive({ username: '', password: '' });
 const refreshing = ref(false);
-const microsoftModes = [{ label: '浏览器授权（无需输入代码）', value: 'oauth' }, { label: '设备代码', value: 'device' }];
+const microsoftModes = computed(() => [{ label: t('account.browserMode'), value: 'oauth' }, { label: t('account.deviceMode'), value: 'device' }]);
 const offlineAccountAllowed = computed(() => Boolean(runtimeInfo.value?.offlineAccountAllowed) || props.accounts.some((account: any) => account?.ownsMinecraft));
 const loginTypes = computed(() => [
-  ...(offlineAccountAllowed.value ? [{ label: '离线账户', value: 'offline' }] : []),
-  { label: 'Microsoft 登录', value: 'microsoft' },
+  ...(offlineAccountAllowed.value ? [{ label: t('account.addOffline'), value: 'offline' }] : []),
+  { label: t('account.microsoftLogin'), value: 'microsoft' },
   { label: 'Yggdrasil / Authlib Injector', value: 'yggdrasil' },
-  { label: '统一通行证', value: 'unified-pass' },
+  { label: 'UnifiedPass', value: 'unified-pass' },
 ]);
-const offlineUuidModes = [{label:'按用户名生成（默认）',value:'default'},{label:'每次随机 UUID',value:'random'},{label:'自定义 UUID',value:'custom'}];
+const offlineUuidModes = computed(() => [{label:t('account.offlineDefault'),value:'default'},{label:t('account.offlineRandom'),value:'random'},{label:t('account.offlineCustom'),value:'custom'}]);
 const loginPreset = ref('custom');
 const loginForm = reactive<any>({ username: '', password: '', authUrl: '', sessionUrl: '', sourceName: '', authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '', tokenType: 'Standard', managedLocal: false, serverId: '', baseUrl: '', minecraftProfileName: '', microsoftMode: 'oauth', offlineUuidMode: 'default', offlineUuid: '' });
 const loginPresetOptions = computed(() => [
-  { label: '自定义服务器', value: 'custom' },
+  { label: t('account.customServer'), value: 'custom' },
   ...presets.value.filter((preset: any) => !preset.official && !preset.managedLocal).map((preset: any) => ({ label: preset.name, value: preset.name })),
-  { label: 'Luna 本地验证服务器', value: '__local__' },
+  { label: t('account.localServer'), value: '__local__' },
 ]);
 const presetForm = reactive<any>({ name: '', authUrl: '', sessionUrl: '', tokenType: 'Standard' });
 async function loadPresets() { try { const result = await props.execute('account.preset.list'); presets.value = Array.isArray(result) ? result : []; } catch { presets.value = []; } }
@@ -318,7 +320,7 @@ async function openLogin(type: string, managedLocal = false) {
 function applyLoginPreset(name: string) {
   if (name === '__local__') {
     loginForm.managedLocal = true;
-    Object.assign(loginForm, { authUrl: '', sessionUrl: '', sourceName: 'Luna 本地验证服务器',
+    Object.assign(loginForm, { authUrl: '', sessionUrl: '', sourceName: t('account.localServer'),
       authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '' });
     return;
   }
@@ -377,7 +379,7 @@ async function createLocalUser() {
   }
 }
 async function removeLocalUser(user: any) {
-  if (!window.confirm(`删除本地用户 ${user.username}？`)) return;
+  if (!window.confirm(t('pcl.accountPage.deleteLocalUser', { name: user.username }))) return;
   try {
     await props.execute('local.yggdrasil.users.remove', { id: user.id, confirm: true });
     await loadLocalServiceStatus();
@@ -450,7 +452,7 @@ async function submitLogin() {
   loginError.value = '';
   loginDeviceUrl.value = '';
   loginDeviceCode.value = '';
-  loginStatus.value = '正在准备登录…';
+  loginStatus.value = t('pcl.accountPage.preparingLogin');
   loginSteps.value = [];
   try {
     {
@@ -464,7 +466,7 @@ async function submitLogin() {
         await new Promise(resolve => setTimeout(resolve, 400));
         task = await props.execute('neo.task.status', { taskId: task.taskId });
       }
-      if (!task || task.state !== 'succeeded') throw new Error(task?.error || '账户登录失败');
+      if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('pcl.accountPage.loginFailed'));
     }
     loginShown.value = false;
     loginDeviceUrl.value = '';
@@ -482,14 +484,14 @@ async function submitLogin() {
   }
 }
 function presetInfo(preset: any) {
-  if (preset.official) return 'Microsoft 官方账户 · 官方服务器 · 内置';
-  if (preset.managedLocal) return 'Luna 本地验证服务 · 内置';
-  return `${preset.authUrl || ''} · ${preset.sessionUrl || ''}${preset.builtin ? ' · 内置' : ''}`;
+  if (preset.official) return t('pcl.accountPage.officialPreset');
+  if (preset.managedLocal) return t('pcl.accountPage.localPreset');
+  return `${preset.authUrl || ''} · ${preset.sessionUrl || ''}${preset.builtin ? ` · ${t('account.builtin')}` : ''}`;
 }
 async function testPreset(preset: any, mode: 'ping' | 'function') {
   if (testingPreset.value) return;
   const url = preset.testUrl || preset.authUrl || preset.sessionUrl;
-  if (!url) { presetTest.value = { name: preset.name, passed: false, message: '没有可测试的地址' }; return; }
+  if (!url) { presetTest.value = { name: preset.name, passed: false, message: t('pcl.accountPage.noTestUrl') }; return; }
   testingPreset.value = preset.name;
   presetTest.value = null;
   try {
@@ -519,7 +521,7 @@ async function refreshAll() {
       tasks = await Promise.all(tasks.map(task => task.finished ? task : props.execute('neo.task.status', { taskId: task.taskId })));
     }
     const failed = tasks.find(task => task?.state !== 'succeeded');
-    if (failed) throw new Error(failed.error || '账户刷新失败');
+    if (failed) throw new Error(failed.error || t('pcl.accountPage.refreshFailed'));
     emit('changed');
   } catch (exception) {
     loginError.value = exception instanceof Error ? exception.message : String(exception);

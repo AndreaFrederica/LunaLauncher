@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/kde">
+        <file>breeze-light.colors</file>
+        <file>breeze-dark.colors</file>
+    </qresource>
+</RCC>

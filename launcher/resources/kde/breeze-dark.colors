@@ -1,0 +1,26 @@
+[General]
+Name=Breeze Dark
+
+[Colors:Window]
+BackgroundNormal=49,54,59
+ForegroundNormal=252,252,252
+
+[Colors:View]
+BackgroundNormal=35,38,41
+BackgroundAlternate=49,54,59
+ForegroundNormal=252,252,252
+ForegroundLink=61,174,233
+ForegroundVisited=189,195,199
+
+[Colors:Button]
+BackgroundNormal=49,54,59
+ForegroundNormal=252,252,252
+
+[Colors:Selection]
+BackgroundNormal=61,174,233
+ForegroundNormal=255,255,255
+BackgroundInactive=75,81,86
+
+[Colors:Tooltip]
+BackgroundNormal=49,54,59
+ForegroundNormal=252,252,252

@@ -174,7 +174,7 @@ meson install -C build --no-rebuild
 | Option | Description | Default |
 |--------|-------------| ------- |
 | `-Dbuild_testing` | Disable tests (default) | `false` |
-| `-Dbuild_updater=false` | Disable auto-updater | `false` |
+| `-Dbuild_updater` | Disable auto-updater | `false` |
 | `-Denable_java_downloader` | Enable Java auto-downloader | `true` |
 | `-Ddeveloper_mode_build` | Enable developer mode | `false` |
 | `-Dgamemode` | Enable GameMode support (Linux) | `enabled` |

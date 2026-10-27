@@ -123,12 +123,26 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
     # Meson activates MSVC, those paths are still inherited by `cl` and make
     # it parse MSYS headers as if they were MSVC headers (`__asm__` errors).
     # Keep the normal VS environment, but remove only MSYS entries from the
-    # inherited search variables so the Meson action remains reproducible.
+    # inherited search variables and compiler flags so the Meson action
+    # remains reproducible.  The flags matter as much as INCLUDE: a stale
+    # `CFLAGS=-ID:/program/msys64/ucrt64/include` is copied into Meson's
+    # compiler cache during setup and survives later environment cleanup.
     for variable in ("INCLUDE", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH", "LIB"):
         if variable in env:
             env[variable] = os.pathsep.join(
                 entry for entry in env[variable].split(os.pathsep) if "msys64" not in entry.lower()
             )
+    for variable in ("CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"):
+        if variable in env:
+            # Flags are a shell string rather than a path list.  Remove both
+            # quoted and unquoted tokens containing an MSYS installation path.
+            env[variable] = re.sub(
+                r'"[^"\r\n]*msys64[^"\r\n]*"|\S*msys64\S*',
+                "",
+                env[variable],
+                flags=re.IGNORECASE,
+            )
+            env[variable] = re.sub(r"\s+", " ", env[variable]).strip()
     cmake_prefix_paths = [str(qt_target / "lib" / "cmake")]
     if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
         cmake_prefix_paths.append(env["CONDA_PREFIX"])

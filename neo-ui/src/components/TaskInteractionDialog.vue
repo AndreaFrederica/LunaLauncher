@@ -2,28 +2,28 @@
   <q-dialog :model-value="!!current" persistent>
     <q-card class="task-interaction" :class="{ 'task-interaction--pcl': pcl }">
       <q-card-section>
-        <h2>{{ restricted ? '需要手动下载的模组' : current?.request.choices ? '需要确认' : '需要输入' }}</h2>
-        <p v-if="restricted">以下文件不允许第三方直接下载。请从作者的下载页面获取文件，校验通过后确认继续安装。</p>
+        <h2>{{ restricted ? t('neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h2>
+        <p v-if="restricted">{{ t('neo.auto2.k7c306073f8') }}</p>
         <p v-else>{{ current?.request.prompt }}</p>
         <p v-if="error || current?.request.error" class="task-interaction__error" role="alert">{{ error || current?.request.error }}</p>
       </q-card-section>
       <q-card-section v-if="restricted" class="task-interaction__body">
         <div class="task-interaction__tools">
-          <PclButton :disabled="submitting" @click="chooseDirectory">选择下载目录</PclButton>
-          <PclButton :disabled="submitting" @click="submit('scan')">重新检测下载</PclButton>
-          <span>{{ matchedCount }} / {{ files.length }} 个文件已校验</span>
+          <PclButton :disabled="submitting" @click="chooseDirectory">{{ t('neo.auto2.k55e40f47a9') }}</PclButton>
+          <PclButton :disabled="submitting" @click="submit('scan')">{{ t('neo.auto2.kb9882a253f') }}</PclButton>
+          <span>{{ t('neo.extra.filesChecked', { count: matchedCount }) }} / {{ files.length }}</span>
         </div>
-        <p class="task-interaction__folders">检测目录：{{ (current?.request.directories || []).join('、') }}</p>
+        <p class="task-interaction__folders">{{ t('neo.extra.detectedDirectories', { directories: (current?.request.directories || []).join(', ') }) }}</p>
         <ul class="task-interaction__files">
           <li v-for="(file, index) in files" :key="`${file.hash}:${index}`">
             <div class="task-interaction__file-info">
               <strong>{{ file.name }}</strong>
-              <span :class="{ verified: file.matched }">{{ file.matched ? '校验通过' : '等待下载并校验' }}</span>
+              <span :class="{ verified: file.matched }">{{ file.matched ? t('neo.auto2.k7035f86dd0') : t('neo.auto2.k49fff9ac14') }}</span>
               <small v-if="file.localPath">{{ file.localPath }}</small>
             </div>
             <div class="task-interaction__tools">
-              <PclButton size="sm" :disabled="submitting || !safeUrl(file.url)" @click="openDownload(file.url)">打开下载页</PclButton>
-              <PclButton size="sm" :disabled="submitting" @click="chooseFile(file.name)">选择文件</PclButton>
+              <PclButton size="sm" :disabled="submitting || !safeUrl(file.url)" @click="openDownload(file.url)">{{ t('neo.auto2.k90ef710913') }}</PclButton>
+              <PclButton size="sm" :disabled="submitting" @click="chooseFile(file.name)">{{ t('neo.auto2.k21a6f5a8d9') }}</PclButton>
             </div>
           </li>
         </ul>
@@ -33,15 +33,17 @@
         <PclInput v-else v-model="answer" :type="current?.request.secret ? 'password' : 'text'" />
       </q-card-section>
       <q-card-actions align="right">
-        <PclButton :disabled="submitting" @click="submit(null)">{{ restricted ? '取消安装' : '取消' }}</PclButton>
+        <PclButton :disabled="submitting" @click="submit(null)">{{ restricted ? t('neo.auto2.kaa385c0338') : t('neo.auto2.k4d0b4688c7') }}</PclButton>
         <PclButton variant="highlight" :disabled="submitting || (restricted && !current?.request.complete)"
-          @click="submit(restricted ? 'continue' : answer)">{{ restricted ? '确认文件并继续安装' : current?.request.choices ? '继续' : '确认' }}</PclButton>
+          @click="submit(restricted ? 'continue' : answer)">{{ restricted ? t('neo.auto2.k4523bfbe2f') : current?.request.choices ? t('neo.auto2.k1fc1afc5c5') : t('neo.auto2.kb56d9ac6c5') }}</PclButton>
       </q-card-actions>
     </q-card>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { launcher } from '../boot/launcher-api';
@@ -110,11 +112,11 @@ async function submit(value: string | number | null) {
   finally { submitting.value = false; }
 }
 async function chooseDirectory() {
-  const path = await pickPclDirectory({ title: '选择保存受限模组的下载目录' });
+  const path = await pickPclDirectory({ title: t('neo.auto2.ka9d30729d6') });
   if (path) await submit(path);
 }
 async function chooseFile(name: string) {
-  const path = await pickPclFile({ title: `选择下载好的 ${name}` });
+  const path = await pickPclFile({ title: t('neo.extra.chooseDownload', { name }) });
   if (path) await submit(path);
 }
 function safeUrl(value: string): boolean {

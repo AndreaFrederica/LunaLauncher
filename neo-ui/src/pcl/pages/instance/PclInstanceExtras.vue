@@ -1,21 +1,21 @@
 <template>
-  <PclCard :title="section === 'worlds' ? '存档' : '截图'" class="pcl-extras">
+  <PclCard  :title="section === 'worlds' ? t('extras.saves') : t('extras.screenshots')" class="pcl-extras">
 
     <template v-if="section === 'worlds'">
       <div class="pcl-extras-head">
         <div>
-          <strong>世界存档</strong>
-          <small>管理存档、导入世界并导出备份。</small>
+          <strong>{{ t('extras.worlds') }}</strong>
+          <small>{{ t('extras.worldHint') }}</small>
         </div>
-        <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder('saves')">打开目录</PclButton>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadWorlds">刷新</PclButton>
+        <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder('saves')">{{ t('extras.openFolder') }}</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadWorlds">{{ t('extras.refresh') }}</PclButton>
       </div>
       <div class="pcl-extras-form">
-        <PclInput v-model="worldSource" placeholder="世界目录或 ZIP 路径" />
-        <PclIconButton icon="folder-open" label="选择世界目录" :size="28" :disabled="busy" @click="chooseWorldDirectory" />
-        <PclIconButton icon="file-archive" label="选择世界压缩包" :size="28" :disabled="busy" @click="chooseWorldArchive" />
-        <PclInput v-model="worldName" placeholder="导入后的名称（可选）" />
-        <PclButton variant="highlight" icon="arrow-up-from-line" :disabled="busy || !worldSource.trim()" @click="importWorld">导入</PclButton>
+        <PclInput v-model="worldSource" :placeholder="t('extras.worldPath')" />
+        <PclIconButton icon="folder-open" :label="t('extras.chooseWorldDir')" :size="28" :disabled="busy" @click="chooseWorldDirectory" />
+        <PclIconButton icon="file-archive" :label="t('extras.chooseWorldArchive')" :size="28" :disabled="busy" @click="chooseWorldArchive" />
+        <PclInput v-model="worldName" :placeholder="t('extras.importedName')" />
+        <PclButton variant="highlight" icon="arrow-up-from-line" :disabled="busy || !worldSource.trim()" @click="importWorld">{{ t('extras.import') }}</PclButton>
       </div>
       <PclHint v-if="worldError" theme="red" closable @close="worldError = ''">{{ worldError }}</PclHint>
       <div v-if="worlds.length" class="pcl-world-list">
@@ -26,41 +26,41 @@
             <small>{{ world.folder }} · {{ formatWorldDate(world.lastPlayed) }} · {{ formatSize(world.size) }}</small>
           </div>
           <div class="pcl-world-row__actions">
-            <PclIconButton icon="pencil" label="重命名" :size="24" :disabled="busy" @click="renameWorld(world)" />
-            <PclIconButton icon="copy" label="复制" :size="24" :disabled="busy" @click="copyWorld(world)" />
-            <PclIconButton icon="download" label="导出" :size="24" :disabled="busy" @click="exportWorld(world)" />
-            <PclIconButton icon="image" label="重置图标" :size="24" :disabled="busy" @click="resetWorldIcon(world)" />
-            <PclIconButton icon="trash-2" label="删除" :size="24" danger :disabled="busy" @click="deleteWorld(world)" />
+            <PclIconButton icon="pencil" :label="t('extras.rename')" :size="24" :disabled="busy" @click="renameWorld(world)" />
+            <PclIconButton icon="copy" :label="t('extras.copy')" :size="24" :disabled="busy" @click="copyWorld(world)" />
+            <PclIconButton icon="download" :label="t('extras.export')" :size="24" :disabled="busy" @click="exportWorld(world)" />
+            <PclIconButton icon="image" :label="t('extras.resetIcon')" :size="24" :disabled="busy" @click="resetWorldIcon(world)" />
+            <PclIconButton icon="trash-2" :label="t('extras.delete')" :size="24" danger :disabled="busy" @click="deleteWorld(world)" />
           </div>
         </div>
       </div>
       <div v-else-if="!loading" class="pcl-empty pcl-extras-empty">
         <PclIcon name="earth" :size="34" />
-        <strong>这个实例还没有世界存档。</strong>
-        <span>可以导入世界目录或 ZIP 备份。</span>
+        <strong>{{ t('extras.noWorlds') }}</strong>
+        <span>{{ t('extras.worldEmptyHint') }}</span>
       </div>
-      <PclLoading v-if="loading" text="正在读取世界" inline />
+      <PclLoading v-if="loading" :text="t('extras.loadingWorlds')" inline />
     </template>
 
     <template v-else>
       <div class="pcl-extras-head">
         <div>
-          <strong>截图</strong>
-          <small>浏览、导入、上传或删除游戏截图。</small>
+          <strong>{{ t('extras.screenshots') }}</strong>
+          <small>{{ t('extras.screenshotHint') }}</small>
         </div>
-        <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder('screenshots')">打开目录</PclButton>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadScreenshots">刷新</PclButton>
+        <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder('screenshots')">{{ t('extras.openFolder') }}</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="loadScreenshots">{{ t('extras.refresh') }}</PclButton>
       </div>
       <div class="pcl-extras-form">
-        <PclInput v-model="screenshotSource" placeholder="本地图片路径" />
-        <PclIconButton icon="folder-open" label="选择图片文件" :size="28" :disabled="busy" @click="chooseScreenshotFile" />
-        <PclInput v-model="screenshotName" placeholder="导入文件名（可选）" />
-        <PclButton variant="highlight" icon="arrow-up-from-line" :disabled="busy || !screenshotSource.trim()" @click="importScreenshot">导入</PclButton>
+        <PclInput v-model="screenshotSource" :placeholder="t('extras.imagePath')" />
+        <PclIconButton icon="folder-open" :label="t('extras.chooseImage')" :size="28" :disabled="busy" @click="chooseScreenshotFile" />
+        <PclInput v-model="screenshotName" :placeholder="t('extras.fileName')" />
+        <PclButton variant="highlight" icon="arrow-up-from-line" :disabled="busy || !screenshotSource.trim()" @click="importScreenshot">{{ t('extras.import') }}</PclButton>
       </div>
       <PclHint v-if="screenshotError" theme="red" closable @close="screenshotError = ''">{{ screenshotError }}</PclHint>
       <div v-if="preview" class="pcl-shot-preview">
-        <img :src="preview" alt="截图预览" />
-        <PclIconButton icon="x" label="关闭预览" :size="26" @click="preview = ''" />
+        <img :src="preview" :alt="t('extras.preview')" />
+        <PclIconButton icon="x" :label="t('extras.closePreview')" :size="26" @click="preview = ''" />
       </div>
       <div v-if="screenshots.length" class="pcl-shot-grid">
         <article v-for="shot in screenshots" :key="shot.name" class="pcl-shot-card">
@@ -73,25 +73,26 @@
             <small>{{ formatSize(shot.size) }} · {{ formatWorldDate(shot.modified) }}</small>
           </div>
           <div class="pcl-shot-card__actions">
-            <PclIconButton icon="search" label="查看" :size="22" :disabled="busy" @click="readScreenshot(shot)" />
-            <PclIconButton icon="pencil" label="重命名" :size="22" :disabled="busy" @click="renameScreenshot(shot)" />
-            <PclIconButton icon="arrow-up-from-line" label="上传" :size="22" :disabled="busy" @click="uploadScreenshot(shot)" />
-            <PclIconButton icon="trash-2" label="删除" :size="22" danger :disabled="busy" @click="deleteScreenshot(shot)" />
+            <PclIconButton icon="search" :label="t('extras.view')" :size="22" :disabled="busy" @click="readScreenshot(shot)" />
+            <PclIconButton icon="pencil" :label="t('extras.rename')" :size="22" :disabled="busy" @click="renameScreenshot(shot)" />
+            <PclIconButton icon="arrow-up-from-line" :label="t('extras.upload')" :size="22" :disabled="busy" @click="uploadScreenshot(shot)" />
+            <PclIconButton icon="trash-2" :label="t('extras.delete')" :size="22" danger :disabled="busy" @click="deleteScreenshot(shot)" />
           </div>
         </article>
       </div>
       <div v-else-if="!loading" class="pcl-empty pcl-extras-empty">
         <PclIcon name="image" :size="34" />
-        <strong>这个实例还没有截图。</strong>
-        <span>可以导入本地图片。</span>
+        <strong>{{ t('extras.noScreenshots') }}</strong>
+        <span>{{ t('extras.screenshotEmptyHint') }}</span>
       </div>
-      <PclLoading v-if="loading" text="正在读取截图" inline />
+      <PclLoading v-if="loading" :text="t('extras.loadingScreenshots')" inline />
     </template>
   </PclCard>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -104,6 +105,7 @@ import { launcher } from '../../../boot/launcher-api';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: string; section: 'worlds' | 'screenshots'; busy: boolean; execute: Execute }>();
+const { t } = useI18n();
 const emit = defineEmits<{ changed: [] }>();
 
 const loading = ref(false);
@@ -119,14 +121,14 @@ const preview = ref('');
 
 function formatSize(value: unknown) {
   const size = Number(value || 0);
-  if (!size) return '大小未知';
+  if (!size) return t('extras.unknownSize');
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`;
   return `${(size / 1024 / 1024).toFixed(1)} MiB`;
 }
 
 function formatWorldDate(value: unknown) {
-  if (!value) return '从未游玩';
+  if (!value) return t('extras.neverPlayed');
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }
@@ -166,34 +168,34 @@ async function loadScreenshots() {
 }
 
 async function renameWorld(world: any) {
-  const name = window.prompt('新的世界名称', world.name || world.folder);
+  const name = window.prompt(t('extras.newWorldName'), world.name || world.folder);
   if (!name || name === (world.name || world.folder)) return;
   await props.execute('instance.world.rename', { instance: props.instance, world: world.folder, name }); emit('changed'); await loadWorlds();
 }
 
 async function copyWorld(world: any) {
-  const name = window.prompt('复制到新的世界名称', `${world.name || world.folder} 副本`);
+  const name = window.prompt(t('extras.copyWorldName'), `${world.name || world.folder} ${t('common.copy')}`);
   if (!name) return;
   await props.execute('instance.world.copy', { instance: props.instance, world: world.folder, name }); emit('changed'); await loadWorlds();
 }
 
 async function deleteWorld(world: any) {
-  if (!window.confirm(`确定删除世界“${world.name || world.folder}”吗？`)) return;
+  if (!window.confirm(t('extras.confirmDeleteWorld', { name: world.name || world.folder }))) return;
   await props.execute('instance.world.delete', { instance: props.instance, world: world.folder, confirm: true }); emit('changed'); await loadWorlds();
 }
 
 async function chooseWorldDirectory() {
-  const selected = await pickPclDirectory({ title: '选择世界存档目录' });
+  const selected = await pickPclDirectory({ title: t('extras.chooseWorldDirTitle') });
   if (selected) worldSource.value = selected;
 }
 
 async function chooseWorldArchive() {
-  const selected = await pickPclFile({ title: '选择世界压缩包', filters: [{ name: '世界压缩包', extensions: ['zip', 'tar', 'gz'] }] });
+  const selected = await pickPclFile({ title: t('extras.chooseWorldArchiveTitle'), filters: [{ name: t('extras.chooseWorldArchive'), extensions: ['zip', 'tar', 'gz'] }] });
   if (selected) worldSource.value = selected;
 }
 
 async function chooseScreenshotFile() {
-  const selected = await pickPclFile({ title: '选择截图', filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
+  const selected = await pickPclFile({ title: t('extras.chooseScreenshot'), filters: [{ name: t('extras.preview'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
   if (selected) screenshotSource.value = selected;
 }
 
@@ -203,13 +205,13 @@ async function importWorld() {
 }
 
 async function exportWorld(world: any) {
-  const output = await pickPclSavePath({ title: '导出世界存档', defaultPath: `${world.name || world.folder}.zip`, filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }] });
+  const output = await pickPclSavePath({ title: t('extras.exportWorld'), defaultPath: `${world.name || world.folder}.zip`, filters: [{ name: 'ZIP archive', extensions: ['zip'] }] });
   if (!output) return;
   await props.execute('instance.world.export', { instance: props.instance, world: world.folder, output, overwrite: true });
 }
 
 async function resetWorldIcon(world: any) {
-  if (!window.confirm(`移除世界“${world.name || world.folder}”的图标吗？`)) return;
+  if (!window.confirm(t('extras.confirmResetIcon', { name: world.name || world.folder }))) return;
   await props.execute('instance.world.reset-icon', { instance: props.instance, world: world.folder });
   emit('changed'); await loadWorlds();
 }
@@ -230,13 +232,13 @@ async function readScreenshot(shot: any) {
 
 async function uploadScreenshot(shot: any) { await props.execute('instance.screenshot.upload', { instance: props.instance, file: shot.name }); }
 async function renameScreenshot(shot: any) {
-  const name = window.prompt('新的截图文件名（png/jpg/jpeg）', shot.name);
+  const name = window.prompt(t('extras.newScreenshotName'), shot.name);
   if (!name || name === shot.name) return;
   await props.execute('instance.screenshot.rename', { instance: props.instance, file: shot.name, name });
   emit('changed'); await loadScreenshots();
 }
 async function deleteScreenshot(shot: any) {
-  if (!window.confirm(`确定删除截图“${shot.name}”吗？`)) return;
+  if (!window.confirm(t('extras.confirmDeleteScreenshot', { name: shot.name }))) return;
   await props.execute('instance.screenshot.delete', { instance: props.instance, file: shot.name, confirm: true });
   emit('changed'); await loadScreenshots();
 }

@@ -17,7 +17,7 @@
           class="pcl-page-nav__refresh pcl-icon-btn"
           role="button"
           :tabindex="0"
-          title="刷新"
+          :title="t('common.refresh')"
           @click.stop="emit('refresh', item.id)"
           @keydown.enter.stop="emit('refresh', item.id)"
         >
@@ -31,6 +31,8 @@
 <script setup lang="ts">
 import PclIcon from './PclIcon.vue';
 import type { PclNavGroup } from '../types';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 
 defineProps<{
   modelValue: string;

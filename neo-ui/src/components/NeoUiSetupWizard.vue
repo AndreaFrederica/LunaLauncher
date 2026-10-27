@@ -5,12 +5,12 @@
         <div class="neo-setup-brand">
           <img :src="launcherLogo" alt="Luna Launcher" width="44" height="44" />
           <div>
-            <div class="neo-setup-kicker">LUNA LAUNCHER</div>
-            <h2>首次启动设置</h2>
+            <div class="neo-setup-kicker">{{ t('ui.launcherKicker') }}</div>
+            <h2>{{ t('neo.auto2.k69b10cf40d') }}</h2>
           </div>
         </div>
-        <p>先完成数据迁移和常用设置，之后可以在设置页继续调整。</p>
-        <div class="neo-setup-progress" role="progressbar" aria-label="设置进度" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${progress}%` }" /></div>
+        <p>{{ t('neo.auto2.k966a3f4e3a') }}</p>
+        <div class="neo-setup-progress" role="progressbar" :aria-label="t('neo.auto2.k442a1dd661')" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${progress}%` }" /></div>
       </q-card-section>
 
       <q-card-section ref="body" class="neo-setup-body">
@@ -19,147 +19,148 @@
           <template v-else><q-spinner color="primary" size="22px" /><span>{{ workingText }}</span></template>
         </div>
         <div v-if="stage === 'welcome'">
-          <h3>欢迎使用 NeoUI</h3>
-          <p class="muted">NeoUI 和 Classic UI 共用同一份启动器数据。检测到旧版数据时，迁移会使用启动器原生的复制任务，并保留原目录。</p>
-          <component :is="controls.hint" v-if="status?.dataRoot" v-bind="hintProps()" class="setup-banner">
-            当前数据目录：<code>{{ status.dataRoot }}</code>
+          <h3>{{ t('neo.auto2.k5cf79a6153') }}</h3>
+          <p class="muted">{{ t('neo.auto2.kf371671607') }}</p>
+          <component :is="controls.hint" v-if="status?.dataRoot" v-bind="hintProps()" class="setup-banner">{{ t('neo.auto2.k8f4d395bcf') }}<code>{{ status.dataRoot }}</code>
           </component>
-          <component :is="controls.hint" v-if="status?.portable" v-bind="hintProps()" class="setup-banner">当前为 portable 模式，数据会保存在便携目录中。</component>
+          <component :is="controls.hint" v-if="status?.portable" v-bind="hintProps()" class="setup-banner">{{ t('neo.auto2.k9439e91bb0') }}</component>
         </div>
 
         <div v-else-if="stage === 'migration'">
-          <h3>迁移旧数据</h3>
-          <p class="muted">可以把 Prism Launcher、PolyMC 或 MultiMC 的实例、账户、资源和设置迁移到当前数据目录。</p>
+          <h3>{{ t('neo.auto2.kbf13dd0c07') }}</h3>
+          <p class="muted">{{ t('neo.auto2.keb006543fb') }}</p>
           <div class="migration-list">
             <div v-for="item in migrations" :key="item.name" class="migration-item">
               <div class="migration-details">
                 <strong>{{ item.name }}</strong>
                 <div class="muted migration-path">{{ item.source }}</div>
-                <div v-if="item.currentDataExists" class="setup-warning">当前目录已有配置，无法自动覆盖；请手动合并。</div>
+                <div v-if="item.currentDataExists" class="setup-warning">{{ t('neo.auto2.k1c1702cbea') }}</div>
               </div>
               <div class="migration-actions">
-                <component :is="controls.button" v-bind="actionProps(true, Boolean(working) || item.currentDataExists)" @click="migrate(item)">迁移</component>
-                <component :is="controls.button" v-bind="actionProps()" @click="dismiss(item)">跳过</component>
+                <component :is="controls.button" v-bind="actionProps(true, Boolean(working) || item.currentDataExists)" @click="migrate(item)">{{ t('neo.auto2.kbdf1cab1ec') }}</component>
+                <component :is="controls.button" v-bind="actionProps()" @click="dismiss(item)">{{ t('neo.auto2.k31a98593f1') }}</component>
               </div>
             </div>
           </div>
-          <component :is="controls.hint" v-if="!migrations.length" v-bind="hintProps()" class="setup-banner">没有待处理的旧数据。</component>
+          <component :is="controls.hint" v-if="!migrations.length" v-bind="hintProps()" class="setup-banner">{{ t('neo.auto2.kfbdad15688') }}</component>
         </div>
 
         <div v-else-if="stage === 'preferences'">
-          <h3>常用设置</h3>
-          <p class="muted">这些选项对应 Classic UI 首次启动向导中的语言、Java 和外观设置，之后都可以在设置页修改。</p>
+          <h3>{{ t('neo.auto2.ke6cffd0771') }}</h3>
+          <p class="muted">{{ t('neo.auto2.k77b8fc36ba') }}</p>
           <fieldset class="setup-group">
-            <legend>语言与外观</legend>
+            <legend>{{ t('neo.auto2.kdeb52f209a') }}</legend>
             <div class="setup-grid">
               <div class="setup-field">
-                <span>界面语言</span>
-                <component :is="controls.select" v-model="language" v-bind="selectProps" :options="languageOptions" aria-label="界面语言" />
+                <span>{{ t('neo.auto2.kd5d8edd12c') }}</span>
+                <component :is="controls.select" v-model="language" v-bind="selectProps" :options="languageOptions" :aria-label="t('neo.auto2.kd5d8edd12c')" />
               </div>
-              <component :is="controls.checkbox" v-model="useSystemLocale" v-bind="checkboxProps" label="跟随系统语言" />
+              <component :is="controls.checkbox" v-model="useSystemLocale" v-bind="checkboxProps" :label="t('neo.auto2.k726bce844f')" />
               <div class="setup-field" data-setup-field="preset">
-                <span>NeoUI 外观预设</span>
-                <component :is="controls.select" :model-value="preferences.pclStylePreset" v-bind="selectProps" :options="presetOptions" aria-label="NeoUI 外观预设" @update:model-value="selectPreset" />
+                <span>{{ t('neo.auto2.k1ab7d5469d') }}</span>
+                <component :is="controls.select" :model-value="preferences.pclStylePreset" v-bind="selectProps" :options="presetOptions" :aria-label="t('neo.auto2.k1ab7d5469d')" @update:model-value="selectPreset" />
               </div>
               <div class="setup-field" data-setup-field="color">
-                <span>NeoUI 颜色模式</span>
-                <component :is="controls.select" v-model="preferences.theme" v-bind="selectProps" :options="colorOptions" aria-label="NeoUI 颜色模式" />
+                <span>{{ t('neo.auto2.k24c9bd1492') }}</span>
+                <component :is="controls.select" v-model="preferences.theme" v-bind="selectProps" :options="colorOptions" :aria-label="t('neo.auto2.k24c9bd1492')" />
               </div>
               <div class="setup-field">
-                <span>Classic UI 应用主题</span>
-                <component :is="controls.select" v-model="theme" v-bind="selectProps" :options="themeOptions" aria-label="Classic UI 应用主题" />
+                <span>{{ t('neo.auto2.k7a468db44b') }}</span>
+                <component :is="controls.select" v-model="theme" v-bind="selectProps" :options="themeOptions" :aria-label="t('neo.auto2.k7a468db44b')" />
               </div>
               <div class="setup-field">
-                <span>Classic UI 图标主题</span>
-                <component :is="controls.select" v-model="icons" v-bind="selectProps" :options="iconOptions" aria-label="Classic UI 图标主题" />
+                <span>{{ t('neo.auto2.k052f629b3c') }}</span>
+                <component :is="controls.select" v-model="icons" v-bind="selectProps" :options="iconOptions" :aria-label="t('neo.auto2.k052f629b3c')" />
               </div>
             </div>
           </fieldset>
           <fieldset class="setup-group">
-            <legend>Java 与内存</legend>
+            <legend>{{ t('neo.auto2.kcffec64a65') }}</legend>
             <div class="setup-grid">
-              <component :is="controls.checkbox" v-model="automaticJavaSwitch" v-bind="checkboxProps" label="按实例自动选择 Java" />
-              <component :is="controls.checkbox" v-model="automaticJavaDownload" v-bind="checkboxProps" :disabled="Boolean(working) || status?.javaDownloaderEnabled === false" :disable="Boolean(working) || status?.javaDownloaderEnabled === false" label="需要时自动下载 Java" />
+              <component :is="controls.checkbox" v-model="automaticJavaSwitch" v-bind="checkboxProps" :label="t('neo.auto2.ke73929398f')" />
+              <component :is="controls.checkbox" v-model="automaticJavaDownload" v-bind="checkboxProps" :disabled="Boolean(working) || status?.javaDownloaderEnabled === false" :disable="Boolean(working) || status?.javaDownloaderEnabled === false" :label="t('neo.auto2.k6422ab08e1')" />
               <div v-if="!automaticJavaDownload" class="setup-wide setup-java">
                 <div class="setup-field">
-                  <label for="setup-java-path">Java 可执行文件</label>
+                  <label for="setup-java-path">{{ t('neo.auto2.k638752651a') }}</label>
                   <div class="setup-java-path">
-                    <component :is="controls.input" v-model="javaPath" v-bind="inputFieldProps('setup-java-path')" placeholder="javaw.exe 或 PATH 中的 java" />
-                    <component :is="controls.button" v-bind="actionProps()" @click="browseJava">浏览</component>
-                    <component :is="controls.button" v-bind="actionProps()" @click="scanJava">扫描本机</component>
+                    <component :is="controls.input" v-model="javaPath" v-bind="inputFieldProps('setup-java-path')" :placeholder="t('neo.auto2.kea1beb7760')" />
+                    <component :is="controls.button" v-bind="actionProps()" @click="browseJava">{{ t('neo.auto2.kef23ea67b0') }}</component>
+                    <component :is="controls.button" v-bind="actionProps()" @click="scanJava">{{ t('neo.auto2.k4b15abac06') }}</component>
                   </div>
                 </div>
                 <div v-if="javaOptions.length" class="setup-field">
-                  <span>已检测的 Java</span>
-                  <component :is="controls.select" v-model="javaPath" v-bind="selectProps" :options="javaOptions" aria-label="已检测的 Java" />
+                  <span>{{ t('neo.auto2.k3e720e6837') }}</span>
+                  <component :is="controls.select" v-model="javaPath" v-bind="selectProps" :options="javaOptions" :aria-label="t('neo.auto2.k3e720e6837')" />
                 </div>
-                <component :is="controls.checkbox" v-model="ignoreJavaWizard" v-bind="checkboxProps" label="稍后配置 Java" />
+                <component :is="controls.checkbox" v-model="ignoreJavaWizard" v-bind="checkboxProps" :label="t('neo.auto2.kb40b63cb74')" />
               </div>
               <div class="setup-field">
-                <label for="setup-min-memory">最小内存（MiB）</label>
+                <label for="setup-min-memory">{{ t('neo.auto2.ka6551c0898') }}</label>
                 <component :is="controls.input" v-model.number="minMemory" v-bind="inputFieldProps('setup-min-memory')" type="number" min="128" step="128" />
               </div>
               <div class="setup-field">
-                <label for="setup-max-memory">最大内存（MiB）</label>
+                <label for="setup-max-memory">{{ t('neo.auto2.k14469bb314') }}</label>
                 <component :is="controls.input" v-model.number="maxMemory" v-bind="inputFieldProps('setup-max-memory')" type="number" min="128" step="128" />
               </div>
             </div>
           </fieldset>
           <fieldset class="setup-group">
-            <legend>日志上传</legend>
+            <legend>{{ t('neo.auto2.k6be63dbd9f') }}</legend>
             <div class="setup-grid">
               <div class="setup-field">
-                <span>日志上传服务</span>
-                <component :is="controls.select" v-model="pasteType" v-bind="selectProps" :options="pasteOptions" aria-label="日志上传服务" />
+                <span>{{ t('neo.auto2.k6c7edf8feb') }}</span>
+                <component :is="controls.select" v-model="pasteType" v-bind="selectProps" :options="pasteOptions" :aria-label="t('neo.auto2.k6c7edf8feb')" />
               </div>
               <div v-if="pasteType === 0" class="setup-field">
-                <label for="setup-paste-base">自定义日志服务地址</label>
-                <component :is="controls.input" v-model="pasteBase" v-bind="inputFieldProps('setup-paste-base')" placeholder="留空使用默认地址" />
+                <label for="setup-paste-base">{{ t('neo.auto2.k0bb7028717') }}</label>
+                <component :is="controls.input" v-model="pasteBase" v-bind="inputFieldProps('setup-paste-base')" :placeholder="t('neo.auto2.kf63c4935ca')" />
               </div>
             </div>
           </fieldset>
-          <component :is="controls.hint" v-bind="hintProps()" class="setup-banner">账户登录、下载核心、镜像源和完整性校验可以在设置页中继续配置。</component>
+          <component :is="controls.hint" v-bind="hintProps()" class="setup-banner">{{ t('neo.auto2.kf23046e691') }}</component>
         </div>
 
         <div v-else-if="stage === 'account'">
-          <h3>添加账户</h3>
-          <p v-if="hasAccounts" class="muted">已有账户已就绪，可以继续完成设置。你也可以再添加一个 Microsoft 账户。</p>
-          <p v-else class="muted">登录拥有 Minecraft 的 Microsoft 账户后即可开始游戏。也可以稍后在账户页添加账户。</p>
-          <component :is="controls.button" v-if="loginAvailable" class="setup-login-button" v-bind="actionProps(true)" @click="login">Microsoft 登录</component>
-          <component :is="controls.hint" v-else v-bind="hintProps()" class="setup-banner">当前构建未配置 Microsoft 登录。其他账户类型可以在账户页管理。</component>
+          <h3>{{ t('neo.auto2.kc771c7d8e2') }}</h3>
+          <p v-if="hasAccounts" class="muted">{{ t('neo.auto2.ka86cea3781') }}</p>
+          <p v-else class="muted">{{ t('neo.auto2.ke909d953ac') }}</p>
+          <component :is="controls.button" v-if="loginAvailable" class="setup-login-button" v-bind="actionProps(true)" @click="login">{{ t('neo.auto2.kc50b0a9ff0') }}</component>
+          <component :is="controls.hint" v-else v-bind="hintProps()" class="setup-banner">{{ t('neo.auto2.kacb4c7e164') }}</component>
           <component :is="controls.hint" v-if="loginTask" v-bind="hintProps()" class="setup-banner">
-            <div>{{ loginTask.status || '正在等待登录…' }}</div>
+            <div>{{ loginTask.status || t('neo.auto2.k4e2209e354') }}</div>
             <div v-if="loginTask.deviceCode" class="setup-device-code">{{ loginTask.deviceCode }}</div>
             <div v-if="loginTask.deviceUrl" class="setup-login-actions">
-              <component :is="controls.button" v-bind="actionProps(false, false)" @click="openLoginUrl">打开登录网页</component>
-              <component :is="controls.button" v-if="loginTask.deviceCode" v-bind="actionProps(false, false)" @click="copyLoginCode">复制代码</component>
+              <component :is="controls.button" v-bind="actionProps(false, false)" @click="openLoginUrl">{{ t('neo.auto2.k90fffc297f') }}</component>
+              <component :is="controls.button" v-if="loginTask.deviceCode" v-bind="actionProps(false, false)" @click="copyLoginCode">{{ t('neo.auto2.k3b1fde4d23') }}</component>
             </div>
-            <component :is="controls.button" v-bind="actionProps(false, false)" @click="cancelLogin">取消登录</component>
+            <component :is="controls.button" v-bind="actionProps(false, false)" @click="cancelLogin">{{ t('neo.auto2.kf21bbc4ead') }}</component>
           </component>
         </div>
 
         <div v-else>
-          <h3>设置完成</h3>
-          <p class="muted">NeoUI 已准备好。你可以从首页导入整合包、管理实例，或随时回到设置页修改这些选项。</p>
+          <h3>{{ t('neo.auto2.kd3fc9c330f') }}</h3>
+          <p class="muted">{{ t('neo.auto2.k21effdff86') }}</p>
           <div class="finish-icon"><PclIcon v-if="isPcl" name="circle-check" :size="56" /><q-icon v-else name="check_circle" size="56px" /></div>
         </div>
 
         <component :is="controls.hint" v-if="error" v-bind="hintProps('red')" class="setup-banner setup-error" role="alert">
           {{ error }}
-          <component :is="controls.button" v-if="!preferencesLoaded" v-bind="actionProps()" @click="reloadPreferences">重试读取设置</component>
+          <component :is="controls.button" v-if="!preferencesLoaded" v-bind="actionProps()" @click="reloadPreferences">{{ t('neo.auto2.k26d6bbe5e4') }}</component>
         </component>
       </q-card-section>
 
       <q-card-actions align="between" class="neo-setup-actions">
-        <component :is="controls.button" v-if="stage !== 'welcome'" v-bind="actionProps()" @click="back">上一步</component>
+        <component :is="controls.button" v-if="stage !== 'welcome'" v-bind="actionProps()" @click="back">{{ t('neo.auto2.k75ef1241c0') }}</component>
         <span v-else />
         <component :is="controls.button" v-if="stage !== 'finish'" data-setup-next v-bind="actionProps(true, Boolean(working) || !preferencesLoaded || (stage === 'migration' && migrations.length > 0))" @click="next">{{ nextLabel }}</component>
-        <component :is="controls.button" v-else data-setup-next v-bind="actionProps(true)" @click="complete">开始使用</component>
+        <component :is="controls.button" v-else data-setup-next v-bind="actionProps(true)" @click="complete">{{ t('neo.auto2.k60ff133549') }}</component>
       </q-card-actions>
     </q-card>
   </q-dialog>
 </template>
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QBanner, QBtn, QInput, QSelect, QToggle } from 'quasar';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -213,7 +214,7 @@ const selectProps = computed(() => isPcl.value ? inputProps.value : { ...inputPr
 const checkboxProps = computed(() => isPcl.value
   ? { disabled: Boolean(working.value) }
   : { disable: Boolean(working.value), dark: neoUiIsDark.value });
-const workingText = computed(() => ({ loading: '正在读取设置…', saving: '正在保存设置…', java: '正在扫描 Java…', complete: '正在完成设置…' }[working.value] || '正在处理旧数据…'));
+const workingText = computed(() => ({ loading: t('neo.auto2.k6303ccb47a'), saving: t('neo.auto2.k8adf00b5dd'), java: t('neo.auto2.k4ff1ce9568'), complete: t('neo.auto2.kc457158b2e') }[working.value] || t('neo.auto2.kc83917a9e7')));
 function actionProps(primary = false, disabled = Boolean(working.value)) {
   return isPcl.value ? { variant: primary ? 'highlight' : 'ghost', disabled }
     : { color: primary ? 'primary' : undefined, unelevated: primary, flat: !primary, disable: disabled, noCaps: true };
@@ -236,8 +237,8 @@ watch(error, async value => {
   await nextTick();
   body.value?.$el.querySelector('.setup-error')?.scrollIntoView({ block: 'nearest' });
 });
-const presetOptions = [{ label: 'Luna Neo（默认）', value: 'luna-neo' }, { label: 'PCL', value: 'pcl' }];
-const colorOptions = [{ label: '深色', value: 'dark' }, { label: '浅色', value: 'light' }, { label: '跟随系统', value: 'system' }];
+const presetOptions = [{ label: t('neo.auto2.ka6dc467052'), value: 'luna-neo' }, { label: 'PCL', value: 'pcl' }];
+const colorOptions = [{ label: t('neo.auto2.k30b2c979ac'), value: 'dark' }, { label: t('neo.auto2.k80ec9e2b1b'), value: 'light' }, { label: t('neo.auto2.kf4bbd91f79'), value: 'system' }];
 const pasteOptions = [
   { label: '0x0.st', value: 0 },
   { label: 'Hastebin', value: 1 },
@@ -249,7 +250,7 @@ const themeOptions = ref<any[]>([]);
 const iconOptions = ref<any[]>([]);
 
 const progress = computed(() => ({ welcome: 20, migration: 40, preferences: 60, account: 80, finish: 100 }[stage.value]));
-const nextLabel = computed(() => stage.value === 'welcome' ? (migrations.value.length ? '检查迁移' : '开始设置') : '继续');
+const nextLabel = computed(() => stage.value === 'welcome' ? (migrations.value.length ? t('neo.auto2.k804f8384da') : t('neo.auto2.k279497bbd2')) : t('neo.auto2.k1fc1afc5c5'));
 
 async function loadPreferences() {
     preferencesLoaded.value = false;
@@ -336,11 +337,11 @@ async function saveSetting(key: string, value: unknown) {
 async function savePreferences() {
     const minimum = Number(minMemory.value), maximum = Number(maxMemory.value);
     if (!Number.isInteger(minimum) || !Number.isInteger(maximum) || minimum < 128 || maximum < minimum)
-      throw new Error('内存必须为整数，最小值至少为 128 MiB，最大内存不能小于最小内存。');
+      throw new Error(t('neo.extra.setupMemory'));
     if (!automaticJavaDownload.value && !ignoreJavaWizard.value) {
-      if (!javaPath.value.trim()) throw new Error('请选择 Java，启用自动下载，或选择稍后配置。');
+      if (!javaPath.value.trim()) throw new Error(t('neo.extra.chooseJava'));
       const diagnostic = await props.execute('java.diagnose', { scope: 'launcher', path: javaPath.value.trim() });
-      if (!diagnostic?.usable) throw new Error('所选 Java 无法运行，请重新选择，或启用自动下载。');
+      if (!diagnostic?.usable) throw new Error(t('neo.extra.javaUnavailable'));
       await props.execute('java.select', { scope: 'launcher', path: javaPath.value.trim() });
     }
     await saveSetting('AutomaticJavaSwitch', automaticJavaSwitch.value);
@@ -384,7 +385,7 @@ function back() {
 
 async function browseJava() {
   try {
-    const path = await open({ title: '选择 Java 可执行文件', multiple: false, directory: false });
+    const path = await open({ title: t('neo.extra.chooseJavaExecutable'), multiple: false, directory: false });
     if (typeof path === 'string') javaPath.value = path;
   } catch (exception) { error.value = String(exception); }
 }
@@ -395,7 +396,7 @@ async function scanJava() {
     const installed = await props.execute('java.refresh');
     javaOptions.value = installed.map((item: any) => ({ label: `${item.version || 'Java'} · ${item.path}`, value: item.path }));
     if (!javaPath.value && javaOptions.value.length) javaPath.value = javaOptions.value[0].value;
-    if (!javaOptions.value.length) error.value = '未检测到 Java，可手动选择或启用自动下载。';
+    if (!javaOptions.value.length) error.value = t('neo.extra.noJavaDetected');
   } catch (exception) { error.value = String(exception); }
   finally { working.value = ''; }
 }
@@ -410,7 +411,7 @@ async function login() {
       if (!disposed) loginTask.value = await props.execute('neo.task.status', { taskId: loginTask.value.taskId });
     }
     if (disposed) return;
-    if (loginTask.value?.state !== 'succeeded') throw new Error(loginTask.value?.error || '登录已取消或失败，可以重试或稍后添加账户。');
+    if (loginTask.value?.state !== 'succeeded') throw new Error(loginTask.value?.error || t('neo.extra.loginFailed'));
     hasAccounts.value = true;
     emit('changed');
   } catch (exception) { error.value = String(exception); }

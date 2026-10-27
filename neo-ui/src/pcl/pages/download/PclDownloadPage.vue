@@ -22,44 +22,40 @@
           <div v-show="Boolean(componentItem)" class="pcl-download-section">
             <PclCard :title="componentItem?.label || ''">
               <PclHint v-if="!componentItem?.uid && !componentItem?.special" theme="yellow">
-                {{ componentItem?.label || '' }} 暂无 Luna 后端接口，无法在此处读取版本或安装。
+                {{ t('pcl.downloadPage.noBackend', { name: componentItem?.label || '' }) }}
               </PclHint>
               <template v-else-if="componentItem?.uid || componentItem?.special">
                 <div class="pcl-component-filter">
-                  <PclInput v-model="componentMinecraft" placeholder="Minecraft 版本（可选）" @enter="loadComponentVersions" />
+                  <PclInput v-model="componentMinecraft" :placeholder="t('pcl.auto2.k48ad119705')" @enter="loadComponentVersions" />
                   <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || componentLoading" @click="loadComponentVersions">
-                    {{ componentLoading ? '正在加载' : '加载版本' }}
+                    {{ componentLoading ? t('pcl.auto2.k3667cb105a') : t('pcl.auto2.k68f7347528') }}
                   </PclButton>
                 </div>
                 <PclHint v-if="componentError" theme="red">{{ componentError }}</PclHint>
-                <PclLoading v-if="componentLoading" text="正在读取版本列表" inline />
+                <PclLoading v-if="componentLoading" :text="t('pcl.auto2.k8e5fed83c5')" inline />
                 <div v-else class="pcl-component-versions">
                   <PclListItem
                     v-for="version in componentVersions"
                     :key="version.version"
                     :title="version.version"
-                    :info="componentItem?.special ? `Minecraft ${version.minecraftVersion || version.version} · ${version.type || '版本'}` : (version.type || '版本')"
-                    :tags="version.recommended ? ['推荐'] : []"
+                    :info="componentItem?.special ? `Minecraft ${version.minecraftVersion || version.version} · ${version.type || t('pcl.auto2.k989d1affa0')}` : (version.type || t('pcl.auto2.k989d1affa0'))"
+                    :tags="version.recommended ? [t('pcl.auto2.k62b46f24ae')] : []"
                     @click="useComponentVersion(version)"
                   >
                     <template #icon><PclIcon :name="componentItem?.icon || 'package'" :size="20" /></template>
                     <template #actions>
-                      <span class="pcl-component-use">{{ componentItem?.id === 'client' ? '选择' : '用于安装' }}</span>
+                      <span class="pcl-component-use">{{ componentItem?.id === 'client' ? t('pcl.auto2.k70b208202c') : t('pcl.auto2.k4e61458b9b') }}</span>
                     </template>
                   </PclListItem>
-                  <div v-if="!componentVersions.length" class="pcl-empty">
-                    点击“加载版本”读取可选版本。
-                  </div>
+                  <div v-if="!componentVersions.length" class="pcl-empty">{{ t('pcl.auto2.k926bc43f38') }}</div>
                 </div>
               </template>
             </PclCard>
           </div>
 
           <div v-show="section === 'import'" class="pcl-download-section">
-          <PclCard title="导入整合包">
-            <PclHint theme="blue">
-              支持本地 .zip / .mrpack 文件、HTTP(S) 下载地址，以及 CurseForge 安装链接。把文件拖到下方，或直接粘贴路径 / URL。
-            </PclHint>
+          <PclCard :title="t('pcl.auto2.k6ddefa974c')">
+            <PclHint theme="blue">{{ t('pcl.auto2.k963725ad7c') }}</PclHint>
             <div
               class="pcl-import-drop"
               :class="{ active: importDragOver }"
@@ -68,39 +64,37 @@
               @drop.prevent="onImportDrop"
             >
               <PclIcon name="upload" :size="34" />
-              <strong>拖入整合包文件</strong>
-              <span>或在下方的路径框里粘贴本地文件路径</span>
+              <strong>{{ t('pcl.auto2.k687f79be54') }}</strong>
+              <span>{{ t('pcl.auto2.k1f1c6e9963') }}</span>
             </div>
             <div class="pcl-form-row pcl-form-row--top">
-              <span class="pcl-form-row__label">本地文件</span>
+              <span class="pcl-form-row__label">{{ t('pcl.auto2.kc8a69b6fd5') }}</span>
               <div class="pcl-form-row__control pcl-form-row__control--column">
-                <PclInput v-model="importPath" placeholder="D:\下载\整合包.zip 或 https://…/pack.zip" />
-                <PclIconButton icon="folder-open" label="选择整合包文件" :size="28" :disabled="importing" @click="chooseImportFile" />
+                <PclInput v-model="importPath" :placeholder="t('pcl.auto2.k040e414c43')" />
+                <PclIconButton icon="folder-open" :label="t('pcl.auto2.k940f61fa15')" :size="28" :disabled="importing" @click="chooseImportFile" />
               </div>
             </div>
             <div class="pcl-form-row">
-              <span class="pcl-form-row__label">实例名称</span>
+              <span class="pcl-form-row__label">{{ t('pcl.auto2.k9c0531d66e') }}</span>
               <div class="pcl-form-row__control">
-                <PclInput v-model="importName" placeholder="可选；留空使用整合包名称" />
+                <PclInput v-model="importName" :placeholder="t('pcl.auto2.kb5e46a0c9c')" />
               </div>
             </div>
             <PclHint v-if="importError" theme="red" closable @close="importError = ''">{{ importError }}</PclHint>
             <div class="pcl-actions">
               <PclButton variant="highlight" icon="file-input" :disabled="busy || importing || !importPath.trim()" @click="importInstance">
-                {{ importing ? '正在导入' : '开始导入' }}
+                {{ importing ? t('pcl.auto2.kc3ddf13267') : t('pcl.auto2.k3d04880897') }}
               </PclButton>
-              <PclButton variant="ghost" icon="download" @click="emit('launch')">返回实例</PclButton>
+              <PclButton variant="ghost" icon="download" @click="emit('launch')">{{ t('pcl.auto2.k14e93edbca') }}</PclButton>
             </div>
           </PclCard>
           </div>
 
           <div v-show="section === 'worlds'" class="pcl-download-section">
-          <PclCard title="世界">
-            <PclHint theme="yellow">
-              Luna 的 Launcher API 暂不支持世界资源类型。你仍然可以在实例目录中手动安装世界存档。
-            </PclHint>
+          <PclCard :title="t('pcl.auto2.kcf1656101e')">
+            <PclHint theme="yellow">{{ t('pcl.auto2.k07cc85beed') }}</PclHint>
             <div class="pcl-actions">
-              <PclButton icon="folder-open" @click="emit('launch')">返回实例</PclButton>
+              <PclButton icon="folder-open" @click="emit('launch')">{{ t('pcl.auto2.k14e93edbca') }}</PclButton>
             </div>
           </PclCard>
           </div>
@@ -144,7 +138,7 @@
           </div>
 
           <div v-show="section === 'favorites'" class="pcl-download-section">
-          <PclCard title="我的收藏">
+          <PclCard :title="t('pcl.auto2.k93a41f509d')">
             <div class="pcl-favorites">
               <PclListItem
                 v-for="item in favorites"
@@ -158,8 +152,8 @@
               </PclListItem>
               <div v-if="!favorites.length" class="pcl-empty">
                 <PclIcon name="heart" :size="34" />
-                <strong>还没有收藏</strong>
-                <span>在资源详情页收藏项目后会显示在这里。</span>
+                <strong>{{ t('pcl.auto2.k525b6078f6') }}</strong>
+                <span>{{ t('pcl.auto2.k9fa897a526') }}</span>
               </div>
             </div>
           </PclCard>
@@ -170,6 +164,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PclPageNav from '../../components/PclPageNav.vue';
 import PclCard from '../../components/PclCard.vue';
@@ -218,25 +214,25 @@ const componentItems: ComponentItem[] = [
   { id: 'quilt', label: 'Quilt', icon: 'layers', uid: 'org.quiltmc.quilt-loader', alias: 'quilt' },
   { id: 'liteloader', label: 'LiteLoader', icon: 'egg', uid: 'com.mumfrey.liteloader', alias: 'liteloader' },
   { id: 'legacyfabric', label: 'Legacy Fabric', icon: 'scroll', alias: 'legacyfabric', special: 'legacyfabric' },
-  { id: 'labymod-production', label: 'LabyMod（正式版）', icon: 'sparkles', alias: 'labymod-production', special: 'labymod-production' },
-  { id: 'labymod-snapshot', label: 'LabyMod（快照）', icon: 'sparkles', alias: 'labymod-snapshot', special: 'labymod-snapshot' },
+  { id: 'labymod-production', label: t('pcl.auto2.k00de822a92'), icon: 'sparkles', alias: 'labymod-production', special: 'labymod-production' },
+  { id: 'labymod-snapshot', label: t('pcl.auto2.k46e7c2f01d'), icon: 'sparkles', alias: 'labymod-snapshot', special: 'labymod-snapshot' },
 ];
 
 const navGroups: PclNavGroup[] = [
   { items: [
     { id: 'install', label: 'Minecraft', icon: 'boxes', refresh: true },
-    { id: 'import', label: '导入整合包', icon: 'file-input' },
+    { id: 'import', label: t('pcl.auto2.k6ddefa974c'), icon: 'file-input' },
   ] },
-  { label: '社区资源', items: [
-    { id: 'mods', label: '模组', icon: 'puzzle', refresh: true },
-    { id: 'modpacks', label: '整合包', icon: 'package', refresh: true },
-    { id: 'datapacks', label: '数据包', icon: 'file-archive', refresh: true },
-    { id: 'resourcepacks', label: '资源包', icon: 'layers', refresh: true },
-    { id: 'shaders', label: '光影包', icon: 'sparkles', refresh: true },
-    { id: 'worlds', label: '世界', icon: 'globe', refresh: true },
-    { id: 'favorites', label: '收藏夹', icon: 'heart', refresh: true },
+  { label: t('pcl.auto2.k3eac9be3ff'), items: [
+    { id: 'mods', label: t('pcl.auto2.kda121cbcd9'), icon: 'puzzle', refresh: true },
+    { id: 'modpacks', label: t('pcl.auto2.kb3a621217c'), icon: 'package', refresh: true },
+    { id: 'datapacks', label: t('pcl.auto2.kf0e3fc625e'), icon: 'file-archive', refresh: true },
+    { id: 'resourcepacks', label: t('pcl.auto2.k826f79355b'), icon: 'layers', refresh: true },
+    { id: 'shaders', label: t('pcl.auto2.k71adc562a4'), icon: 'sparkles', refresh: true },
+    { id: 'worlds', label: t('pcl.auto2.kcf1656101e'), icon: 'globe', refresh: true },
+    { id: 'favorites', label: t('pcl.auto2.ke6f497d8b4'), icon: 'heart', refresh: true },
   ] },
-  { label: '安装包', items: componentItems.map(item => ({
+  { label: t('pcl.auto2.k4f4d1ab15f'), items: componentItems.map(item => ({
     id: item.id,
     label: item.label,
     icon: item.icon,
@@ -289,7 +285,7 @@ const resourceKinds: Record<string, string> = {
 const isResource = computed(() => Boolean(resourceKinds[section.value]));
 const resourceKind = computed(() => resourceKinds[section.value]);
 const resourceProvider = ref('modrinth');
-const resourceTag = ref('全部');
+const resourceTag = ref(t('pcl.auto2.k778fc8f994'));
 const favorites = ref<any[]>([]);
 const importPath = ref(''), importName = ref(''), importError = ref('');
 const importing = ref(false), importDragOver = ref(false);
@@ -339,7 +335,7 @@ function useComponentVersion(version: any) {
   }
   initialMinecraftVersion.value = '';
   if (!item.alias) {
-    componentError.value = `${item.label} 暂未接入 Luna 后端。`;
+    componentError.value = t('pcl.downloadPage.componentUnavailable', { name: item.label });
     return;
   }
   const requiredMinecraft = Array.isArray(version.requires)
@@ -387,10 +383,10 @@ function onImportDrop(event: DragEvent) {
   importDragOver.value = false;
   const file = event.dataTransfer?.files?.[0] as any;
   if (file?.path) importPath.value = String(file.path);
-  else if (file?.name) importError.value = '浏览器没有提供本地文件路径，请在下方粘贴完整路径。';
+  else if (file?.name) importError.value = t('pcl.auto2.k1ee23fe480');
 }
 async function chooseImportFile() {
-  const selected = await pickPclFile({ title: '选择整合包文件', filters: [{ name: '整合包', extensions: ['zip', 'mrpack'] }] });
+  const selected = await pickPclFile({ title: t('pcl.auto2.k940f61fa15'), filters: [{ name: t('pcl.auto2.kb3a621217c'), extensions: ['zip', 'mrpack'] }] });
   if (selected) importPath.value = selected;
 }
 
@@ -417,7 +413,7 @@ async function importInstance() {
   importError.value = '';
   const source = normalizedImportSource(importPath.value);
   const curseForge = parseCurseForgeImport(source);
-  const info = { title: curseForge ? '正在安装 CurseForge 整合包' : '正在导入整合包', name: importName.value.trim() || source.split(/[\\/]/).pop() || '导入实例' };
+  const info = { title: curseForge ? t('pcl.auto2.kbe0cfa607f') : t('pcl.auto2.k2e9a411bcc'), name: importName.value.trim() || source.split(/[\\/]/).pop() || t('pcl.auto2.kf1f38acef7') };
   emit('install-start', info);
   try {
     let task: any = await props.execute('neo.task.start', {
@@ -433,10 +429,10 @@ async function importInstance() {
       task = await props.execute('neo.task.status', { taskId: task.taskId });
     }
     emit('install-progress', task);
-    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '导入任务失败');
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('pcl.auto2.kc042def72c'));
     emit('installed', {
       id: task.createdInstanceId || '',
-      name: importName.value.trim() || source.split(/[\\/]/).pop() || '导入实例',
+      name: importName.value.trim() || source.split(/[\\/]/).pop() || t('pcl.auto2.kf1f38acef7'),
     });
   } catch (exception) {
     importError.value = exception instanceof Error ? exception.message : String(exception);

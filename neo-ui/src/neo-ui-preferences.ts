@@ -1,4 +1,5 @@
 import { computed, reactive, watch } from 'vue';
+import { i18n } from './i18n';
 
 export type NeoTheme = 'dark' | 'light' | 'system';
 export type NeoDensity = 'comfortable' | 'compact';
@@ -119,7 +120,7 @@ const defaults: NeoUiPreferences = {
   pclBackgroundMusicVolume: 0.35,
   pclBackgroundMusicEnabled: false,
   pclHomeCards: [
-    { id: 'welcome', title: '欢迎回来', content: '在 设置 → 个性化 → 主页卡片 中编辑这张卡片。' },
+    { id: 'welcome', title: i18n.global.t('neo.extra.welcomeTitle'), content: i18n.global.t('neo.extra.welcomeContent') },
   ],
   pclHomeShowInstances: true,
   pclHomeShowServers: true,
@@ -271,14 +272,14 @@ export function persistNeoUiPreferences() {
 }
 
 export const PCL_ACCENT_PRESETS = [
-  { name: '猫蓝', value: '#2a80e3' },
-  { name: '薄荷', value: '#2fa58a' },
-  { name: '翠绿', value: '#3f9b55' },
-  { name: '琥珀', value: '#d68a2e' },
-  { name: '绯红', value: '#d0525a' },
-  { name: '紫罗兰', value: '#8a5cf6' },
-  { name: '樱花', value: '#d65c9a' },
-  { name: '石墨', value: '#5c738a' },
+  { name: i18n.global.t('neo.extra.accentCatBlue'), value: '#2a80e3' },
+  { name: i18n.global.t('neo.extra.accentMint'), value: '#2fa58a' },
+  { name: i18n.global.t('neo.extra.accentGreen'), value: '#3f9b55' },
+  { name: i18n.global.t('neo.extra.accentAmber'), value: '#d68a2e' },
+  { name: i18n.global.t('neo.extra.accentRed'), value: '#d0525a' },
+  { name: i18n.global.t('neo.extra.accentViolet'), value: '#8a5cf6' },
+  { name: i18n.global.t('neo.extra.accentPink'), value: '#d65c9a' },
+  { name: i18n.global.t('neo.extra.accentGraphite'), value: '#5c738a' },
 ] as const;
 
 export function normalizePclAccent(value: string): string {

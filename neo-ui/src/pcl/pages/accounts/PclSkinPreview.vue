@@ -1,7 +1,7 @@
 <template>
   <div class="pcl-skin-preview">
     <div class="pcl-skin-preview__stage">
-      <img v-if="mode === '2d'" :src="src" class="pcl-skin-2d" alt="皮肤 2D 预览" />
+      <img v-if="mode === '2d'" :src="src" class="pcl-skin-2d" :alt="t('pcl.skinPreview.alt')" />
       <div v-else class="pcl-skin-3d">
         <div class="pcl-skin-model">
           <div
@@ -23,13 +23,15 @@
       </div>
     </div>
     <div class="pcl-skin-preview__modes">
-      <button type="button" :class="{ active: mode === '2d' }" @click="mode = '2d'">2D</button>
-      <button type="button" :class="{ active: mode === '3d' }" @click="mode = '3d'">3D</button>
+      <button type="button" :class="{ active: mode === '2d' }" @click="mode = '2d'">{{ t('ui.view2d') }}</button>
+      <button type="button" :class="{ active: mode === '3d' }" @click="mode = '3d'">{{ t('ui.view3d') }}</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 import { computed, ref } from 'vue';
 
 const props = withDefaults(defineProps<{ src: string; initialMode?: '2d' | '3d' }>(), {

@@ -1,9 +1,9 @@
 <template>
   <div class="pcl-secret-input">
     <PclInput v-model="draft" type="password" :aria-label="label" autocomplete="new-password"
-      :placeholder="configured ? '已保存，输入新值以替换' : '未设置，可留空'" :disabled="disabled || saving" />
-    <PclButton size="sm" :disabled="disabled || saving || !draft" @click="commit(draft)">保存</PclButton>
-    <PclButton size="sm" variant="ghost" :disabled="disabled || saving || !configured" @click="commit('')">清除</PclButton>
+      :placeholder="configured ? t('secret.replace') : t('secret.empty')" :disabled="disabled || saving" />
+    <PclButton size="sm" :disabled="disabled || saving || !draft" @click="commit(draft)">{{ t('common.save') }}</PclButton>
+    <PclButton size="sm" variant="ghost" :disabled="disabled || saving || !configured" @click="commit('')">{{ t('common.clear') }}</PclButton>
   </div>
 </template>
 
@@ -11,6 +11,8 @@
 import { ref } from 'vue';
 import PclInput from './PclInput.vue';
 import PclButton from './PclButton.vue';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const props = defineProps<{
   label: string; configured: boolean; disabled?: boolean; save: (value: string) => Promise<boolean>;
 }>();

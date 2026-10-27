@@ -17,21 +17,21 @@
  <PclInstancePage v-if="selected" v-show="page==='manage'" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='pcl-settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="installComponentVersion" @browse="openComponentDownload" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @action="workspaceAction" />
   </div>
  <XmclDashboard v-if="!isPclShell && page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
- <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">等待启动：{{ launchQueue.map(i=>i.name).join('、') }}<template #action><q-btn flat label="清空队列" @click="launchQueue=[]"/></template></q-banner>
+ <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">{{ t('app.queueWaiting', { names: launchQueue.map(i=>i.name).join('、') }) }}<template #action><q-btn flat :label="t('app.clearQueue')" @click="launchQueue=[]"/></template></q-banner>
  <XmclInstanceWorkspace v-if="page==='manage' && selected && !isPclShell" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
- <div v-if="page==='create'" class="form"><h5>添加实例</h5>
-  <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" label="服务端"/><q-tab name="import" label="导入整合包"/><q-tab name="catalog" label="下载整合包"/></q-tabs>
+ <div v-if="page==='create'" class="form"><h5>{{ t('app.addInstance') }}</h5>
+  <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" :label="t('app.server')"/><q-tab name="import" :label="t('app.importPack')"/><q-tab name="catalog" :label="t('app.downloadPack')"/></q-tabs>
   <CatalogBrowser v-if="createMode==='catalog'" packs :busy="busy" :execute="catalogExecute" @installed="navigate('instances')"/>
   <template v-else>
-  <q-input dark outlined v-model="creation.name" label="实例名称" class="q-my-md"/><q-input dark outlined v-model="creation.group" label="分组（可选）" class="q-mb-md"/>
+  <q-input dark outlined v-model="creation.name" :label="t('app.instanceName')" class="q-my-md"/><q-input dark outlined v-model="creation.group" :label="t('app.groupOptional')" class="q-mb-md"/>
   <template v-if="createMode==='vanilla'">
-   <div class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.version" :options="minecraftVersions" use-input input-debounce="0" @filter="filterMinecraft" label="Minecraft 版本" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/><q-btn label="加载版本" :disable="busy" @click="loadVersions(false)"/></div>
-   <q-select dark outlined v-model="creation.loader" :options="['','fabric','forge','neoforge','quilt']" label="Mod Loader（可选）" class="q-mb-md" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/>
-   <div v-if="creation.loader" class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.loaderVersion" :options="loaderVersions" label="Loader 版本"/><q-btn label="加载兼容版本" :disable="busy || !creation.version" @click="loadVersions(true)"/></div>
+   <div class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.version" :options="minecraftVersions" use-input input-debounce="0" @filter="filterMinecraft" :label="t('app.minecraftVersion')" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/><q-btn :label="t('app.loadVersions')" :disable="busy" @click="loadVersions(false)"/></div>
+   <q-select dark outlined v-model="creation.loader" :options="['','fabric','forge','neoforge','quilt']" :label="t('app.loaderOptional')" class="q-mb-md" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/>
+   <div v-if="creation.loader" class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.loaderVersion" :options="loaderVersions" :label="t('app.loaderVersion')"/><q-btn :label="t('app.loadCompatible')" :disable="busy || !creation.version" @click="loadVersions(true)"/></div>
   </template>
-  <template v-else-if="createMode==='server'"><q-input dark outlined v-model="creation.version" label="Minecraft 服务端版本" class="q-mb-md"/><q-input dark outlined v-model="creation.source" label="服务端 Jar 路径或下载 URL（可选）" class="q-mb-md"/></template>
-  <q-input v-else dark outlined v-model="creation.source" label="整合包本地完整路径或下载 URL" class="q-mb-md"/>
-  <q-btn color="primary" label="创建实例" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : (createMode==='import' && !creation.source))" @click="create"/></template>
+  <template v-else-if="createMode==='server'"><q-input dark outlined v-model="creation.version" :label="t('app.serverVersion')" class="q-mb-md"/><q-input dark outlined v-model="creation.source" :label="t('app.serverSource')" class="q-mb-md"/></template>
+  <q-input v-else dark outlined v-model="creation.source" :label="t('app.packSource')" class="q-mb-md"/>
+  <q-btn color="primary" :label="t('app.createInstance')" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : (createMode==='import' && !creation.source))" @click="create"/></template>
  </div>
   <XmclAccountWorkspace v-if="page==='accounts' && !isPclShell" :accounts="accounts" :busy="busy" :execute="catalogExecute" :pcl="false" @changed="refresh" />
  <XmclStoreWorkspace v-if="page==='store'" :busy="busy" :execute="catalogExecute" @installed="refresh" />
@@ -43,19 +43,19 @@
 <q-dialog v-model="deviceShown" persistent>
  <q-card :class="isPclShell ? 'pcl-dialog pcl-device-dialog' : 'device-card'">
   <q-card-section>
-   <div class="pcl-kicker">MICROSOFT 登录</div>
-   <h3>在浏览器中完成登录</h3>
-   <p class="pcl-muted">打开下面的地址并输入设备代码。登录完成后此窗口会自动继续；不要关闭启动器。</p>
+   <div class="pcl-kicker">{{ t('app.microsoftLogin') }}</div>
+   <h3>{{ t('app.browserLogin') }}</h3>
+   <p class="pcl-muted">{{ t('app.deviceHint') }}</p>
   </q-card-section>
   <q-card-section v-if="device?.code" class="pcl-device-code">{{ device.code }}</q-card-section>
   <q-card-section>
-   <code class="pcl-device-url">{{ device?.url || '正在获取登录地址…' }}</code>
-   <p v-if="device?.expiresIn" class="pcl-muted">代码有效期约 {{ Math.ceil(Number(device.expiresIn) / 60) }} 分钟。</p>
+   <code class="pcl-device-url">{{ device?.url || t('app.loadingLoginUrl') }}</code>
+   <p v-if="device?.expiresIn" class="pcl-muted">{{ t('app.codeExpires', { minutes: Math.ceil(Number(device.expiresIn) / 60) }) }}</p>
   </q-card-section>
   <q-card-actions align="right">
-   <PclButton icon="external-link" :disabled="!device?.url" @click="openDeviceBrowser">打开浏览器</PclButton>
-   <PclButton icon="copy" :disabled="!device?.code" @click="copyDeviceCode">复制代码</PclButton>
-   <PclButton variant="ghost" @click="cancelDeviceLogin">关闭并取消</PclButton>
+   <PclButton icon="external-link" :disabled="!device?.url" @click="openDeviceBrowser">{{ t('app.openBrowser') }}</PclButton>
+   <PclButton icon="copy" :disabled="!device?.code" @click="copyDeviceCode">{{ t('app.copyCode') }}</PclButton>
+   <PclButton variant="ghost" @click="cancelDeviceLogin">{{ t('app.closeCancel') }}</PclButton>
   </q-card-actions>
  </q-card>
 </q-dialog>
@@ -80,6 +80,7 @@
 </template>
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import CatalogBrowser from './components/CatalogBrowser.vue';
 import InstanceExtras from './components/InstanceExtras.vue';
 import ServerPanel from './components/ServerPanel.vue';
@@ -119,6 +120,7 @@ import { launcher } from './boot/launcher-api';
 import { neoUiPreferences, persistNeoUiPreferences } from './neo-ui-preferences';
 import { useNeoDialogs } from './composables/useNeoDialogs';
 import { flattenTaskItems, taskActiveItems, taskProgressStats } from './pcl/composables/useTaskProgress';
+const { t } = useI18n();
 const buildLabel = '2026-09-20.1';
 const launchQuery = new URLSearchParams(window.location.search);
 const editorInstanceId = launchQuery.get('instanceEditor') || '';
@@ -140,15 +142,15 @@ async function loadIcons(refreshToken = refreshGeneration){
 }
 const components=ref<any[]>([]),componentError=ref('');
 async function loadComponents(refreshToken = refreshGeneration){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});if(refreshToken===refreshGeneration)components.value=r.components;}catch(e){if(refreshToken===refreshGeneration)componentError.value=message(e);}}
-async function changeComponentVersion(c:any){const v=await ask('更改 '+(c.name||c.id)+' 版本',c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
+async function changeComponentVersion(c:any){const v=await ask(t('app.changeVersion', { name: c.name || c.id }),c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
 const editWindows=ref<any[]>([]), instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false),searchShown=ref(false),globalSearch=ref('');
-const installProgressOpen=ref(false),installProgressTitle=ref('正在安装整合包'),installTask=ref<any>(null),installCancelling=ref(false);
+const installProgressOpen=ref(false),installProgressTitle=ref(t('app.installingPack')),installTask=ref<any>(null),installCancelling=ref(false);
 const logMode=ref('live'),logFiles=ref<any[]>([]),logFile=ref(''),fileLog=ref('');
-const consoleLines=ref<string[]>([]),consoleState=ref('未连接'),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
+const consoleLines=ref<string[]>([]),consoleState=ref(t('app.disconnected')),followLog=ref(true),consoleElement=ref<HTMLElement|null>(null);
 const launchQueue=ref<any[]>([])
 const launchTaskId=ref('');
 type LaunchUiState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
-const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref('初始化'), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchDetails=ref(''), launchChildren=ref<any[]>([]), launchAccountId=ref('');
+const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref(t('app.initializing')), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchDetails=ref(''), launchChildren=ref<any[]>([]), launchAccountId=ref('');
 const selectedAccountStorageKey='luna-neo-selected-account';
 function rememberedAccountId(){try{return localStorage.getItem(selectedAccountStorageKey)||'';}catch{return '';}}
 function selectLaunchAccount(id:string){launchAccountId.value=id;try{localStorage.setItem(selectedAccountStorageKey,id);}catch{/* Storage may be unavailable in a restricted webview. */}}
@@ -172,16 +174,16 @@ function receiveStream(batch:any){
  if(!entry)return;
  const instanceId=entry[0];
  const updateRunning=(running:boolean)=>{instances.value=instances.value.map((item:any)=>item.id===instanceId?{...item,running}:item);if(selected.value?.id===instanceId)selected.value={...selected.value,running};};
- if(entry[0]!==selected.value?.id){for(const event of batch.events||[]){if(event.kind==='console.line')entry[1].lines.push(event.text);if(event.kind==='instance.state'){entry[1].state=event.running?'客户端运行中':'客户端已停止';updateRunning(Boolean(event.running));}}entry[1].lines.splice(0,Math.max(0,entry[1].lines.length-3000));return;}
- if(batch.dropped)void appendConsole(`[日志缓冲区已省略 ${batch.dropped} 条消息]`);
+ if(entry[0]!==selected.value?.id){for(const event of batch.events||[]){if(event.kind==='console.line')entry[1].lines.push(event.text);if(event.kind==='instance.state'){entry[1].state=event.running?t('app.clientRunning'):t('app.clientStopped');updateRunning(Boolean(event.running));}}entry[1].lines.splice(0,Math.max(0,entry[1].lines.length-3000));return;}
+ if(batch.dropped)void appendConsole(t('app.droppedLogs', { count: batch.dropped }));
  for(const event of batch.events || []){
   if(event.kind==='console.line')void appendConsole(event.text);
   else if(event.kind==='console.data')void appendConsole(new TextDecoder().decode(Uint8Array.from(atob(event.data),c=>c.charCodeAt(0))));
   else if(event.kind==='instance.state'){
-   consoleState.value=event.running?'客户端运行中':'客户端已停止';
+   consoleState.value=event.running?t('app.clientRunning'):t('app.clientStopped');
    updateRunning(Boolean(event.running));
    void appendConsole(`[${consoleState.value}]`);
-  }else if(event.kind==='console.reset')consoleState.value=event.available?'控制台已连接':'等待启动';
+  }else if(event.kind==='console.reset')consoleState.value=event.available?t('app.consoleConnected'):t('app.waitingLaunch');
  }
 }
 async function connectConsole(i:any){
@@ -189,9 +191,9 @@ async function connectConsole(i:any){
  try{
   const existing=sessions.get(i.id);if(existing?.subscription){consoleSubscription=existing.subscription;consoleInstance=i.id;consoleLines.value=existing.lines;consoleState.value=existing.state;return;}
   consoleSubscription='';consoleInstance=i.id;consoleLines.value=[];
-  const sub=await call('instance.console.subscribe',{instance:i.id});consoleSubscription=sub.subscriptionId;sessions.set(i.id,{subscription:consoleSubscription,lines:consoleLines.value,state:'控制台已连接'});
-  consoleState.value='控制台已连接';
- }catch(e){error.value=message(e);consoleState.value='连接失败';}
+  const sub=await call('instance.console.subscribe',{instance:i.id});consoleSubscription=sub.subscriptionId;sessions.set(i.id,{subscription:consoleSubscription,lines:consoleLines.value,state:t('app.consoleConnected')});
+  consoleState.value=t('app.consoleConnected');
+ }catch(e){error.value=message(e);consoleState.value=t('app.connectionFailed');}
 }
 let launchProgressTimer: ReturnType<typeof setInterval> | undefined;
 function startLaunchProgressAnimation(){
@@ -216,20 +218,20 @@ function updateLaunchProgress(value:any){
   if(stats.percent !== null) launchTargetProgress.value=Math.max(0,Math.min(1,stats.percent/100));
   else if(value.state==='succeeded') launchTargetProgress.value=1;
  const activeStep=taskActiveItems(rows, 1)[0];
- launchStage.value=activeStep?.label || activeStep?.status || value.details || value.status || launchStage.value || '正在执行';
+ launchStage.value=activeStep?.label || activeStep?.status || value.details || value.status || launchStage.value || t('app.executing');
  launchDetails.value=[value.details, stats.itemCount ? stats.summary : '', stats.byteSummary].filter(Boolean).join(' · ');
  launchChildren.value=rows;
  launchSpeed.value=Number(value.transferRate || 0);
- if(value.failReason || String(value.state || value.status || '').toLowerCase()==='failed'){launchError.value=value.failReason || value.details || '启动任务失败';setLaunchState('failed');}
+ if(value.failReason || String(value.state || value.status || '').toLowerCase()==='failed'){launchError.value=value.failReason || value.details || t('app.launchTaskFailed');setLaunchState('failed');}
  else if(!isTaskFinished(value) && (launchInFlight || preparingLaunch))setLaunchState('launching');
 }
 async function launch(i:any, accountId?:string, serverAddress?:string, restoreSelectionId?:string){
  if(busy.value){if(i.id!==launchingId&&!launchQueue.value.some(x=>x.id===i.id))launchQueue.value.push(i);return;}
  if(launchUiResetTimer)clearTimeout(launchUiResetTimer);
-  launchProgress.value=0;launchTargetProgress.value=0;launchStage.value='初始化';launchSpeed.value=0;launchError.value='';launchDetails.value='';launchChildren.value=[];setLaunchState('launching');
+  launchProgress.value=0;launchTargetProgress.value=0;launchStage.value=t('app.initializing');launchSpeed.value=0;launchError.value='';launchDetails.value='';launchChildren.value=[];setLaunchState('launching');
  busy.value=true;launchingId=i.id;preparingLaunch=true;
  await openInstance(i,true,true);if(neoUiPreferences.pclClearLaunchLogOnStart)clearConsole();if(isPclShell.value)page.value='instances';logMode.value='live';await connectConsole(i);preparingLaunch=false;
- if(!consoleSubscription){busy.value=false;launchingId='';setLaunchState('failed');launchError.value='无法连接实例控制台';resetLaunchUiSoon();return;}
+ if(!consoleSubscription){busy.value=false;launchingId='';setLaunchState('failed');launchError.value=t('app.consoleUnavailable');resetLaunchUiSoon();return;}
  busy.value=true;launchInFlight=true;error.value='';notice.value='';
  try{
   const parameters:any={instance:i.id};
@@ -246,10 +248,10 @@ async function launch(i:any, accountId?:string, serverAddress?:string, restoreSe
     task=await call('neo.task.status',{taskId:task.taskId});
   }
   handleTaskUpdate(task);
-  if(!task || task.state!=='succeeded')throw new Error(task?.error || '启动失败');
-  launchTargetProgress.value=1;launchProgress.value=1;launchStage.value='等待游戏窗口';setLaunchState('launched');
-  notice.value=`启动请求已返回（PID ${task.pid}），请查看控制台确认客户端运行状态。`;resetLaunchUiSoon();
- }catch(e){error.value=message(e);if(launchUiState.value!=='cancelled'){launchError.value=error.value;setLaunchState('failed');}void appendConsole('[启动失败] '+error.value,launchingId);resetLaunchUiSoon();}
+  if(!task || task.state!=='succeeded')throw new Error(task?.error || t('app.launchFailed'));
+  launchTargetProgress.value=1;launchProgress.value=1;launchStage.value=t('app.waitingGameWindow');setLaunchState('launched');
+  notice.value=t('app.launchReturned', { pid: task.pid });resetLaunchUiSoon();
+ }catch(e){error.value=message(e);if(launchUiState.value!=='cancelled'){launchError.value=error.value;setLaunchState('failed');}void appendConsole(`[${t('app.launchFailed')}] `+error.value,launchingId);resetLaunchUiSoon();}
  finally{busy.value=false;launchInFlight=false;launchingId='';launchTaskId.value='';device.value=null;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;if(restoreSelectionId&&restoreSelectionId!==i.id){const previous=instances.value.find((item:any)=>String(item.id)===restoreSelectionId);if(previous){selected.value=previous;rememberInstance(previous);void call('instance.info',{instance:previous.id}).then((info:any)=>{if(selected.value?.id===previous.id){instanceDetails.value=info;notes.value=info.notes||'';}}).catch(()=>{});}}}
 }
 function quickLaunchHome(instance:any, switchSelected:boolean){
@@ -296,14 +298,14 @@ function launchMany(items:any[]){
  launchQueue.value=queue.slice(1);
  void launch(queue[0]);
 }
-async function readLogFile(){try{const r=await call('instance.log.read',{instance:selected.value.id,file:logFile.value,maxBytes:1048576});fileLog.value=r.content+(r.truncated?'\n[文件超过 1 MiB，仅显示前部分]':'');}catch(e){error.value=message(e);}}
+async function readLogFile(){try{const r=await call('instance.log.read',{instance:selected.value.id,file:logFile.value,maxBytes:1048576});fileLog.value=r.content+(r.truncated?'\n'+t('app.logTruncated'):'');}catch(e){error.value=message(e);}}
 const resources=ref<any[]>([]),resourceKind=ref('mods'),resourceSource=ref('');
-const resourceKinds=[{label:'模组',value:'mods'},{label:'资源包',value:'resourcepacks'},{label:'光影包',value:'shaderpacks'},{label:'材质包',value:'texturepacks'},{label:'数据包',value:'datapacks'},{label:'投影',value:'schematics'},{label:'Yes Steve Model',value:'yesstevemodels'},{label:'Customizable Player Models',value:'customplayermodels'}];
-const pages=[{id:'instances',label:'实例库',icon:'apps'},{id:'create',label:'添加实例',icon:'add_box'},{id:'accounts',label:'账户管理',icon:'person'},{id:'settings',label:'设置',icon:'settings'}];
+const resourceKinds=[{label:t('resource.kinds.mods'),value:'mods'},{label:t('resource.kinds.resourcepacks'),value:'resourcepacks'},{label:t('resource.kinds.shaderpacks'),value:'shaderpacks'},{label:t('resource.kinds.texturepacks'),value:'texturepacks'},{label:t('resource.kinds.datapacks'),value:'datapacks'},{label:t('resource.kinds.schematics'),value:'schematics'},{label:'Yes Steve Model',value:'yesstevemodels'},{label:'Customizable Player Models',value:'customplayermodels'}];
+const pages=[{id:'instances',label:t('app.instances'),icon:'apps'},{id:'create',label:t('app.addInstance'),icon:'add_box'},{id:'accounts',label:t('nav.accounts'),icon:'person'},{id:'settings',label:t('nav.settings'),icon:'settings'}];
 const drawerOpen=ref(true), addDialog=ref(false), page=ref('instances'), busy=ref(false), error=ref(''), notice=ref(''), status=ref(''), search=ref(''), username=ref(''), notes=ref('');
 let lastErrorNotification='';
-watch(error,(value)=>{if(value && value!==lastErrorNotification){lastErrorNotification=value;if(isPclShell.value){showPclToast({type:'error',title:'操作失败',message:value,timeout:6000});}else{quasar.notify({type:'negative',message:value,timeout:6000,position:'top',progress:true,actions:[{icon:'close',color:'white'}]});}}});
-watch(notice,(value)=>{if(!value)return;if(isPclShell.value){showPclToast({type:'success',title:'操作完成',message:value,timeout:3500});}else{quasar.notify({type:'positive',message:value,timeout:3500,position:'top',progress:true});}});
+watch(error,(value)=>{if(value && value!==lastErrorNotification){lastErrorNotification=value;if(isPclShell.value){showPclToast({type:'error',title:t('app.operationFailed'),message:value,timeout:6000});}else{quasar.notify({type:'negative',message:value,timeout:6000,position:'top',progress:true,actions:[{icon:'close',color:'white'}]});}}});
+watch(notice,(value)=>{if(!value)return;if(isPclShell.value){showPclToast({type:'success',title:t('app.operationDone'),message:value,timeout:3500});}else{quasar.notify({type:'positive',message:value,timeout:3500,position:'top',progress:true});}});
 watch(busy,async value=>{if(!value && launchQueue.value.length){await nextTick();if(!busy.value){const next=launchQueue.value.shift();if(next)void launch(next);}}});
 watch(isPclShell,(value)=>{scope.value='launcher';if(value && page.value==='settings')page.value='pcl-settings';else if(!value && page.value==='pcl-settings')page.value='settings';void refresh();});
 const instances=ref<any[]>([]),accounts=ref<any[]>([]),settings=ref<any[]>([]),selected=ref<any>(null),device=ref<any>(null),deviceShown=ref(false);
@@ -341,7 +343,7 @@ async function loadVersions(loader:boolean){
   if(loader)loaderVersions.value=versions;else {allMinecraftVersions=versions;minecraftVersions.value=versions;}
  }catch(e){error.value=message(e);}finally{busy.value=false;}
 }
-const actions=[{op:'rename',field:'name',label:'重命名'},{op:'copy',field:'name',label:'复制实例'},{op:'group',field:'group',label:'修改分组'},{op:'update',label:'更新组件'},{op:'verify',label:'校验文件'},{op:'stop',label:'停止运行'}];
+const actions=[{op:'rename',field:'name',label:t('xmcl.instance.rename')},{op:'copy',field:'name',label:t('xmcl.instance.copy')},{op:'group',field:'group',label:t('xmcl.instance.group')},{op:'update',label:t('xmcl.instance.update')},{op:'verify',label:t('xmcl.instance.verify')},{op:'stop',label:t('xmcl.instance.stop')}];
 const { dialog, prompt, answer, choices, secret, confirmation, ask, finishDialog, message } = useNeoDialogs();
 const legacyTaskInteraction = ref<any>(null);
 const readOnlyOperations=new Set([
@@ -350,11 +352,11 @@ const readOnlyOperations=new Set([
    'language.list','launcher.update.status','component.catalog','component.versions','special.loader.versions'
 ]);
 async function catalogExecute(op:string,p:Record<string,unknown>){
- if(busy.value && !readOnlyOperations.has(op)){throw new Error('当前任务仍在执行，请等待它完成。');}
+ if(busy.value && !readOnlyOperations.has(op)){throw new Error(t('app.taskBusy'));}
  if(readOnlyOperations.has(op))return call(op,p);
  busy.value=true;try{return await call(op,p);}finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;if(op==='account.login'){deviceShown.value=false;device.value=null;}}
 }
-async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||'操作失败');connected.value=true;return r.data;}
+async function call(op:string,p:Record<string,unknown>={}){const r=await launcher.execute<any>(op,p);if(!r.ok)throw new Error(r.error||t('app.operationFailed'));connected.value=true;return r.data;}
 async function finishStartupSetup(){
  try{startupState.value=await call('startup.status');await refresh();}
  catch(e){error.value=message(e);}
@@ -362,7 +364,7 @@ async function finishStartupSetup(){
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
 let resourceRequest=0;
 let refreshGeneration=0;
-async function loadResources(refreshToken = refreshGeneration){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind,includeIcons:false});if(request===resourceRequest&&refreshToken===refreshGeneration){if(!Array.isArray(data))throw new Error('资源接口返回格式错误');resources.value=data;}}catch(e){if(request===resourceRequest&&refreshToken===refreshGeneration)resourceError.value=message(e);}finally{if(request===resourceRequest&&refreshToken===refreshGeneration)resourcesLoading.value=false;}}
+async function loadResources(refreshToken = refreshGeneration){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind,includeIcons:false});if(request===resourceRequest&&refreshToken===refreshGeneration){if(!Array.isArray(data))throw new Error(t('app.resourceFormatError'));resources.value=data;}}catch(e){if(request===resourceRequest&&refreshToken===refreshGeneration)resourceError.value=message(e);}finally{if(request===resourceRequest&&refreshToken===refreshGeneration)resourcesLoading.value=false;}}
 async function loadLogFiles(refreshToken = refreshGeneration){try{const files=await call('instance.log.list',{instance:selected.value.id});if(refreshToken===refreshGeneration)logFiles.value=files;}catch(e){if(refreshToken===refreshGeneration)error.value=message(e);}}
 async function refresh(){const refreshToken=++refreshGeneration;error.value='';try{if(page.value==='accounts'){const value=await call('account.list');if(refreshToken===refreshGeneration)accounts.value=value;}else if(page.value==='settings' || page.value==='pcl-settings'){const value=await call('settings.list',settingScope());if(refreshToken===refreshGeneration)settings.value=value;}else if(page.value==='manage'){await loadResources(refreshToken);await loadComponents(refreshToken);await loadLogFiles(refreshToken);if(selected.value){const value=await call('settings.list',{scope:'instance',instance:selected.value.id});if(refreshToken===refreshGeneration)settings.value=value;}}else {const value=await call('instance.list');if(refreshToken!==refreshGeneration)return;instances.value=value;await loadIcons(refreshToken);if(refreshToken!==refreshGeneration)return;if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value || !instances.value.some((item:any)=>item.id===selected.value.id))selected.value=rememberedInstance || instances.value[0] || null;if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();const accountValue=await call('account.list');if(refreshToken!==refreshGeneration)return;accounts.value=accountValue;const rememberedAccount=rememberedAccountId();const defaultAccount=accounts.value.find((account:any)=>account.default);const accountKeyOf=(account:any)=>String(account?.internalId || account?.id || account?.profileName || '');const currentAccountExists=accounts.value.some((account:any)=>accountKeyOf(account)===launchAccountId.value);if(!launchAccountId.value || !currentAccountExists){const saved=accounts.value.find((account:any)=>accountKeyOf(account)===rememberedAccount);launchAccountId.value=accountKeyOf(saved) || accountKeyOf(defaultAccount) || accountKeyOf(accounts.value[0]);}}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}}catch(e){if(refreshToken===refreshGeneration)error.value=message(e);}}
 async function navigate(id:string){
@@ -389,11 +391,11 @@ function openComponentDownload(uid:string){
  notice.value='';
  if(!busy.value)void refresh();
 }
-function openPclCreate(uid?:string,version?:string){createMode.value='vanilla';creation.value={...creation.value,name:creation.value.name || '新建实例',version:uid==='net.minecraft'?(version || ''):creation.value.version,loader:uid==='net.fabricmc.fabric-loader'?'fabric':uid==='net.minecraftforge'?'forge':uid==='net.neoforged'?'neoforge':uid==='org.quiltmc.quilt-loader'?'quilt':creation.value.loader,loaderVersion:uid && uid!=='net.minecraft'?(version || ''):creation.value.loaderVersion};page.value='create';}
+function openPclCreate(uid?:string,version?:string){createMode.value='vanilla';creation.value={...creation.value,name:creation.value.name || t('app.newInstance'),version:uid==='net.minecraft'?(version || ''):creation.value.version,loader:uid==='net.fabricmc.fabric-loader'?'fabric':uid==='net.minecraftforge'?'forge':uid==='net.neoforged'?'neoforge':uid==='org.quiltmc.quilt-loader'?'quilt':creation.value.loader,loaderVersion:uid && uid!=='net.minecraft'?(version || ''):creation.value.loaderVersion};page.value='create';}
 function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
 function openSearchResult(instance:any){searchShown.value=false;void openInstance(instance);}
 function xmclTab(tab:string){if(busy.value)return;if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
-async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value='操作已完成';await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
+async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value=t('app.operationDone');await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
 async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function onPclInstalled(result:any){
  await refresh();
@@ -424,28 +426,28 @@ async function openInstance(i:any,forceRead=false,forLaunch=false){
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});
  if(selected.value?.id!==i.id){
   const old=sessions.get(selected.value?.id);if(old){old.lines=consoleLines.value;old.state=consoleState.value;}
-  const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||'未连接';logFile.value='';fileLog.value='';logFiles.value=[];
+  const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||t('app.disconnected');logFile.value='';fileLog.value='';logFiles.value=[];
  }
 selected.value=i;rememberInstance(i);if(!forLaunch){page.value='manage';if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState('launch');}notes.value='';error.value='';instanceDetails.value=null;
  try{const info=await call('instance.info',{instance:i.id});instanceDetails.value=info;notes.value=info.notes || '';}catch(e){error.value=message(e);}
  try{settings.value=await call('settings.list',{scope:'instance',instance:i.id});}catch{/* Older backends may not expose instance settings yet. */}
  if(!forLaunch){await loadResources();await loadComponents();await loadLogFiles();}
 }
-async function changeIcon(){const path=await ask('图标文件完整路径（PNG / ICO 等）');if(path===null||!path.trim())return;await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});icons.value[selected.value.id]=icon.dataUrl;}}
+async function changeIcon(){const path=await ask(t('app.iconPath'));if(path===null||!path.trim())return;await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});icons.value[selected.value.id]=icon.dataUrl;}}
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}
-async function workspaceAction(op:string){const labels:Record<string,string>={rename:'重命名',copy:'复制实例',group:'修改分组'};if(labels[op]){await instanceAction(op,op==='group'?'group':'name',labels[op]);return;}await instanceAction(op,undefined,op);}
+async function workspaceAction(op:string){const labels:Record<string,string>={rename:t('xmcl.instance.rename'),copy:t('xmcl.instance.copy'),group:t('xmcl.instance.group')};if(labels[op]){await instanceAction(op,op==='group'?'group':'name',labels[op]);return;}await instanceAction(op,undefined,op);}
 async function instanceSelectionAction(instance:any,op:string){
  if(!instance?.id)return;
- if(op==='delete'){if(await ask(`确认移除 ${instance.name}？`,'',true))await run('instance.delete',{instance:instance.id,confirm:true});return;}
- const labels:Record<string,string>={rename:'重命名',group:'移动到分组',copy:'复制实例'};
+ if(op==='delete'){if(await ask(t('app.confirmRemove', { name: instance.name }),'',true))await run('instance.delete',{instance:instance.id,confirm:true});return;}
+ const labels:Record<string,string>={rename:t('xmcl.instance.rename'),group:t('app.moveGroup'),copy:t('xmcl.instance.copy')};
  if(labels[op]){const field=op==='group'?'group':'name';const value=await ask(labels[op],field==='group'?(instance.group||''):(instance.name||''));if(value===null)return;await run(`instance.${op}`,{instance:instance.id,[field]:value});return;}
  if(op==='verify'){await run('instance.verify',{instance:instance.id});return;}
  if(op==='stop'){await run('instance.stop',{instance:instance.id});return;}
  if(op==='shortcut'){await run('instance.create-shortcut',{instance:instance.id,target:'desktop'});return;}
- if(op==='export'){await openInstance(instance);notice.value='已打开实例页，请在“导出”中完成导出。';return;}
+ if(op==='export'){await openInstance(instance);notice.value=t('app.exportHint');return;}
 }
-async function askDelete(op:string,p:any,name:string){if(await ask('确认移除 '+name+'？','',true))await run(op,{...p,confirm:true});}
-async function editSetting(s:any){const value=await ask('编辑 '+s.key,JSON.stringify(s.value));if(value===null)return;try{await run('settings.set',{...settingScope(),key:s.key,value:JSON.parse(value)});}catch(e){error.value='请输入有效的 JSON 值，例如 true、1024 或 "文本"';}}
+async function askDelete(op:string,p:any,name:string){if(await ask(t('app.confirmRemove', { name }),'',true))await run(op,{...p,confirm:true});}
+async function editSetting(s:any){const value=await ask(t('app.editSetting', { key: s.key }),JSON.stringify(s.value));if(value===null)return;try{await run('settings.set',{...settingScope(),key:s.key,value:JSON.parse(value)});}catch(e){error.value=t('app.invalidJson');}}
 function isTaskFinished(value:any){return Boolean(value?.finished) || value?.running === false || ['succeeded','failed','aborted','finished','completed','cancelled','canceled'].includes(String(value?.state || value?.status || '').toLowerCase());}
 function handleTaskUpdate(value:any){
  if(!value)return;
@@ -453,12 +455,12 @@ function handleTaskUpdate(value:any){
  if(installProgressOpen.value && installTask.value?.taskId && value.taskId!==installTask.value.taskId)return;
  if(installProgressOpen.value && (!installTask.value?.taskId || installTask.value.taskId===value.taskId))installTask.value=value;
  updateLaunchProgress(value);
- if(isTaskFinished(value)){if(launchInFlight && (value.failReason || value.successful===false)){launchError.value=value.failReason || value.details || '启动任务失败';setLaunchState('failed');}taskSnapshot.value=null;taskCenterOpen.value=false;status.value='';}
- else {taskSnapshot.value=value;status.value=value.status || value.state || '正在执行';}
+ if(isTaskFinished(value)){if(launchInFlight && (value.failReason || value.successful===false)){launchError.value=value.failReason || value.details || t('app.launchTaskFailed');setLaunchState('failed');}taskSnapshot.value=null;taskCenterOpen.value=false;status.value='';}
+ else {taskSnapshot.value=value;status.value=value.status || value.state || t('app.executing');}
 }
 async function installComponentVersion(component:any,version:string){
  if(!selected.value)return;
- beginInstallProgress({ title: `正在安装 ${component?.name || component?.id || '组件'}`, name: version });
+ beginInstallProgress({ title: t('app.installingComponent', { name: component?.name || component?.id || t('app.component') }), name: version });
  try {
   let task:any=await catalogExecute('neo.task.start',{operation:'instance.component.set-version',priority:'high',parameters:{instance:selected.value.id,component:component.id,version,important:component.id==='net.minecraft'}});
   while(task && !task.finished){
@@ -467,36 +469,36 @@ async function installComponentVersion(component:any,version:string){
    task=await catalogExecute('neo.task.status',{taskId:task.taskId});
   }
   installTask.value=task;
-  if(!task || task.state!=='succeeded')throw new Error(task?.error || '组件安装失败');
+  if(!task || task.state!=='succeeded')throw new Error(task?.error || t('app.componentInstallFailed'));
   await refresh();
  } catch(exception){error.value=message(exception);}
  finally { endInstallProgress(); }
 }
-function beginInstallProgress(info:any){installProgressTitle.value=info?.title || '正在安装整合包';installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
+function beginInstallProgress(info:any){installProgressTitle.value=info?.title || t('app.installingPack');installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
 function endInstallProgress(){
  const task=installTask.value,title=installProgressTitle.value;
  const state=String(task?.state||'').toLowerCase();
  if(state==='succeeded' && isPclShell.value){
-  const completed=title.replace(/^正在/,'').replace(/：.*$/,'');
-  showPclToast({type:'success',title:'操作完成',message:`${completed}完成`,timeout:3500});
+  const completed=title;
+  showPclToast({type:'success',title:t('app.operationDone'),message:t('app.completed', { name: completed }),timeout:3500});
  }
  installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;
 }
 
 async function exportInstance(payload:any){
   if(!selected.value)return;
-  beginInstallProgress({title:'正在导出实例',name:selected.value.name});
+  beginInstallProgress({title:t('app.exportingInstance'),name:selected.value.name});
   try{
     let task:any=await call('neo.task.start',{operation:'instance.export',priority:'high',parameters:{instance:selected.value.id,output:payload.output,format:payload.format||'zip',name:payload.name,version:payload.version,summary:payload.summary,author:payload.author,optionalFiles:Boolean(payload.optionalFiles),overwrite:payload.overwrite!==false}});
     while(task && !task.finished){installTask.value=task;await new Promise(resolve=>setTimeout(resolve,400));task=await call('neo.task.status',{taskId:task.taskId});}
     installTask.value=task;
-    if(!task || task.state!=='succeeded')throw new Error(task?.error||'导出失败');
-    notice.value='实例已导出到 '+(payload.output||'');
+    if(!task || task.state!=='succeeded')throw new Error(task?.error||t('app.exportFailed'));
+    notice.value=t('app.exportedTo') + ' '+(payload.output||'');
   }catch(e){error.value=message(e);}
   finally{endInstallProgress();}
 }
 async function cancelInstallProgress(){installCancelling.value=true;try{if(installTask.value?.taskId)await launcher.execute('neo.task.cancel',{taskId:installTask.value.taskId});else await launcher.execute('task.cancel',{});}catch{/* the task may already be terminal */}}
-async function cancel(){try{if(launchTaskId.value)await call('neo.task.cancel',{taskId:launchTaskId.value});else await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value='启动已取消';resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
+async function cancel(){try{if(launchTaskId.value)await call('neo.task.cancel',{taskId:launchTaskId.value});else await call('task.cancel');if(launchInFlight || launchUiState.value==='launching'){setLaunchState('cancelled');launchError.value=t('app.launchCancelled');resetLaunchUiSoon();}}catch(e){error.value=message(e);}}
 async function openFolder(){
  if(!selected.value)return;
  try{
@@ -504,13 +506,13 @@ async function openFolder(){
   // previously selected instance when the user switches tabs quickly.
   const info=await call('instance.get',{instance:selected.value.id});
   const path=info?.paths?.root;
-  if(!path)throw new Error('实例目录尚未读取');
+  if(!path)throw new Error(t('app.instanceDirUnread'));
   await launcher.openPath(path);
-  if(isPclShell.value) showPclToast({type:'success',title:'目录已打开',message:path,timeout:2500});
-  else quasar.notify({type:'positive',message:`已打开实例目录：${path}`,timeout:2500,position:'top',progress:true});
+  if(isPclShell.value) showPclToast({type:'success',title:t('app.folderOpened'),message:path,timeout:2500});
+  else quasar.notify({type:'positive',message:t('app.folderOpenedPath', { path }),timeout:2500,position:'top',progress:true});
  }catch(e){error.value=message(e);}
 }
-async function copyText(value:string){try{await navigator.clipboard?.writeText(value);notice.value='已复制到剪贴板';}catch{/* Clipboard may be unavailable in the web preview. */}}
+async function copyText(value:string){try{await navigator.clipboard?.writeText(value);notice.value=t('app.copiedClipboard');}catch{/* Clipboard may be unavailable in the web preview. */}}
 async function cancelDeviceLogin(){
  deviceShown.value=false;device.value=null;
  try{await launcher.execute('task.cancel',{});}catch{/* the login may already have finished */}
@@ -518,7 +520,7 @@ async function cancelDeviceLogin(){
 async function openDeviceBrowser(){const url=String(device.value?.url || '');if(!url)return;try{await call('desktop.open-url',{url});}catch(e){error.value=message(e);}}
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
-onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value='后端已退出';instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || '启动器后端已退出，请刷新重连。';});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:'正在执行');if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole('[启动] '+messageText,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
+onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value=t('app.backendExited');instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || t('app.backendDisconnected');});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:t('app.executing'));if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole(`[${t('app.launchPrefix')}] ${messageText}`,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
 onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>

@@ -5,7 +5,7 @@
     class="pcl-account-skin"
     width="64"
     height="64"
-    :aria-label="name ? `${name} 的皮肤头像` : '皮肤头像'"
+    :aria-label="name ? t('pcl.account.skinAvatarNamed', { name }) : t('pcl.account.skinAvatar')"
   />
   <span v-if="!loaded || failed" class="pcl-account-skin__fallback" aria-hidden="true">
     <PclIcon name="user" :size="18" />
@@ -14,9 +14,11 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclIcon from './PclIcon.vue';
 
 const props = defineProps<{ src?: string; name?: string }>();
+const { t } = useI18n();
 const canvas = ref<HTMLCanvasElement | null>(null);
 const loaded = ref(false);
 const failed = ref(false);

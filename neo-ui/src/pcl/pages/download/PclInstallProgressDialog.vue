@@ -4,9 +4,9 @@
       <q-card-section class="pcl-install-progress__head">
         <span class="pcl-install-progress__icon"><PclIcon name="download" :size="22" /></span>
         <div>
-          <div class="pcl-kicker">INSTALLATION</div>
-          <h3>{{ title || '正在安装整合包' }}</h3>
-          <p>{{ task?.name || task?.type || '准备安装任务' }}</p>
+          <div class="pcl-kicker">{{ t('pcl.installDialog.kicker') }}</div>
+          <h3>{{ title || t('pcl.installDialog.installingPack') }}</h3>
+          <p>{{ task?.name || task?.type || t('pcl.installDialog.preparingTask') }}</p>
         </div>
         <span class="pcl-install-progress__percent">{{ percent === null ? '—' : `${percent}%` }}</span>
       </q-card-section>
@@ -17,7 +17,7 @@
         </div>
         <div class="pcl-install-progress__status">
           <PclLoading v-if="!finished" inline />
-          <span>{{ task?.details || task?.status || '正在准备安装…' }}</span>
+          <span>{{ task?.details || task?.status || t('pcl.installDialog.preparing') }}</span>
         </div>
         <div v-if="activeFiles.length" class="pcl-install-progress__files">
           <div v-for="file in activeFiles" :key="file.id || file.label" class="pcl-install-progress__current">
@@ -35,7 +35,7 @@
           </div>
         </div>
         <div v-else-if="!finished" class="pcl-install-progress__current">
-          <div class="pcl-install-progress__current-head"><span>{{ task?.status || task?.details || '正在准备下一步…' }}</span></div>
+          <div class="pcl-install-progress__current-head"><span>{{ task?.status || task?.details || t('pcl.installDialog.nextStep') }}</span></div>
           <div class="pcl-progress-track pcl-install-progress__current-track is-indeterminate"><span /></div>
         </div>
         <div class="pcl-install-progress__stages">
@@ -47,8 +47,8 @@
         <div class="pcl-install-progress__summary">
           <span>{{ stats.summary }}</span>
           <span v-if="stats.byteSummary"> · {{ stats.byteSummary }}</span>
-          <span v-if="pendingCount"> · 等待 {{ pendingCount }}</span>
-          <span v-if="activeCount > 1"> · 正在执行 {{ activeCount }} 项</span>
+          <span v-if="pendingCount"> · {{ t('pcl.installDialog.waitingCount', { count: pendingCount }) }}</span>
+          <span v-if="activeCount > 1"> · {{ t('pcl.installDialog.activeCount', { count: activeCount }) }}</span>
         </div>
         <div class="pcl-install-progress__meta">
           <span v-if="rateText(task)">{{ rateText(task) }}</span>
@@ -58,7 +58,7 @@
 
       <q-card-actions align="right" class="pcl-install-progress__actions">
         <PclButton variant="ghost" :disabled="finished || cancelling" @click="emit('cancel')">
-          {{ cancelling ? '正在取消…' : '取消安装' }}
+          {{ cancelling ? t('pcl.installDialog.cancelling') : t('pcl.installDialog.cancel') }}
         </PclButton>
       </q-card-actions>
     </q-card>
@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclLoading from '../../components/PclLoading.vue';
@@ -96,6 +97,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   cancel: [];
 }>();
+const { t } = useI18n();
 
 const finished = computed(() => isTaskItemFinished(props.task));
 const children = computed<any[]>(() => flattenTaskItems(props.task));
@@ -125,15 +127,15 @@ const activeCount = computed(() => stats.value.active);
 const pendingCount = computed(() => stats.value.waiting);
 const stages = computed(() => {
   const labels = props.task?.operation === 'modpack.install'
-    ? ['准备', '下载整合包', '解压安装', '下载模组', '完成']
-    : ['准备', '下载', '安装', '完成'];
+    ? [t('pcl.installDialog.prepare'), t('pcl.installDialog.downloadPack'), t('pcl.installDialog.unpack'), t('pcl.installDialog.downloadMods'), t('pcl.installDialog.done')]
+    : [t('pcl.installDialog.prepare'), t('pcl.installDialog.download'), t('pcl.installDialog.install'), t('pcl.installDialog.done')];
   const status = String(props.task?.status || '').toLowerCase();
   const finishedTask = props.task?.state === 'succeeded';
   let active = 0;
   if (finishedTask) active = labels.length - 1;
   else if (children.value.some(child => /\.(jar|zip|litemod)$/i.test(String(child.label || '')))) active = Math.min(labels.length - 2, 3);
-  else if (status.includes('unpack') || status.includes('解压') || status.includes('install') || status.includes('安装')) active = Math.min(labels.length - 2, 2);
-  else if (children.value.length || status.includes('下载') || status.includes('download')) active = 1;
+  else if (status.includes('unpack') || status.includes('install')) active = Math.min(labels.length - 2, 2);
+  else if (children.value.length || status.includes('download')) active = 1;
   return labels.map((label, index) => ({ label, state: index < active ? 'done' : index === active ? 'active' : 'waiting' }));
 });
 const childPercent = taskItemPercent;

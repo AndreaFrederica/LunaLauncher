@@ -3,84 +3,84 @@
     <section v-if="section === 'install'" class="pcl-section-card pcl-install-section">
       <div class="pcl-install-head">
         <div>
-          <span class="pcl-kicker">INSTANCE INSTALLATION</span>
-          <h2>安装</h2>
-          <p>按 Luna 的组件顺序查看和调整当前实例的 Minecraft 与加载器。</p>
+          <span class="pcl-kicker">{{ t('ui.instanceInstallation') }}</span>
+          <h2>{{ t('instanceSections.install') }}</h2>
+          <p>{{ t('instanceSections.installHint') }}</p>
         </div>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">刷新当前页</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy" @click="emit('refresh')">{{ t('common.refresh') }}</PclButton>
       </div>
-      <PclHint v-if="componentError" theme="red" :closable="false">组件数据读取失败：{{ componentError }}</PclHint>
+      <PclHint v-if="componentError" theme="red" :closable="false">{{ t('instanceSections.componentError', { error: componentError }) }}</PclHint>
       <div class="pcl-install-list">
         <article v-for="item in installItems" :key="item.id" class="pcl-install-item" :class="{ expanded: expanded === item.id }">
           <button class="pcl-install-item__head" type="button" @click="expanded = expanded === item.id ? '' : item.id">
             <PclIcon :name="item.icon" :size="18" />
             <span class="pcl-install-item__name">{{ item.label }}</span>
-            <span class="pcl-install-item__version">{{ componentFor(item.uid)?.version || '未安装' }}</span>
+            <span class="pcl-install-item__version">{{ componentFor(item.uid)?.version || t('instanceSections.notInstalled') }}</span>
             <PclIcon :name="expanded === item.id ? 'chevron-up' : 'chevron-down'" :size="15" />
           </button>
           <div v-if="expanded === item.id" class="pcl-install-item__body">
             <p>{{ item.description }}</p>
             <div v-if="componentFor(item.uid)" class="pcl-install-current">
-              <span>当前版本：{{ componentFor(item.uid)?.version || '未知' }}</span>
+              <span>{{ t('instanceSections.currentVersion', { version: componentFor(item.uid)?.version || t('instanceSections.unknown') }) }}</span>
               <PclCheckbox
                 :model-value="componentFor(item.uid)?.enabled !== false"
-                label="启用"
+                :label="t('instanceSections.enable')"
                 :disabled="busy || !componentFor(item.uid)?.canDisable"
                 @update:model-value="emit('component-enabled', componentFor(item.uid), $event)"
               />
             </div>
             <div class="pcl-install-actions">
-              <PclInput v-model="versions[item.id]" placeholder="输入版本号" />
-              <PclButton variant="highlight" :disabled="busy || !versions[item.id]?.trim() || (componentFor(item.uid) && componentFor(item.uid)?.canChangeVersion === false)" @click="emit('component-version', componentFor(item.uid) || { id: item.uid, name: item.label }, versions[item.id].trim())">应用版本</PclButton>
-              <PclButton variant="ghost" icon="search" @click="emit('browse', item.uid)">浏览可用版本</PclButton>
+              <PclInput v-model="versions[item.id]" :placeholder="t('instanceSections.versionPlaceholder')" />
+              <PclButton variant="highlight" :disabled="busy || !versions[item.id]?.trim() || (componentFor(item.uid) && componentFor(item.uid)?.canChangeVersion === false)" @click="emit('component-version', componentFor(item.uid) || { id: item.uid, name: item.label }, versions[item.id].trim())" >{{ t('instanceSections.applyVersion') }}</PclButton>
+              <PclButton variant="ghost" icon="search" @click="emit('browse', item.uid)" >{{ t('instanceSections.browseVersions') }}</PclButton>
             </div>
           </div>
         </article>
       </div>
-      <PclHint theme="blue">安装项的顺序和可选状态与 Luna 实例安装页保持一致；版本变更会通过启动器组件 API 写入实例。</PclHint>
+      <PclHint theme="blue">{{ t('instanceSections.installFooter') }}</PclHint>
     </section>
 
     <section v-else-if="section === 'export'" class="pcl-section-card pcl-export">
       <div class="pcl-export__head">
         <div>
-          <span class="pcl-kicker">INSTANCE EXPORT</span>
-          <h2>导出实例</h2>
-          <p>选择格式和要打包的内容，导出为整合包或启动器压缩包。</p>
+          <span class="pcl-kicker">{{ t('ui.instanceExport') }}</span>
+          <h2>{{ t('instanceSections.export') }}</h2>
+          <p>{{ t('instanceSections.exportHint') }}</p>
         </div>
       </div>
       <div class="pcl-export__body">
         <PclHint v-if="exportError" theme="red" closable @close="exportError = ''">{{ exportError }}</PclHint>
         <div class="pcl-export__grid">
           <label class="pcl-export__field">
-            <span>整合包名称</span>
-            <PclInput v-model="exportName" placeholder="例如：Fabulously Optimized" />
+            <span>{{ t('instanceSections.packName') }}</span>
+            <PclInput v-model="exportName" :placeholder="t('instanceSections.packNamePlaceholder')" />
           </label>
           <label class="pcl-export__field">
-            <span>整合包版本</span>
-            <PclInput v-model="exportVersion" placeholder="例如：1.0.0" />
+            <span>{{ t('instanceSections.packVersion') }}</span>
+            <PclInput v-model="exportVersion" :placeholder="t('instanceSections.packVersionPlaceholder')" />
           </label>
           <label class="pcl-export__field">
-            <span>导出格式</span>
+            <span>{{ t('instanceSections.format') }}</span>
             <PclSelect v-model="exportFormat" :options="exportFormats" />
           </label>
           <label class="pcl-export__field">
-            <span>输出路径</span>
+            <span>{{ t('instanceSections.outputPath') }}</span>
             <div class="pcl-path-row">
               <PclInput v-model="exportOutput" :placeholder="exportOutputPlaceholder" />
-              <PclIconButton icon="folder-open" label="选择导出位置" :size="28" :disabled="busy" @click="chooseExportOutput" />
+              <PclIconButton icon="folder-open" :label="t('instanceSections.chooseOutput')" :size="28" :disabled="busy" @click="chooseExportOutput" />
             </div>
           </label>
           <label v-if="exportFormat === 'modrinth'" class="pcl-export__field pcl-export__field--wide">
-            <span>Modrinth 简介</span>
-            <PclInput v-model="exportSummary" placeholder="可选，简短介绍这个整合包" />
+            <span>{{ t('instanceSections.modrinthSummary') }}</span>
+            <PclInput v-model="exportSummary" :placeholder="t('instanceSections.summaryPlaceholder')" />
           </label>
           <label v-if="exportFormat === 'curseforge'" class="pcl-export__field pcl-export__field--wide">
-            <span>CurseForge 作者</span>
-            <PclInput v-model="exportAuthor" placeholder="可选，作者名称" />
+            <span>{{ t('instanceSections.curseforgeAuthor') }}</span>
+            <PclInput v-model="exportAuthor" :placeholder="t('instanceSections.authorPlaceholder')" />
           </label>
         </div>
 
-        <div class="pcl-export__section-title">打包内容</div>
+        <div class="pcl-export__section-title">{{ t('instanceSections.packageContent') }}</div>
         <div class="pcl-export__options">
           <div v-for="item in exportItems" :key="item.key" class="pcl-export__option" @click="toggleExport(item.key, !selectedExport.includes(item.key))">
             <PclCheckbox :model-value="selectedExport.includes(item.key)" @update:model-value="toggleExport(item.key, $event)" @click.stop />
@@ -89,39 +89,40 @@
         </div>
 
         <div class="pcl-export__checks">
-          <PclCheckbox v-model="exportOptionalFiles" label="标记可选资源" />
-          <PclCheckbox v-model="exportOverwrite" label="覆盖已有文件" />
+          <PclCheckbox v-model="exportOptionalFiles" :label="t('instanceSections.markOptional')" />
+          <PclCheckbox v-model="exportOverwrite" :label="t('instanceSections.overwrite')" />
         </div>
 
         <PclHint theme="blue">
-          ZIP 用于保留完整实例；Modrinth / CurseForge 会按平台格式重新生成整合包，需要填写版本。
+          {{ t('instanceSections.formatHint') }}
         </PclHint>
 
         <div class="pcl-export__actions">
           <PclButton variant="highlight" icon="archive" :disabled="busy || exporting || !canExport" @click="startExport">
-            {{ exporting ? '正在导出…' : '开始导出' }}
+            {{ exporting ? t('instanceSections.exporting') : t('instanceSections.startExport') }}
           </PclButton>
         </div>
       </div>
     </section>
 
     <section v-else-if="section === 'settings'" class="pcl-section-card">
-      <div class="section-heading"><div><span class="pcl-kicker">INSTANCE SETTINGS</span><h2>实例设置</h2><p>这些选项只作用于当前实例，布局参照 Luna 的实例设置页。</p></div></div>
-      <div class="setting-grid"><div v-for="item in instanceSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><q-toggle v-if="item.type === 'boolean'" :model-value="settingValue(item.key)" :label="settingValue(item.key) ? '启用' : '关闭'" :disable="busy" @update:model-value="save(item.key, $event)"/><q-input v-else outlined dense :model-value="settingValue(item.key)" :label="item.label" :disable="busy" @update:model-value="save(item.key, $event)"/></div></div>
-      <q-banner class="pcl-hint"><span class="material-icons">tune</span>更完整的实例参数仍可在启动器设置 API 中读取；此页优先呈现 Luna 用户最常用的启动、Java 和内存选项。</q-banner>
+      <div class="section-heading"><div><span class="pcl-kicker">{{ t('ui.instanceSettings') }}</span><h2>{{ t('instanceSections.settings') }}</h2><p>{{ t('instanceSections.settingsHint') }}</p></div></div>
+      <div class="setting-grid"><div v-for="item in instanceSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><q-toggle v-if="item.type === 'boolean'" :model-value="settingValue(item.key)" :label="settingValue(item.key) ? t('instanceSections.enable') : t('instanceSections.disable')" :disable="busy" @update:model-value="save(item.key, $event)"/><q-input v-else outlined dense :model-value="settingValue(item.key)" :label="item.label" :disable="busy" @update:model-value="save(item.key, $event)"/></div></div>
+      <q-banner class="pcl-hint"><span class="material-icons">tune</span>{{ t('instanceSections.settingsNotice') }}</q-banner>
     </section>
 
-    <section v-else-if="section === 'java'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">INSTANCE JAVA</span><h2>Java 设置</h2><p>选择此实例使用的 Java，并检测运行时兼容性。</p></div></div><div class="java-layout"><div class="java-summary"><span class="material-icons">coffee</span><div><strong>{{ settingValue('JavaPath') || '跟随启动器设置' }}</strong><small>当前 Java 路径</small></div><q-btn outline label="检测 Java" icon="search" :disable="busy" @click="emit('save',{key:'JavaPath',value:settingValue('JavaPath')})"/></div><div class="setting-grid"><div v-for="item in javaSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><div class="pcl-path-row"><q-input outlined dense :model-value="settingValue(item.key)" :disable="busy" @update:model-value="save(item.key,$event)"/><PclIconButton v-if="item.key === 'JavaPath'" icon="folder-open" label="选择 Java" :size="26" :disabled="busy" @click="chooseJavaPath" /></div></div></div></div></section>
+    <section v-else-if="section === 'java'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">{{ t('ui.instanceJava') }}</span><h2>{{ t('instanceSections.java') }}</h2><p>{{ t('instanceSections.javaHint') }}</p></div></div><div class="java-layout"><div class="java-summary"><span class="material-icons">coffee</span><div><strong>{{ settingValue('JavaPath') || t('instanceSections.followLauncher') }}</strong><small>{{ t('instanceSections.javaPath') }}</small></div><q-btn outline :label="t('instanceSections.detectJava')" icon="search" :disable="busy" @click="emit('save',{key:'JavaPath',value:settingValue('JavaPath')})"/></div><div class="setting-grid"><div v-for="item in javaSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><div class="pcl-path-row"><q-input outlined dense :model-value="settingValue(item.key)" :disable="busy" @update:model-value="save(item.key,$event)"/><PclIconButton v-if="item.key === 'JavaPath'" icon="folder-open" :label="t('instanceSections.chooseJava')" :size="26" :disabled="busy" @click="chooseJavaPath" /></div></div></div></div></section>
 
     <PclMemoryPanel v-else-if="section === 'memory'" :settings="settings || []" :busy="busy" :execute="execute || (async () => ({}))" @save="emit('save', $event)" />
 
-    <section v-else-if="section === 'advanced'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">INSTANCE ADVANCED</span><h2>高级启动</h2><p>对应启动器的渲染器、JVM 参数、游戏参数和启动前命令。</p></div></div><div class="advanced-form"><label>渲染器<select :value="settingValue('Renderer')" @change="save('Renderer',($event.target as HTMLSelectElement).value)"><option value="">跟随全局设置</option><option value="default">游戏默认</option><option value="software">软件渲染</option><option value="directx12">DirectX 12</option><option value="vulkan">Vulkan</option></select></label><label>JVM 参数<textarea :value="settingValue('JvmArgs')" rows="4" @change="save('JvmArgs',($event.target as HTMLTextAreaElement).value)" placeholder="留空表示跟随全局设置"/></label><label>游戏参数<input :value="settingValue('GameArgs')" @change="save('GameArgs',($event.target as HTMLInputElement).value)" placeholder="留空表示跟随全局设置"/></label><label>启动前命令<input :value="settingValue('PreLaunchCommand')" @change="save('PreLaunchCommand',($event.target as HTMLInputElement).value)"/></label><div class="advanced-checks"><q-toggle :model-value="Boolean(settingValue('IgnoreJavaCompatibility'))" label="忽略 Java 兼容性检查" @update:model-value="save('IgnoreJavaCompatibility',$event)"/><q-toggle :model-value="Boolean(settingValue('DisableFileVerification'))" label="禁用文件校验" @update:model-value="save('DisableFileVerification',$event)"/><q-toggle :model-value="Boolean(settingValue('UseGlobalProxy'))" label="使用全局代理" @update:model-value="save('UseGlobalProxy',$event)"/></div></div></section>
+    <section v-else-if="section === 'advanced'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">{{ t('ui.instanceAdvanced') }}</span><h2>{{ t('instanceSections.advanced') }}</h2><p>{{ t('instanceSections.advancedHint') }}</p></div></div><div class="advanced-form"><label>{{ t('instanceSections.renderer') }}<select :value="settingValue('Renderer')" @change="save('Renderer',($event.target as HTMLSelectElement).value)"><option value="">{{ t('instanceSections.followGlobal') }}</option><option value="default">{{ t('instanceSections.gameDefault') }}</option><option value="software">{{ t('instanceSections.software') }}</option><option value="directx12">{{ t('ui.directx12') }}</option><option value="vulkan">{{ t('ui.vulkan') }}</option></select></label><label>{{ t('instanceSections.jvmArgs') }}<textarea :value="settingValue('JvmArgs')" rows="4" @change="save('JvmArgs',($event.target as HTMLTextAreaElement).value)" :placeholder="t('instanceSections.followGlobalPlaceholder')"/></label><label>{{ t('instanceSections.gameArgs') }}<input :value="settingValue('GameArgs')" @change="save('GameArgs',($event.target as HTMLInputElement).value)" :placeholder="t('instanceSections.followGlobalPlaceholder')"/></label><label>{{ t('instanceSections.preLaunch') }}<input :value="settingValue('PreLaunchCommand')" @change="save('PreLaunchCommand',($event.target as HTMLInputElement).value)"/></label><div class="advanced-checks"><q-toggle :model-value="Boolean(settingValue('IgnoreJavaCompatibility'))" :label="t('instanceSections.ignoreJava')" @update:model-value="save('IgnoreJavaCompatibility',$event)"/><q-toggle :model-value="Boolean(settingValue('DisableFileVerification'))" :label="t('instanceSections.disableVerification')" @update:model-value="save('DisableFileVerification',$event)"/><q-toggle :model-value="Boolean(settingValue('UseGlobalProxy'))" :label="t('instanceSections.globalProxy')" @update:model-value="save('UseGlobalProxy',$event)"/></div></div></section>
 
-    <section v-else-if="section === 'server'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">SERVER</span><h2>服务端</h2><p>管理服务端地址、EULA、属性和运行终端。</p></div><div class="server-actions"><q-btn flat icon="refresh" label="读取配置" :disable="busy || serverLoading" @click="loadServer"/><q-btn color="primary" icon="play_arrow" label="启动服务端" :disable="busy || serverLoading || !eulaAgreed" @click="startServer"/></div></div><q-banner v-if="serverError" class="bg-red-1 text-red-9 q-mt-md">{{ serverError }}</q-banner><div class="server-grid"><q-card flat bordered class="server-card"><q-card-section><div class="server-card-title">EULA</div><q-toggle v-model="eulaAgreed" label="我同意 Minecraft 服务端 EULA" :disable="busy || serverLoading" @update:model-value="saveEula"/><p class="pcl-muted">服务端必须写入 eula=true 后才能启动。</p></q-card-section></q-card><q-card flat bordered class="server-card"><q-card-section><div class="server-card-title">server.properties</div><div class="server-properties"><label>服务器端口<input v-model="serverPort" type="number" min="1" max="65535" @change="saveProperty('server-port',serverPort)"/></label><label>最大玩家<input v-model="serverMaxPlayers" type="number" min="1" @change="saveProperty('max-players',serverMaxPlayers)"/></label><label>游戏模式<select v-model="serverGamemode" @change="saveProperty('gamemode',serverGamemode)"><option value="survival">生存</option><option value="creative">创造</option><option value="adventure">冒险</option><option value="spectator">旁观</option></select></label><label>白名单<select v-model="serverWhitelist" @change="saveProperty('white-list',serverWhitelist)"><option value="true">启用</option><option value="false">关闭</option></select></label></div></q-card-section></q-card></div><q-card flat bordered class="server-console"><q-card-section><div class="server-card-title"><span>服务端控制台</span><q-btn flat icon="terminal" label="打开实例终端" @click="emit('console')"/></div><pre>{{ consoleText || '服务端尚未启动，控制台输出会显示在这里。' }}</pre><div class="console-command"><input v-model="serverCommand" placeholder="输入服务端命令，例如 list" @keyup.enter="sendServerCommand"/><q-btn color="primary" label="发送" :disable="busy || !serverCommand.trim()" @click="sendServerCommand"/></div></q-card-section></q-card></section>
+    <section v-else-if="section === 'server'" class="pcl-section-card"><div class="section-heading"><div><span class="pcl-kicker">{{ t('ui.server') }}</span><h2>{{ t('instanceSections.server') }}</h2><p>{{ t('instanceSections.serverHint') }}</p></div><div class="server-actions"><q-btn flat icon="refresh" :label="t('instanceSections.readConfig')" :disable="busy || serverLoading" @click="loadServer"/><q-btn color="primary" icon="play_arrow" :label="t('instanceSections.startServer')" :disable="busy || serverLoading || !eulaAgreed" @click="startServer"/></div></div><q-banner v-if="serverError" class="bg-red-1 text-red-9 q-mt-md">{{ serverError }}</q-banner><div class="server-grid"><q-card flat bordered class="server-card"><q-card-section><div class="server-card-title">{{ t('ui.eula') }}</div><q-toggle v-model="eulaAgreed" :label="t('instanceSections.acceptEula')" :disable="busy || serverLoading" @update:model-value="saveEula"/><p class="pcl-muted">{{ t('instanceSections.eulaHint') }}</p></q-card-section></q-card><q-card flat bordered class="server-card"><q-card-section><div class="server-card-title">{{ t('ui.serverProperties') }}</div><div class="server-properties"><label>{{ t('instanceSections.serverPort') }}<input v-model="serverPort" type="number" min="1" max="65535" @change="saveProperty('server-port',serverPort)"/></label><label>{{ t('instanceSections.maxPlayers') }}<input v-model="serverMaxPlayers" type="number" min="1" @change="saveProperty('max-players',serverMaxPlayers)"/></label><label>{{ t('pcl.server.gameMode') }}<select v-model="serverGamemode" @change="saveProperty('gamemode',serverGamemode)"><option value="survival">{{ t('instanceSections.survival') }}</option><option value="creative">{{ t('instanceSections.creative') }}</option><option value="adventure">{{ t('instanceSections.adventure') }}</option><option value="spectator">{{ t('instanceSections.spectator') }}</option></select></label><label>{{ t('instanceSections.whitelist') }}<select v-model="serverWhitelist" @change="saveProperty('white-list',serverWhitelist)"><option value="true">{{ t('instanceSections.enable') }}</option><option value="false">{{ t('instanceSections.disable') }}</option></select></label></div></q-card-section></q-card></div><q-card flat bordered class="server-console"><q-card-section><div class="server-card-title"><span>{{ t('instanceSections.serverConsole') }}</span><q-btn flat icon="terminal" :label="t('instanceSections.openTerminal')" @click="emit('console')"/></div><pre>{{ consoleText || t('instanceSections.consoleHint') }}</pre><div class="console-command"><input v-model="serverCommand" :placeholder="t('instanceSections.commandPlaceholder')" @keyup.enter="sendServerCommand"/><q-btn color="primary" :label="t('instanceSections.send')" :disable="busy || !serverCommand.trim()" @click="sendServerCommand"/></div></q-card-section></q-card></section>
   </div>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
@@ -132,45 +133,46 @@ import { pickPclDirectory, pickPclSavePath } from '../../composables/usePclFileD
 import PclSelect from '../../components/PclSelect.vue';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props=defineProps<{section:string;components:any[];componentError?:string;settings?:any[];busy:boolean;instance?:string;execute?:Execute}>();
+const { t } = useI18n();
 const emit=defineEmits<{refresh:[];browse:[uid:string];'component-enabled':[component:any,enabled:boolean];'component-version':[component:any,version:string];export:[payload:any];save:[payload:{key:string;value:any}];console:[]}>();
 const expanded=ref('minecraft'), versions=reactive<Record<string,string>>({}), exportName=ref(''), exportVersion=ref('1.0'), exportOutput=ref(''), exportFormat=ref('zip'), exportSummary=ref(''), exportAuthor=ref(''), exportOptionalFiles=ref(false), exportOverwrite=ref(true), exportError=ref(''), exporting=ref(false), selectedExport=ref(['game','gameSettings','gameProfile','mod','resourcepacks','shaderpacks','saves','screenshots']);
-const exportFormats=[{label:'MMC包（.zip）',value:'zip'},{label:'Modrinth 整合包（.mrpack）',value:'modrinth'},{label:'CurseForge 整合包（.zip）',value:'curseforge'}];
-const exportOutputPlaceholder=computed(()=>exportFormat.value==='modrinth'?'例如：D:/Export/pack.mrpack':'例如：D:/Export/pack.zip');
+const exportFormats=[{label:t('instanceSections.mmcZip'),value:'zip'},{label:t('instanceSections.modrinthPack'),value:'modrinth'},{label:t('instanceSections.curseforgePack'),value:'curseforge'}];
+const exportOutputPlaceholder=computed(()=>exportFormat.value==='modrinth'?t('instanceSections.modrinthPath'):t('instanceSections.zipPath'));
 const canExport=computed(()=>Boolean(exportName.value.trim() && exportOutput.value.trim() && (exportFormat.value==='zip' || exportVersion.value.trim())));
 function toggleExport(key:string, enabled:boolean){selectedExport.value=enabled?[...selectedExport.value,key]:selectedExport.value.filter(item=>item!==key);}
 async function chooseExportOutput() {
   const extension = exportFormat.value === 'modrinth' ? 'mrpack' : 'zip';
-  const selected = await pickPclSavePath({ title: '选择导出位置', defaultPath: exportOutput.value || `${exportName.value || 'instance'}.${extension}`, filters: [{ name: exportFormat.value === 'modrinth' ? 'Modrinth 整合包' : 'ZIP 压缩包', extensions: [extension] }] });
+  const selected = await pickPclSavePath({ title: t('instanceSections.chooseOutput'), defaultPath: exportOutput.value || `${exportName.value || 'instance'}.${extension}`, filters: [{ name: exportFormat.value === 'modrinth' ? t('instanceSections.modrinthPack') : t('instanceSections.zipArchive'), extensions: [extension] }] });
   if (selected) exportOutput.value = selected;
 }
 
 async function chooseJavaPath() {
-  const selected = await pickPclDirectory({ title: '选择 Java 目录' });
+  const selected = await pickPclDirectory({ title: t('java.chooseDirectory') });
   if (selected) save('JavaPath', selected);
 }
 
 function startExport(){
   exportError.value='';
-  if(!exportName.value.trim()){exportError.value='请填写整合包名称。';return;}
-  if(!exportOutput.value.trim()){exportError.value='请填写输出路径。';return;}
-  if(exportFormat.value!=='zip'&&!exportVersion.value.trim()){exportError.value='该格式需要填写整合包版本。';return;}
+  if(!exportName.value.trim()){exportError.value=t('instanceSections.nameRequired');return;}
+  if(!exportOutput.value.trim()){exportError.value=t('instanceSections.outputRequired');return;}
+  if(exportFormat.value!=='zip'&&!exportVersion.value.trim()){exportError.value=t('instanceSections.versionRequired');return;}
   exporting.value=true;
   emit('export',{name:exportName.value.trim(),version:exportVersion.value.trim(),output:exportOutput.value.trim(),format:exportFormat.value,summary:exportSummary.value.trim(),author:exportAuthor.value.trim(),optionalFiles:exportOptionalFiles.value,overwrite:exportOverwrite.value,items:selectedExport.value});
   window.setTimeout(()=>{exporting.value=false;},800);
 }
 const serverLoading=ref(false), serverError=ref(''), eulaAgreed=ref(false), serverPort=ref(25565), serverMaxPlayers=ref(20), serverGamemode=ref('survival'), serverWhitelist=ref('false'), serverCommand=ref(''), consoleText=ref('');
 const installItems=[
-  {id:'minecraft',label:'Minecraft',icon:'box',uid:'net.minecraft',description:'选择实例使用的 Minecraft 客户端版本。'},
-  {id:'forge',label:'Forge',icon:'anvil',uid:'net.minecraftforge',description:'安装 Forge 加载器及其依赖。'},
-  {id:'neoforge',label:'NeoForge',icon:'cat',uid:'net.neoforged',description:'安装 NeoForge 加载器。'},
-  {id:'cleanroom',label:'Cleanroom',icon:'flask-conical',uid:'com.cleanroommc.cleanroom',description:'安装或更新 Cleanroom 加载器及其配套文件。'},
-  {id:'fabric',label:'Fabric',icon:'scroll',uid:'net.fabricmc.fabric-loader',description:'安装 Fabric 加载器。'},
-  {id:'quilt',label:'Quilt',icon:'layers',uid:'org.quiltmc.quilt-loader',description:'安装 Quilt 加载器。'},
-  {id:'liteloader',label:'LiteLoader',icon:'egg',uid:'com.mumfrey.liteloader',description:'安装 LiteLoader。'},
+  {id:'minecraft',label:'Minecraft',icon:'box',uid:'net.minecraft',description:t('instanceSections.minecraftDescription')},
+  {id:'forge',label:'Forge',icon:'anvil',uid:'net.minecraftforge',description:t('instanceSections.forgeDescription')},
+  {id:'neoforge',label:'NeoForge',icon:'cat',uid:'net.neoforged',description:t('instanceSections.neoforgeDescription')},
+  {id:'cleanroom',label:'Cleanroom',icon:'flask-conical',uid:'com.cleanroommc.cleanroom',description:t('instanceSections.cleanroomDescription')},
+  {id:'fabric',label:'Fabric',icon:'scroll',uid:'net.fabricmc.fabric-loader',description:t('instanceSections.fabricDescription')},
+  {id:'quilt',label:'Quilt',icon:'layers',uid:'org.quiltmc.quilt-loader',description:t('instanceSections.quiltDescription')},
+  {id:'liteloader',label:'LiteLoader',icon:'egg',uid:'com.mumfrey.liteloader',description:t('instanceSections.liteloaderDescription')},
 ];
-const exportItems=[{key:'game',label:'游戏核心',description:'Minecraft 客户端与加载器'},{key:'gameSettings',label:'游戏设置',description:'options.txt 等设置文件'},{key:'gameProfile',label:'游戏配置',description:'实例组件配置'},{key:'mod',label:'模组',description:'mods 文件夹和禁用模组'},{key:'resourcepacks',label:'资源包',description:'resourcepacks 文件夹'},{key:'shaderpacks',label:'光影',description:'shaderpacks 文件夹'},{key:'saves',label:'存档',description:'saves 文件夹'},{key:'screenshots',label:'截图',description:'screenshots 文件夹'},{key:'servers',label:'服务器列表',description:'servers.dat'}];
-const instanceSettings=[{key:'InstanceAccountId',label:'登录账户',description:'此实例使用的账户',type:'string'},{key:'InstanceWindowWidth',label:'窗口宽度',description:'启动时的窗口宽度',type:'string'},{key:'InstanceWindowHeight',label:'窗口高度',description:'启动时的窗口高度',type:'string'},{key:'OverrideJavaArgs',label:'自定义 Java 参数',description:'覆盖默认 JVM 参数',type:'boolean'},{key:'Fullscreen',label:'全屏启动',description:'启动后进入全屏模式',type:'boolean'}];
-const javaSettings=[{key:'JavaPath',label:'Java 路径',description:'留空时自动选择兼容版本'},{key:'JavaArguments',label:'Java 参数',description:'实例专用 JVM 参数'}];
+const exportItems=[{key:'game',label:t('instanceSections.gameCore'),description:t('instanceSections.gameCoreDescription')},{key:'gameSettings',label:t('instanceSections.gameSettings'),description:t('instanceSections.gameSettingsDescription')},{key:'gameProfile',label:t('instanceSections.gameProfile'),description:t('instanceSections.gameProfileDescription')},{key:'mod',label:t('resource.kinds.mods'),description:t('instanceSections.modsDescription')},{key:'resourcepacks',label:t('resource.kinds.resourcepacks'),description:t('instanceSections.resourcepacksDescription')},{key:'shaderpacks',label:t('resource.kinds.shaderpacks'),description:t('instanceSections.shaderpacksDescription')},{key:'saves',label:t('extras.saves'),description:t('instanceSections.savesDescription')},{key:'screenshots',label:t('extras.screenshots'),description:t('instanceSections.screenshotsDescription')},{key:'servers',label:t('instanceSections.serverList'),description:'servers.dat'}];
+const instanceSettings=[{key:'InstanceAccountId',label:t('instanceSections.account'),description:t('instanceSections.accountDescription'),type:'string'},{key:'InstanceWindowWidth',label:t('instanceSections.windowWidth'),description:t('instanceSections.windowWidthDescription'),type:'string'},{key:'InstanceWindowHeight',label:t('instanceSections.windowHeight'),description:t('instanceSections.windowHeightDescription'),type:'string'},{key:'OverrideJavaArgs',label:t('instanceSections.customJavaArgs'),description:t('instanceSections.customJavaArgsDescription'),type:'boolean'},{key:'Fullscreen',label:t('instanceSections.fullscreen'),description:t('instanceSections.fullscreenDescription'),type:'boolean'}];
+const javaSettings=[{key:'JavaPath',label:t('instanceSections.javaPathLabel'),description:t('instanceSections.javaPathDescription')},{key:'JavaArguments',label:t('instanceSections.javaArguments'),description:t('instanceSections.javaArgumentsDescription')}];
 function componentFor(uid:string){
   const target=String(uid||'').trim().toLowerCase();
   const aliases:Record<string,string[]>={
@@ -212,8 +214,8 @@ async function startServer(){
   try{
     let task:any=await props.execute('neo.task.start',{operation:'server.start',priority:'high',parameters:{instance:props.instance}});
     while(task && !task.finished){await new Promise(resolve=>setTimeout(resolve,300));task=await props.execute('neo.task.status',{taskId:task.taskId});}
-    if(!task || task.state!=='succeeded')throw new Error(task?.error||'服务端启动失败');
-    consoleText.value='服务端已请求启动，请通过控制台查看输出。';
+    if(!task || task.state!=='succeeded')throw new Error(task?.error||t('instanceSections.serverStartFailed'));
+    consoleText.value=t('instanceSections.serverStartRequested');
   }catch(e){serverError.value=e instanceof Error?e.message:String(e);}finally{serverLoading.value=false;}
 }
 async function sendServerCommand(){ const command=serverCommand.value.trim();if(!command||!props.execute||!props.instance)return;try{await props.execute('server.console.command',{instance:props.instance,command});consoleText.value += `${consoleText.value?'\n':''}> ${command}`;serverCommand.value='';}catch(e){serverError.value=e instanceof Error?e.message:String(e);} }

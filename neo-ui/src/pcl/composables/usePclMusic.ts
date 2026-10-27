@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import { i18n } from '../../i18n';
 import { neoUiPreferences, persistNeoUiPreferences } from '../../neo-ui-preferences';
 
 const databaseName = 'luna-pcl-media';
@@ -81,7 +82,7 @@ function ensureAudio(): HTMLAudioElement {
     audio.volume = pclMusic.volume;
     audio.addEventListener('play', () => { pclMusic.playing = true; });
     audio.addEventListener('pause', () => { pclMusic.playing = false; });
-    audio.addEventListener('error', () => { pclMusic.error = '背景音乐无法播放，请重新选择文件。'; });
+    audio.addEventListener('error', () => { pclMusic.error = i18n.global.t('pcl.music.playError'); });
   }
   return audio;
 }
@@ -126,11 +127,11 @@ export async function initPclMusic(): Promise<void> {
 
 export async function choosePclMusic(file: File): Promise<void> {
   if (!file.type.startsWith('audio/')) {
-    pclMusic.error = '请选择音频文件。';
+    pclMusic.error = i18n.global.t('pcl.music.chooseFile');
     return;
   }
   if (file.size > 30 * 1024 * 1024) {
-    pclMusic.error = '背景音乐不能超过 30 MB。';
+    pclMusic.error = i18n.global.t('pcl.music.tooLarge');
     return;
   }
   try {

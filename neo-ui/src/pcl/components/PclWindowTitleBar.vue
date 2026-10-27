@@ -7,13 +7,13 @@
       </div>
     </div>
     <div class="pcl-window-titlebar__actions">
-      <button type="button" aria-label="最小化" title="最小化" @click="minimize">
+      <button type="button" :aria-label="t('window.minimize')" :title="t('window.minimize')" @click="minimize">
         <span class="material-icons">remove</span>
       </button>
-      <button type="button" :aria-label="maximized ? '还原' : '最大化'" :title="maximized ? '还原' : '最大化'" @click="toggleMaximize">
+      <button type="button" :aria-label="maximized ? t('window.restore') : t('window.maximize')" :title="maximized ? t('window.restore') : t('window.maximize')" @click="toggleMaximize">
         <span class="material-icons">{{ maximized ? 'filter_none' : 'crop_square' }}</span>
       </button>
-      <button type="button" class="pcl-window-titlebar__close" aria-label="关闭" title="关闭" @click="close">
+      <button type="button" class="pcl-window-titlebar__close" :aria-label="t('window.close')" :title="t('window.close')" @click="close">
         <span class="material-icons">close</span>
       </button>
     </div>
@@ -23,6 +23,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 
 defineProps<{
   title?: string;

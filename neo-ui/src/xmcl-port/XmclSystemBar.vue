@@ -1,22 +1,22 @@
 <template>
-  <div class="system-bar" :class="{ inner: isPclInner }" role="toolbar" aria-label="XMCL system bar">
-    <button class="system-bar-back" aria-label="刷新实例库" @click="emit('refresh')"><span class="material-icons">arrow_back</span></button><button v-if="isPclInner" class="system-bar-inner-back" aria-label="返回启动页" @click="emit('navigate', 'instances')"><span class="material-icons">arrow_back</span></button>
-    <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging"><strong class="system-bar-inner-title" v-if="isPclInner">{{ instanceName || '实例管理' }}</strong><span class="system-bar-brand"><strong class="system-bar-title-default">Luna Launcher</strong><strong class="system-bar-title-pcl">LunaLauncher</strong></span><small class="system-bar-title-default-subtitle">NEO UI</small><small class="system-bar-title-pcl-subtitle">NEOUI</small></div>
-    <nav class="system-bar-pcl-tabs" aria-label="Luna 主导航">
-      <button :class="{ active: page === 'instances' || page === 'manage' }" @click="emit('navigate', 'instances')"><PclIcon name="play" :size="16" />启动</button>
-      <button :class="{ active: page === 'store' || page === 'create' || page === 'pcl-download' }" @click="emit('navigate', 'pcl-download')"><PclIcon name="download" :size="16" />下载</button>
-      <button :class="{ active: page === 'settings' || page === 'pcl-settings' }" @click="emit('navigate', 'pcl-settings')"><PclIcon name="settings" :size="16" />设置</button>
-      <button :class="{ active: page === 'pcl-tools' }" @click="emit('navigate', 'pcl-tools')"><PclIcon name="wrench" :size="16" />工具</button>
+  <div class="system-bar" :class="{ inner: isPclInner }" role="toolbar" :aria-label="t('xmcl.system.toolbar')">
+    <button class="system-bar-back" :aria-label="t('xmcl.system.refreshInstances')" @click="emit('refresh')"><span class="material-icons">arrow_back</span></button><button v-if="isPclInner" class="system-bar-inner-back" :aria-label="t('xmcl.system.backToLaunch')" @click="emit('navigate', 'instances')"><span class="material-icons">arrow_back</span></button>
+    <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging"><strong class="system-bar-inner-title" v-if="isPclInner">{{ instanceName || t('xmcl.system.instanceManagement') }}</strong><span class="system-bar-brand"><strong class="system-bar-title-default">Luna Launcher</strong><strong class="system-bar-title-pcl">LunaLauncher</strong></span><small class="system-bar-title-default-subtitle">NEO UI</small><small class="system-bar-title-pcl-subtitle">NEOUI</small></div>
+    <nav class="system-bar-pcl-tabs" :aria-label="t('xmcl.system.mainNavigation')">
+      <button :class="{ active: page === 'instances' || page === 'manage' }" @click="emit('navigate', 'instances')"><PclIcon name="play" :size="16" />{{ t('xmcl.system.launch') }}</button>
+      <button :class="{ active: page === 'store' || page === 'create' || page === 'pcl-download' }" @click="emit('navigate', 'pcl-download')"><PclIcon name="download" :size="16" />{{ t('xmcl.system.download') }}</button>
+      <button :class="{ active: page === 'settings' || page === 'pcl-settings' }" @click="emit('navigate', 'pcl-settings')"><PclIcon name="settings" :size="16" />{{ t('xmcl.system.settings') }}</button>
+      <button :class="{ active: page === 'pcl-tools' }" @click="emit('navigate', 'pcl-tools')"><PclIcon name="wrench" :size="16" />{{ t('xmcl.system.tools') }}</button>
     </nav>
     <div class="system-bar-spacer" data-tauri-drag-region @mousedown="startDragging" />
-    <button class="system-bar-badge" aria-label="Web UI 管理" title="Web UI 管理 (Ctrl+Shift+U)" @click="openWebUiManager"><span class="material-icons">web</span></button>
-    <button class="system-bar-badge" aria-label="搜索" @click="emit('search')"><span class="material-icons">search</span></button>
-    <button class="system-bar-badge" aria-label="任务" @click="emit('tasks')"><span class="material-icons">assignment</span><i v-if="busy" /></button>
-    <span class="system-bar-status"><span class="status-dot" :class="{ connected }" />{{ connected ? '已连接' : '未连接' }}</span>
-    <button class="system-bar-badge" :disabled="busy" aria-label="刷新" @click="emit('refresh')"><span class="material-icons">refresh</span></button>
-    <button class="system-bar-window" aria-label="最小化" @click="minimize"><span class="material-icons">remove</span></button>
-    <button class="system-bar-window" aria-label="最大化" @click="toggleMaximize"><span class="material-icons">crop_square</span></button>
-    <button class="system-bar-window close" aria-label="关闭" @click="closeWindow"><span class="material-icons">close</span></button>
+    <button class="system-bar-badge" :aria-label="t('xmcl.system.webManager')" :title="t('xmcl.system.webManagerTitle')" @click="openWebUiManager"><span class="material-icons">web</span></button>
+    <button class="system-bar-badge" :aria-label="t('xmcl.system.search')" @click="emit('search')"><span class="material-icons">search</span></button>
+    <button class="system-bar-badge" :aria-label="t('xmcl.system.tasks')" @click="emit('tasks')"><span class="material-icons">assignment</span><i v-if="busy" /></button>
+    <span class="system-bar-status"><span class="status-dot" :class="{ connected }" />{{ connected ? t('xmcl.system.connected') : t('xmcl.system.disconnected') }}</span>
+    <button class="system-bar-badge" :disabled="busy" :aria-label="t('common.refresh')" @click="emit('refresh')"><span class="material-icons">refresh</span></button>
+    <button class="system-bar-window" :aria-label="t('xmcl.system.minimize')" @click="minimize"><span class="material-icons">remove</span></button>
+    <button class="system-bar-window" :aria-label="t('xmcl.system.maximize')" @click="toggleMaximize"><span class="material-icons">crop_square</span></button>
+    <button class="system-bar-window close" :aria-label="t('xmcl.system.close')" @click="closeWindow"><span class="material-icons">close</span></button>
   </div>
 </template>
 <script setup lang="ts">
@@ -25,9 +25,11 @@ import PclIcon from '../pcl/components/PclIcon.vue';
 import { launcher } from '../boot/launcher-api';
 import { useQuasar } from 'quasar';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { neoUiPreferences } from '../neo-ui-preferences';
 import { showPclToast } from '../pcl/composables/usePclToast';
 const quasar = useQuasar();
+const { t } = useI18n();
 async function openWebUiManager() {
   try { await launcher.openWebUiManager(); }
   catch (e: any) {

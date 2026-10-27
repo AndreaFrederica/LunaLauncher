@@ -2,28 +2,27 @@
   <div ref="catalogRoot" class="pcl-catalog">
     <div class="pcl-catalog-toolbar">
       <PclSelect v-model="provider" :options="providerOptions" :disabled="busy" @update:model-value="changeProvider" />
-      <PclInput v-model="query" placeholder="搜索项目" @enter="search(0)" />
-      <PclInput v-if="packs && provider === 'legacy-ftb'" v-model="privateCode" placeholder="Legacy FTB 私有码（可选）" @enter="search(0)" />
-      <PclButton variant="highlight" icon="search" :disabled="busy" @click="search(0)">搜索</PclButton>
+      <PclInput v-model="query" :placeholder="t('pcl.auto2.kb617f05c84')" @enter="search(0)" />
+      <PclInput v-if="packs && provider === 'legacy-ftb'" v-model="privateCode" :placeholder="t('pcl.auto2.k0b67abdebc')" @enter="search(0)" />
+      <PclButton variant="highlight" icon="search" :disabled="busy" @click="search(0)">{{ t('pcl.auto2.kf04090805c') }}</PclButton>
     </div>
     <div v-if="!packs" class="pcl-catalog-filters">
-      <PclInput v-model="gameVersion" placeholder="Minecraft 版本" />
+      <PclInput v-model="gameVersion" :placeholder="t('pcl.auto2.kff0b86d5da')" />
       <PclSelect v-model="loader" :options="loaderOptions" />
       <PclSelect v-model="sort" :options="sortOptions" />
-      <PclButton variant="ghost" icon="rotate-ccw" :disabled="busy" @click="resetFilters">重置</PclButton>
+      <PclButton variant="ghost" icon="rotate-ccw" :disabled="busy" @click="resetFilters">{{ t('pcl.auto2.k3d81345303') }}</PclButton>
     </div>
 
     <div v-if="error" class="pcl-catalog-error">
       <PclIcon name="info" :size="15" />
       <span>{{ error }}</span>
-      <button type="button" @click="error = ''">关闭</button>
+      <button type="button" @click="error = ''">{{ t('pcl.auto2.k6c14bd7f6f') }}</button>
     </div>
     <div v-if="busy || detailLoading || installing" class="pcl-catalog-loading"><PclLoading inline /></div>
 
     <template v-if="project">
       <button class="pcl-catalog-back" type="button" @click="project = null">
-        <PclIcon name="arrow-left" :size="14" />返回搜索结果
-      </button>
+        <PclIcon name="arrow-left" :size="14" />{{ t('pcl.auto2.ked6bcdc619') }}</button>
       <article class="pcl-project">
         <div class="pcl-project-head">
           <img v-if="project.iconUrl" :src="project.iconUrl" alt="" />
@@ -35,7 +34,7 @@
           </div>
           <PclIconButton
             :icon="favorite ? 'heart-filled' : 'heart'"
-            :label="favorite ? '取消收藏' : '收藏项目'"
+            :label="favorite ? t('pcl.auto2.k26acae04cf') : t('pcl.auto2.k0e7c7c1ee1')"
             :size="28"
             :class="{ 'pcl-favorite--active': favorite }"
             @click="toggleFavorite"
@@ -43,31 +42,31 @@
         </div>
 
         <div class="pcl-project-tabs">
-          <button type="button" :class="{ active: projectTab === 'overview' }" @click="projectTab = 'overview'">项目说明</button>
-          <button type="button" :class="{ active: projectTab === 'versions' }" @click="projectTab = 'versions'">版本 ({{ versions.length }})</button>
+          <button type="button" :class="{ active: projectTab === 'overview' }" @click="projectTab = 'overview'">{{ t('pcl.auto2.k42b249cd84') }}</button>
+          <button type="button" :class="{ active: projectTab === 'versions' }" @click="projectTab = 'versions'">{{ t('pcl.catalog.versionsCount', { count: versions.length }) }}</button>
         </div>
 
         <div v-if="projectTab === 'overview'" class="pcl-project-body" v-html="renderedBody" />
         <div v-else class="pcl-version-list">
-          <div v-if="!versions.length && !detailLoading" class="pcl-catalog-empty">没有可用版本。</div>
+          <div v-if="!versions.length && !detailLoading" class="pcl-catalog-empty">{{ t('pcl.auto2.k30a123c455') }}</div>
           <label v-for="v in versions" :key="v.versionId" class="pcl-version-option">
             <input v-model="version" type="radio" :value="v.versionId" />
             <span>
               <strong>{{ versionLabel(v) }}</strong>
-              <small>{{ v.releaseType || v.type || 'release' }} · {{ v.datePublished || v.created || '未知日期' }}</small>
+              <small>{{ v.releaseType || v.type || 'release' }} · {{ v.datePublished || v.created || t('pcl.auto2.kbe19659105') }}</small>
             </span>
           </label>
         </div>
 
         <div v-if="packs" class="pcl-project-field">
-          <label>新实例名称</label>
-          <PclInput v-model="instanceName" placeholder="实例名称" />
+          <label>{{ t('pcl.auto2.kd1829a3f57') }}</label>
+          <PclInput v-model="instanceName" :placeholder="t('pcl.auto2.k9c0531d66e')" />
         </div>
         <div class="pcl-project-field">
-          <label>版本</label>
-          <PclSelect v-model="version" :options="versionOptions" placeholder="请选择版本" />
+          <label>{{ t('pcl.auto2.k989d1affa0') }}</label>
+          <PclSelect v-model="version" :options="versionOptions" :placeholder="t('pcl.auto2.kf7dc468fc8')" />
         </div>
-        <PclCheckbox v-if="!packs" v-model="optional" label="同时安装可选依赖" class="pcl-optional" />
+        <PclCheckbox v-if="!packs" v-model="optional" :label="t('pcl.auto2.k4fdbdee574')" class="pcl-optional" />
         <div class="pcl-project-actions">
           <PclButton
             variant="highlight"
@@ -75,7 +74,7 @@
             :disabled="busy || installing || !version || (packs && !instanceName.trim())"
             @click="install"
           >
-            {{ installing ? '正在安装…' : packs ? '安装并创建实例' : '安装所选版本' }}
+            {{ installing ? t('pcl.auto2.ke0ce99ef5b') : packs ? t('pcl.auto2.ke6cc1d4499') : t('pcl.auto2.kffa40ad820') }}
           </PclButton>
         </div>
       </article>
@@ -88,25 +87,25 @@
           <span v-else class="pcl-result-icon"><PclIcon name="box" :size="24" /></span>
           <span class="pcl-result-copy">
             <strong>{{ item.name }}</strong>
-            <small>{{ item.description || '暂无描述' }}</small>
+            <small>{{ item.description || t('pcl.auto2.k4b64e784af') }}</small>
             <em>{{ providerLabel(item.provider || provider) }} · {{ item.projectId }}</em>
           </span>
           <PclIcon name="chevron-right" :size="16" />
         </button>
         <div v-if="searched && !results.length && !busy" class="pcl-catalog-empty">
-          <PclIcon name="search" :size="30" />
-          没有找到符合条件的项目。
-        </div>
+          <PclIcon name="search" :size="30" />{{ t('pcl.auto2.kfd34ebffa6') }}</div>
       </div>
       <div v-if="searched" class="pcl-pagination">
-        <PclButton size="sm" :disabled="busy || offset === 0" @click="search(Math.max(0, offset - 25))">上一页</PclButton>
-        <span>第 {{ Math.floor(offset / 25) + 1 }} 页 · 每页 25 项（API 上限）</span>
-        <PclButton size="sm" :disabled="busy || !results.length" @click="search(offset + 25)">下一页</PclButton>
+        <PclButton size="sm" :disabled="busy || offset === 0" @click="search(Math.max(0, offset - 25))">{{ t('pcl.auto2.kb41561d807') }}</PclButton>
+        <span>{{ t('pcl.catalog.pageInfo', { page: Math.floor(offset / 25) + 1 }) }}</span>
+        <PclButton size="sm" :disabled="busy || !results.length" @click="search(offset + 25)">{{ t('pcl.auto2.k67a246a344') }}</PclButton>
       </div>
     </template>
   </div>
 </template>
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
@@ -132,10 +131,10 @@ const sortOptions = computed(() => {
   const methods = providerCatalog.value.find(entry => String(entry?.id) === provider.value)?.sorts;
   if (Array.isArray(methods) && methods.length) return methods.map((entry: any) => ({ label: String(entry.name || entry.id), value: String(entry.id) }));
   return [
-    { label: '相关度', value: 'relevance' },
-    { label: '下载量', value: 'downloads' },
-    { label: '最新', value: 'newest' },
-    { label: '最近更新', value: 'updated' },
+    { label: t('pcl.auto2.k0e1b55305e'), value: 'relevance' },
+    { label: t('pcl.auto2.k2a6c7441d8'), value: 'downloads' },
+    { label: t('pcl.auto2.k7e805a1230'), value: 'newest' },
+    { label: t('pcl.auto2.k80920cd667'), value: 'updated' },
   ];
 });
 function changeProvider() {
@@ -179,14 +178,14 @@ watch(() => props.refreshToken, token => {
 watch(() => props.kind, () => { void loadProviders(); });
 
 const loaderOptions = [
-  { label: '全部加载器', value: '' },
+  { label: t('pcl.auto2.k93bd6737dc'), value: '' },
   { label: 'Forge', value: 'forge' },
   { label: 'NeoForge', value: 'neoforge' },
   { label: 'Fabric', value: 'fabric' },
   { label: 'Quilt', value: 'quilt' },
 ];
 const versionOptions = computed(() => versions.value.map(v => ({ label: versionLabel(v), value: v.versionId })));
-const renderedBody = computed(() => renderMarkdown(String(project.value?.body || project.value?.description || '暂无项目说明。')));
+const renderedBody = computed(() => renderMarkdown(String(project.value?.body || project.value?.description || t('pcl.auto2.kcbbd8f733d'))));
 const providerMeta = computed(() => providerCatalog.value.find(entry => String(entry?.id) === provider.value) || null);
 
 const allowedTags = new Set(['a', 'p', 'br', 'strong', 'em', 'del', 'code', 'pre', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'div', 'span']);
@@ -369,7 +368,7 @@ function scrollCatalogToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
-async function search(start:number){if(props.busy)return;error.value='';project.value=null;try{const text=[query.value,props.tag&&props.tag!=='全部'?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:text,offset:start});const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;scrollCatalogToTop();}catch(e){error.value=String(e);}}
+async function search(start:number){if(props.busy)return;error.value='';project.value=null;try{const text=[query.value,props.tag&&props.tag!==t('pcl.auto2.k778fc8f994')?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:text,offset:start});const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;scrollCatalogToTop();}catch(e){error.value=String(e);}}
 function favoriteKey(item:any){return `${provider.value}:${props.kind || 'modpack'}:${item.projectId}`;}
 function readFavorites():any[]{try{return JSON.parse(localStorage.getItem('luna-pcl-favorites') || '[]');}catch{return [];}}
 function writeFavorites(value:any[]){try{localStorage.setItem('luna-pcl-favorites',JSON.stringify(value.slice(-200)));}catch{/* storage unavailable in native webview */}}
@@ -378,7 +377,7 @@ async function select(item:any){if(props.busy)return;error.value='';versions.val
 async function install(){
   if(!project.value||!version.value)return;
   installing.value=true;error.value='';
-  const info={title:props.packs?'正在安装整合包':'正在安装资源',name:props.packs?instanceName.value:project.value.name,kind:props.packs?'modpack':'resource'};
+  const info={title:props.packs?t('pcl.auto2.k4c095994c9'):t('pcl.auto2.k6e263f278c'),name:props.packs?instanceName.value:project.value.name,kind:props.packs?'modpack':'resource'};
   emit('install-start',info);
   try{
     let completedResult: any = null;
@@ -394,7 +393,7 @@ async function install(){
         task=await props.execute('neo.task.status',{taskId:task.taskId});
       }
       emit('install-progress',task);
-      if(!task || task.state!=='succeeded')throw new Error(task?.error || '整合包安装失败');
+      if(!task || task.state!=='succeeded')throw new Error(task?.error || t('pcl.auto2.k41e0e243d7'));
       completedResult = { id: task.createdInstanceId || '', name: instanceName.value };
     }else{
       // The recursive task is only implemented by the built-in providers.
@@ -412,7 +411,7 @@ async function install(){
         task=await props.execute('neo.task.status',{taskId:task.taskId});
       }
       emit('install-progress',task);
-      if(!task || task.state!=='succeeded')throw new Error(task?.error || '资源及依赖安装失败');
+      if(!task || task.state!=='succeeded')throw new Error(task?.error || t('pcl.auto2.k6c24c6cb06'));
     }
     emit('installed', completedResult);
   }catch(e){error.value=String(e);}

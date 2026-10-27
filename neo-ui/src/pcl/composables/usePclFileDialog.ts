@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
+import { i18n } from '../../i18n';
 
 export interface PclFileFilter {
   name: string;
@@ -8,7 +9,7 @@ export interface PclFileFilter {
 
 async function showNativePicker(kind: 'file' | 'directory' | 'save', title?: string, defaultPath?: string, filters?: PclFileFilter[], multiple = false): Promise<string> {
   if (!isTauri()) {
-    return window.prompt(title || (kind === 'directory' ? '输入目录完整路径' : kind === 'save' ? '输入保存路径' : '输入文件完整路径'), defaultPath || '') || '';
+    return window.prompt(title || (kind === 'directory' ? i18n.global.t('pcl.fileDialog.directoryPath') : kind === 'save' ? i18n.global.t('pcl.fileDialog.savePath') : i18n.global.t('pcl.fileDialog.filePath')), defaultPath || '') || '';
   }
   try {
     const dialogFilters = filters?.filter(filter => filter.extensions.length).map(filter => ({ name: filter.name, extensions: filter.extensions }));

@@ -1,14 +1,14 @@
 <template>
   <q-dialog v-model="shown" persistent :maximized="false" transition-show="slide-up" transition-hide="slide-down" @hide="emit('closed')">
     <q-card class="task-card text-white">
-      <q-card-section class="task-header"><div><div class="eyebrow">TASK CENTER</div><div class="text-h6">{{ task?.name || title || '正在执行' }}</div><div class="text-caption text-grey-5">{{ task?.status || status || '正在准备…' }}</div></div><q-btn v-if="task?.canAbort || busy" flat round icon="close" color="orange" @click="emit('cancel')" /></q-card-section>
+      <q-card-section class="task-header"><div><div class="eyebrow">{{ t('ui.taskCenter') }}</div><div class="text-h6">{{ task?.name || title || t('xmcl.task.running') }}</div><div class="text-caption text-grey-5">{{ task?.status || status || t('xmcl.task.preparing') }}</div></div><q-btn v-if="task?.canAbort || busy" flat round icon="close" color="orange" :aria-label="t('xmcl.task.cancel')" @click="emit('cancel')" /></q-card-section>
       <q-linear-progress :value="progress" color="primary" track-color="grey-8" rounded class="q-mx-lg" />
       <q-card-section class="task-body">
         <div class="task-progress-row"><strong>{{ progressLabel }}</strong><span v-if="task">{{ formatRate(effectiveRate) }}<span v-if="eta"> · {{ eta }}</span></span></div>
         <div v-if="taskCountLabel" class="task-count">{{ taskCountLabel }}</div>
         <div v-if="task?.details && task.details !== taskCountLabel" class="task-details">{{ task.details }}</div>
         <q-banner v-if="task?.failReason" dense class="task-error q-mb-sm">{{ task.failReason }}</q-banner>
-        <div v-if="stepRows.length" class="task-section-label">任务明细（进行中优先）</div>
+        <div v-if="stepRows.length" class="task-section-label">{{ t('xmcl.task.details') }}</div>
         <q-list v-if="stepRows.length" dense class="task-steps">
           <q-item v-for="step in stepRows" :key="step.id">
             <q-item-section avatar><q-icon :name="taskState(step) === 'succeeded' ? 'check_circle' : step.state === 'failed' ? 'error' : step.state === 'running' ? 'sync' : 'radio_button_unchecked'" :color="taskState(step) === 'succeeded' ? 'positive' : step.state === 'failed' ? 'negative' : step.state === 'running' ? 'primary' : 'grey'" /></q-item-section>
@@ -16,7 +16,7 @@
             <q-item-section side><span v-if="step.current != null && step.total > 0">{{ taskItemProgressText(step) }}</span><span v-if="step.transferRate > 0" class="task-step-rate">{{ formatRate(step.transferRate) }}</span></q-item-section>
           </q-item>
         </q-list>
-        <div v-if="activeRows.length" class="task-section-label">当前下载</div>
+        <div v-if="activeRows.length" class="task-section-label">{{ t('xmcl.task.currentDownload') }}</div>
         <q-list v-if="activeRows.length" dense class="task-children">
           <q-item v-for="row in activeRows" :key="row.id">
             <q-item-section avatar><q-icon name="sync" color="primary" /></q-item-section>
@@ -25,15 +25,17 @@
           </q-item>
         </q-list>
       </q-card-section>
-      <q-card-actions align="right"><q-btn flat label="后台运行" :disable="!canBackground" @click="shown=false" /><q-btn v-if="task?.finished" color="primary" label="完成" @click="shown=false" /><q-btn v-else flat color="orange" label="取消任务" @click="emit('cancel')" /></q-card-actions>
+      <q-card-actions align="right"><q-btn flat :label="t('xmcl.task.background')" :disable="!canBackground" @click="shown=false" /><q-btn v-if="task?.finished" color="primary" :label="t('xmcl.task.done')" @click="shown=false" /><q-btn v-else flat color="orange" :label="t('xmcl.task.cancelTask')" @click="emit('cancel')" /></q-card-actions>
     </q-card>
   </q-dialog>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { launcher } from '../boot/launcher-api';
+import { useI18n } from 'vue-i18n';
 import { flattenTaskItems, taskProgressStats, taskItemProgressText, taskItemLabel, taskItemCurrent, taskItemTotal, isTaskItemActive, isTaskItemFinished, taskState } from '../pcl/composables/useTaskProgress';
 const props = defineProps<{ busy: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any>; title?: string; status?: string; snapshot?: any; open?: boolean }>();
+const { t } = useI18n();
 const emit = defineEmits<{ cancel: []; closed: []; updated: [task: any] }>();
 const shown = ref(false); const polled = ref<any>(null); let unlistenTaskEvents: (() => void) | undefined; let pollInFlight = false;
 const task = computed(() => props.snapshot || polled.value || null);
@@ -43,7 +45,7 @@ const activeRows = computed(() => stepRows.value.filter(isTaskItemActive).map(it
 const effectiveRate = computed(() => isTaskItemFinished(task.value) ? 0 : Number(task.value?.transferRate || 0) || activeRows.value.reduce((sum, row) => sum + Number(row.item.transferRate || 0), 0));
 const done = computed(() => isFinished(task.value));
 const progress = computed(() => (stats.value.percent ?? 0) / 100);
-const progressLabel = computed(() => stats.value.percent === null ? '进行中' : `${Math.round(stats.value.percent)}%`);
+const progressLabel = computed(() => stats.value.percent === null ? t('xmcl.task.inProgress') : `${Math.round(stats.value.percent)}%`);
 const canBackground = computed(() => !props.busy || done.value);
 const taskCountLabel = computed(() => [stats.value.summary, stats.value.byteSummary].filter(Boolean).join(' · '));
 const eta = computed(() => stats.value.hasBytes && !stats.value.unknownByteTotals && effectiveRate.value > 0 && stats.value.totalBytes > stats.value.currentBytes

@@ -2,15 +2,15 @@
   <div class="pcl-custom-ui">
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
 
-    <PclCard title="自定义 UI">
+    <PclCard :title="t('pcl.customUi.title')">
       <template #actions>
-        <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="reload">重新加载</PclButton>
-        <PclButton size="sm" variant="ghost" icon="save" :disabled="busy || loading" @click="save">保存状态</PclButton>
+        <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="reload">{{ t('common.refresh') }}</PclButton>
+        <PclButton size="sm" variant="ghost" icon="save" :disabled="busy || loading" @click="save">{{ t('pcl.customUi.saveState') }}</PclButton>
       </template>
 
       <div v-if="tabs.length" class="pcl-custom-tabs">
         <button v-for="(tab, index) in tabs" :key="tab.source || index" type="button" :class="{ active: activeTab === index }" @click="activeTab = index">
-          {{ tab.resolvedTitle || tab.title || tab.name || `面板 ${index + 1}` }}
+          {{ tab.resolvedTitle || tab.title || tab.name || t('pcl.customUi.panel', { index: index + 1 }) }}
         </button>
       </div>
 
@@ -49,7 +49,7 @@
               size="sm"
               :disabled="busy || loading"
               @click="trigger(control, true)"
-            >{{ control.resolvedText || control.text || control.label || '执行' }}</PclButton>
+            >{{ control.resolvedText || control.text || control.label || t('pcl.customUi.execute') }}</PclButton>
             <span v-else class="pcl-custom-control__plain">{{ control.value ?? control.resolvedText ?? '' }}</span>
           </div>
         </div>
@@ -57,19 +57,21 @@
 
       <div v-else class="pcl-empty">
         <PclIcon name="layout-list" :size="28" />
-        <strong>没有自定义 UI 面板</strong>
-        <span>在实例目录的 <code>customui</code> 中放入 panel.json 或 panel.js 后重新加载。</span>
+        <strong>{{ t('pcl.customUi.empty') }}</strong>
+        <span>{{ t('pcl.customUi.emptyHint') }}</span>
       </div>
 
       <PclHint v-if="errors.length" theme="yellow">
         <span v-for="item in errors" :key="item">{{ item }}</span>
       </PclHint>
-      <PclHint theme="blue">自定义 UI 控件由实例的 JSON/JS 描述，值通过 C++ CustomUiRuntime 执行；游戏运行时只读。</PclHint>
+      <PclHint theme="blue">{{ t('pcl.customUi.hint') }}</PclHint>
     </PclCard>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 import { computed, onMounted, reactive, ref } from 'vue';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';

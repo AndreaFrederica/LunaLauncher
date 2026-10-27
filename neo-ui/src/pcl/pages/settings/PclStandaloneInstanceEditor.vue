@@ -1,8 +1,8 @@
 <template>
   <div class="pcl-standalone-editor">
-    <PclWindowTitleBar title="实例设置" :subtitle="instance?.name || instanceId" />
+    <PclWindowTitleBar :title="t('instanceSections.settings')" :subtitle="instance?.name || instanceId" />
     <div class="pcl-standalone-editor__body">
-    <div v-if="loading" class="pcl-standalone-editor__loading"><PclLoading /> 正在读取实例…</div>
+    <div v-if="loading" class="pcl-standalone-editor__loading"><PclLoading /> {{ t('pcl.standalone.reading') }}</div>
     <PclInstancePage
       v-else-if="instance"
       :instance="instance"
@@ -15,7 +15,7 @@
       :busy="refreshing"
       :execute="execute"
       :console-lines="[]"
-      :console-state="'未连接'"
+      :console-state="t('pcl.standalone.disconnected')"
       :log-files="logFiles"
       :file-log="fileLog"
       @launch="launch"
@@ -44,6 +44,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 import { onMounted, ref } from 'vue';
 import PclHint from '../../components/PclHint.vue';
 import PclWindowTitleBar from '../../components/PclWindowTitleBar.vue';
@@ -93,7 +95,7 @@ async function updateComponentVersion(component: any, version: string) {
       await new Promise(resolve => setTimeout(resolve, 250));
       task = await execute('neo.task.status', { taskId: task.taskId });
     }
-    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '组件安装失败');
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('app.componentInstallFailed'));
     await refresh();
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
@@ -181,7 +183,7 @@ async function saveNotes(value: string) {
 }
 
 async function changeIcon() {
-  const path = await pickPclFile({ title: '选择实例图标', filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'ico', 'webp'] }] });
+  const path = await pickPclFile({ title: t('pcl.standalone.chooseIcon'), filters: [{ name: t('pcl.standalone.image'), extensions: ['png', 'jpg', 'jpeg', 'ico', 'webp'] }] });
   if (!path?.trim()) return;
   try {
     await execute('instance.set-icon', { instance: props.instanceId, path: path.trim() });
@@ -193,7 +195,7 @@ async function changeIcon() {
 }
 
 async function removeInstance() {
-  if (!window.confirm('确认移除这个实例？')) return;
+  if (!window.confirm(t('pcl.standalone.confirmRemove'))) return;
   try {
     await execute('instance.delete', { instance: props.instanceId, confirm: true });
     window.close();
@@ -205,7 +207,7 @@ async function removeInstance() {
 async function readLog(file: string) {
   try {
     const result: any = await execute('instance.log.read', { instance: props.instanceId, file, maxBytes: 1048576 });
-    fileLog.value = String(result?.content || '') + (result?.truncated ? '\n[文件超过 1 MiB，仅显示前部分]' : '');
+    fileLog.value = String(result?.content || '') + (result?.truncated ? `\n[${t('app.logTruncated')}]` : '');
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   }
@@ -213,7 +215,7 @@ async function readLog(file: string) {
 
 onMounted(() => {
   document.documentElement.dataset.neoShell = 'pcl';
-  document.title = '实例 - Luna Launcher';
+  document.title = `${t('instance.client')} - Luna Launcher`;
   void load();
 });
 </script>

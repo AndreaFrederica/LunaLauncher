@@ -14,7 +14,7 @@
             <strong>{{ toast.title }}</strong>
             <span>{{ toast.message }}</span>
           </div>
-          <button class="pcl-toast__close" type="button" aria-label="关闭提示" @click.stop="dismissPclToast(toast.id)">
+          <button class="pcl-toast__close" type="button" :aria-label="t('pcl.common.closeHint')" @click.stop="dismissPclToast(toast.id)">
             <PclIcon name="x" :size="13" />
           </button>
           <span
@@ -29,8 +29,10 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import PclIcon from './PclIcon.vue';
 import { dismissPclToast, pclToasts } from '../composables/usePclToast';
+const { t } = useI18n();
 </script>
 
 <style scoped>

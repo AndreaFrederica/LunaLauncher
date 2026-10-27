@@ -6,7 +6,7 @@
           <PclAccountAvatar v-if="account?.profile?.skin?.url" :src="account.profile.skin.url" :name="account.profileName || account.displayName" />
           <PclIcon v-else name="user" :size="18" />
         </span>
-        <span class="pcl-classic-nav__account-copy"><strong>{{ account?.profileName || account?.displayName || '未选择账户' }}</strong><small>{{ accountServiceLabel(account) }}</small></span>
+        <span class="pcl-classic-nav__account-copy"><strong>{{ account?.profileName || account?.displayName || t('nav.noAccount') }}</strong><small>{{ accountServiceLabel(account) }}</small></span>
         <PclIcon name="chevron-left" :size="12" class="pcl-classic-nav__account-chevron" :class="{ open: accountMenu }" />
       </button>
       <div v-if="accountMenu" class="pcl-classic-nav__account-menu">
@@ -15,10 +15,10 @@
             <PclAccountAvatar v-if="item.profile?.skin?.url" :src="item.profile.skin.url" :name="item.profileName || item.displayName" />
             <PclIcon v-else name="user" :size="14" />
           </span>
-          <span><strong>{{ item.profileName || item.displayName || '未命名账户' }}</strong><small>{{ accountServiceLabel(item) }}</small></span>
+          <span><strong>{{ item.profileName || item.displayName || t('account.unnamed') }}</strong><small>{{ accountServiceLabel(item) }}</small></span>
           <PclIcon v-if="accountKey(item) === accountId" name="circle-check" :size="14" />
         </button>
-        <div v-if="!accounts.length" class="pcl-classic-nav__empty">没有可用账户</div>
+        <div v-if="!accounts.length" class="pcl-classic-nav__empty">{{ t('account.empty') }}</div>
       </div>
     </div>
 
@@ -27,54 +27,55 @@
       <span v-else class="pcl-classic-nav__icon-fallback" :style="{ width: `${iconSize}px`, height: `${iconSize}px` }">
         <PclIcon name="box" :size="Math.round(iconSize * 0.45)" />
       </span>
-      <strong>{{ instance?.name || '未选择实例' }}</strong>
+      <strong>{{ instance?.name || t('nav.noInstance') }}</strong>
       <small>{{ version || 'Minecraft' }}</small>
     </div>
 
     <div class="pcl-classic-nav__actions">
       <button type="button" :disabled="!instance || instance.running || busy" @click="emit('launch')">
-        <PclIcon name="play" :size="16" /><span>启动 (L)</span>
+        <PclIcon name="play" :size="16" /><span>{{ t('pcl.sidebar.launch') }} (L)</span>
       </button>
       <button type="button" :disabled="!instance?.running" @click="emit('stop')">
-        <PclIcon name="power" :size="15" /><span>结束进程 (K)</span>
+        <PclIcon name="power" :size="15" /><span>{{ t('pcl.sidebar.stopProcess') }} (K)</span>
       </button>
       <button type="button" :disabled="!instance" @click="emit('settings')">
-        <PclIcon name="settings" :size="15" /><span>编辑 (E)</span>
+        <PclIcon name="settings" :size="15" /><span>{{ t('common.edit') }} (E)</span>
       </button>
       <button type="button" :disabled="!instance" @click="emit('action', 'group')">
-        <PclIcon name="folder-open" :size="15" /><span>改变分组 (C)</span>
+        <PclIcon name="folder-open" :size="15" /><span>{{ t('app.moveGroup') }} (C)</span>
       </button>
       <button type="button" :disabled="!instance" @click="emit('folder')">
-        <PclIcon name="folder-open" :size="15" /><span>实例文件夹 (F)</span>
+        <PclIcon name="folder-open" :size="15" /><span>{{ t('instance.instanceDir') }} (F)</span>
       </button>
       <button type="button" :disabled="!instance" @click="emit('action', 'export')">
-        <PclIcon name="file-archive" :size="15" /><span>导出 (X)</span>
+        <PclIcon name="file-archive" :size="15" /><span>{{ t('instanceSections.export') }} (X)</span>
       </button>
       <button type="button" :disabled="!instance" @click="emit('action', 'copy')">
-        <PclIcon name="copy" :size="15" /><span>复制 (Y)</span>
+        <PclIcon name="copy" :size="15" /><span>{{ t('xmcl.instance.copy') }} (Y)</span>
       </button>
       <button type="button" class="danger" :disabled="!instance" @click="emit('action', 'delete')">
-        <PclIcon name="trash-2" :size="15" /><span>删除 (T)</span>
+        <PclIcon name="trash-2" :size="15" /><span>{{ t('common.delete') }} (T)</span>
       </button>
       <button type="button" :disabled="!instance" @click="emit('action', 'shortcut')">
-        <PclIcon name="external-link" :size="15" /><span>创建快捷方式 (S)</span>
+        <PclIcon name="external-link" :size="15" /><span>{{ t('pcl.sidebar.shortcut') }} (S)</span>
       </button>
     </div>
 
     <div class="pcl-classic-nav__servers">
-      <div class="pcl-classic-nav__server-title">当前实例服务器</div>
-      <div v-if="serversLoading" class="pcl-classic-nav__empty">正在读取…</div>
+      <div class="pcl-classic-nav__server-title">{{ t('pcl.sidebar.currentServers') }}</div>
+      <div v-if="serversLoading" class="pcl-classic-nav__empty">{{ t('tasks.loading') }}</div>
       <button v-for="server in servers" :key="server.ip" type="button" class="pcl-classic-nav__server" @click="emit('connect', server.ip)">
         <PclIcon name="server" :size="14" />
         <span><strong>{{ server.name || server.ip }}</strong><small>{{ server.ip }}</small></span>
       </button>
-      <div v-if="!serversLoading && !servers.length" class="pcl-classic-nav__empty">No Server Configured</div>
+      <div v-if="!serversLoading && !servers.length" class="pcl-classic-nav__empty">{{ t('pcl.sidebar.noServers') }}</div>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclIcon from './PclIcon.vue';
 import PclAccountAvatar from './PclAccountAvatar.vue';
 
@@ -99,6 +100,7 @@ const emit = defineEmits<{
   connect: [address: string];
   'account-change': [id: string];
 }>();
+const { t } = useI18n();
 
 const iconSize = computed(() => Number(props.iconSize) || 96);
 const accountMenu = ref(false);
@@ -111,7 +113,7 @@ function chooseAccount(value: any) {
 }
 
 function accountServiceLabel(account: any) {
-  if (!account) return '点击选择账户';
+  if (!account) return t('pcl.sidebar.chooseAccount');
   const type = String(account.type || '').toLowerCase();
   if (type.includes('msa') || type.includes('microsoft')) return 'Microsoft';
   if (type.includes('ygg')) {
@@ -120,7 +122,7 @@ function accountServiceLabel(account: any) {
   if (type.includes('unified')) {
     return String(account.unifiedPass?.displayName || account.unifiedPass?.serverName || account.unifiedPass?.serverId || account.authServer?.displayName || 'UnifiedPass');
   }
-  return String(account.type || '离线账户');
+  return String(account.type || t('account.offlineAccountLabel'));
 }
 
 const version = computed(() => props.instance?.runtime?.minecraftVersion || props.instance?.runtime?.minecraft || props.instance?.minecraftVersion || 'Minecraft');

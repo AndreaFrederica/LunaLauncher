@@ -1,33 +1,33 @@
 <template>
   <PclCard :title="kindLabel" class="pcl-resource-view">
     <div class="pcl-resource-toolbar">
-      <PclInput v-model="query" placeholder="筛选文件" class="pcl-resource-query" @enter="load" />
+      <PclInput v-model="query" :placeholder="t('resource.filter')" class="pcl-resource-query" @enter="load" />
       <div class="pcl-resource-view-toggle">
-        <PclIconButton icon="grid-2x2" label="卡片视图" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
-        <PclIconButton icon="layout-list" label="列表视图" :size="28" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
+        <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
+        <PclIconButton icon="layout-list" :label="t('resource.list')" :size="28" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
       </div>
-      <PclButton v-if="catalogKind" size="sm" variant="highlight" icon="download" :disabled="busy" @click="openDownload">下载{{ kindLabel }}</PclButton>
-      <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">刷新</PclButton>
-      <PclButton size="sm" icon="rotate-ccw" :disabled="busy || loading" @click="update">重新扫描</PclButton>
-      <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder">打开目录</PclButton>
+      <PclButton v-if="catalogKind" size="sm" variant="highlight" icon="download" :disabled="busy" @click="openDownload">{{ t('resource.download', { kind: kindLabel }) }}</PclButton>
+      <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">{{ t('resource.refresh') }}</PclButton>
+      <PclButton size="sm" icon="rotate-ccw" :disabled="busy || loading" @click="update">{{ t('resource.rescan') }}</PclButton>
+      <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder">{{ t('resource.openFolder') }}</PclButton>
     </div>
 
     <div class="pcl-resource-install">
-      <PclInput v-model="installSource" placeholder="本地文件路径或 HTTP(S) URL" @enter="install" />
-      <PclIconButton icon="folder-open" label="选择本地文件" :size="28" :disabled="busy || localBusy" @click="chooseInstallFile" />
-      <PclButton variant="highlight" icon="plus" :disabled="busy || localBusy || !installSource.trim()" @click="install">安装资源</PclButton>
+      <PclInput v-model="installSource" :placeholder="t('resource.source')" @enter="install" />
+      <PclIconButton icon="folder-open" :label="t('resource.chooseFile')" :size="28" :disabled="busy || localBusy" @click="chooseInstallFile" />
+      <PclButton variant="highlight" icon="plus" :disabled="busy || localBusy || !installSource.trim()" @click="install">{{ t('resource.install') }}</PclButton>
     </div>
 
     <div v-if="selectedCount" class="pcl-resource-batch">
-      <span>已选择 {{ selectedCount }} 项</span>
-      <PclButton size="sm" :disabled="busy || localBusy" @click="setSelected(true)">启用</PclButton>
-      <PclButton size="sm" :disabled="busy || localBusy" @click="setSelected(false)">禁用</PclButton>
-      <PclButton size="sm" variant="red" :disabled="busy || localBusy" @click="removeSelected">删除</PclButton>
-      <PclButton size="sm" variant="ghost" @click="clearSelected">取消选择</PclButton>
+      <span>{{ t('resource.selected', { count: selectedCount }) }}</span>
+      <PclButton size="sm" :disabled="busy || localBusy" @click="setSelected(true)">{{ t('resource.enable') }}</PclButton>
+      <PclButton size="sm" :disabled="busy || localBusy" @click="setSelected(false)">{{ t('resource.disable') }}</PclButton>
+      <PclButton size="sm" variant="red" :disabled="busy || localBusy" @click="removeSelected">{{ t('resource.delete') }}</PclButton>
+      <PclButton size="sm" variant="ghost" @click="clearSelected">{{ t('resource.clearSelection') }}</PclButton>
     </div>
 
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
-    <PclLoading v-if="loading || localBusy" text="正在读取资源" inline />
+    <PclLoading v-if="loading || localBusy" :text="t('resource.loading')" inline />
 
     <div v-if="viewMode === 'grid'" class="pcl-resource-grid">
       <article
@@ -41,41 +41,41 @@
           :model-value="selected.has(resourceRef(item))"
           @update:model-value="toggleSelected(item)"
         />
-        <button class="pcl-resource-icon" :title="`查看 ${item.name || item.fileName || item.path}`" @click="inspect(item)">
+        <button class="pcl-resource-icon" :title="t('resource.inspect', { name: item.name || item.fileName || item.path })" @click="inspect(item)">
           <img v-if="item.icon" :src="item.icon" alt="" />
           <PclIcon v-else :name="icon" :size="24" />
         </button>
         <div class="pcl-resource-copy" @click="inspect(item)">
-          <strong>{{ item.name || item.fileName || item.path || '未命名资源' }}</strong>
+          <strong>{{ item.name || item.fileName || item.path || t('resource.unnamed') }}</strong>
           <small v-if="item.version || item.metadata?.version">{{ item.version || item.metadata?.version }}</small>
-          <small>{{ item.enabled === false ? '已禁用' : item.size ? formatSize(item.size) : statusLabel(item) }}</small>
+          <small>{{ item.enabled === false ? t('resource.disabled') : item.size ? formatSize(item.size) : statusLabel(item) }}</small>
         </div>
         <div class="pcl-resource-actions">
           <PclIconButton
             :icon="item.enabled === false ? 'circle-check' : 'power'"
-            :label="item.enabled === false ? '启用' : '禁用'"
+            :label="item.enabled === false ? t('resource.enable') : t('resource.disable')"
             :size="26"
             :disabled="busy || localBusy"
             @click="setEnabled(item, item.enabled === false)"
           />
-          <PclIconButton icon="trash-2" label="删除" :size="26" danger :disabled="busy || localBusy" @click="remove(item)" />
+          <PclIconButton icon="trash-2" :label="t('resource.delete')" :size="26" danger :disabled="busy || localBusy" @click="remove(item)" />
         </div>
       </article>
 
       <div v-if="!filtered.length && !loading" class="pcl-empty pcl-resource-empty">
         <PclIcon name="package" :size="38" />
-        <strong>{{ query ? '没有匹配的资源' : '没有找到资源' }}</strong>
-        <span>{{ query ? '尝试修改筛选条件。' : '可以使用上方输入框安装本地文件或远程资源。' }}</span>
+        <strong>{{ query ? t('resource.noMatch') : t('resource.noResource') }}</strong>
+        <span>{{ query ? t('resource.adjustFilter') : t('resource.installHint') }}</span>
       </div>
     </div>
 
     <div v-else class="pcl-resource-table">
       <div class="pcl-resource-table__head">
         <span />
-        <span>名称</span>
-        <span>版本</span>
-        <span>大小</span>
-        <span>状态</span>
+        <span>{{ t('resource.name') }}</span>
+        <span>{{ t('resource.version') }}</span>
+        <span>{{ t('resource.size') }}</span>
+        <span>{{ t('resource.status') }}</span>
         <span />
       </div>
       <div
@@ -91,29 +91,29 @@
             <PclIcon v-else :name="icon" :size="18" />
           </span>
           <span class="pcl-resource-row__copy">
-            <strong>{{ item.name || item.fileName || item.path || '未命名资源' }}</strong>
+            <strong>{{ item.name || item.fileName || item.path || t('resource.unnamed') }}</strong>
           </span>
         </button>
         <span class="pcl-resource-row__meta">{{ item.version || item.metadata?.version || '—' }}</span>
         <span class="pcl-resource-row__meta">{{ item.size ? formatSize(item.size) : '—' }}</span>
         <span class="pcl-resource-row__status" :class="{ off: item.enabled === false }">
-          {{ item.enabled === false ? '已禁用' : '已启用' }}
+          {{ item.enabled === false ? t('account.disabled') : t('resource.enabled') }}
         </span>
         <span class="pcl-resource-row__actions">
           <PclIconButton
             :icon="item.enabled === false ? 'circle-check' : 'power'"
-            :label="item.enabled === false ? '启用' : '禁用'"
+            :label="item.enabled === false ? t('resource.enable') : t('resource.disable')"
             :size="24"
             :disabled="busy || localBusy"
             @click="setEnabled(item, item.enabled === false)"
           />
-          <PclIconButton icon="trash-2" label="删除" :size="24" danger :disabled="busy || localBusy" @click="remove(item)" />
+          <PclIconButton icon="trash-2" :label="t('resource.delete')" :size="24" danger :disabled="busy || localBusy" @click="remove(item)" />
         </span>
       </div>
       <div v-if="!filtered.length && !loading" class="pcl-empty pcl-resource-empty">
         <PclIcon name="package" :size="38" />
-        <strong>{{ query ? '没有匹配的资源' : '没有找到资源' }}</strong>
-        <span>{{ query ? '尝试修改筛选条件。' : '可以使用上方输入框安装本地文件或远程资源。' }}</span>
+        <strong>{{ query ? t('resource.noMatch') : t('resource.noResource') }}</strong>
+        <span>{{ query ? t('resource.adjustFilter') : t('resource.installHint') }}</span>
       </div>
     </div>
   </PclCard>
@@ -122,12 +122,12 @@
     <q-card class="pcl-dialog pcl-resource-detail">
       <q-card-section class="pcl-resource-detail__head">
         <div>
-          <div class="pcl-kicker">资源详情</div>
-          <h3>{{ detail?.name || detail?.fileName || detail?.path || '资源详情' }}</h3>
+          <div class="pcl-kicker">{{ t('resource.detail') }}</div>
+          <h3>{{ detail?.name || detail?.fileName || detail?.path || t('resource.detail') }}</h3>
         </div>
-        <PclIconButton icon="x" label="关闭" :size="28" @click="detailOpen = false" />
+        <PclIconButton icon="x" :label="t('resource.close')" :size="28" @click="detailOpen = false" />
       </q-card-section>
-      <q-card-section v-if="detailLoading"><PclLoading text="正在读取详情" inline /></q-card-section>
+      <q-card-section v-if="detailLoading"><PclLoading :text="t('resource.loadingDetail')" inline /></q-card-section>
       <PclHint v-else-if="detailError" theme="red">{{ detailError }}</PclHint>
       <q-card-section v-else class="pcl-resource-detail__body">
         <img v-if="detail?.icon" class="pcl-resource-detail__icon" :src="detail.icon" alt="" />
@@ -139,8 +139,8 @@
         <pre v-if="detail?.description" class="pcl-resource-detail__description">{{ detail.description }}</pre>
       </q-card-section>
       <q-card-actions align="right">
-        <PclButton variant="ghost" @click="detailOpen = false">关闭</PclButton>
-        <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || localBusy" @click="update">重新扫描</PclButton>
+        <PclButton variant="ghost" @click="detailOpen = false">{{ t('resource.close') }}</PclButton>
+        <PclButton variant="highlight" icon="refresh-cw" :disabled="busy || localBusy" @click="update">{{ t('resource.rescan') }}</PclButton>
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -148,10 +148,10 @@
     <q-card class="pcl-dialog pcl-resource-download">
       <q-card-section class="pcl-resource-download__head">
         <div>
-          <div class="pcl-kicker">资源下载</div>
-          <h3>下载{{ kindLabel }}</h3>
+          <div class="pcl-kicker">{{ t('resource.downloadTitle') }}</div>
+          <h3>{{ t('resource.download', { kind: kindLabel }) }}</h3>
         </div>
-        <PclIconButton icon="x" label="关闭" :size="28" @click="downloadOpen = false" />
+        <PclIconButton icon="x" :label="t('resource.close')" :size="28" @click="downloadOpen = false" />
       </q-card-section>
       <q-card-section class="pcl-resource-download__body">
         <PclCatalogBrowser
@@ -172,6 +172,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PclButton from '../../components/PclButton.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
@@ -186,6 +187,7 @@ import { pickPclFile } from '../../composables/usePclFileDialog';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props = defineProps<{ instance: string; kind: string; busy: boolean; execute: Execute }>();
+const { t } = useI18n();
 const emit = defineEmits<{ 'install-start': [info: any]; 'install-progress': [task: any]; 'install-done': [info: any] }>();
 const query = ref(''), installSource = ref(''), resources = ref<any[]>([]), loading = ref(false), localBusy = ref(false), error = ref('');
 type ResourceView = 'grid' | 'list';
@@ -269,16 +271,19 @@ function setView(mode: ResourceView) {
 const selected = ref(new Set<string>()), detailOpen = ref(false), detail = ref<any>(null), detailLoading = ref(false), detailError = ref('');
 
 const labels: Record<string, string> = {
-  mods: '模组', coremods: '核心模组', nilmods: 'NilMod', resourcepacks: '资源包', texturepacks: '材质包',
-  shaderpacks: '光影包', datapacks: '数据包', yesstevemodels: 'YSM模型', customplayermodels: '自定义玩家模型',
-  schematics: '投影原理图', plugins: '插件',
+  mods: 'mods', coremods: 'coremods', nilmods: 'nilmods', resourcepacks: 'resourcepacks', texturepacks: 'texturepacks',
+  shaderpacks: 'shaderpacks', datapacks: 'datapacks', yesstevemodels: 'yesstevemodels', customplayermodels: 'customplayermodels',
+  schematics: 'schematics', plugins: 'plugins',
 };
 const icons: Record<string, string> = {
   mods: 'puzzle', coremods: 'package', nilmods: 'package-plus', resourcepacks: 'palette', texturepacks: 'image',
   shaderpacks: 'sparkles', datapacks: 'layers', yesstevemodels: 'shirt', customplayermodels: 'user',
   schematics: 'grid-2x2', plugins: 'puzzle',
 };
-const kindLabel = computed(() => labels[props.kind] || props.kind);
+const kindLabel = computed(() => {
+  const key = labels[props.kind];
+  return key ? t(`resource.kinds.${key}`) : props.kind;
+});
 const icon = computed(() => icons[props.kind] || 'package');
 const filtered = computed(() => {
   const value = query.value.trim().toLowerCase();
@@ -288,12 +293,12 @@ const selectedCount = computed(() => selected.value.size);
 const detailEntries = computed(() => {
   const item = detail.value || {};
   return [
-    ['文件', item.path || item.fileName || '—'],
-    ['版本', item.version || item.metadata?.version || '—'],
-    ['状态', statusLabel(item)],
-    ['类型', item.type || '—'],
-    ['加载器', Array.isArray(item.loaders) ? item.loaders.join(', ') : (item.loaders || '—')],
-    ['Minecraft', Array.isArray(item.minecraftVersions) ? item.minecraftVersions.join(', ') : (item.minecraftVersion || '—')],
+    [t('resource.detailFile'), item.path || item.fileName || '—'],
+    [t('resource.detailVersion'), item.version || item.metadata?.version || '—'],
+    [t('resource.detailStatus'), statusLabel(item)],
+    [t('resource.detailType'), item.type || '—'],
+    [t('resource.detailLoader'), Array.isArray(item.loaders) ? item.loaders.join(', ') : (item.loaders || '—')],
+    [t('resource.detailMinecraft'), Array.isArray(item.minecraftVersions) ? item.minecraftVersions.join(', ') : (item.minecraftVersion || '—')],
   ];
 });
 
@@ -336,9 +341,9 @@ async function loadResourceIcons(requestToken: number) {
   await Promise.all(Array.from({ length: Math.min(6, items.length) }, worker));
 }
 function statusLabel(item: any) {
-  if (item.status === 'no-metadata') return '没有元数据';
-  if (item.status === 'installed') return '已安装';
-  return '已安装资源';
+  if (item.status === 'no-metadata') return t('resource.statusNoMetadata');
+  if (item.status === 'installed') return t('resource.statusInstalled');
+  return t('resource.statusInstalledResource');
 }
 function formatSize(value: unknown) {
   const size = Number(value || 0);
@@ -376,7 +381,7 @@ async function update() {
   }
 }
 async function chooseInstallFile() {
-  const selected = await pickPclFile({ title: '选择要安装的资源文件' });
+  const selected = await pickPclFile({ title: t('resource.chooseInstallTitle') });
   if (selected) installSource.value = selected;
 }
 
@@ -385,7 +390,7 @@ async function install() {
   if (!source) return;
   localBusy.value = true;
   error.value = '';
-  const info = { title: '正在安装资源', name: source.split(/[\\/]/).pop() || source };
+  const info = { title: t('resource.installing'), name: source.split(/[\\/]/).pop() || source };
   emit('install-start', info);
   try {
     let task: any = await props.execute('neo.task.start', {
@@ -399,7 +404,7 @@ async function install() {
       task = await props.execute('neo.task.status', { taskId: task.taskId });
     }
     emit('install-progress', task);
-    if (!task || task.state !== 'succeeded') throw new Error(task?.error || '资源安装失败');
+    if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('resource.installFailed'));
     installSource.value = '';
     await load();
   } catch (exception) {
@@ -435,7 +440,7 @@ async function setEnabled(item: any, enabled: boolean) {
   }
 }
 async function remove(item: any) {
-  if (!window.confirm(`确定删除“${item.name || item.fileName || item.path}”吗？`)) return;
+  if (!window.confirm(t('resource.confirmDelete', { name: item.name || item.fileName || item.path }))) return;
   localBusy.value = true;
   error.value = '';
   try {
@@ -468,7 +473,7 @@ function clearSelected() {
 }
 async function removeSelected() {
   const items = resources.value.filter(item => selected.value.has(resourceRef(item)));
-  if (!items.length || !window.confirm(`确定删除选中的 ${items.length} 项资源吗？`)) return;
+  if (!items.length || !window.confirm(t('resource.confirmDeleteSelected', { count: items.length }))) return;
   localBusy.value = true;
   try {
     for (const item of items) await props.execute('resource.remove', { instance: props.instance, kind: props.kind, resource: resourceRef(item), confirm: true });

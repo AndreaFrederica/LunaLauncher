@@ -1,4 +1,5 @@
 import { launcher } from '../../boot/launcher-api';
+import { i18n } from '../../i18n';
 
 /**
  * Wait for a task to finish using the launcher event stream instead of
@@ -9,7 +10,7 @@ export async function waitForTask(
   onUpdate?: (snapshot: any) => void,
   timeoutMs = 20 * 60 * 1000,
 ): Promise<any> {
-  if (!taskId) throw new Error('Task ID is empty.');
+  if (!taskId) throw new Error(i18n.global.t('pcl.tasks.emptyId'));
   let unlisten: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   return new Promise(async (resolve, reject) => {
@@ -52,7 +53,7 @@ export async function waitForTask(
       finish(null, error instanceof Error ? error : new Error(String(error)));
       return;
     }
-    if (!settled) timer = setTimeout(() => finish(null, new Error('等待任务超时。')), timeoutMs);
+    if (!settled) timer = setTimeout(() => finish(null, new Error(i18n.global.t('pcl.tasks.timeout'))), timeoutMs);
   });
 }
 

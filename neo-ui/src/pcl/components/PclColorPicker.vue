@@ -16,11 +16,11 @@
       </button>
     </div>
     <div class="pcl-color-picker__custom">
-      <label class="pcl-color-picker__swatch" :style="{ background: normalized }" title="选择自定义颜色">
+      <label class="pcl-color-picker__swatch" :style="{ background: normalized }" :title="t('pcl.color.custom')">
         <input type="color" :value="normalized" @input="onNativeColor" />
       </label>
       <PclInput v-model="draft" placeholder="#2a80e3" @enter="commit" />
-      <PclButton size="sm" icon="check" @click="commit">应用</PclButton>
+      <PclButton size="sm" icon="check" @click="commit">{{ t('common.save') }}</PclButton>
     </div>
     <div class="pcl-color-picker__names">
       <span v-for="preset in PCL_ACCENT_PRESETS" :key="preset.value">{{ preset.name }}</span>
@@ -30,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { PCL_ACCENT_PRESETS, normalizePclAccent } from '../../neo-ui-preferences';
 import PclButton from './PclButton.vue';
 import PclIcon from './PclIcon.vue';
@@ -37,6 +38,7 @@ import PclInput from './PclInput.vue';
 
 const props = defineProps<{ modelValue?: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
+const { t } = useI18n();
 const draft = ref(props.modelValue || '#2a80e3');
 const normalized = computed(() => normalizePclAccent(props.modelValue || draft.value));
 

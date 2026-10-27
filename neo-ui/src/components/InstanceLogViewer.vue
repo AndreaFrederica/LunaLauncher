@@ -1,36 +1,38 @@
 <template>
-  <section class="instance-logs" :class="{ 'instance-logs--pcl': pcl }" aria-label="实例历史日志">
+  <section class="instance-logs" :class="{ 'instance-logs--pcl': pcl }" :aria-label="t('neo.auto2.k8acb5aa50b')">
     <div class="instance-logs__grid">
       <aside class="instance-logs__files">
-        <header><strong>日志文件</strong><span>{{ files.length }} 个</span></header>
-        <div class="instance-logs__list" aria-label="日志文件列表">
+        <header><strong>{{ t('neo.auto2.k01516b6cd4') }}</strong><span>{{ files.length }}</span></header>
+        <div class="instance-logs__list" :aria-label="t('neo.auto2.kf961b06e6c')">
           <button v-for="file in files" :key="file.path" type="button" :title="file.path"
             :class="{ selected: selectedPath === file.path }" :aria-pressed="selectedPath === file.path" @click="read(file.path)">
             <span class="instance-logs__filename">{{ file.name }}</span>
             <small>{{ formatDate(file.modified) }}</small>
           </button>
-          <p v-if="!files.length" class="instance-logs__hint">没有可读取的日志。</p>
+          <p v-if="!files.length" class="instance-logs__hint">{{ t('neo.auto2.kff9d2397a0') }}</p>
         </div>
       </aside>
       <div class="instance-logs__detail">
         <header class="instance-logs__toolbar">
-          <strong :title="selectedPath">{{ selectedFile?.name || '日志内容' }}</strong>
+          <strong :title="selectedPath">{{ selectedFile?.name || t('neo.auto2.k5f5f8b8a86') }}</strong>
           <div class="instance-logs__actions">
-            <label><input v-model="wrap" type="checkbox" /> 自动换行</label>
-            <button type="button" :disabled="!selectedPath || loading" @click="read(selectedPath)">重新读取</button>
-            <LogUploadButton :instance="instance" :name="selectedFile?.name || '日志'" :file="selectedPath" :pcl="pcl"
+            <label><input v-model="wrap" type="checkbox" />{{ t('neo.auto2.kfce1b42c8b') }}</label>
+            <button type="button" :disabled="!selectedPath || loading" @click="read(selectedPath)">{{ t('neo.auto2.k7784972fc8') }}</button>
+            <LogUploadButton :instance="instance" :name="selectedFile?.name || t('neo.auto2.k4de50894b8')" :file="selectedPath" :pcl="pcl"
               :execute="execute" :disabled="!selectedPath || loading || !!error || !content" />
           </div>
         </header>
-        <p v-if="truncated" class="instance-logs__hint">预览仅显示前 1 MiB；一键上传会重新读取所选文件。</p>
+        <p v-if="truncated" class="instance-logs__hint">{{ t('neo.auto2.k9c0a9e9b8d') }}</p>
         <p v-if="error" class="instance-logs__error" role="alert">{{ error }}</p>
-        <pre ref="viewer" class="instance-logs__text" :class="{ wrap }" tabindex="0" aria-label="日志内容" :aria-busy="loading">{{ loading ? '正在读取日志…' : content || (selectedPath ? '日志文件为空。' : '选择左侧日志文件查看内容。') }}</pre>
+        <pre ref="viewer" class="instance-logs__text" :class="{ wrap }" tabindex="0" :aria-label="t('neo.auto2.k5f5f8b8a86')" :aria-busy="loading">{{ loading ? t('neo.auto2.k79aa9eabfa') : content || (selectedPath ? t('neo.auto2.k3a03512b57') : t('neo.auto2.kb9d0ef7801')) }}</pre>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import LogUploadButton from './LogUploadButton.vue';
 

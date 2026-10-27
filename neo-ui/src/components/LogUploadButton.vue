@@ -1,40 +1,40 @@
 <template>
-  <PclButton v-if="pcl" size="sm" icon="upload" :disabled="disabled || preparing || uploading" @click="prepare">{{ preparing ? '准备中…' : '一键上传' }}</PclButton>
-  <q-btn v-else flat icon="cloud_upload" label="一键上传" :disable="disabled || preparing || uploading" @click="prepare" />
+  <PclButton v-if="pcl" size="sm" icon="upload" :disabled="disabled || preparing || uploading" @click="prepare">{{ preparing ? t('neo.auto2.ke25f6e877f') : t('neo.auto2.kd8c6114d5c') }}</PclButton>
+  <q-btn v-else flat icon="cloud_upload" :label="t('neo.auto2.kd8c6114d5c')" :disable="disabled || preparing || uploading" @click="prepare" />
   <q-dialog v-model="shown" :persistent="uploading">
     <q-card class="log-upload-dialog" :class="{ 'log-upload-dialog--pcl': pcl }">
       <q-card-section>
-        <h2>{{ url ? '日志上传成功' : '上传日志' }}</h2>
+        <h2>{{ url ? t('neo.auto2.keb54b37320') : t('neo.auto2.k786977870f') }}</h2>
         <p>{{ snapshot?.name || name }}</p>
         <p v-if="error" role="alert" class="log-upload-error">{{ error }}</p>
         <template v-if="url">
-          <p>{{ copied ? '链接已复制，可以直接粘贴分享。' : '日志已上传，可复制下方链接。' }}</p>
-          <input class="log-upload-url" aria-label="日志分享链接" :value="url" readonly @focus="($event.target as HTMLInputElement).select()" />
-          <p v-if="wasTruncated">超长日志已保留开头和末尾，中间部分已省略。</p>
+          <p>{{ copied ? t('neo.auto2.kd2de83a42b') : t('neo.auto2.kf7035228b9') }}</p>
+          <input class="log-upload-url" :aria-label="t('neo.auto2.k82df2b61e8')" :value="url" readonly @focus="($event.target as HTMLInputElement).select()" />
+          <p v-if="wasTruncated">{{ t('neo.auto2.k7614d11602') }}</p>
         </template>
         <template v-else-if="snapshot">
-          <p>将上传至 <strong>{{ snapshot.baseUrl }}</strong>。</p>
-          <p>上传前会按 C++ 版规则隐藏部分个人信息，请仍检查日志内容后再分享。</p>
-          <p v-if="snapshot.file">上传所选日志文件，包含预览未显示的内容（解压后上限 16 MiB）。</p>
+          <p>{{ t('neo.auto2.k9bf1269e4b') }}<strong>{{ snapshot.baseUrl }}</strong>。</p>
+          <p>{{ t('neo.auto2.ked0b536e8f') }}</p>
+          <p v-if="snapshot.file">{{ t('neo.auto2.k15162760a3') }}</p>
           <label v-if="snapshot.pasteType === 3" class="log-upload-option">
-            <input v-model="trimLongLog" type="checkbox" :disabled="uploading" />
-            超过 25,000 行时保留前 10,000 行和最后 14,900 行
-          </label>
+            <input v-model="trimLongLog" type="checkbox" :disabled="uploading" />{{ t('neo.auto2.k4f441902b5') }}</label>
         </template>
       </q-card-section>
       <q-card-actions align="right">
-        <q-btn flat :label="url || !snapshot ? '关闭' : '取消'" :disable="uploading" @click="shown = false" />
+        <q-btn flat :label="url || !snapshot ? t('neo.auto2.k6c14bd7f6f') : t('neo.auto2.k4d0b4688c7')" :disable="uploading" @click="shown = false" />
         <template v-if="url">
-          <q-btn flat label="复制链接" @click="copyLink" />
-          <q-btn color="primary" label="打开链接" @click="openLink" />
+          <q-btn flat :label="t('neo.auto2.kabb22bd95c')" @click="copyLink" />
+          <q-btn color="primary" :label="t('neo.auto2.k6d02ca8ccb')" @click="openLink" />
         </template>
-        <q-btn v-else-if="snapshot" color="primary" label="确认上传" :loading="uploading" @click="upload" />
+        <q-btn v-else-if="snapshot" color="primary" :label="t('neo.auto2.k97d588373b')" :loading="uploading" @click="upload" />
       </q-card-actions>
     </q-card>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { ref } from 'vue';
 import { copyToClipboard } from 'quasar';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -61,7 +61,7 @@ async function prepare() {
     const value = (key: string) => settings.find((entry: any) => entry.key === key)?.value;
     const pasteType = Math.max(0, Math.min(3, Math.trunc(Number(value('PastebinType') ?? 3)) || 0));
     const baseUrl = String(value('PastebinCustomAPIBase') || bases[pasteType]).trim().replace(/\/+$/, '');
-    if (!['https:', 'http:'].includes(new URL(baseUrl).protocol)) throw new Error('日志上传服务地址无效，请检查设置。');
+    if (!['https:', 'http:'].includes(new URL(baseUrl).protocol)) throw new Error(t('neo.auto2.k2007f2b8e0'));
     snapshot.value = { ...source, pasteType, baseUrl };
   } catch (exception) { error.value = String(exception instanceof Error ? exception.message : exception); }
   finally { preparing.value = false; shown.value = true; }
@@ -73,7 +73,7 @@ async function upload() {
     const { name: _name, ...parameters } = snapshot.value;
     const result = await props.execute('instance.log.upload', { ...parameters, truncate: trimLongLog.value });
     const link = String(result?.url || '');
-    if (!['https:', 'http:'].includes(new URL(link).protocol)) throw new Error('上传服务未返回有效的分享链接。');
+    if (!['https:', 'http:'].includes(new URL(link).protocol)) throw new Error(t('neo.auto2.kde098201fe'));
     url.value = link;
     wasTruncated.value = Boolean(result?.truncated);
     await copyLink();
@@ -82,7 +82,7 @@ async function upload() {
 }
 async function copyLink() {
   try { await copyToClipboard(url.value); copied.value = true; error.value = ''; }
-  catch { copied.value = false; error.value = '自动复制失败，请选中上方链接手动复制。'; }
+  catch { copied.value = false; error.value = t('neo.auto2.ka9bfbb49f9'); }
 }
 async function openLink() {
   try { await openUrl(url.value); }

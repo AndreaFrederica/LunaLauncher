@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QTest>
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AuthSession.h"
@@ -90,7 +91,9 @@ class AccountSnapshotTest : public QObject {
         const auto snapshot = data.cachedSnapshot();
         QVERIFY(!snapshot.isEmpty());
         const auto encoded = QJsonDocument(snapshot).toJson();
-        QVERIFY(encoded.contains("cape-bytes"));
+        const auto capes = snapshot.value("profile").toObject().value("capes").toArray();
+        QCOMPARE(capes.size(), 1);
+        QCOMPARE(QByteArray::fromBase64(capes.first().toObject().value("data").toString().toLatin1()), QByteArray("cape-bytes"));
         QVERIFY(!encoded.contains("provider-password"));
         QVERIFY(!encoded.contains("provider-token"));
 

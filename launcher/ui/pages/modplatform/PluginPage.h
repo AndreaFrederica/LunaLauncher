@@ -58,7 +58,8 @@ class PluginPage : public ResourcePage {
 
     QMap<QString, QString> urlHandlers() const override;
 
-    void addResourceToPage(ModPlatform::IndexedPack::Ptr, ModPlatform::IndexedVersion&, ResourceFolderModel*) override;
+    void addResourceToPage(ModPlatform::IndexedPack::Ptr, ModPlatform::IndexedVersion&, ResourceFolderModel*,
+                           QString downloadReason = "standalone") override;
 
     bool supportsFiltering() const override { return false; };
 

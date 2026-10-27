@@ -1340,6 +1340,8 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/InstallLoaderDialog.h
     ui/dialogs/ChooseOfflineNameDialog.cpp
     ui/dialogs/ChooseOfflineNameDialog.h
+    ui/dialogs/UntrustedModsDialog.cpp
+    ui/dialogs/UntrustedModsDialog.h
 
     ui/dialogs/skins/SkinManageDialog.cpp
     ui/dialogs/skins/SkinManageDialog.h
@@ -1522,6 +1524,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/dialogs/ChooseProviderDialog.ui
     ui/dialogs/skins/SkinManageDialog.ui
     ui/dialogs/ChooseOfflineNameDialog.ui
+    ui/dialogs/UntrustedModsDialog.ui
 )
 
 qt_wrap_ui(PRISM_UPDATE_UI
@@ -1842,8 +1845,10 @@ if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     target_compile_options(Launcher_logic PRIVATE /wd4100) # C4100 - unused parameter
     target_compile_options(${Launcher_Name} PRIVATE /wd4100) # C4100 - unused parameter
 else()
-    target_compile_options(Launcher_logic PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-sfinae-incomplete)
-    target_compile_options(${Launcher_Name} PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-sfinae-incomplete)
+    # sfinae-incomplete is a new GCC warning and triggers in Qt headers
+    # no-unknown-warning-option so that compilers that don't have sfinae-incomplete don't error
+    target_compile_options(Launcher_logic PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-unknown-warning-option -Wno-sfinae-incomplete)
+    target_compile_options(${Launcher_Name} PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-unknown-warning-option -Wno-sfinae-incomplete)
 endif()
 
 #### The bundle mess! ####

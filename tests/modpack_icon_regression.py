@@ -131,7 +131,9 @@ var api = {
                 assert blue['dataUrl'] == expected['blue'] and blue['icon'] != green['icon']
                 assert sidecar.ok('instance.icon', instance=first) == green, 'Another pack overwrote the first cover'
                 _, repeat, _ = install('green', name='Second green copy')
-                assert repeat == green, 'Installing the same cover again must remain readable'
+                assert repeat['id'] != green['id'], 'The second install must create its own instance'
+                assert (repeat['icon'], repeat['dataUrl']) == (green['icon'], green['dataUrl']), (
+                    'Installing the same cover again must remain readable', repeat, green)
                 print('PASS: catalog cover overrides bundled icon, persists to disk, and survives repeated installs')
 
                 count = requests['/cover/green']

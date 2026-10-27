@@ -20,7 +20,7 @@ bool InstanceCreationTask::abort()
         return m_gameFilesTask->abort();
     }
 
-    return true;
+    return InstanceTask::abort();
 }
 
 QList<Task*> InstanceCreationTask::getSubTasks() const

@@ -85,12 +85,12 @@ QUrl BaseEntity::url() const
     return LocalYggdrasil::instance().metadataUrl(QUrl(metaOverride).resolved(localFilename()));
 }
 
-Task::Ptr BaseEntity::loadTask(Net::Mode mode)
+Task::Ptr BaseEntity::loadTask(Net::Mode mode, bool forceReload)
 {
     if (m_task && m_task->isRunning()) {
         return m_task;
     }
-    m_task.reset(new BaseEntityLoadTask(this, mode));
+    m_task.reset(new BaseEntityLoadTask(this, mode, forceReload));
     return m_task;
 }
 
@@ -115,7 +115,9 @@ BaseEntity::LoadStatus BaseEntity::status() const
     return m_load_status;
 }
 
-BaseEntityLoadTask::BaseEntityLoadTask(BaseEntity* parent, Net::Mode mode) : m_entity(parent), m_mode(mode) {}
+BaseEntityLoadTask::BaseEntityLoadTask(BaseEntity* parent, Net::Mode mode, bool forceReload)
+    : m_entity(parent), m_mode(mode), m_force_reload(forceReload)
+{}
 
 void BaseEntityLoadTask::executeTask()
 {
@@ -133,9 +135,11 @@ void BaseEntityLoadTask::executeTask()
             }
 
             // on online the hash needs to match
-            hashMatches = m_entity->m_sha256 == m_entity->m_file_sha256;
+            const auto& expected = m_entity->m_sha256;
+            const auto& actual = m_entity->m_file_sha256;
+            hashMatches = expected == actual;
             if (m_mode == Net::Mode::Online && !m_entity->m_sha256.isEmpty() && !hashMatches) {
-                throw Exception("mismatched checksum");
+                throw Exception(QString("Checksum mismatch, expected sha256: %1, got: %2").arg(expected, actual));
             }
 
             // load local file
@@ -147,7 +151,7 @@ void BaseEntityLoadTask::executeTask()
             }
 
         } catch (const Exception& e) {
-            qDebug() << QString("Unable to parse file %1: %2").arg(fname, e.cause());
+            qCritical() << QString("Unable to parse file %1: %2").arg(fname, e.cause());
             // just make sure it's gone and we never consider it again.
             FS::deletePath(fname);
             m_entity->m_load_status = BaseEntity::LoadStatus::NotLoaded;
@@ -157,13 +161,18 @@ void BaseEntityLoadTask::executeTask()
     auto wasLoadedOffline = m_entity->m_load_status != BaseEntity::LoadStatus::NotLoaded && m_mode == Net::Mode::Offline;
     // if has is not present allways fetch from remote(e.g. the main index file), else only fetch if hash doesn't match
     auto wasLoadedRemote = m_entity->m_sha256.isEmpty() ? m_entity->m_load_status == BaseEntity::LoadStatus::Remote : hashMatches;
-    if (wasLoadedOffline || wasLoadedRemote) {
+    if (wasLoadedOffline || (wasLoadedRemote && !m_force_reload)) {
         emitSucceeded();
         return;
     }
     m_task.reset(new NetJob(QObject::tr("Download of meta file %1").arg(m_entity->localFilename()), APPLICATION->network()));
     auto url = m_entity->url();
     auto entry = APPLICATION->metacache()->resolveEntry("meta", m_entity->localFilename());
+    if (m_force_reload) {
+        // clear validators so manual refreshes fetch a fresh body
+        entry->setETag({});
+        entry->setRemoteChangedTimestamp({});
+    }
     entry->setStale(true);
     auto dl = Net::ApiDownload::makeCached(url, entry);
     /*
@@ -176,10 +185,10 @@ void BaseEntityLoadTask::executeTask()
     m_task->addNetAction(dl);
     m_task->setAskRetry(false);
     connect(m_task.get(), &Task::failed, this, &BaseEntityLoadTask::emitFailed);
-    connect(m_task.get(), &Task::succeeded, this, &BaseEntityLoadTask::emitSucceeded);
     connect(m_task.get(), &Task::succeeded, this, [this]() {
         m_entity->m_load_status = BaseEntity::LoadStatus::Remote;
         m_entity->m_file_sha256 = m_entity->m_sha256;
+        emitSucceeded();
     });
 
     connect(m_task.get(), &Task::progress, this, &Task::setProgress);

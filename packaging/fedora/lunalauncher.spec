@@ -3,13 +3,13 @@
 %global build_platform %(if [ -n "%{?fedora}" ]; then printf "fedora%s" "%{fedora}"; else printf "fedora"; fi)
 %bcond_with tests
 %if %{with tests}
-%global cmake_build_testing ON
+%global meson_build_testing true
 %else
-%global cmake_build_testing OFF
+%global meson_build_testing false
 %endif
 
 Name:           lunalauncher
-Version:        11.0.2
+Version:        11.1.1
 Release:        1%{?dist}
 Summary:        Custom Minecraft launcher based on Prism Launcher
 
@@ -22,12 +22,14 @@ Source0:        %{name}-%{version}.tar.gz
 # like Fedora 42-rawhide can be carried in one spec.
 BuildRequires:  cmake >= 3.28
 BuildRequires:  desktop-file-utils
-BuildRequires:  extra-cmake-modules
 BuildRequires:  gcc-c++
 BuildRequires:  java-devel
+BuildRequires:  meson >= 1.4.0
 BuildRequires:  ninja-build
 BuildRequires:  pkgconf-pkg-config
+BuildRequires:  python3
 BuildRequires:  qt6-qtbase-devel
+BuildRequires:  qt6-qtimageformats
 BuildRequires:  qt6-qtmultimedia-devel
 BuildRequires:  qt6-qtnetworkauth-devel
 BuildRequires:  qt6-qttools-devel
@@ -42,6 +44,7 @@ BuildRequires:  pkgconfig(tomlplusplus) >= 3.2.0
 BuildRequires:  zlib-devel
 
 Recommends:     java-headless
+Requires:       qt6-qtimageformats
 
 %description
 Luna Launcher is a custom Minecraft launcher based on Prism Launcher with
@@ -52,25 +55,27 @@ customization features.
 %autosetup -n %{name}-%{version}
 
 %build
-%cmake \
-    -DLauncher_BUILD_PLATFORM:STRING=%{build_platform} \
-    -DLauncher_BUILD_ARTIFACT:STRING= \
-    -DLauncher_UPDATER_GITHUB_REPO:STRING= \
-    -DLauncher_ENABLE_JAVA_DOWNLOADER:BOOL=ON \
-    -DBUILD_TESTING:BOOL=%{cmake_build_testing}
-%cmake_build
+%meson \
+    --wrap-mode=nodownload \
+    -Dinstall_layout=system \
+    -Dbuild_platform=%{build_platform} \
+    -Dupdater_github_repo= \
+    -Denable_java_downloader=true \
+    -Dbuild_pcl_download=false \
+    -Dbuild_yukari_connect=false \
+    -Dcurseforge_webview=disabled \
+    -Dneo_ui=disabled \
+    -Dyggdrasil=disabled \
+    -Dbuild_testing=%{meson_build_testing}
+%meson_build
 
 %install
-%cmake_install
-rm -f %{buildroot}%{_bindir}/qjs %{buildroot}%{_bindir}/qjsc
-rm -rf %{buildroot}%{_includedir}/quickjs*.h \
-       %{buildroot}%{_libdir}/libqjs.so \
-       %{buildroot}%{_libdir}/cmake/quickjs \
-       %{buildroot}%{_datadir}/doc/quickjs
+%meson_install
 
 %check
 %if %{with tests}
-%ctest --output-on-failure
+export QT_QPA_PLATFORM=offscreen
+%meson_test
 %endif
 
 %post
@@ -99,17 +104,19 @@ fi
 %license LICENSE
 %doc README.md
 %{_bindir}/lunalauncher
-%{_libdir}/libqjs.so.0*
 %{_datadir}/applications/org.lunalauncher.LunaLauncher.desktop
 %{_datadir}/icons/hicolor/256x256/apps/org.lunalauncher.LunaLauncher.png
 %{_datadir}/icons/hicolor/scalable/apps/org.lunalauncher.LunaLauncher.svg
 %{_datadir}/metainfo/org.lunalauncher.LunaLauncher.metainfo.xml
 %{_datadir}/mime/packages/org.lunalauncher.LunaLauncher.xml
-%{_datadir}/qlogging-categories6/*.categories
 %{_datadir}/%{datadir_name}/
 %{_mandir}/man6/lunalauncher.6*
 
 %changelog
+* Sun Oct 25 2026 W-874 <1317825684@qq.com> - 11.1.1-1
+- Build the native launcher with Meson and the Fedora system install layout
+- Include complete pinned submodule sources in COPR source packages
+
 * Sun May 24 2026 W-874 <1317825684@qq.com> - 11.0.2-1
 - Generalize Fedora packaging for COPR targets Fedora 42 through Rawhide
 

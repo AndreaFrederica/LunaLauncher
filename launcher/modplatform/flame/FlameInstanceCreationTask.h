@@ -80,6 +80,9 @@ class FlameCreationTask final : public InstanceCreationTask {
    private:
     /// True when the file already exists in the staging area with the expected size.
     bool isFileAlreadyPresent(const Flame::File& file, const QString& path) const;
+    /// Looks for an already downloaded copy of a Modrinth-fallback file in the
+    /// user's download / central mods folders. Returns an empty string if none.
+    QString findLocalCopy(const Flame::File& file) const;
     /// Offers the failed downloads as blocked mods (manual download) and retries once.
     void onDownloadFailed(const QString& reason, QEventLoop& loop);
 

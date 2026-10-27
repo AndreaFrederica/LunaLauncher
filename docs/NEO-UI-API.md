@@ -1,159 +1,190 @@
-# Tauri / Neo UI 接入
+# Neo UI API 开发指南
 
-独立 Web UI 的构建、目录约定和 `window.luna` 接口见
-[Web UI 开发与构建](WEBUI-DEVELOPMENT.md)。本文说明宿主与后端之间的原始协议。
+本文描述 Luna Neo UI 的两套接口。它们都使用 `apiVersion: 1`，但版本号只表示
+协议格式，不表示功能清单：
 
-采用常驻子进程即可复用当前启动器核心。Neo UI 不需要链接 Qt；后端仍使用
-Qt 和现有实例、账户、下载、设置实现。新增接口集中在 `launcher/api`，GUI
-和核心任务保持原有结构，方便继续合并上游。
+- **普通 API**：一次请求对应一次 `launcher/execute` 调用。
+- **Neo Async API**：通过 `neo.task.*` 提交长操作，立即返回任务快照，随后由前端
+  读取状态、处理交互并决定是否取消。
 
-## 启动与打包
+操作数量、参数、可选集成和异步支持必须在运行时读取，不能硬编码。启动时先调用
+`api.describe`（或兼容的 `launcher/catalog`），按返回的 JSON Schema 和
+`capability` 生成页面。当前源代码额外注册 `neo.task.start`、`status`、`list`、
+`cancel`、`respond`、`capabilities` 六个操作；旧安装包可能尚未包含它们，应按
+目录检测并降级。
 
-使用 **Meson install 并部署运行库后的完整目录**，启动其中的：
+## 连接宿主
+
+Tauri 宿主启动同目录的 CLI sidecar：
 
 ```text
 lunalauncher-cli.exe --dir ABSOLUTE_DATA_DIRECTORY --mcp
 ```
 
-不要只复制 build 目录中的 exe。Qt 库、插件、Java JAR、PCL.Download、WebView
-及选用的联机工具需要遵循现有安装布局。Tauri 的 Rust 层或 shell 插件负责启动
-进程、持有 stdin、读取 stdout/stderr，并在退出时关闭 stdin。Windows 子进程
-使用隐藏窗口。一个数据目录仅由一个启动器进程管理，避免和现有 GUI 同时占用。
+必须使用完整安装目录（Qt 库、插件、Java、PCL.Download 和平台插件都要在旁边）。
+stdout 只包含协议，stderr 只用于诊断。管道采用 UTF-8、每行一个 JSON 对象；读取
+端必须支持 UTF-8 分片、合并多行和进程提前退出。单个请求最大 4 MiB，写入后立即
+flush。一个数据目录只能由一个 launcher 进程占用。
 
-首次 headless 启动不会弹出旧数据迁移对话框。新目录不会自动导入或修改旧资料。
+浏览器预览不能访问 sidecar。使用 `neo-ui/src/boot/launcher-api.ts` 中的 Tauri
+adapter；独立静态 Web UI 使用 `window.luna`（见 [WEBUI-DEVELOPMENT.md](WEBUI-DEVELOPMENT.md)），
+不要混用两种桥接对象。
 
-## 请求、结果和事件
-
-协议是 UTF-8、每行一个 JSON 对象；每个请求使用唯一的字符串或数字 ID。
-stdout 只承载协议，stderr 是诊断日志。输入允许分片和多行合并，每个请求限制
-为 4 MiB；发送后要刷新 stdin。保持管道打开才能接收交互并管理持续任务。
-
-读取目录：
+## JSON-RPC 外壳
 
 ```json
-{"jsonrpc":"2.0","id":1,"method":"launcher/catalog","params":{}}
+{"jsonrpc":"2.0","id":1,"method":"launcher/execute","params":{"operation":"instance.list","parameters":{}}}
 ```
 
-调用接口：
+目录和控制方法：
 
 ```json
-{"jsonrpc":"2.0","id":2,"method":"launcher/execute","params":{"operation":"resource.search","parameters":{"provider":"modrinth","kind":"mods","query":"sodium","minecraftVersion":"1.21.1","loaders":["fabric"]}}}
+{"jsonrpc":"2.0","id":2,"method":"launcher/catalog","params":{}}
+{"jsonrpc":"2.0","id":3,"method":"launcher/execute","params":{"operation":"api.describe","parameters":{}}}
 ```
 
-响应的 `result` 为 `{ok, apiVersion, operation, exitCode, data}`；失败时为
-`{ok:false, apiVersion, operation, exitCode, error:"说明"}`。`data` 可以是数组
-或对象，取决于操作。JSON-RPC 的 `error` 表示协议问题；`result.ok=false`
-表示业务操作失败，两者应分别处理。
-
-任务运行期间会发出以下通知：
+成功与失败均使用业务信封：
 
 ```json
-{"jsonrpc":"2.0","method":"launcher/event","params":{"requestId":2,"kind":"task","data":{"id":"task-uuid","state":"running","running":true,"canAbort":true,"progress":100,"totalProgress":1000}}}
+{"ok":true,"apiVersion":1,"operation":"instance.list","exitCode":0,"data":[]}
+{"ok":false,"apiVersion":1,"operation":"instance.info","exitCode":2,"error":"Instance not found."}
 ```
 
-`task` 通知约每 100 ms 检查一次变化，短任务可能只出现在 `task.list` 的历史中。
-其他通知类型是 `status`、`device_code` 和 `input`。最终结果通过原请求 ID 的
-响应返回；没有单独的 started/succeeded 事件。任务 UUID 和 JSON-RPC 请求 ID
-是两个不同标识，一个操作可能先后产生多个任务。
+JSON-RPC `error` 表示协议或参数错误；`result.ok:false` 表示操作失败。不要解析
+翻译后的 `error` 文本来决定流程。目录项包含 `name`、`description`、`apiVersion`、
+`inputSchema`、`destructive` 和可选 `capability`。能力组只说明代码路径存在，
+不代表可选程序已安装；用 `integration.status` 检查集成，用 `runtime.info` 检查
+平台能力。MCP 工具、CLI `api OPERATION JSON_OBJECT` 和 Neo UI 共用目录。
 
-普通操作串行执行：运行中的下载或登录会使其他普通调用返回 JSON-RPC
-`-32000`。以下调用仍可执行：
+## 普通 API 使用顺序
 
-- `launcher/catalog`、`api.describe`、`tools/list`、`ping`。
-- `task.list`、`task.status`、`task.cancel`，可以通过 native 或 MCP 调用。
-- `event.poll`、`event.subscriptions`、`event.unsubscribe`，以及
-  `server.console.command/write/resize`。
-- `launcher/respond` 和 `notifications/cancelled`。
+| 场景 | 调用顺序 |
+| --- | --- |
+| 首页 | `launcher.get` → `instance.list` → `account.snapshot` |
+| 新建实例 | `component.catalog` → `component.versions` → `instance.create` |
+| 资源浏览 | `resource.providers` → `resource.search` → `resource.project` / `resource.versions` |
+| 资源更新 | `resource.updates.check` → 选择 `items` → `resource.updates.apply`；放弃用 `resource.updates.discard` |
+| 账户 | `account.list` / `account.snapshot` → `account.login` 或 `account.refresh` |
+| 服务端 | `server.distribution.catalog` → `versions` / `resolve` → `server.distribution.install` → `server.start` |
+| 设置 | `settings.list/get/set/reset`；备份恢复用 `settings.export/import` |
+| 外观语言 | `appearance.catalog/select`、`language.list/select/refresh` |
 
-查询当前任务可省略 `taskId`；指定 UUID 可查询已完成任务快照。取消整个操作：
+资源搜索按 provider 分页（通常每页 25）；`resource.update` 只刷新本地元数据，
+不是远程升级。批量更新计划十分钟过期，应用不是事务；逐项检查 `updated`、
+`failed`、`cancelled` 和恢复目录。服务端 YAML 写入支持 `ifRevision`，终端写入
+上限为 32 KiB，`resize` 的行列范围为 1–1000。
+
+## Neo Async API
+
+### 提交
 
 ```json
-{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":2}}
+{"jsonrpc":"2.0","id":10,"method":"launcher/execute","params":{"operation":"neo.task.start","parameters":{"operation":"resource.install-version","parameters":{"instance":"demo","provider":"modrinth","kind":"mods","projectId":"sodium","versionId":"..."},"priority":"normal","idempotencyKey":"install-demo-sodium-v1"}}}
 ```
 
-其他请求 ID 的取消通知不会影响当前操作。取消是协作式的：以任务的 `canAbort`
-和最终结果为准。取消任务不会自动回滚已经完成的文件写入。UI 在取消后仍应等待
-原调用结束，再提交下一项普通操作。
+响应立即返回 `{ok:true,data:<snapshot>}`，其中 `data.id` 是任务 ID。支持列表由
+`neo.task.capabilities` 返回，当前包括实例创建/导入/更新、组件版本切换、特殊
+loader、Java 安装、整合包安装、资源安装（含依赖）、账户登录/刷新、实例启动/导出
+和服务端启动。未知操作应显示为不支持并禁用按钮。
 
-## 登录输入与选择
+`idempotencyKey` 可安全重试提交；命中已有任务时会返回 `deduplicated:true` 和
+原快照。`priority` 只有 `normal`、`high` 两档。
 
-需要用户名、密码或多个账户档案之间的选择时，后端发送：
+### 快照、完成和取消
 
 ```json
-{"jsonrpc":"2.0","method":"launcher/event","params":{"requestId":3,"kind":"input","interactionId":"uuid","prompt":"Username","secret":false,"expiresIn":300}}
+{"jsonrpc":"2.0","id":11,"method":"launcher/execute","params":{"operation":"neo.task.status","parameters":{"taskId":"uuid"}}}
+{"jsonrpc":"2.0","id":12,"method":"launcher/execute","params":{"operation":"neo.task.cancel","parameters":{"taskId":"uuid"}}}
+{"jsonrpc":"2.0","id":13,"method":"launcher/execute","params":{"operation":"neo.task.list","parameters":{}}}
 ```
 
-`secret:true` 表示密码输入；有 `choices` 数组时渲染选择器。回复文本，或选择项
-从零开始的下标：
+快照可能包含 `state`（`queued`、`running`、`succeeded`、`failed`、`cancelled`）、
+`finished`、`status`、`error`、`progress`、`total`、`transferRate`、`instanceId`、
+`createdInstanceId`、`pid`、`conflictKey`、`cancelRequested`、`deadlineMs`、
+`interaction`、`deviceCode`、`deviceUrl` 和 `deviceExpiresIn`。以 `finished` 和
+`state` 判断终态，不要只依赖进度值。取消是协作式的，已完成的文件不会自动回滚。
+
+运行时最多同时执行 6 个任务。不同资源键可并行；相同实例、账户、Java 或全局
+实例集合的写入会排队。安装类任务还共享 `interactive-install` 交互通道。UI 应
+显示 `queued`，不要自行实现第二个队列；冲突策略以 `neo.task.capabilities` 为准。
+
+### 交互和设备登录
+
+轮询快照发现 `interaction` 后，使用任务专属回复：
 
 ```json
-{"jsonrpc":"2.0","id":4,"method":"launcher/respond","params":{"interactionId":"uuid","value":"NeoPlayer"}}
+{"jsonrpc":"2.0","id":14,"method":"launcher/execute","params":{"operation":"neo.task.respond","parameters":{"taskId":"uuid","interactionId":"interaction-uuid","value":"continue"}}}
 ```
 
-取消该输入时传 `cancel:true`。输入五分钟未回复会结束等待；过期/不匹配的
-interactionId、错误类型或越界下标返回 `-32602`。密码通过管道传递，不放在启动
-命令参数里。Microsoft 登录使用 `device_code` 的 URL、code、expiresIn 渲染引导。
-现有 MCP `tools/call` 的参数和通知形式保持兼容；交互回复流程用于 native 调用。
+取消交互传 `cancel:true`。必须回传当前 `interactionId`；过期、重复或其他任务
+的回复会失败。交互可能是 `input`、`select` 或 `type:"restricted-downloads"`
+的文件校验流程，只有重新扫描且校验通过才能继续。Microsoft 登录使用快照中的
+`deviceUrl`、`deviceCode`、`deviceExpiresIn` 展示设备码。
+
+## 事件和实时流
+
+sidecar 可发送 `launcher/event`：
+
+```json
+{"jsonrpc":"2.0","method":"launcher/event","params":{"requestId":10,"kind":"task","data":{"id":"uuid","state":"running","progress":4,"totalProgress":10,"canAbort":true}}}
+```
+
+`kind` 包括 `status`、`device_code`、`task`、`input`。通知只用于即时刷新，最终
+结果仍以原请求 ID 的响应为准。请求取消使用：
+
+```json
+{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":10}}
+```
+
+`instance.console.subscribe`、`instance.log.subscribe`、`account.subscribe` 和
+`launcher.update.subscribe` 返回订阅 ID。推送格式为 `launcher/stream`，也可用
+`event.poll` 按游标读取：
+
+```json
+{"jsonrpc":"2.0","method":"launcher/stream","params":{"subscriptionId":"sub","events":[],"nextCursor":8,"dropped":0,"hasMore":false}}
+```
+
+每个订阅最多缓存 512 条或 1 MiB；`dropped > 0` 表示历史缺口。控制台和日志字节
+块使用 base64，`console.line` 是已脱敏文本；轮换或截断会产生 `log.reset`。游标
+属于订阅，`event.poll` 与推送消费互不影响。完成后调用 `event.unsubscribe`。
 
 ## TypeScript 客户端
 
-参考 [launcher-api.ts](../examples/neo-ui/launcher-api.ts)。客户端不依赖 Tauri
-包；将写入函数接到子进程 stdin，将完整 stdout 行交给 `acceptLine`，在子进程
-退出时调用 `close`。如果 Rust 层提供字节块，先做 UTF-8 增量解码和换行分帧。
-不要把 stderr 交给 JSON 解析器。
+仓库中的 [examples/neo-ui/launcher-api.ts](../examples/neo-ui/launcher-api.ts) 已
+实现乱序响应分发、写入串行化、断管拒绝 Promise、目录读取、普通调用、取消和
+交互回复。异步任务可封装为：
 
-```typescript
-const client = new LauncherClient(line => child.write(line), event => {
-  // 按 event.requestId 更新进度、登录引导或输入框。
-}, batch => {
-  // 按 batch.subscriptionId 分发控制台／日志事件并记录 nextCursor。
-  // dropped > 0 表示缓冲区已有历史缺口。
+```ts
+const started = await client.execute('neo.task.start', {
+  operation: 'resource.install-with-dependencies',
+  parameters: { instance: 'demo', provider: 'modrinth', kind: 'mods', projectId: 'x' },
+  idempotencyKey: crypto.randomUUID(),
 });
-// 注册 stdout / close 监听之后：
-const catalog = await client.catalog();
-const call = client.begin("component.versions", { uid: "net.minecraft" });
-// 取消按钮：await call.cancel();
-const result = await call.result;
-if (!result.ok) showError(result.error);
+const taskId = (started.data as any).id;
+for (;;) {
+  const result = await client.execute('neo.task.status', { taskId });
+  const task = result.data as any;
+  if (task.interaction?.interactionId) await renderAndReply(task.interaction);
+  if (task.finished) break;
+  await new Promise(resolve => setTimeout(resolve, 250));
+}
 ```
 
-客户端根据 ID 分发乱序响应，串行写入管道，并在子进程退出或断管时拒绝所有
-未完成 Promise。它不替 UI 排队所有业务操作；通常 await 当前调用，任务控制和
-输入回复可以同时发送。接口目录作为版本协商依据，避免把完整功能表硬编码进 UI。
+实际 UI 应优先监听 stream 或 Tauri `launcher-event`，轮询仅作为重连和丢事件后的
+补偿。不要缓存完整操作表；每次后端升级都重新读取目录。
 
-## 功能使用顺序
+## 安全、兼容和验证
 
-| 页面 | 推荐调用 |
-| --- | --- |
-| 新建实例 | `component.catalog` → `component.versions` → `instance.create` |
-| 资源浏览 | `resource.providers` → `resource.search` → `resource.project` / `resource.versions` |
-| 资源安装/升级 | 检查版本返回的 dependencies，必要时 `resource.resolve-dependency`，再逐项 `resource.install-version` |
-| 批量升级 | `resource.updates.check` → 展示 updates 并勾选 itemId → `resource.updates.apply`；取消计划用 discard |
-| 依赖安装 | `resource.install-with-dependencies`，用 `maxDepth/maxItems` 限制递归，可选 includeOptional |
-| 世界管理 | `instance.world.list` → `instance.world.import/export/rename/delete/reset-icon` |
-| 自定义组件 | `instance.components.list` → `instance.component.install-custom`（component/jarmod/jar/agent） |
-| 设置 | `settings.list/get/set/reset`；备份用 `settings.export`，恢复用 `settings.import`，instance scope 同时提供 instance ID |
-| 外观／语言 | `appearance.catalog/refresh/select`、`language.list/select/refresh` |
-| 服务端 YAML | `server.yaml.read` → 编辑 content → `server.yaml.write`，附带读取时的 ifRevision |
-| 服务端终端 | `instance.console.subscribe` → `server.start` → `server.console.write/resize`；结束用 `instance.stop/kill` |
-| 服务端安装 | `server.distribution.install` 传入发行版 URL 和版本信息，后端暂存下载并配置启动命令 |
-| 日志跟随 | `instance.log.subscribe` → `launcher/stream` 通知或 `event.poll` → `event.unsubscribe` |
-| 联机 | `integration.status` → install/start → host/join → state/log → leave/stop |
-| 下载队列 | `aria2.downloads`、`aria2.cancel`、`aria2.clear-finished` |
+路径参数只能访问 launcher 允许的实例目录和已声明的本地文件。敏感设置默认脱敏，
+确需读取时才使用 `reveal:true`；密码不得放在命令行、日志或 localStorage。新闻
+HTML 必须在浏览器端清理后再渲染。`destructive:true` 只是目录元数据，是否需要
+`confirm` 以操作 schema 为准。可选集成缺失、网络不可用和未知操作要分别展示。
 
-## 升级计划和实时流
+```text
+python tests/api_sidecar_smoke.py --exe install-api-test/lunalauncher-cli.exe
+node --experimental-strip-types --test tests/launcher_api_client.test.mjs
+```
 
-`resource.updates.check` 最多检查 256 个索引资源，默认只选择 release，并读取
-实例 Minecraft／loader 配置。返回的 `updates` 由前端选择 itemId 后交给
-`resource.updates.apply`；计划在十分钟后过期，最多保留 16 个。执行前会校验原文件、
-索引和目标文件名，下载使用临时目录和既有校验和逻辑，成功后替换并保留禁用状态。
-单项失败会尝试恢复原文件；批次没有整体回滚，依赖仍需单独选择安装。
-
-`instance.console.subscribe` 和 `instance.log.subscribe` 返回 subscriptionId。服务端
-终端和日志文件的字节块使用 base64，客户端 console.line 来自脱敏日志模型。
-`launcher/stream` 通知与 `event.poll` 共享有界历史但游标独立；每个订阅最多保留
-512 条／1 MiB，`dropped` 大于零表示需要提示日志缺口。文件轮换或截断会产生
-`log.reset`。`server.console.write` 最多 32 KiB，command 会补换行，resize 范围为
-1–1000。外观接口应用 Qt 后端主题，Neo UI 自己负责浏览器样式和文案翻译。
-
-接口目录以运行中后端的 `api.describe` / `launcher/catalog` 为准，不要硬编码接口数量。领域包含实例、组件、资源与依赖、整合包目录和安装、托管包更新、世界与 datapack、账户与 Java、设置导入导出、外观语言、日志截图、更新器、终端和联机整合。仍属于服务端边界的项目（例如远程服务端部署策略）会按服务端 API 的能力返回；可选第三方工具仍以 `integration.status` 报告运行时能力。
+涉及长任务、受限下载、交互回复和并行冲突时，再运行
+`tests/neo_restricted_downloads_test.py`。具体字段和能力始终以目标安装包的
+`api.describe`、`launcher/catalog`、`neo.task.capabilities` 为准。

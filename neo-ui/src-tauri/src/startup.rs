@@ -43,7 +43,7 @@ fn launcher_context() -> Result<LauncherContext, String> {
     let output = command
         .args(["--cli", "--print-startup-context"])
         .output()
-        .map_err(|e| format!("无法启动启动器后端：{e}"))?;
+        .map_err(|e| format!("webui.error.launch_backend|{e}"))?;
     if !output.status.success() {
         // Keep the Web UI usable with an older installed CLI. The context
         // query was added after some packaged launchers were built; those
@@ -53,20 +53,20 @@ fn launcher_context() -> Result<LauncherContext, String> {
             let data_root = std::env::var_os("LUNA_LAUNCHER_DATA")
                 .map(PathBuf::from)
                 .or_else(|| dirs::data_dir().map(|path| path.join("LunaLauncher")))
-                .ok_or_else(|| "无法确定启动器数据目录".to_string())?;
+                .ok_or_else(|| "webui.error.data_directory".to_string())?;
             return Ok(LauncherContext {
                 data_root,
                 instance_id: "luna-launcher".into(),
             });
         }
         return Err(format!(
-            "无法读取后端启动信息（{}）。请确认 Neo UI 与 CLI 已一起更新。\n{}",
+            "webui.error.startup_context|{}|{}",
             output.status,
             stderr.trim()
         ));
     }
     let context: LauncherContext =
-        serde_json::from_slice(&output.stdout).map_err(|e| format!("后端启动信息无效：{e}"))?;
+        serde_json::from_slice(&output.stdout).map_err(|e| format!("webui.error.invalid_context|{e}"))?;
     if !context.data_root.is_absolute()
         || context.instance_id.is_empty()
         || !context
@@ -74,7 +74,7 @@ fn launcher_context() -> Result<LauncherContext, String> {
             .bytes()
             .all(|c| c.is_ascii_alphanumeric())
     {
-        return Err("后端返回了无效的数据目录或单实例 ID".into());
+        return Err("webui.error.invalid_context_data".into());
     }
     Ok(context)
 }

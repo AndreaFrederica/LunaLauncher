@@ -121,37 +121,37 @@ fn roots_for(base: &[Root], settings: &Settings) -> Vec<Root> {
 
 fn validate_settings(settings: &Settings) -> Result<(), String> {
     if settings.startup_ui.is_empty() || settings.startup_ui.len() > 16384 {
-        return Err("默认界面 ID 无效".into());
+        return Err("webui.error.invalid_startup_id".into());
     }
     if settings.additional_directories.len() > 16 {
-        return Err("最多添加 16 个额外扫描目录".into());
+        return Err("webui.error.too_many_directories".into());
     }
     for path in &settings.additional_directories {
         if !path.is_absolute() || path.components().any(|c| matches!(c, Component::ParentDir)) {
-            return Err("扫描目录必须是绝对路径，且不能包含 ..".into());
+            return Err("webui.error.absolute_directory".into());
         }
         if path.to_string_lossy().len() > 4096 || path.to_string_lossy().contains('\0') {
-            return Err("扫描目录路径无效".into());
+            return Err("webui.error.invalid_directory".into());
         }
         if path.exists() && !path.is_dir() {
-            return Err(format!("扫描路径不是目录：{}", path.display()));
+            return Err(format!("webui.error.not_directory|{}", path.display()));
         }
     }
     Ok(())
 }
 
 fn merge_settings(current: &Settings, patch: serde_json::Value) -> Result<Settings, String> {
-    let patch = patch.as_object().ok_or("加载设置必须是对象")?;
+    let patch = patch.as_object().ok_or("webui.error.patch_object")?;
     let mut value = serde_json::to_value(current).map_err(|e| e.to_string())?;
     value.as_object_mut().unwrap().extend(patch.clone());
     let settings: Settings =
-        serde_json::from_value(value).map_err(|e| format!("加载设置无效：{e}"))?;
+        serde_json::from_value(value).map_err(|e| format!("webui.error.invalid_settings|{e}"))?;
     validate_settings(&settings)?;
     Ok(settings)
 }
 
 fn save_preference(path: &Path, settings: &Settings, selected: &str) -> Result<(), String> {
-    let parent = path.parent().ok_or("加载设置路径不可用")?;
+    let parent = path.parent().ok_or("webui.error.settings_path")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let mut file = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     serde_json::to_writer_pretty(
@@ -186,9 +186,9 @@ pub struct WebUiState(pub Mutex<Registry>);
 fn builtin() -> Entry {
     Entry {
         id: "builtin".into(),
-        name: "内置 Neo UI".into(),
+        name: "Built-in Neo UI".into(),
         version: env!("CARGO_PKG_VERSION").into(),
-        description: "启动器自带的 Vue / Quasar 界面".into(),
+        description: "The Vue / Quasar interface bundled with the launcher".into(),
         source: "builtin".into(),
         path: None,
         error: None,
@@ -223,23 +223,23 @@ fn scan(roots: &[Root]) -> Vec<Entry> {
             let check = || -> Result<Manifest, String> {
                 let path = child.path().canonicalize().map_err(|e| e.to_string())?;
                 if !path.starts_with(&canonical_root) {
-                    return Err("界面目录不能链接到 webui 目录之外".into());
+                    return Err("webui.error.outside_webui".into());
                 }
                 safe_asset(&path, "/index.html")
-                    .map_err(|_| "缺少可读取的 index.html".to_string())?;
+                    .map_err(|_| "webui.error.missing_index".to_string())?;
                 let manifest_path = path.join("webui.json");
                 if !manifest_path.exists() {
                     return Ok(Manifest::default());
                 }
                 let manifest = safe_asset(&path, "/webui.json")?;
                 if fs::metadata(&manifest).map_err(|e| e.to_string())?.len() > 65536 {
-                    return Err("webui.json 超过 64 KiB".into());
+                    return Err("webui.error.manifest_too_large".into());
                 }
                 let manifest: Manifest =
                     serde_json::from_slice(&fs::read(manifest).map_err(|e| e.to_string())?)
-                        .map_err(|e| format!("webui.json 无效：{e}"))?;
+                        .map_err(|e| format!("webui.error.manifest_invalid|{e}"))?;
                 if manifest.api_version.unwrap_or(1) != 1 {
-                    return Err("不支持这套界面的桥接 API 版本".into());
+                    return Err("webui.error.api_version".into());
                 }
                 Ok(manifest)
             };
@@ -382,7 +382,7 @@ pub fn webui_settings_update(
         .iter()
         .any(|entry| entry.id == settings.startup_ui && entry.error.is_none())
     {
-        return Err("默认界面不在启用的扫描目录中；请先选择内置界面或启用对应目录。".into());
+        return Err("webui.error.startup_unavailable".into());
     }
     // Commit only after a successful atomic write. Changing discovery does not
     // navigate or invalidate the active bundle's resource root.
@@ -410,16 +410,16 @@ pub fn webui_select(
 ) -> Result<(), String> {
     let mut s = state.0.lock().map_err(|e| e.to_string())?;
     if s.requests != 0 || s.switching {
-        return Err("请等待当前请求、下载或登录完成后再切换界面。".into());
+        return Err("webui.error.busy".into());
     }
     let entry = scan(&s.roots)
         .into_iter()
         .find(|e| e.id == id)
-        .ok_or("未找到这套 Web UI，请刷新列表。")?;
+        .ok_or("webui.error.not_found")?;
     if let Some(error) = &entry.error {
         return Err(error.clone());
     }
-    let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
+    let window = app.get_webview_window("main").ok_or("webui.error.main_window")?;
     let url = if entry.path.is_none() {
         app_url("index.html")
     } else {
@@ -444,7 +444,7 @@ pub fn webui_select(
     }
     s.selected = id;
     if let Err(error) = save_preference(&s.preference, &s.settings, &s.selected) {
-        s.warning = Some(format!("界面已切换，但无法保存选择：{error}"));
+        s.warning = Some(format!("webui.error.save_selection|{error}"));
     }
     Ok(())
 }
@@ -478,19 +478,19 @@ pub async fn webui_initialize(app: tauri::AppHandle) -> Result<(), String> {
             }
             s.preference = path.join("selection.json");
         } else {
-            s.warning = Some("未能读取启动器数据目录；目前只扫描安装目录。".into());
+            s.warning = Some("webui.error.data_root".into());
         }
         let saved = match fs::read(&s.preference) {
             Ok(bytes) => match serde_json::from_slice::<Preference>(&bytes) {
                 Ok(saved) if validate_settings(&saved.settings).is_ok() => saved,
                 _ => {
-                    s.warning = Some("加载设置无效，已使用默认加载设置。".into());
+                    s.warning = Some("webui.error.saved_invalid".into());
                     Preference::default()
                 }
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Preference::default(),
             Err(error) => {
-                s.warning = Some(format!("无法读取加载设置：{error}"));
+                s.warning = Some(format!("webui.error.read_settings|{error}"));
                 Preference::default()
             }
         };
@@ -513,7 +513,7 @@ pub async fn webui_initialize(app: tauri::AppHandle) -> Result<(), String> {
         {
             selected
         } else {
-            s.warning = Some(format!("所选界面 {selected} 不可用，已恢复内置 Neo UI。"));
+            s.warning = Some(format!("webui.error.selected_unavailable|{selected}"));
             "builtin".into()
         }
     };
@@ -542,7 +542,7 @@ pub async fn webui_manager(app: tauri::AppHandle) -> Result<(), String> {
         "webui-manager",
         tauri::WebviewUrl::App("webui-manager.html".into()),
     )
-    .title("Web UI 管理")
+    .title("Web UI manager")
     .inner_size(680.0, 640.0)
     .min_inner_size(440.0, 360.0);
     if let Some(path) = &app.state::<crate::startup::Startup>().webview_data_dir {
@@ -562,7 +562,7 @@ pub fn webui_open_folder(state: State<'_, WebUiState>, source: String) -> Result
         .iter()
         .find(|r| r.source == source)
         .map(|r| r.path.clone())
-        .ok_or("目录不可用")?;
+        .ok_or("webui.error.directory_unavailable")?;
     fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| e.to_string())
 }
@@ -586,7 +586,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let manage = tauri::menu::MenuItem::with_id(
         app,
         "webui-manager",
-        "Web UI 管理",
+        "Web UI manager",
         true,
         Some("CmdOrCtrl+Shift+U"),
     )?;
@@ -615,7 +615,7 @@ impl RequestLease {
         let state = app.state::<WebUiState>();
         let mut s = state.0.lock().map_err(|e| e.to_string())?;
         if s.switching {
-            return Err("正在切换 Web UI，请稍后重试。".into());
+            return Err("webui.error.switching".into());
         }
         s.requests += 1;
         Ok(Self(app.clone()))
@@ -691,7 +691,7 @@ mod tests {
         }
         fs::write(
             roots[1].path.join("same-name/webui.json"),
-            r#"{"name":"测试界面","apiVersion":1,"nativeFrame":false}"#,
+            r#"{"name":"Test UI","apiVersion":1,"nativeFrame":false}"#,
         )
         .unwrap();
         fs::create_dir(roots[1].path.join("broken")).unwrap();
@@ -706,7 +706,7 @@ mod tests {
             .any(|e| e.id == "install/same-name" && e.error.is_none()));
         assert!(entries
             .iter()
-            .any(|e| e.id == "data/same-name" && e.name == "测试界面" && !e.native_frame));
+            .any(|e| e.id == "data/same-name" && e.name == "Test UI" && !e.native_frame));
         assert_eq!(entries.iter().filter(|e| e.error.is_some()).count(), 2);
     }
     #[test]
@@ -715,7 +715,7 @@ mod tests {
         let root = dir.path().join("ui");
         fs::create_dir_all(root.join("assets")).unwrap();
         fs::write(root.join("index.html"), "index").unwrap();
-        fs::write(root.join("assets/图标.svg"), "svg").unwrap();
+        fs::write(root.join("assets/icon.svg"), "svg").unwrap();
         fs::write(dir.path().join("secret"), "outside").unwrap();
         assert_eq!(
             fs::read_to_string(safe_asset(&root, "/").unwrap()).unwrap(),

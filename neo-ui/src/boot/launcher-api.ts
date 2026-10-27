@@ -2,6 +2,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { i18n } from '../i18n';
 
 export type ApiResult<T = unknown> = { ok: boolean; data?: T; error?: string; operation?: string };
 
@@ -109,7 +110,7 @@ export class LauncherApiClient {
   }
 
   private requireDesktop(): void {
-    if (!isTauri()) throw new Error('当前为网页预览。请启动安装目录中的 luna-neo-ui.exe，以连接启动器并读取实例、账户和设置。');
+    if (!isTauri()) throw new Error(i18n.global.t('neo.extra.webPreview'));
   }
 
   private cacheKey(operation: string, parameters: Record<string, unknown>): string {

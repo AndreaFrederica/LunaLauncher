@@ -110,11 +110,11 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<Sidecar, String> {
             .map(|tail| tail.iter().cloned().collect::<Vec<_>>().join("\n"))
             .unwrap_or_default();
         let error = if details.contains("data directory is already in use") {
-            "启动器数据目录已被另一个进程占用。请使用已打开的 Neo UI；如果运行的是传统 Qt 界面，请先关闭它再打开 Neo UI。".to_string()
+            "webui.error.data_in_use".to_string()
         } else if details.is_empty() {
-            "启动器后端已退出，未返回响应。".to_string()
+            "webui.error.backend_exited".to_string()
         } else {
-            format!("启动器后端已退出：\n{details}")
+            format!("webui.error.backend_exited|{details}")
         };
         if let Ok(mut connection) = reader_connection.lock() {
             connection.closed = Some(error.clone());
@@ -271,7 +271,7 @@ async fn open_resource_download(app: tauri::AppHandle, instance: String, kind: S
         label,
         tauri::WebviewUrl::External(webui::app_url(&path)),
     )
-    .title(format!("下载资源 - {name}"))
+    .title(format!("Resource download - {name}"))
     .decorations(false)
     .inner_size(1020.0, 780.0)
     .min_inner_size(720.0, 480.0);
@@ -298,7 +298,7 @@ async fn open_instance_editor(app: tauri::AppHandle, id: String, name: String) -
         label,
         tauri::WebviewUrl::External(webui::app_url(&path)),
     )
-    .title(format!("实例设置 - {name}"))
+    .title(format!("Instance settings - {name}"))
     .decorations(false)
     .inner_size(980.0, 760.0)
     .min_inner_size(720.0, 480.0);

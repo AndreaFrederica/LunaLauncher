@@ -36,6 +36,13 @@
 #include "FlameInstanceCreationTask.h"
 #include "cli/ScopedUserInteraction.h"
 
+#include <QCryptographicHash>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+
 #include "InstanceTask.h"
 #include "QObjectPtr.h"
 #include "minecraft/mod/tasks/LocalResourceUpdateTask.h"
@@ -74,6 +81,33 @@
 #include "ui/pages/modplatform/OptionalModDialog.h"
 
 static const FlameAPI api;
+
+namespace {
+/// Hash one file and compare it with the expected hex digest.
+bool fileMatchesHash(const QString& path, const QString& hashType, const QString& expected)
+{
+    if (expected.isEmpty())
+        return false;
+
+    QCryptographicHash::Algorithm algorithm = QCryptographicHash::Sha1;
+    if (hashType.compare(QStringLiteral("md5"), Qt::CaseInsensitive) == 0)
+        algorithm = QCryptographicHash::Md5;
+    else if (hashType.compare(QStringLiteral("sha256"), Qt::CaseInsensitive) == 0)
+        algorithm = QCryptographicHash::Sha256;
+    else if (hashType.compare(QStringLiteral("sha512"), Qt::CaseInsensitive) == 0)
+        algorithm = QCryptographicHash::Sha512;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+
+    QCryptographicHash hash(algorithm);
+    if (!hash.addData(&file))
+        return false;
+
+    return QString::fromLatin1(hash.result().toHex()).compare(expected, Qt::CaseInsensitive) == 0;
+}
+}  // namespace
 
 bool FlameCreationTask::abort()
 {
@@ -543,6 +577,7 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
     // first check for blocked mods
     QList<BlockedMod> blocked_mods;
     auto anyBlocked = false;
+    auto anyUnmatched = false;
     for (const auto& result : results.values()) {
         if (result.resourceType != ModPlatform::ResourceType::Mod) {
             m_otherResources.append(std::make_pair(result.version.fileName, result.targetFolder));
@@ -551,21 +586,37 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
         // skip optional mods that were not selected
         if (result.version.downloadUrl.isEmpty()) {
             BlockedMod blocked_mod;
-            blocked_mod.name = result.version.fileName;
+            blocked_mod.name = FS::RemoveInvalidPathChars(result.version.fileName);
             blocked_mod.websiteUrl = QString("%1/download/%2").arg(result.pack.websiteUrl, QString::number(result.fileId));
             blocked_mod.hash = result.version.hash;
             blocked_mod.matched = false;
             blocked_mod.localPath = "";
             blocked_mod.targetFolder = result.targetFolder;
-            auto fileName = result.version.fileName;
-            fileName = FS::RemoveInvalidPathChars(fileName);
-            auto relpath = FS::PathCombine(result.targetFolder, fileName);
+            auto relpath = FS::PathCombine(result.targetFolder, blocked_mod.name);
             blocked_mod.disabled = !result.required && !m_selectedOptionalMods.contains(relpath);
+
+            // The user may already have downloaded this file into their download
+            // folder from an earlier attempt: use it instead of asking again.
+            const auto localCopy = findLocalCopy(result);
+            if (!localCopy.isEmpty()) {
+                blocked_mod.matched = true;
+                blocked_mod.localPath = localCopy;
+                qDebug() << "Found blocked mod" << blocked_mod.name << "in the download folder:" << localCopy;
+            } else {
+                anyUnmatched = true;
+            }
 
             blocked_mods.append(blocked_mod);
 
             anyBlocked = true;
         }
+    }
+    if (anyBlocked && !anyUnmatched) {
+        // Everything is already available locally, no dialog needed.
+        qDebug() << "All blocked mods were found locally, copying them into the instance";
+        copyBlockedMods(blocked_mods);
+        setupDownloadJob(loop);
+        return;
     }
     if (anyBlocked) {
         qWarning() << "Blocked mods found, displaying mod list";
@@ -624,6 +675,21 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
             continue;
         }
 
+        // Blocked-mod files are often already sitting in the user's downloads
+        // folder (that is where the manual download flow puts them). Prefer such
+        // a local copy over downloading the Modrinth substitute.
+        if (result.fromModrinthFallback) {
+            const auto local = findLocalCopy(result);
+            if (!local.isEmpty()) {
+                FS::ensureFilePathExists(path);
+                if (FS::copy(local, path)()) {
+                    qDebug() << "Using local copy of" << fileName << "from" << local;
+                    continue;
+                }
+                qWarning() << "Found a local copy of" << fileName << "at" << local << "but could not copy it to" << path;
+            }
+        }
+
         // Modrinth fallback URLs point at cdn.modrinth.com; honour the optional
         // CDN override so users behind a blocked/slow CDN can reroute them.
         const QString url = MirrorDownload::rewriteUrl(result.version.downloadUrl, mirror);
@@ -666,6 +732,74 @@ bool FlameCreationTask::isFileAlreadyPresent(const Flame::File& file, const QStr
         return true;
 
     return info.size() == file.version.fileSize;
+}
+
+QString FlameCreationTask::findLocalCopy(const Flame::File& file) const
+{
+    const auto expected = file.version.hash;
+    if (expected.isEmpty())
+        return {};
+
+    const auto& hashType = file.version.hash_type;
+    const QString fileName = FS::RemoveInvalidPathChars(file.version.fileName);
+
+    // Same locations the blocked-mods dialog watches, so files the user has
+    // already downloaded for previous attempts are picked up here.
+    QStringList directories;
+    const auto downloadsDir = APPLICATION->settings()->get("DownloadsDir").toString();
+    if (!downloadsDir.isEmpty())
+        directories << downloadsDir;
+    const auto centralModsDir = APPLICATION->settings()->get("CentralModsDir").toString();
+    if (!centralModsDir.isEmpty())
+        directories << centralModsDir;
+    directories << QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    directories.removeAll(QString());
+    directories.removeDuplicates();
+
+    const bool recursiveDownloads = APPLICATION->settings()->get("DownloadsDirWatchRecursive").toBool();
+
+    for (const auto& directory : directories) {
+        QFileInfo dirInfo(directory);
+        if (!dirInfo.isDir() || !dirInfo.isReadable())
+            continue;
+
+        // 1) The file with the expected name, next to the download folder root.
+        const auto direct = QDir(directory).absoluteFilePath(fileName);
+        if (QFileInfo::exists(direct) && fileMatchesHash(direct, hashType, expected))
+            return direct;
+
+        // 2) Same name somewhere below it. The central mods folder is always
+        // searched recursively; the downloads folder only when the user asked for
+        // it, since it can be huge.
+        const bool recursive = directory != downloadsDir || recursiveDownloads;
+        if (recursive) {
+            int examined = 0;
+            QDirIterator it(directory, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+            while (it.hasNext() && examined++ < 5000) {
+                const auto candidate = it.next();
+                if (QFileInfo(candidate).fileName().compare(fileName, Qt::CaseInsensitive) != 0)
+                    continue;
+                if (fileMatchesHash(candidate, hashType, expected))
+                    return candidate;
+            }
+        }
+
+        // 3) Same size, different name (browsers like to rename downloads).
+        if (file.version.fileSize >= 0) {
+            int examined = 0;
+            const auto entries = QDir(directory).entryInfoList(QDir::Files | QDir::NoSymLinks, QDir::Name);
+            for (const auto& entry : entries) {
+                if (examined++ >= 5000)
+                    break;
+                if (entry.size() != file.version.fileSize)
+                    continue;
+                if (fileMatchesHash(entry.absoluteFilePath(), hashType, expected))
+                    return entry.absoluteFilePath();
+            }
+        }
+    }
+
+    return {};
 }
 
 void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop)

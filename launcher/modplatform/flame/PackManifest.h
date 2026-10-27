@@ -56,6 +56,10 @@ struct File {
     // our
     QString targetFolder = QStringLiteral("mods");
     ModPlatform::ResourceType resourceType;
+
+    /// True when CurseForge does not serve this file and the download URL was
+    /// substituted with the equivalent file found on Modrinth.
+    bool fromModrinthFallback = false;
 };
 
 struct Modloader {

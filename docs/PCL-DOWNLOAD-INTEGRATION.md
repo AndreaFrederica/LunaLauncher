@@ -809,6 +809,19 @@ authlib-injector、Nide8、YukariConnect、Terracotta 等直接调用 `QNetworkA
 
 这条路径同时覆盖了「Modrinth 回退拿到的 `cdn.modrinth.com` 直链也不可用」的情况：以前这种情况直接让整个导入失败，用户没有任何补救入口。
 
+### 5.8.1 本地优先：先找用户下载目录，再走网络
+
+用户常常已经手动下过那个被阻止的 mod（上一轮导入时放进下载目录）。所以导入时**先查本地、再下网络**：
+
+| 场景 | 行为 |
+|---|---|
+| CurseForge 直接给了下载地址，且不是回退文件 | 直接下载（本地查找只针对回退/被阻止的文件，避免无谓扫描） |
+| Modrinth 回退文件（`Flame::File::fromModrinthFallback`） | 先 `findLocalCopy()` 找同名 / 同大小 / 哈希匹配的文件，命中就 `FS::copy` 进 staging，**完全不发起网络请求**；否则才下载（并应用 CDN 覆盖） |
+| 被阻止的文件（无下载地址）且本地能找到 | 直接 `copyBlockedMods()`，**不再弹对话框** |
+| 被阻止的文件本地也没有 | 走 `BlockedModsDialog` / `resolveHeadlessBlockedMods`（对话框里已匹配的条目会预勾选） |
+
+查找目录与 `BlockedModsDialog` 监听的一致：`DownloadsDir`（是否递归由 `DownloadsDirWatchRecursive` 决定）、`CentralModsDir`（总是递归）、系统下载目录。匹配时按 `IndexedVersion::hash_type`（sha1/md5/sha256/sha512）流式计算并比对，先试同名文件，再按文件大小筛选候选；扫描有 5000 个条目的上限，避免在大下载目录上卡住。
+
 ### 5.9 `cdn.modrinth.com` 的镜像覆盖
 
 Modrinth 回退给出的下载地址是 `https://cdn.modrinth.com/...`，而 `ModrinthMirror` / `CurseForgeMirror` 只改写 API 基址，不覆盖文件 CDN。为此新增设置：

@@ -189,6 +189,7 @@ void Flame::FileResolvingTask::netJobFinished(QByteArray* response)
                             auto file = Modrinth::loadIndexedPackVersion(entry);
 
                             out.version.downloadUrl = file.downloadUrl;
+                            out.fromModrinthFallback = true;
                             qDebug() << "Found alternative on modrinth" << out.version.fileName;
                         } catch (Json::JsonException& e) {
                             qDebug() << e.cause();

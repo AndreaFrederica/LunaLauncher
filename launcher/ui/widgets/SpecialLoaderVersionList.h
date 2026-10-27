@@ -38,7 +38,7 @@ class SpecialLoaderVersionList final : public BaseVersionList {
    public:
     explicit SpecialLoaderVersionList(QString loader, QString minecraftVersion, QObject* parent = nullptr);
 
-    Task::Ptr getLoadTask() override;
+    Task::Ptr getLoadTask(bool forceReload = false) override;
     bool isLoaded() override { return m_loaded; }
     const BaseVersion::Ptr at(int i) const override { return m_versions.at(i); }
     int count() const override { return m_versions.size(); }

@@ -297,6 +297,7 @@ void APIPage::loadSettings()
     loadModApiMirror(ui->curseForgeMirrorComboBox, s->get("CurseForgeMirror").toInt());
     ui->modrinthMirrorURL->setText(s->get("ModrinthMirrorURL").toString());
     ui->curseForgeMirrorURL->setText(s->get("CurseForgeMirrorURL").toString());
+    ui->modrinthDownloadMirrorURL->setText(s->get("ModrinthDownloadMirrorURL").toString());
 
     const auto curseForgeDownloadBrowser = s->get("CurseForgeDownloadBrowser").toString();
     auto curseForgeDownloadBrowserIndex = ui->curseForgeDownloadBrowserComboBox->findData(curseForgeDownloadBrowser);
@@ -348,6 +349,7 @@ void APIPage::applySettings()
     s->set("CurseForgeMirror", ui->curseForgeMirrorComboBox->currentData().toInt());
     s->set("ModrinthMirrorURL", ui->modrinthMirrorURL->text().trimmed());
     s->set("CurseForgeMirrorURL", ui->curseForgeMirrorURL->text().trimmed());
+    s->set("ModrinthDownloadMirrorURL", ui->modrinthDownloadMirrorURL->text().trimmed());
     s->set("CurseForgeDownloadBrowser", ui->curseForgeDownloadBrowserComboBox->currentData().toString());
 
     // Save download backend

@@ -116,11 +116,16 @@ MirrorDownload::ResolvedMirror MirrorDownload::resolve(SettingsObject* settings)
     if (!settings)
         return mirror;
 
+    // Third-party mod file CDNs have their own override and must also work when
+    // the Mojang downloads are served officially.
+    mirror.modrinthCdnBase = normalizeBase(settings->get("ModrinthDownloadMirrorURL").toString());
+
     const int type = settings->get("DownloadMirrorType").toInt();
     if (type < First || type > Last)
         return mirror;
 
     mirror.type = static_cast<MirrorType>(type);
+
     if (mirror.type == Official)
         return mirror;
 
@@ -162,10 +167,17 @@ MirrorDownload::ResolvedMirror MirrorDownload::resolve(SettingsObject* settings)
 
 QString MirrorDownload::rewriteUrl(const QString& url, const ResolvedMirror& mirror)
 {
-    if (mirror.isOfficial() || url.isEmpty())
+    if (url.isEmpty())
         return url;
 
     QString rewritten = url;
+
+    // Mod file CDN override (e.g. the Modrinth fallback for blocked CurseForge
+    // mods). Configured independently of the Mojang mirror selection.
+    replaceHost(rewritten, QStringLiteral("cdn.modrinth.com"), mirror.modrinthCdnBase);
+
+    if (mirror.isOfficial())
+        return rewritten;
 
     // Assets objects. AssetUpdateTask also supplies the assets base directly, but
     // absolute asset URLs can appear in other version metadata as well.

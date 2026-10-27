@@ -50,6 +50,7 @@
 #include "Json.h"
 
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/MirrorDownload.h"
 #include "minecraft/PackProfile.h"
 
 #include "modplatform/helpers/OverrideUtils.h"
@@ -599,6 +600,7 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
 {
     m_filesJob.reset(new NetJob(tr("Mod Download Flame"), APPLICATION->network()));
     auto results = m_modIdResolver->getResults().files;
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
 
     for (const auto& result : results) {
         auto fileName = result.version.fileName;
@@ -612,22 +614,31 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
         relpath = FS::PathCombine("minecraft", relpath);
         auto path = FS::PathCombine(m_stagingPath, relpath);
 
-        if (!result.version.downloadUrl.isEmpty()) {
-            qDebug() << "Will download" << result.version.downloadUrl << "to" << path;
-            auto dl = Net::ApiDownload::makeFile(result.version.downloadUrl, path);
-            m_filesJob->addNetAction(dl);
+        if (result.version.downloadUrl.isEmpty())
+            continue;
+
+        // The file may already be there: shipped by the pack overrides, supplied
+        // manually after a failed download, or downloaded by a previous attempt.
+        if (isFileAlreadyPresent(result, path)) {
+            qDebug() << "Skipping already present file" << path;
+            continue;
         }
+
+        // Modrinth fallback URLs point at cdn.modrinth.com; honour the optional
+        // CDN override so users behind a blocked/slow CDN can reroute them.
+        const QString url = MirrorDownload::rewriteUrl(result.version.downloadUrl, mirror);
+        qDebug() << "Will download" << url << "to" << path;
+        auto dl = Net::ApiDownload::makeFile(QUrl(url), path);
+        if (!result.version.hash.isEmpty())
+            dl->setExpectedIntegrity(result.version.hash_type, result.version.hash, result.version.fileSize);
+        m_filesJob->addNetAction(dl);
     }
 
     connect(m_filesJob.get(), &NetJob::succeeded, this, [this, &loop]() {
         m_filesJob.reset();
         validateOtherResources(loop);
     });
-    connect(m_filesJob.get(), &NetJob::failed, this, [this, &loop](QString reason) {
-        m_filesJob.reset();
-        setError(reason);
-        loop.quit();
-    });
+    connect(m_filesJob.get(), &NetJob::failed, this, [this, &loop](QString reason) { onDownloadFailed(reason, loop); });
     connect(m_filesJob.get(), &NetJob::aborted, this, [this, &loop]() {
         m_filesJob.reset();
         loop.quit();
@@ -641,6 +652,90 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
 
     setStatus(tr("Downloading mods..."));
     m_filesJob->start();
+}
+
+bool FlameCreationTask::isFileAlreadyPresent(const Flame::File& file, const QString& path) const
+{
+    QFileInfo info(path);
+    if (!info.exists() || !info.isFile() || info.size() == 0)
+        return false;
+
+    // Without size information the best we have is the assumption that an
+    // existing file came from a good source.
+    if (file.version.fileSize < 0)
+        return true;
+
+    return info.size() == file.version.fileSize;
+}
+
+void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop)
+{
+    auto failedUrls = m_filesJob->getFailedFiles();
+    m_filesJob.reset();
+
+    if (m_blockedFallbackUsed) {
+        setError(reason);
+        loop.quit();
+        return;
+    }
+
+    // Map the failed URLs back to manifest files so we can offer the same manual
+    // download flow that is used for genuinely blocked CurseForge files.
+    auto results = m_modIdResolver->getResults().files;
+    QList<BlockedMod> blocked_mods;
+    for (const auto& result : results) {
+        if (result.version.downloadUrl.isEmpty())
+            continue;
+
+        const auto rewritten = MirrorDownload::rewriteUrl(result.version.downloadUrl, APPLICATION->settings());
+        if (!failedUrls.contains(result.version.downloadUrl) && !failedUrls.contains(rewritten))
+            continue;
+
+        auto fileName = FS::RemoveInvalidPathChars(result.version.fileName);
+        BlockedMod blocked_mod;
+        blocked_mod.name = fileName;
+        blocked_mod.websiteUrl = QString("%1/download/%2").arg(result.pack.websiteUrl, QString::number(result.fileId));
+        blocked_mod.hash = result.version.hash;
+        blocked_mod.matched = false;
+        blocked_mod.localPath = "";
+        blocked_mod.targetFolder = result.targetFolder;
+        blocked_mod.disabled = !result.required && !m_selectedOptionalMods.contains(FS::PathCombine(result.targetFolder, fileName));
+
+        blocked_mods.append(blocked_mod);
+    }
+
+    if (blocked_mods.isEmpty()) {
+        setError(reason);
+        loop.quit();
+        return;
+    }
+
+    qWarning() << "Downloads failed, offering manual download:" << blocked_mods;
+
+    QString headlessError;
+    const bool accepted = [&] {
+        if (APPLICATION->isHeadless())
+            return resolveHeadlessBlockedMods(blocked_mods, "sha1", headlessError);
+
+        BlockedModsDialog message_dialog(m_parent, tr("Some files could not be downloaded"),
+                                         tr("The following files could not be downloaded automatically.<br/>"
+                                            "You can download them manually and add them to the instance."),
+                                         blocked_mods);
+
+        message_dialog.setModal(true);
+
+        return message_dialog.exec() != 0;
+    }();
+
+    if (!accepted) {
+        setError(headlessError.isEmpty() ? "Canceled" : headlessError);
+        loop.quit();
+        return;
+    }
+
+    copyBlockedMods(blocked_mods);
+    m_blockedFallbackUsed = true;
+    setupDownloadJob(loop);
 }
 
 /// @brief copy the matched blocked mods to the instance staging area

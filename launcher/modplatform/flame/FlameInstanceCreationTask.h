@@ -78,6 +78,12 @@ class FlameCreationTask final : public InstanceCreationTask {
     QString getVersionForLoader(QString uid, QString loaderType, QString version, QString mcVersion);
 
    private:
+    /// True when the file already exists in the staging area with the expected size.
+    bool isFileAlreadyPresent(const Flame::File& file, const QString& path) const;
+    /// Offers the failed downloads as blocked mods (manual download) and retries once.
+    void onDownloadFailed(const QString& reason, QEventLoop& loop);
+
+   private:
     QWidget* m_parent = nullptr;
 
     shared_qobject_ptr<Flame::FileResolvingTask> m_modIdResolver;
@@ -94,4 +100,8 @@ class FlameCreationTask final : public InstanceCreationTask {
     std::optional<BaseInstance*> m_instance;
 
     QStringList m_selectedOptionalMods;
+
+    /// Set once the failed downloads were handed to the user, so a second
+    /// failure fails the import instead of showing the dialog again.
+    bool m_blockedFallbackUsed = false;
 };

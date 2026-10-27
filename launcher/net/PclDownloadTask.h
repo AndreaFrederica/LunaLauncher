@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <QElapsedTimer>
+#include <QTimer>
+
 #include "net/Download.h"
 
 namespace Net {
@@ -49,11 +52,18 @@ class PclDownloadTask : public Download {
 
    private slots:
     void onTaskEvent(int taskId, int eventType, qint64 downloaded, qint64 total, qint64 speed, int threads);
+    void checkStall();
 
    private:
     void startQtFallback(const QString& reason);
     void finishDownload();
     void failOrAbort(const QString& reason);
+
+    /// Start/stop the transfer-timeout watchdog. Mirrors QNetworkRequest::setTransferTimeout():
+    /// the download is abandoned when no new bytes arrive for RequestTimeout seconds.
+    void startStallWatch();
+    void stopStallWatch();
+    void handleStall();
 
    private:
     QString m_targetPath;
@@ -65,6 +75,11 @@ class PclDownloadTask : public Download {
     int m_statusCode = -1;
     QNetworkReply::NetworkError m_error = QNetworkReply::NoError;
     QString m_errorString;
+
+    QTimer m_stallTimer;
+    QElapsedTimer m_stallClock;
+    qint64 m_lastKnownBytes = 0;
+    int m_stallTimeoutMs = 0;
 };
 
 }  // namespace Net

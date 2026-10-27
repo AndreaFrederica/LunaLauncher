@@ -770,6 +770,55 @@ endif
 
 authlib-injector、Nide8、YukariConnect、Terracotta 等直接调用 `QNetworkAccessManager::get()`，不经过 `Net::Download` facade。这些不在本次集成范围内。如需覆盖，需单独修改。
 
+### 5.6 传输超时（与 Qt 语义对齐）
+
+原生路径此前**没有任何超时**：`PclDownloadTask` 只等 `finished` / `failed` / `aborted` 事件，一旦原生下载器卡在某个分片的 socket 上，任务永不结束；而 `NetJob` 只重试「已失败」的 action，于是整个下载队列原地冻结（表现为导入停在 N/236、0 B/s、无报错）。Qt 路径的 `QNetworkRequest::setTransferTimeout()` 对这条路径完全无效。
+
+现在 `PclDownloadTask` 自带看门狗，语义与 Qt 一致：
+
+| 语义 | Qt（`NetRequest`） | PCL.Download（`PclDownloadTask`） |
+|---|---|---|
+| 超时时长 | `RequestTimeout` 秒（默认 60，0 = 关闭） | 同一设置项 |
+| 计时方式 | 无新字节即计时（inactivity） | 同上：只有 `downloaded` 数值增长才算活跃 |
+| 超时结果 | `TimeoutError`，交给上层重试 | 中止原生任务，再按 `PclDownloadFallbackToQt` 回退到 Qt 下载器；关闭回退时 `emitFailed(TimeoutError)` |
+| 重试 | `NetJob` 最多 3 次 | 回退后由 Qt 下载器走同一套 3 次重试；重试会重置每个 attempt 的状态 |
+
+要点：
+
+- 计时器在 `executeTask()` 里启动，首次 `Progress` 事件之前就已经生效（覆盖 DNS/连接/TLS 阶段）；原生的 `Progress` 事件即使持续推送、只要字节数不涨也不续命。
+- 超时后 `abortDownload()` 是异步的，句柄延迟 10 s 再 `releaseTask()`，避免迟到的终态事件打到已释放的任务。
+- 顺带修掉一个会让重试永久挂起的缺陷：`Task::start()` 会用**同一个对象**重启失败的 action，而 `m_finished` 之前没有在 `executeTask()` 开头复位，导致第二次尝试吞掉所有原生事件。现在每次尝试都会重置 `m_finished` / `m_taskId` / `m_error` 等状态。
+- 原生 API 没有超时导出（`Exports.cs` 只有线程数/限速/代理），所以对齐放在 C++ 侧，不需要重编 `PCL.Download.dll`。
+- `Aria2Download` 现在使用完全相同的看门狗（`startStallWatch` / `checkStall` / `handleStall`），卡住时先 `aria2.remove` 再按 `Aria2FallbackToQt` 回退；它同样修掉了 `m_finished` 未复位的重试挂死问题。
+
+### 5.7 下载完整性校验
+
+`Net::Download::setExpectedIntegrity(hashType, hash, size)` 统一声明期望值（`Download.h`），三条路径都会校验：
+
+| 路径 | 校验方式 |
+|---|---|
+| Qt（`NetRequest`） | `ChecksumValidator` 挂在 sink 上，流式哈希 + `finalize` 时比对 |
+| PCL.Download | 期望的 sha1 / 文件大小同时传给 `pcl_download_file(hash, expectedSize)`；下载完成后再走 `sink->validateExternalData()` 复核 |
+| aria2 | 文件落盘后调用 `verifyFileIntegrity()` 复核，不匹配则删除并失败 |
+
+`ModPlatform::IndexedVersion` 新增 `fileSize`（CurseForge `fileLength`、Modrinth `files[].size`），`FlameCreationTask` 在为每个 manifest 文件建 `Download` 时用 `version.hash_type / hash / fileSize` 调用上述 API。校验失败会走下面的「手动下载」回退，而不是被静默接受。
+
+### 5.8 失败回退到 Blocked mods 手动流程
+
+`FlameCreationTask::onDownloadFailed()`：NetJob 失败后，把失败 URL 映射回 manifest 文件，弹出 `BlockedModsDialog`（headless 走 `resolveHeadlessBlockedMods`），用户提供本地文件后 `copyBlockedMods()` 复制到 staging，然后**只重试缺失的文件**（`setupDownloadJob` 现在会跳过已存在且大小匹配的文件；`isFileAlreadyPresent()`）。用 `m_blockedFallbackUsed` 保证最多回退一次，避免死循环。
+
+这条路径同时覆盖了「Modrinth 回退拿到的 `cdn.modrinth.com` 直链也不可用」的情况：以前这种情况直接让整个导入失败，用户没有任何补救入口。
+
+### 5.9 `cdn.modrinth.com` 的镜像覆盖
+
+Modrinth 回退给出的下载地址是 `https://cdn.modrinth.com/...`，而 `ModrinthMirror` / `CurseForgeMirror` 只改写 API 基址，不覆盖文件 CDN。为此新增设置：
+
+- `ModrinthDownloadMirrorURL`（设置 → API → *Modrinth CDN Prefix*），空 = 官方 CDN；
+- `MirrorDownload::ResolvedMirror::modrinthCdnBase` 独立于 Mojang 镜像类型解析，`rewriteUrl()` 会把 `cdn.modrinth.com` 前缀替换成它（带主机名精确匹配，`cdn.modrinth.com.evil` 不会被误伤）；
+- `FlameCreationTask` 建下载任务时应用该改写；失败时再落到 5.8 的手动流程。
+
+> 注意：目前已知的公共镜像（mcimirror）**不**代理 `cdn.modrinth.com`（实测 `/modrinth/data/...` 返回 404），所以该设置默认留空，供自建/第三方 CDN 代理使用。
+
 ---
 
 ## 六、测试计划

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Prism Launcher - Minecraft Launcher
  *  Copyright (c) 2022 flowln <flowlnlnln@gmail.com>
@@ -214,6 +214,7 @@ ModPlatform::IndexedVersion Modrinth::loadIndexedPackVersion(QJsonObject& obj,
         file.downloadUrl = Json::requireString(parent, "url");
         file.fileName = Json::requireString(parent, "filename");
         file.fileName = FS::RemoveInvalidPathChars(file.fileName);
+        file.fileSize = static_cast<qint64>(parent["size"].toInteger(-1));
         file.is_preferred = Json::requireBoolean(parent, "primary") || (files.count() == 1);
         auto hash_list = Json::requireObject(parent, "hashes");
 

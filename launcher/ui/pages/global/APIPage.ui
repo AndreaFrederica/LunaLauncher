@@ -228,7 +228,32 @@
              </property>
             </widget>
            </item>
-         </layout>
+                    <item row="4" column="0">
+            <widget class="QLabel" name="modrinthDownloadMirrorURLLabel">
+             <property name="text">
+              <string>Modrinth CDN Prefix</string>
+             </property>
+             <property name="toolTip">
+              <string>Optional. Replaces https://cdn.modrinth.com/ when downloading mod files, for example when a blocked CurseForge mod is downloaded from Modrinth instead. Leave empty to use the official CDN.</string>
+             </property>
+             <property name="buddy">
+              <cstring>modrinthDownloadMirrorURL</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLineEdit" name="modrinthDownloadMirrorURL">
+             <property name="placeholderText">
+              <string>https://cdn.modrinth.com/</string>
+             </property>
+             <property name="toolTip">
+              <string>Base URL that replaces https://cdn.modrinth.com/ in file download links.</string>
+             </property>
+             <property name="clearButtonEnabled">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item></layout>
         </widget>
        </item>
        <item>

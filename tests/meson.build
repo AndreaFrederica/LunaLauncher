@@ -14,6 +14,7 @@ test_sources = [
   'WorldSaveParse_test.cpp',
   'ParseUtils_test.cpp',
   'Task_test.cpp',
+  'DownloadIntegrity_test.cpp',
   'INIFile_test.cpp',
   'JavaVersion_test.cpp',
   'Packwiz_test.cpp',

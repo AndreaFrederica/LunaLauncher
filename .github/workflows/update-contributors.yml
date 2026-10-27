@@ -1,214 +1,38 @@
 name: Update contributors
-
 on:
   workflow_dispatch:
-
 permissions:
   contents: write
-
 concurrency:
   group: update-contributors
   cancel-in-progress: false
-
 jobs:
   update:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Luna
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: meson
           fetch-depth: 0
-
-      - name: Fetch Prism Launcher history
+      - name: Fetch Prism history
         shell: bash
         run: |
           set -euo pipefail
-
           git remote add prism https://github.com/PrismLauncher/PrismLauncher.git
-
-          prism_branch="$(
-            git ls-remote --symref prism HEAD |
-              sed -n 's@^ref: refs/heads/\(.*\)[[:space:]]HEAD$@\1@p'
-          )"
-
-          if [ -z "$prism_branch" ]; then
-            echo "Could not determine Prism Launcher's default branch." >&2
-            exit 1
-          fi
-
-          git fetch --no-tags prism \
-            "+refs/heads/$prism_branch:refs/remotes/prism/default"
-
-      - name: Generate contributor lists
+          branch="$(git ls-remote --symref prism HEAD | sed -n 's@^ref: refs/heads/\(.*\)[[:space:]]HEAD$@\1@p')"
+          test -n "$branch"
+          git fetch --no-tags prism "+refs/heads/$branch:refs/remotes/prism/default"
+      - name: Update README
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/update_contributors.py
+      - name: Commit changes
         shell: bash
         run: |
           set -euo pipefail
-
-          python3 - <<'PY'
-          import json
-          import re
-          import subprocess
-          from pathlib import Path
-
-          config_path = Path(".github/contributors.json")
-          config = {}
-
-          if config_path.exists():
-              config = json.loads(config_path.read_text(encoding="utf-8"))
-
-          excluded = {
-              name.casefold()
-              for name in config.get("exclude", ["github-actions[bot]"])
-          }
-
-          def run_git(*args):
-              return subprocess.check_output(
-                  ["git", *args],
-                  text=True,
-                  encoding="utf-8",
-                  errors="replace",
-              )
-
-          def authors(*args, group=None):
-              command = ["shortlog", "-sn", "--no-merges"]
-
-              if group:
-                  command.append(f"--group={group}")
-
-              command.extend(args)
-              output = run_git(*command)
-
-              names = []
-              for line in output.splitlines():
-                  match = re.match(r"^\s*\d+\s+(.+?)\s*$", line)
-                  if not match:
-                      continue
-
-                  name = match.group(1).strip()
-
-                  # Trailer values may include an email address.
-                  name = re.sub(r"\s*<[^>]*>\s*$", "", name).strip()
-
-                  if name and name.casefold() not in excluded:
-                      names.append(name)
-
-              return names
-
-          def merge_names(*groups):
-              result = {}
-
-              for group in groups:
-                  for name in group:
-                      name = name.strip()
-                      if name and name.casefold() not in excluded:
-                          result.setdefault(name.casefold(), name)
-
-              return sorted(result.values(), key=str.casefold)
-
-          def escape_markdown(text):
-              return re.sub(r"([\\`*_\[\]<>])", r"\\\1", text)
-
-          def render_list(names):
-              if not names:
-                  return "_No contributors identified yet._"
-              return "\n".join(f"- {escape_markdown(name)}" for name in names)
-
-          # All authors in the current Prism default branch history.
-          upstream_authors = merge_names(
-              authors("prism/default"),
-              config.get("upstream", []),
-          )
-
-          # Luna-side commits excluding patch-equivalent upstream commits.
-          luna_range = [
-              "--cherry-pick",
-              "--right-only",
-              "prism/default...HEAD",
-          ]
-
-          luna_authors = merge_names(
-              authors(*luna_range),
-              config.get("luna", []),
-          )
-
-          # Co-authors of the Luna-side commits.
-          luna_coauthors = merge_names(
-              authors(*luna_range, group="trailer:co-authored-by"),
-              config.get("coauthors", []),
-          )
-
-          # Manual acknowledgements for non-commit contributions.
-          other_contributors = merge_names(config.get("other", []))
-
-          content = (
-              "<!-- contributors:start -->\n"
-              "## Contributors\n\n"
-              "Luna Launcher is built upon Prism Launcher and the work of "
-              "its contributors. We sincerely thank everyone who made "
-              "the upstream project possible.\n\n"
-              "### Luna contributors\n\n"
-              "Authors identified from Luna-specific commits, plus "
-              "manually acknowledged contributors.\n\n"
-              f"{render_list(luna_authors)}\n\n"
-              "### Luna co-authors\n\n"
-              "Co-authors identified from Luna-specific commits.\n\n"
-              f"{render_list(luna_coauthors)}\n\n"
-              "### Other Luna contributors\n\n"
-              f"{render_list(other_contributors)}\n\n"
-              "### Prism Launcher contributors\n\n"
-              "Authors identified from the complete history of "
-              "Prism Launcher's default branch.\n\n"
-              "<details>\n"
-              "<summary>Show upstream contributors</summary>\n\n"
-              f"{render_list(upstream_authors)}\n\n"
-              "</details>\n"
-              "<!-- contributors:end -->"
-          )
-
-          readme = Path("README.md")
-          text = readme.read_text(encoding="utf-8")
-
-          start = "<!-- contributors:start -->"
-          end = "<!-- contributors:end -->"
-
-          if text.count(start) != text.count(end):
-              raise SystemExit("Contributor markers are mismatched in README.md")
-
-          if text.count(start) > 1:
-              raise SystemExit("Contributor markers appear more than once")
-
-          if start in text:
-              before, rest = text.split(start, 1)
-              _, after = rest.split(end, 1)
-              updated = before + content + after
-          else:
-              # Place the list immediately before the existing license section.
-              marker = "## License"
-              if marker not in text:
-                  raise SystemExit(
-                      "Could not find '## License'. Add contributor markers manually."
-                  )
-              updated = text.replace(marker, content + "\n\n---\n\n" + marker, 1)
-
-          readme.write_text(updated, encoding="utf-8")
-          PY
-
-      - name: Commit updated README
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if git diff --quiet -- README.md; then
-            echo "Contributor list is unchanged."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
+          if git diff --quiet -- README.md; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add README.md
-          git commit -m "docs: update contributor acknowledgements"
+          git commit -m 'docs: update contributor acknowledgements'
           git push origin HEAD:meson

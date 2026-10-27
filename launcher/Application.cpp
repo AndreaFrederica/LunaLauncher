@@ -1342,7 +1342,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     }
 
     // now we have network, download translation updates
-    m_translations->downloadIndex();
+    if (qEnvironmentVariableIsEmpty("LUNA_DISABLE_BACKGROUND_DOWNLOADS"))
+        m_translations->downloadIndex();
 
     // FIXME: what to do with these?
     m_profilers.insert("jprofiler", std::shared_ptr<BaseProfilerFactory>(new JProfilerFactory()));

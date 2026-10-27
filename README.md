@@ -171,14 +171,14 @@ meson install -C build --no-rebuild
 
 #### Useful Meson Options
 
-| Option | Description |
-|--------|-------------|
-| `-Dbuild_testing=false` | Disable tests (default) |
-| `-Dbuild_updater=false` | Disable auto-updater |
-| `-Denable_java_downloader=true` | Enable Java auto-downloader |
-| `-Ddisable_ownership_check=false` | Disable ownership verification |
-| `-Dgamemode=enabled` | Enable GameMode support (Linux) |
-| `-Db_vscrt=md` | Use MSVC dynamic runtime (Windows) |
+| Option | Description | Default |
+|--------|-------------| ------- |
+| `-Dbuild_testing` | Disable tests (default) | `false` |
+| `-Dbuild_updater=false` | Disable auto-updater | `false` |
+| `-Denable_java_downloader` | Enable Java auto-downloader | `true` |
+| `-Ddeveloper_mode_build` | Enable developer mode | `false` |
+| `-Dgamemode` | Enable GameMode support (Linux) | `enabled` |
+| `-Db_vscrt` | Use MSVC dynamic runtime (Windows) | `md` |
 
 ---
 

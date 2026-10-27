@@ -37,6 +37,7 @@
 #include "LaunchController.h"
 #include <QRegularExpression>
 #include <QTimer>
+#include "DeveloperMode.h"
 #include "cli/ScopedUserInteraction.h"
 #include "Application.h"
 #include "launch/steps/PrintServers.h"
@@ -164,27 +165,26 @@ LaunchDecision LaunchController::decideLaunchMode()
 
     const auto* accounts = APPLICATION->accounts();
 
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
-    // Luna feature support: allow third-party auth accounts to launch directly in explicit test builds.
-    MinecraftAccountPtr accountToCheck = m_accountToUse;
-#else
     MinecraftAccountPtr accountToCheck;
-    if (m_accountToUse->ownsMinecraft()) {
+    if (DeveloperMode::isEnabled()) {
         accountToCheck = m_accountToUse;
-    } else if (m_accountToUse->accountType() == AccountType::Yggdrasil &&
-               LocalYggdrasil::instance().hasAccountSnapshot(*m_accountToUse->accountData())) {
-        accountToCheck = m_accountToUse;
-    } else if (const auto defaultAccount = accounts->defaultAccount(); defaultAccount && defaultAccount->ownsMinecraft()) {
-        accountToCheck = defaultAccount;
     } else {
-        for (int i = 0; i < accounts->count(); i++) {
-            if (const auto account = accounts->at(i); account->ownsMinecraft()) {
-                accountToCheck = account;
-                break;
+        if (m_accountToUse->ownsMinecraft()) {
+            accountToCheck = m_accountToUse;
+        } else if (m_accountToUse->accountType() == AccountType::Yggdrasil &&
+                   LocalYggdrasil::instance().hasAccountSnapshot(*m_accountToUse->accountData())) {
+            accountToCheck = m_accountToUse;
+        } else if (const auto defaultAccount = accounts->defaultAccount(); defaultAccount && defaultAccount->ownsMinecraft()) {
+            accountToCheck = defaultAccount;
+        } else {
+            for (int i = 0; i < accounts->count(); i++) {
+                if (const auto account = accounts->at(i); account->ownsMinecraft()) {
+                    accountToCheck = account;
+                    break;
+                }
             }
         }
     }
-#endif
 
     if (!accountToCheck) {
         m_actualLaunchMode = LaunchMode::Demo;

@@ -45,6 +45,7 @@
 
 #include "AccountData.h"
 #include "AuthSession.h"
+#include "DeveloperMode.h"
 #include "QObjectPtr.h"
 #include "Usable.h"
 #include "minecraft/auth/AuthFlow.h"
@@ -134,19 +135,16 @@ class MinecraftAccount : public QObject, public Usable {
     AccountType accountType() const noexcept { return data.type; }
 
     // MSA accounts always check their actual entitlement
-    // Third-party accounts (Offline, Yggdrasil, UnifiedPass) depend on DISABLE_OWNERSHIP_CHECK setting
+    // Third-party accounts (Offline, Yggdrasil, UnifiedPass) depend on DebugMarker0 setting
     bool ownsMinecraft() const
     {
+        if (DeveloperMode::isEnabled()) {
+            return true;
+        }
+
         if (data.type == AccountType::MSA) {
             return data.minecraftEntitlement.ownsMinecraft;
         }
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
-        // When ownership check is disabled, third-party accounts are treated as owning Minecraft
-        return true;
-#else
-        // Otherwise, third-party accounts don't own Minecraft (they rely on having a valid MSA account)
-        return false;
-#endif
     }
 
     bool hasProfile() const { return data.profileId().size() != 0; }

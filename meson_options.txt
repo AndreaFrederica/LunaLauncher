@@ -1,7 +1,7 @@
 option('build_testing', type: 'boolean', value: false)
 option('use_pch', type: 'boolean', value: false)
 option('enable_java_downloader', type: 'boolean', value: true)
-option('disable_ownership_check', type: 'boolean', value: false)
+option('developer_mode_build', type: 'boolean', value: false)
 option('build_updater', type: 'boolean', value: false)
 option('build_filelinker', type: 'boolean', value: true)
 option('bundle_aria2c', type: 'boolean', value: false)

@@ -292,19 +292,26 @@ void NetRequest::downloadFinished()
     {
         qCDebug(logCat) << getUid().toString() << "Request failed but we are allowed to proceed:" << m_url.toString();
         m_sink->abort();
+        // QNetworkReply is parented to the network manager. Release our
+        // deferred-delete pointer while the reply is still alive so a later
+        // network-manager teardown cannot leave a dangling QScopedPointer.
+        m_reply.reset();
         emit succeeded();
         emit finished();
         return;
     } else if (m_state == State::Failed) {
         qCDebug(logCat) << getUid().toString() << "Request failed in previous step:" << m_url.toString();
         m_sink->abort();
-        m_failReason = m_reply->errorString();
-        emit failed(m_reply->errorString());
+        const auto reason = m_reply->errorString();
+        m_failReason = reason;
+        m_reply.reset();
+        emit failed(reason);
         emit finished();
         return;
     } else if (m_state == State::AbortedByUser) {
         qCDebug(logCat) << getUid().toString() << "Request aborted in previous step:" << m_url.toString();
         m_sink->abort();
+        m_reply.reset();
         emit aborted();
         emit finished();
         return;
@@ -319,6 +326,7 @@ void NetRequest::downloadFinished()
             qCDebug(logCat) << getUid().toString() << "Request failed to write:" << m_url.toString();
             m_sink->abort();
             m_failReason = m_sink->failReason();
+            m_reply.reset();
             emit failed(m_sink->failReason());
             emit finished();
             return;
@@ -331,12 +339,14 @@ void NetRequest::downloadFinished()
         qCDebug(logCat) << getUid().toString() << "Request failed to finalize:" << m_url.toString();
         m_sink->abort();
         m_failReason = m_sink->failReason();
+        m_reply.reset();
         emit failed(m_sink->failReason());
         emit finished();
         return;
     }
 
     qCDebug(logCat) << getUid().toString() << "Request succeeded:" << m_url.toString();
+    m_reply.reset();
     emit succeeded();
     emit finished();
 }

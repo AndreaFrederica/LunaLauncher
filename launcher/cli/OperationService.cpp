@@ -160,7 +160,7 @@ std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, Q
     return index < lists.size() ? lists.at(index) : nullptr;
 }
 
-QString resourceTypeName(ResourceType type)
+[[maybe_unused]] QString resourceTypeName(ResourceType type)
 {
     switch (type) {
         case ResourceType::ZIPFILE:

@@ -1127,6 +1127,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_settings->registerSetting("CurseForgeMirror", ModApiMirror::Official);
             m_settings->registerSetting("ModrinthMirrorURL", "");
             m_settings->registerSetting("CurseForgeMirrorURL", "");
+            // Optional replacement base for cdn.modrinth.com file downloads
+            // (used by the blocked-mod Modrinth fallback). Empty = official CDN.
+            m_settings->registerSetting("ModrinthDownloadMirrorURL", "");
             m_settings->registerSetting("LibrariesURL", "");
             m_settings->registerSetting({ "LegacyFMLLibsURLOverride", "FMLLibsURL" }, "");
             m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON

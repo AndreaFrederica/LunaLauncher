@@ -27,6 +27,7 @@ namespace Net {
 Aria2Download::Aria2Download(QString path) : Download(), m_targetPath(std::move(path))
 {
     logCat = taskDownloadLogC;
+    connect(&m_stallTimer, &QTimer::timeout, this, &Aria2Download::checkStall);
 }
 
 bool Aria2Download::shouldUseFor(const QUrl& url)
@@ -62,6 +63,14 @@ Download::Ptr Aria2Download::makeCached(QUrl url, MetaEntryPtr entry, Options op
 
 void Aria2Download::executeTask()
 {
+    // NetJob restarts failed actions on the same object, so each attempt has to
+    // start from a clean slate instead of inheriting m_finished from the last one.
+    m_finished = false;
+    m_statusCode = -1;
+    m_error = QNetworkReply::NoError;
+    m_errorString.clear();
+    m_gid.clear();
+
     if (!shouldUseFor(m_url)) {
         Download::executeTask();
         return;
@@ -113,6 +122,7 @@ void Aria2Download::executeTask()
                              }
                              m_gid = gid;
                              setStatus(tr("Downloading with aria2: %1").arg(StringUtils::truncateUrlHumanFriendly(m_url, 80)));
+                             startStallWatch();
                          });
 }
 
@@ -152,6 +162,13 @@ void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2Download
         return;
     }
 
+    // Only newly transferred bytes count as progress: aria2 keeps reporting
+    // status samples even while every connection is stalled.
+    if (info.completedLength != m_lastKnownBytes) {
+        m_lastKnownBytes = info.completedLength;
+        m_stallClock.restart();
+    }
+
     setProgress(info.completedLength, info.totalLength);
     setTransferRate(info.downloadSpeed);
     QString progress = tr("%1 / %2")
@@ -161,10 +178,12 @@ void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2Download
     setDetails(progress + "\n" + speed);
 
     if (info.status == "complete") {
+        stopStallWatch();
         m_finished = true;
         m_statusCode = 200;
         finishFromTempFile();
     } else if (info.status == "error" || info.status == "removed") {
+        stopStallWatch();
         m_finished = true;
         m_error = info.status == "removed" ? QNetworkReply::OperationCanceledError : QNetworkReply::UnknownNetworkError;
         m_errorString = info.errorMessage.isEmpty() ? tr("aria2 download failed with status %1").arg(info.status) : info.errorMessage;
@@ -249,6 +268,16 @@ void Aria2Download::finishFromTempFile()
         return;
     }
 
+    QString integrityError;
+    if (!verifyFileIntegrity(m_targetPath, &integrityError)) {
+        qCWarning(taskDownloadLogC) << getUid().toString() << "Integrity check failed for" << m_targetPath << ":" << integrityError;
+        m_error = QNetworkReply::UnknownContentError;
+        m_errorString = tr("Downloaded file failed verification: %1").arg(integrityError);
+        QFile::remove(m_targetPath);
+        emitFailed(m_errorString);
+        return;
+    }
+
     // For the cached (MetaCacheSink) case only: update the cache metadata
     // manually, mirroring MetaCacheSink::finalizeCache. aria2 gives us no HTTP
     // headers, so ETag and Last-Modified are left untouched — matching the old
@@ -272,12 +301,69 @@ void Aria2Download::finishFromTempFile()
 
 bool Aria2Download::abort()
 {
+    stopStallWatch();
     m_state = State::AbortedByUser;
     if (!m_gid.isEmpty()) {
         Aria2Manager::instance()->removeDownload(m_gid);
     }
     QFile::remove(m_tempPath);
     return true;
+}
+
+void Aria2Download::startStallWatch()
+{
+    stopStallWatch();
+
+    int timeoutSeconds = 60;
+#if defined(LAUNCHER_APPLICATION)
+    if (APPLICATION_DYN)
+        timeoutSeconds = APPLICATION->settings()->get("RequestTimeout").toInt();
+#endif
+
+    if (timeoutSeconds <= 0)
+        return;
+
+    m_stallTimeoutMs = qMax(5, timeoutSeconds) * 1000;
+    m_lastKnownBytes = 0;
+    m_stallClock.start();
+    m_stallTimer.start(qBound(1000, m_stallTimeoutMs / 4, 5000));
+}
+
+void Aria2Download::stopStallWatch()
+{
+    m_stallTimer.stop();
+}
+
+void Aria2Download::checkStall()
+{
+    if (m_finished || m_gid.isEmpty() || m_stallTimeoutMs <= 0) {
+        stopStallWatch();
+        return;
+    }
+    if (m_stallClock.elapsed() < m_stallTimeoutMs)
+        return;
+    handleStall();
+}
+
+void Aria2Download::handleStall()
+{
+    stopStallWatch();
+
+    const int seconds = m_stallTimeoutMs / 1000;
+    const QString reason = tr("aria2 received no data for %1 s from %2").arg(seconds).arg(m_url.toString());
+    qCWarning(taskDownloadLogC) << getUid().toString() << reason;
+
+    m_finished = true;
+    m_error = QNetworkReply::TimeoutError;
+    m_errorString = reason;
+
+    if (!m_gid.isEmpty()) {
+        Aria2Manager::instance()->removeDownload(m_gid);
+        m_gid.clear();
+    }
+    QFile::remove(m_tempPath);
+
+    startQtFallback(reason);
 }
 
 }  // namespace Net

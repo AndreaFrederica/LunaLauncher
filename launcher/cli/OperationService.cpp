@@ -280,6 +280,7 @@ QString settingCategory(const QString& id)
         "Aria2PollInterval", "Aria2ExtraArgs", "Aria2UseLauncherProxy", "CurseForgeDownloadBrowser",
         "ShowModIncompat", "FallbackMRBlockedMods", "MetaURLOverride", "LocalServiceCache", "ResourceURLOverride", "DownloadMirrorType",
         "ModrinthMirror", "CurseForgeMirror", "ModrinthMirrorURL", "CurseForgeMirrorURL", "LibrariesURL", "LegacyFMLLibsURLOverride", "MojangDownloadsMirrorURL",
+        "ModrinthDownloadMirrorURL",
         "CFKeyOverride", "FlameKeyOverride", "ModrinthToken"
     };
     static const QSet<QString> java{

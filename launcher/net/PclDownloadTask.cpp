@@ -18,6 +18,7 @@
 #include "net/PclDownloadTask.h"
 
 #include <QCryptographicHash>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QNetworkReply>
@@ -61,6 +62,7 @@ namespace Net {
 PclDownloadTask::PclDownloadTask(QString path) : Download(), m_targetPath(std::move(path))
 {
     logCat = taskDownloadLogC;
+    connect(&m_stallTimer, &QTimer::timeout, this, &PclDownloadTask::checkStall);
 }
 
 bool PclDownloadTask::shouldUseFor(const QUrl& url)
@@ -102,6 +104,16 @@ Download::Ptr PclDownloadTask::makeCached(QUrl url, MetaEntryPtr entry, Options 
 
 void PclDownloadTask::executeTask()
 {
+    // NetJob retries a failed action by restarting the very same task object, so
+    // every attempt has to start from a clean slate. Without this reset a retry
+    // would ignore all native events (m_finished) and hang forever.
+    m_finished = false;
+    m_usingPcl = false;
+    m_taskId = -1;
+    m_statusCode = -1;
+    m_error = QNetworkReply::NoError;
+    m_errorString.clear();
+
     if (!shouldUseFor(m_url)) {
         Download::executeTask();
         return;
@@ -131,7 +143,7 @@ void PclDownloadTask::executeTask()
     // main thread, so m_taskId is always assigned before any handler runs.
     connect(bridge, &PclDownloadBridge::taskEvent, this, &PclDownloadTask::onTaskEvent);
 
-    m_taskId = lib.startFileDownload(m_url, m_targetPath);
+    m_taskId = lib.startFileDownload(m_url, m_targetPath, expectedHash(), expectedSize());
     if (m_taskId < 0) {
         startQtFallback(tr("PCL.Download failed to start the download"));
         return;
@@ -139,6 +151,7 @@ void PclDownloadTask::executeTask()
 
     m_usingPcl = true;
     setStatus(tr("Downloading with PCL.Download: %1").arg(StringUtils::truncateUrlHumanFriendly(m_url, 80)));
+    startStallWatch();
 
     // Safety net: handle a terminal state that might have been reached before
     // the connection was fully set up (should not happen in practice).
@@ -159,6 +172,12 @@ void PclDownloadTask::onTaskEvent(int taskId, int eventType, qint64 downloaded, 
 
     switch (static_cast<PclDownloadEvent>(eventType)) {
         case PclDownloadEvent::Progress: {
+            // Only a change in the number of received bytes counts as progress:
+            // the native library keeps pushing samples even when a chunk is wedged.
+            if (downloaded != m_lastKnownBytes) {
+                m_lastKnownBytes = downloaded;
+                m_stallClock.restart();
+            }
             setTransferRate(speed);
             if (total > 0) {
                 setProgress(downloaded, total);
@@ -171,6 +190,7 @@ void PclDownloadTask::onTaskEvent(int taskId, int eventType, qint64 downloaded, 
             break;
         }
         case PclDownloadEvent::Finished: {
+            stopStallWatch();
             m_finished = true;
             lib.releaseTask(m_taskId);
             if (m_state == State::AbortedByUser) {
@@ -183,6 +203,7 @@ void PclDownloadTask::onTaskEvent(int taskId, int eventType, qint64 downloaded, 
         }
         case PclDownloadEvent::Failed:
         case PclDownloadEvent::Aborted: {
+            stopStallWatch();
             m_finished = true;
             const QString error = lib.taskErrorString(m_taskId);
             lib.releaseTask(m_taskId);
@@ -280,6 +301,7 @@ void PclDownloadTask::startQtFallback(const QString& reason)
 
 bool PclDownloadTask::abort()
 {
+    stopStallWatch();
     if (!m_usingPcl) {
         return Download::abort();
     }
@@ -288,6 +310,71 @@ bool PclDownloadTask::abort()
         PclDownloadLibrary::instance().abortDownload(m_taskId);
     }
     return true;
+}
+
+void PclDownloadTask::startStallWatch()
+{
+    stopStallWatch();
+
+    int timeoutSeconds = 60;
+#if defined(LAUNCHER_APPLICATION)
+    if (APPLICATION_DYN)
+        timeoutSeconds = APPLICATION->settings()->get("RequestTimeout").toInt();
+#endif
+
+    // Same semantics as QNetworkRequest::setTransferTimeout(0): timeout disabled.
+    if (timeoutSeconds <= 0)
+        return;
+
+    m_stallTimeoutMs = qMax(5, timeoutSeconds) * 1000;
+    m_lastKnownBytes = 0;
+    m_stallClock.start();
+    m_stallTimer.start(qBound(1000, m_stallTimeoutMs / 4, 5000));
+}
+
+void PclDownloadTask::stopStallWatch()
+{
+    m_stallTimer.stop();
+}
+
+void PclDownloadTask::checkStall()
+{
+    if (m_finished || !m_usingPcl || m_stallTimeoutMs <= 0) {
+        stopStallWatch();
+        return;
+    }
+    if (m_stallClock.elapsed() < m_stallTimeoutMs)
+        return;
+    handleStall();
+}
+
+void PclDownloadTask::handleStall()
+{
+    stopStallWatch();
+
+    const int stalledTask = m_taskId;
+    const int seconds = m_stallTimeoutMs / 1000;
+    const QString reason = tr("PCL.Download received no data for %1 s from %2").arg(seconds).arg(m_url.toString());
+    qCWarning(taskDownloadLogC) << getUid().toString() << reason;
+
+    // Stop listening before touching the native task: its terminal event will
+    // arrive after this attempt has already been abandoned.
+    m_finished = true;
+    m_usingPcl = false;
+    m_error = QNetworkReply::TimeoutError;
+    m_errorString = reason;
+
+    if (stalledTask >= 0) {
+        PclDownloadLibrary::instance().abortDownload(stalledTask);
+        // Native abort is asynchronous; release our reference a little later so
+        // that a late terminal event cannot hit an already released task.
+        QTimer::singleShot(10000, QCoreApplication::instance(), [stalledTask]() { PclDownloadLibrary::instance().releaseTask(stalledTask); });
+    }
+
+    // Same recovery the launcher already uses when the native library is
+    // unusable: retry through the Qt downloader (which has its own transfer
+    // timeout and is retried by NetJob).
+    startQtFallback(reason);
 }
 
 }  // namespace Net

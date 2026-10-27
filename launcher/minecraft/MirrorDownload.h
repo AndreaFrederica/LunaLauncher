@@ -67,6 +67,10 @@ public:
         /// Base for authlib-injector.yushi.moe.
         QString authlibInjectorBase;
 
+        /// Optional replacement base for cdn.modrinth.com (mod file downloads).
+        /// Independent of the Mojang mirror type: it is configured on its own.
+        QString modrinthCdnBase;
+
         bool isOfficial() const { return type == Official; }
         bool isEmpty() const { return mojangBase.isEmpty() && librariesBase.isEmpty() && assetsBase.isEmpty(); }
     };

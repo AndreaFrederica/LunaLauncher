@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Luna Launcher - Minecraft Launcher
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
@@ -135,6 +135,8 @@ struct IndexedVersion {
     PluginLoaderTypes pluginLoaders = {};  // For server plugins (Hangar)
     QString hash_type;
     QString hash;
+    // Size of the file in bytes, -1 when the provider does not report it.
+    qint64 fileSize = -1;
     bool is_preferred = true;
     QString changelog;
     QList<Dependency> dependencies;

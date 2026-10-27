@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <QElapsedTimer>
+#include <QTimer>
+
 #include "net/Aria2Manager.h"
 #include "net/Download.h"
 
@@ -30,11 +33,18 @@ class Aria2Download : public Download {
    private slots:
     void aria2DownloadChanged(const QString& gid, const Net::Aria2DownloadInfo& info);
     void aria2DownloadGidChanged(const QString& oldGid, const QString& newGid, const Net::Aria2DownloadInfo& info);
+    void checkStall();
 
    private:
     void startQtFallback(const QString& reason);
     void finishFromTempFile();
     QJsonObject buildAria2Options(QNetworkRequest& request) const;
+
+    /// Mirror of the Qt transfer timeout: abandon the download when aria2 stops
+    /// transferring bytes for RequestTimeout seconds.
+    void startStallWatch();
+    void stopStallWatch();
+    void handleStall();
 
    private:
     QString m_targetPath;
@@ -46,6 +56,11 @@ class Aria2Download : public Download {
     int m_statusCode = -1;
     QNetworkReply::NetworkError m_error = QNetworkReply::NoError;
     QString m_errorString;
+
+    QTimer m_stallTimer;
+    QElapsedTimer m_stallClock;
+    qint64 m_lastKnownBytes = 0;
+    int m_stallTimeoutMs = 0;
 };
 
 }  // namespace Net

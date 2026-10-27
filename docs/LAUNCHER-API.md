@@ -129,7 +129,10 @@ the upstream GUI implementation remains easy to merge.
 
 ## Current coverage and remaining gaps
 
-The implementation currently exposes 208 operations and reuses existing models and tasks in additive domain adapters:
+The current catalog exposes 213 regular operations in the bundled API build and reuses
+existing models and tasks in additive domain adapters. Neo UI builds may additionally
+expose the six `neo.task.*` asynchronous task-runtime operations; always read
+`api.describe` instead of relying on this count:
 
 | Domain | Implemented boundary | Remaining work |
 | --- | --- | --- |

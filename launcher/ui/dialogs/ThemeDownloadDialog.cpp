@@ -20,6 +20,7 @@
 #include <QPainter>
 #include <QPersistentModelIndex>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSet>
@@ -592,7 +593,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
             m_dirty = true;
     });
     auto help = new QLabel(tr("安装不会自动应用。Kvantum 可改变真实 Qt 控件的形状、尺寸和状态绘制，并使用主题自带配色。"
-                              "配色和图标可即时切换；控件皮肤、外观模式和窗口装饰的变化会在下次启动生效。"
+                              "配色、图标、控件皮肤、外观模式和窗口装饰会在应用组合后即时切换。"
                               "窗口透明度和材质会立即尝试应用；Windows Acrylic / Mica 需要系统 DWM 合成，模糊半径由平台近似实现。"
                               "KWin / Aurorae 窗口装饰和 Plasma 桌面组件需要各自的运行环境。"),
                            fields);
@@ -608,7 +609,7 @@ ThemeDownloadDialog::ThemeDownloadDialog(QWidget* parent) : QDialog(parent), m_s
     auto apply = button(tr("应用组合"), "dialog-ok-apply", combination);
     apply->setObjectName("themeApply");
     auto reset = button(tr("重载已保存组合"), "view-refresh", combination);
-    m_undo = button(tr("撤销待重启更改"), "edit-undo", combination);
+    m_undo = button(tr("撤销待生效更改"), "edit-undo", combination);
     m_undo->setObjectName("themeUndo");
     ca->addWidget(preview);
     ca->addWidget(reset);
@@ -944,6 +945,19 @@ void ThemeDownloadDialog::startInstall(QJsonObject request, std::function<void(b
     connect(task.get(), &Task::succeeded, m_service, [] { APPLICATION->themeManager()->refresh(); });
     if (completion) {
         connect(task.get(), &Task::finished, this, [this, task, completion = std::move(completion)] {
+            if (task->wasSuccessful()) {
+                const auto unresolved = task->result().value("unresolvedDependencies").toArray();
+                if (!unresolved.isEmpty()) {
+                    QStringList names;
+                    for (const auto& value : unresolved) {
+                        const auto dependency = value.toObject();
+                        names.append(dependency.value("category").toString() + " · #" +
+                                     dependency.value("contentId").toString());
+                    }
+                    completion(false, tr("部分递归依赖无法安装：%1").arg(names.join("、")));
+                    return;
+                }
+            }
             completion(task->wasSuccessful(), task->failReason());
         });
     } else {
@@ -1002,13 +1016,18 @@ void ThemeDownloadDialog::refreshInstalled()
                 auto dependency = value.toObject();
                 if (!dependency.value("supported").toBool())
                     continue;
-                declaredDependencyKinds.insert(dependency.value("category").toString());
                 bool found = false;
                 for (const auto& package : m_service->packages())
                     found |= sameStoreIdentity(package.toObject(), dependency);
                 if (found)
                     continue;
+                declaredDependencyKinds.insert(dependency.value("category").toString());
                 dependency.insert("dependency", true);
+                // Keep the owning package identity on the action row.  The
+                // row itself must remain package-less so the Remove action
+                // cannot delete the parent package, but completion needs to
+                // re-resolve that parent after the child download finishes.
+                dependency.insert("parentPackageId", data.value("packageId"));
                 dependency.insert("id", "dependency-" + dependency.value("contentId").toString());
                 auto child = new QTreeWidgetItem(row, { kindName(dependency.value("category").toString()) + " · #" + dependency.value("contentId").toString(),
                                                        tr("商店依赖"), tr("尚未安装 · 选择后自动下载") });
@@ -1024,6 +1043,7 @@ void ThemeDownloadDialog::refreshInstalled()
                 if (kind == "application" || declaredDependencyKinds.contains(kind))
                     continue;
                 missing.insert("dependency", true);
+                missing.insert("parentPackageId", data.value("packageId"));
                 missing.insert("provider", "kde");
                 missing.insert("category", kind);
                 missing.insert("reference", missing.value("name"));
@@ -1135,10 +1155,51 @@ bool ThemeDownloadDialog::buildSelectedConfiguration(QJsonObject& configuration,
 }
 void ThemeDownloadDialog::configureSelected()
 {
-    if (selection(m_installed).value("dependency").toBool()) {
+    const auto selected = selection(m_installed);
+    if (selected.value("dependency").toBool()) {
         updateSelected();
         return;
     }
+
+    // Keep this entry point on the same dependency-completion path as
+    // "一键完整应用".  A global KDE package can be installed while its
+    // referenced Kvantum, palette, or icon package is absent.  Previously
+    // buildSelectedConfiguration() reported that state directly and the
+    // user's only action was an information dialog; the package could never
+    // be completed from the normal "使用所选主题包" button.
+    if (!m_completionInProgress && selected.contains("packageId")) {
+        QString resolvedError;
+        const auto resolved = m_service->packageConfiguration(selected.value("id").toString(), resolvedError);
+        if (resolvedError.isEmpty() && !resolved.value("complete").toBool()) {
+            bool needsCompletion = false;
+            for (const auto& value : resolved.value("missing").toArray()) {
+                const auto kind = value.toObject().value("kind").toString();
+                if (QStringList{ "widgets", "palette", "icons" }.contains(kind)) {
+                    needsCompletion = true;
+                    break;
+                }
+            }
+            if (!needsCompletion) {
+                for (const auto& value : resolved.value("dependencies").toArray()) {
+                    const auto dependency = value.toObject();
+                    if (!dependency.value("supported").toBool() || dependency.value("contentId").toString().isEmpty())
+                        continue;
+                    bool installed = false;
+                    for (const auto& installedPackage : m_service->packages())
+                        installed |= sameStoreIdentity(installedPackage.toObject(), dependency);
+                    if (!installed) {
+                        needsCompletion = true;
+                        break;
+                    }
+                }
+            }
+            if (needsCompletion) {
+                beginCompletion(selected, false);
+                return;
+            }
+        }
+    }
+
     QJsonObject configuration;
     QString error;
     if (!buildSelectedConfiguration(configuration, true, error)) {
@@ -1160,7 +1221,7 @@ void ThemeDownloadDialog::configureSelected()
     updateState();
     m_draftStatus->setText(tr("已载入此包的组件组合，请预览后应用。"));
 }
-void ThemeDownloadDialog::beginCompletion(const QJsonObject& package)
+void ThemeDownloadDialog::beginCompletion(const QJsonObject& package, bool autoApply)
 {
     if (m_completionInProgress)
         return;
@@ -1172,6 +1233,7 @@ void ThemeDownloadDialog::beginCompletion(const QJsonObject& package)
     }
     QJsonArray queue;
     QSet<QString> keys;
+    QSet<QString> declaredDependencyKinds;
     for (const auto& value : resolved.value("dependencies").toArray()) {
         const auto dependency = value.toObject();
         if (!dependency.value("supported").toBool() || dependency.value("contentId").toString().isEmpty())
@@ -1180,9 +1242,12 @@ void ThemeDownloadDialog::beginCompletion(const QJsonObject& package)
         bool installed = false;
         for (const auto& installedPackage : m_service->packages())
             installed |= sameStoreIdentity(installedPackage.toObject(), dependency);
-        if (!installed && !keys.contains(key)) {
-            keys.insert(key);
-            queue.append(dependency);
+        if (!installed) {
+            declaredDependencyKinds.insert(dependency.value("category").toString());
+            if (!keys.contains(key)) {
+                keys.insert(key);
+                queue.append(dependency);
+            }
         }
     }
     for (const auto& value : resolved.value("missing").toArray()) {
@@ -1190,6 +1255,12 @@ void ThemeDownloadDialog::beginCompletion(const QJsonObject& package)
         const auto kind = reference.value("kind").toString();
         const auto name = reference.value("name").toString().trimmed();
         if (!QStringList{ "widgets", "palette", "icons" }.contains(kind) || name.isEmpty())
+            continue;
+        // A KDE global package often records both a supported store identity
+        // and the desktop resource name from its defaults file.  The store
+        // dependency is authoritative; queueing the name as well causes a
+        // second search after the dependency has already been installed.
+        if (declaredDependencyKinds.contains(kind))
             continue;
         const auto key = kind + ':' + name.toLower();
         if (keys.contains(key))
@@ -1200,16 +1271,20 @@ void ThemeDownloadDialog::beginCompletion(const QJsonObject& package)
         reference.insert("reference", name);
         queue.append(reference);
     }
-    if (queue.isEmpty()) {
-        m_status->setText(tr("主题组件已经齐全。"));
-        return;
-    }
     m_completionPackageId = package.value("packageId").toString();
     if (m_completionPackageId.isEmpty())
         m_completionPackageId = package.value("id").toString();
     m_completionQueue = queue;
-    m_completionAutoApply = true;
+    m_completionAutoApply = autoApply;
     m_completionInProgress = true;
+    if (queue.isEmpty()) {
+        // A package can be incomplete only because it exposes several
+        // compatible variants.  There is nothing to download in that case;
+        // continueCompletion() will select the first variant and apply it.
+        m_status->setText(tr("主题组件已经齐全，正在选择默认变体…"));
+        continueCompletion();
+        return;
+    }
     m_status->setText(tr("正在补全主题组件…"));
     updateInstalledActions();
     continueCompletion();
@@ -1226,8 +1301,53 @@ void ThemeDownloadDialog::continueCompletion()
         m_completionPackageId.clear();
         refreshInstalled();
         updateInstalledActions();
+        // Re-resolve after every completed download. Store searches are
+        // fuzzy and an archive can expose a resource name different from the
+        // KDE defaults reference. Without this check the auto-apply callback
+        // starts the same completion queue again forever.
+        QString resolveError;
+        const auto resolved = m_service->packageConfiguration(packageId, resolveError);
+        if (!resolveError.isEmpty()) {
+            m_status->setText(tr("组件已下载，但无法重新解析主题：%1").arg(resolveError));
+            return;
+        }
         if (!apply) {
-            m_status->setText(tr("主题组件补全完成。"));
+            m_status->setText(tr("主题组件补全完成，正在载入主题组合…"));
+            QTimer::singleShot(0, this, [this, packageId] {
+                std::function<QTreeWidgetItem*(QTreeWidgetItem*)> find = [&](QTreeWidgetItem* parent) -> QTreeWidgetItem* {
+                    for (int i = 0; i < parent->childCount(); ++i) {
+                        auto* item = parent->child(i);
+                        const auto data = item->data(0, Qt::UserRole).toJsonObject();
+                        if (data.value("packageId").toString() == packageId &&
+                            (data.value("id").toString() == packageId || data.value("kind") == "bundle"))
+                            return item;
+                        if (auto* found = find(item))
+                            return found;
+                    }
+                    return nullptr;
+                };
+                QTreeWidgetItem* selected = nullptr;
+                for (int i = 0; i < m_installed->topLevelItemCount() && !selected; ++i) {
+                    auto* item = m_installed->topLevelItem(i);
+                    const auto data = item->data(0, Qt::UserRole).toJsonObject();
+                    selected = data.value("packageId").toString() == packageId ? item : find(item);
+                }
+                if (!selected) {
+                    m_status->setText(tr("组件已下载，但无法定位原主题包。"));
+                    return;
+                }
+                m_installed->setCurrentItem(selected);
+                configureSelected();
+            });
+            return;
+        }
+        const auto unresolved = resolved.value("missing").toArray();
+        if (!unresolved.isEmpty()) {
+            QStringList names;
+            for (const auto& value : unresolved)
+                names.append(kindName(value.toObject().value("kind").toString()) + " · " + value.toObject().value("name").toString());
+            m_status->setText(tr("组件已下载，但仍缺少：%1。请在已安装列表中选择对应组件，或手动导入正确的 KDE 资源包。")
+                                  .arg(names.join("、")));
             return;
         }
         QTimer::singleShot(0, this, [this, packageId] {
@@ -1268,12 +1388,15 @@ void ThemeDownloadDialog::resolveCompletionReference(const QJsonObject& referenc
 {
     const auto wanted = reference.value("reference").toString();
     const bool anyKvantumTheme = reference.value("category").toString() == "widgets" && wanted.compare("kvantum", Qt::CaseInsensitive) == 0;
+    const auto searchHint = reference.value("search").toString().trimmed();
     auto request = QJsonObject{ { "provider", "kde" },
                                 { "category", reference.value("category") },
                                 { "sort", "high" },
                                 { "page", 0 },
                                 { "refresh", true } };
-    if (!anyKvantumTheme)
+    if (!searchHint.isEmpty())
+        request.insert("search", searchHint);
+    else if (!anyKvantumTheme)
         request.insert("search", wanted);
     m_completionStore = makeShared<ThemeStoreTask>(APPLICATION->network().get(), request, m_service->cacheDirectory());
     auto raw = m_completionStore.get();
@@ -1285,13 +1408,19 @@ void ThemeDownloadDialog::resolveCompletionReference(const QJsonObject& referenc
             return;
         }
         QList<QJsonObject> candidates;
+        const auto normalize = [](QString value) {
+            value.remove(QRegularExpression("[^A-Za-z0-9]"));
+            return value.toCaseFolded();
+        };
+        const auto normalizedHint = normalize(reference.value("search").toString());
         for (const auto& value : raw->result().value("items").toArray()) {
             const auto item = value.toObject();
             if (!item.value("installable").toBool())
                 continue;
             const auto name = item.value("name").toString();
-            if (reference.value("reference").toString().compare("kvantum", Qt::CaseInsensitive) == 0)
+            if (reference.value("reference").toString().compare("kvantum", Qt::CaseInsensitive) == 0) {
                 candidates.append(item);
+            }
             else if (name.compare(wanted, Qt::CaseInsensitive) == 0)
                 candidates.prepend(item);
             else if (name.contains(wanted, Qt::CaseInsensitive))
@@ -1302,6 +1431,39 @@ void ThemeDownloadDialog::resolveCompletionReference(const QJsonObject& referenc
             return;
         }
         QJsonObject selected = candidates.first();
+        if (candidates.size() > 1 && !normalizedHint.isEmpty()) {
+            // A missing `widgetStyle=kvantum` reference is resolved using the
+            // global package name.  Prefer a unique name that starts with
+            // that hint (Sweet KDE, Layan kvantum, ...); unrelated results
+            // such as Utterly Sweet must not force a choice dialog or get
+            // installed by accident.
+            QList<QJsonObject> ranked;
+            int bestScore = -1;
+            for (const auto& candidate : candidates) {
+                const auto normalizedName = normalize(candidate.value("name").toString());
+                int score = 0;
+                if (normalizedName == normalizedHint)
+                    score = 1000;
+                else if (normalizedName.startsWith(normalizedHint))
+                    score = 700;
+                else if (normalizedName.contains(normalizedHint))
+                    score = 400;
+                if (candidate.value("name").toString().contains("kvantum", Qt::CaseInsensitive))
+                    score += 50;
+                if (score > bestScore) {
+                    bestScore = score;
+                    ranked = { candidate };
+                } else if (score == bestScore) {
+                    ranked.append(candidate);
+                }
+            }
+            if (bestScore >= 700 && ranked.size() == 1)
+                selected = ranked.first();
+            else
+                ranked.clear();
+            if (!ranked.isEmpty())
+                candidates = ranked;
+        }
         if (candidates.size() > 1) {
             QStringList names;
             for (const auto& candidate : candidates)
@@ -1315,6 +1477,8 @@ void ThemeDownloadDialog::resolveCompletionReference(const QJsonObject& referenc
             }
             selected = candidates.at(qMax(0, names.indexOf(choice)));
         }
+        if (!normalizedHint.isEmpty())
+            selected.insert("completionSearch", reference.value("search"));
         installCompletionItem(selected);
     });
     m_completionStore->start();
@@ -1345,7 +1509,31 @@ void ThemeDownloadDialog::installCompletionItem(const QJsonObject& item)
             return;
         }
         QJsonObject file = files.first();
-        if (files.size() > 1) {
+        const auto completionHint = item.value("completionSearch").toString();
+        if (!completionHint.isEmpty()) {
+            const auto normalize = [](QString value) {
+                value.remove(QRegularExpression("[^A-Za-z0-9]"));
+                return value.toCaseFolded();
+            };
+            const auto wantedFile = normalize(completionHint);
+            int bestScore = -1;
+            for (const auto& candidate : files) {
+                auto name = candidate.value("name").toString();
+                if (const auto dot = name.lastIndexOf('.'); dot > 0)
+                    name.truncate(dot);
+                // Archives can have a double extension (Sweet.tar.xz).
+                if (name.endsWith(".tar", Qt::CaseInsensitive) || name.endsWith(".tar.gz", Qt::CaseInsensitive))
+                    name = name.left(name.lastIndexOf('.'));
+                const auto normalizedName = normalize(name);
+                int score = normalizedName == wantedFile ? 1000 : normalizedName.startsWith(wantedFile) ? 700
+                                                                                                        : normalizedName.contains(wantedFile) ? 400 : 0;
+                if (score > bestScore) {
+                    bestScore = score;
+                    file = candidate;
+                }
+            }
+        }
+        if (files.size() > 1 && completionHint.isEmpty()) {
             QStringList names;
             for (const auto& candidate : files)
                 names.append(candidate.value("name").toString());
@@ -1370,7 +1558,6 @@ void ThemeDownloadDialog::installCompletionItem(const QJsonObject& item)
                                                                           : item.value("name"));
         install.insert("version", file.value("version"));
         install.insert("components", QJsonArray{ item.value("category") });
-        install.insert("skipDependencies", true);
         startInstall(install, [this, item](bool succeeded, const QString& error) {
             if (!succeeded) {
                 completeInstallation(false, tr("安装 %1 失败：%2").arg(item.value("name").toString(), error));
@@ -1404,8 +1591,32 @@ void ThemeDownloadDialog::applyCompleteSelected()
         QString resolvedError;
         const auto resolved = m_service->packageConfiguration(selected.value("id").toString(), resolvedError);
         if (resolvedError.isEmpty() && !resolved.value("complete").toBool()) {
-            beginCompletion(selected);
-            return;
+            bool needsCompletion = false;
+            for (const auto& value : resolved.value("missing").toArray()) {
+                const auto kind = value.toObject().value("kind").toString();
+                if (QStringList{ "widgets", "palette", "icons" }.contains(kind)) {
+                    needsCompletion = true;
+                    break;
+                }
+            }
+            if (!needsCompletion) {
+                for (const auto& value : resolved.value("dependencies").toArray()) {
+                    const auto dependency = value.toObject();
+                    if (!dependency.value("supported").toBool() || dependency.value("contentId").toString().isEmpty())
+                        continue;
+                    bool installed = false;
+                    for (const auto& installedPackage : m_service->packages())
+                        installed |= sameStoreIdentity(installedPackage.toObject(), dependency);
+                    if (!installed) {
+                        needsCompletion = true;
+                        break;
+                    }
+                }
+            }
+            if (needsCompletion) {
+                beginCompletion(selected);
+                return;
+            }
         }
     }
     QJsonObject configuration;
@@ -1425,8 +1636,7 @@ void ThemeDownloadDialog::applyCompleteSelected()
     refreshChoices(true);
     m_navigation->setCurrentRow(2);
     const auto requiresRestart = result.value("requiresRestart").toBool();
-    m_draftStatus->setText(requiresRestart ? tr("已完整应用主题；控件风格、外观模式或窗口装饰将在下次启动生效。")
-                                           : tr("已完整应用主题。"));
+    m_draftStatus->setText(requiresRestart ? tr("主题已保存，将在下次启动恢复。") : tr("已完整应用主题。"));
 }
 void ThemeDownloadDialog::removeSelected()
 {
@@ -1448,7 +1658,7 @@ void ThemeDownloadDialog::updateSelected()
         if (m_completionInProgress)
             return;
         m_completionQueue = QJsonArray{ s };
-        m_completionPackageId.clear();
+        m_completionPackageId = s.value("parentPackageId").toString();
         m_completionAutoApply = false;
         m_completionInProgress = true;
         m_status->setText(tr("正在补全组件…"));

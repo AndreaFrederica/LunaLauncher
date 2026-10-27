@@ -1581,6 +1581,17 @@ bool Application::createSetupWizard()
                    !settings()->get("AutomaticJavaSwitch").toBool() && !settings()->get("UserAskedAboutAutomaticJavaDownload").toBool();
     bool languageRequired = settings()->get("Language").toString().isEmpty();
     bool pasteInterventionRequired = settings()->get("PastebinURL") != "";
+
+    // Managed appearance packages (including KDE global themes) are
+    // registered lazily by AppearanceService.  The setup wizard is created
+    // before the normal startup theme is applied, so checking the legacy
+    // settings first would treat a persisted `managed-...` theme as missing
+    // on every launch and add the Appearance page again.  Constructing the
+    // service here only reloads its catalog and registers the components; it
+    // does not apply or mutate the selected appearance.  The existing
+    // validity checks below can then correctly recognize installed package
+    // themes while retaining the first-run behavior for empty settings.
+    m_themeManager->appearance();
     bool validWidgets = m_themeManager->isValidApplicationTheme(settings()->get("ApplicationTheme").toString());
     bool validIcons = m_themeManager->isValidIconTheme(settings()->get("IconTheme").toString());
     bool login = !m_accounts->anyAccountIsValid() && capabilities() & Application::SupportsMSA;

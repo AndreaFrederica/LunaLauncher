@@ -4,6 +4,7 @@
 #include <QCryptographicHash>
 #include <QDirIterator>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QSet>
 #include <QTemporaryDir>
@@ -308,9 +309,14 @@ void registerLauncherApiAppearanceOperations(LauncherApi& api)
          { "mode", "theme", "icons", "background", "palette", "colorMode", "lightPalette", "darkPalette", "decoration", "decorationTheme" })
         configProperties.insert(key, string("Classic appearance component or mode."));
     configProperties.insert("systemTitlebarPalette", boolean());
+    configProperties.insert("windowEffectsEnabled", boolean());
+    configProperties.insert("windowRoundedCorners", boolean());
+    configProperties.insert("windowOpacity", QJsonObject{ { "type", "integer" }, { "minimum", 10 }, { "maximum", 100 } });
+    configProperties.insert("windowBlur", QJsonObject{ { "type", "integer" }, { "minimum", 0 }, { "maximum", 100 } });
+    configProperties.insert("windowMaterial", QJsonObject{ { "type", "string" }, { "enum", QJsonArray{ "theme", "none", "mica", "acrylic" } } });
     const auto configuration = schema(configProperties);
     api.registerOperation(
-        { "appearance.apply", "Validate and commit an appearance combination; structural changes wait for restart.",
+        { "appearance.apply", "Validate, apply and commit an appearance combination immediately.",
           schema({ { "configuration", configuration }, { "baseRevision", revision } }, { "configuration", "baseRevision" }), "appearance",
           true },
         [appearance](const QJsonObject& p, UserInteraction&) {
@@ -339,6 +345,7 @@ void registerLauncherApiAppearanceOperations(LauncherApi& api)
                                 { "source", string("HTTPS GitHub repository URL.") },
                                 { "category", string("palette, icons, bundle, widgets, decoration, plasma.") },
                                 { "sort", string("high, new, alpha, down.") },
+                                { "search", string("Optional KDE Store catalog search text.") },
                                 { "page", revision },
                                 { "refresh", boolean() },
                                 { "contentId", string("Store content identity.") } });

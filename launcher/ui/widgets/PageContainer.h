@@ -89,6 +89,7 @@ class PageContainer : public QWidget, public BasePageContainer {
     virtual void setParentContainer(BasePageContainer* container) { m_container = container; };
 
     void changeEvent(QEvent*) override;
+    bool event(QEvent*) override;
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -97,6 +98,7 @@ class PageContainer : public QWidget, public BasePageContainer {
    private:
     void createUI();
     void retranslate();
+    void synchronizePageVisibility();
 
    public slots:
     void help();
@@ -118,4 +120,5 @@ class PageContainer : public QWidget, public BasePageContainer {
     QListView* m_pageList;
     QLabel* m_header;
     QGridLayout* m_layout;
+    bool m_synchronizingPageVisibility = false;
 };

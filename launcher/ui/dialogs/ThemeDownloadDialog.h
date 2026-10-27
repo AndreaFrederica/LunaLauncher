@@ -2,8 +2,10 @@
 #pragma once
 #include <QDialog>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
+#include <functional>
 #include "QObjectPtr.h"
 class AppearanceService;
 class ThemeStoreTask;
@@ -13,6 +15,7 @@ class QComboBox;
 class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QSlider;
 class QListWidget;
 class QPushButton;
 class QStackedWidget;
@@ -36,11 +39,17 @@ class ThemeDownloadDialog final : public QDialog {
     void loadFiles(const QJsonObject& identity);
     void filter();
     void installSelected();
-    void startInstall(QJsonObject request);
+    void startInstall(QJsonObject request, std::function<void(bool, const QString&)> completion = {});
     void importLocal(bool directory);
     void refreshInstalled();
+    void updateInstalledActions();
     void configureSelected();
     void applyCompleteSelected();
+    void beginCompletion(const QJsonObject& package, bool autoApply = true);
+    void continueCompletion();
+    void resolveCompletionReference(const QJsonObject& reference);
+    void installCompletionItem(const QJsonObject& item);
+    void completeInstallation(bool succeeded, const QString& error = {});
     void removeSelected();
     void updateSelected();
     void refreshChoices(bool fromState);
@@ -56,7 +65,10 @@ class ThemeDownloadDialog final : public QDialog {
     QLabel *m_summary, *m_status, *m_title, *m_thumbnail, *m_stateLabel, *m_draftStatus;
     QComboBox *m_source, *m_category, *m_sort, *m_files;
     QLineEdit* m_search;
-    QCheckBox *m_compatible, *m_titlebarPalette;
+    QCheckBox *m_compatible, *m_titlebarPalette, *m_windowEffectsEnabled, *m_windowRoundedCorners;
+    QSlider *m_windowOpacity, *m_windowBlur;
+    QLabel *m_windowOpacityValue, *m_windowBlurValue;
+    QComboBox* m_windowMaterial;
     QListWidget* m_online;
     QTreeWidget *m_installed, *m_tasks;
     QTextBrowser* m_description;
@@ -64,10 +76,13 @@ class ThemeDownloadDialog final : public QDialog {
     QHash<QString, QComboBox*> m_options;
     QHash<QString, QCheckBox*> m_allowed;
     shared_qobject_ptr<ThemeStoreTask> m_query, m_details;
+    shared_qobject_ptr<ThemeStoreTask> m_completionStore;
     ThemeThumbnailLoader* m_thumbnails;
     QJsonObject m_selected, m_loadedQuery;
+    QJsonArray m_completionQueue;
+    QString m_completionPackageId;
     qint64 m_baseRevision = 0;
     quint64 m_queryGeneration = 0, m_detailGeneration = 0;
     int m_page = 0;
-    bool m_filling = false, m_dirty = false;
+    bool m_filling = false, m_dirty = false, m_completionAutoApply = false, m_completionInProgress = false;
 };

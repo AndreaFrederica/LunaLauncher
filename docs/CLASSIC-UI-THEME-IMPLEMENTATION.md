@@ -13,7 +13,7 @@
 
 KDE Look-and-Feel（全局）包中的 `contents/defaults` 通常只是引用 `kvantum`、`breeze` 等系统组件，实际 `.kvconfig`/`.svg` 控件资源可能在另一个商店条目中。已安装树会把这类缺失引用显示为“控件 / KDE 组件引用”，可直接跳转到 KDE 控件分类；只有归档中实际包含并通过校验的控件组件才会进入“控件风格 / 皮肤”选择框。
 
-配色、图标与背景可以即时生效；控件风格、系统/独立模式和窗口装饰在下次启动生效。待重启组合可撤销；界面同时显示当前生效值和下次启动值。在线分页、搜索、选中项和草稿保留在常驻页面中。搜索明确筛选已载入的项目。
+配色、图标、背景、控件风格、系统/独立模式和窗口装饰都通过同一个事务即时生效；渲染或持久化失败时恢复上一套可用组合。在线分页、搜索、选中项和草稿保留在常驻页面中。搜索明确筛选已载入的项目。
 
 独立预览由同一个可执行文件以 `--theme-preview` 启动普通 QApplication，不创建启动器 Application、不加载账户、不取得数据目录锁。预览包含真实 Qt 控件、所选图标、背景、日志配色和装饰。预览失败会反馈到页面和外观事件流。
 
@@ -42,7 +42,7 @@ Fusion 是可组合配色的通用基线。显式写死颜色的旧 QSS/Prism �
 
 Kvantum 引擎来源和改动见 [`libraries/kvantum/README.luna.md`](../libraries/kvantum/README.luna.md)。引擎只从显式传入的包内路径读取配置，不读取全局 Kvantum 选择器，不设置 `XDG_CONFIG_HOME`，不修改用户桌面设置。Qt 6.6 及以上构建包含该引擎；保留 Qt 6.4 / 6.5 构建时不编译该引擎，组件会报告缺少引擎。
 
-支持 `X-KPackage-Dependencies` 中的 `kns://icons.knsrc/...`、`kns://colorschemes.knsrc/...`、`kns://kvantum.knsrc/...` 精确商店 ID。只有一个下载附件时自动安装；多个附件会报告待选择，已安装树中提供“选择并下载此依赖…”入口。API 可通过 `dependencyFiles: {"内容ID":"附件ID"}` 指定变体。上游未声明来源或使用其他插件/脚本的依赖仍需手动补齐，不会按相似名称随意下载安装。
+支持 `X-KPackage-Dependencies` 中的 `kns://icons.knsrc/...`、`kns://colorschemes.knsrc/...`、`kns://kvantum.knsrc/...` 精确商店 ID。安装器会递归遍历依赖图，按 provider、类别和内容 ID 去重，并阻止循环依赖；子包声明的依赖也会进入同一安装任务。只有一个下载附件时自动安装；多个附件会报告待选择，已安装树中提供“选择并下载此依赖…”入口。API 可通过 `dependencyFiles: {"内容ID":"附件ID"}` 指定变体。对于上游没有声明 KNS 来源、只在 `contents/defaults` 中留下资源名称的包，补全流程会按类别和资源名精确查询 KDE Store，多个匹配项要求用户选择，不会静默安装模糊结果。
 
 Windows 提供应用内 Luna 标题栏及移动、缩放、最大化、系统菜单和 Snap 命中处理。Linux 使用 Qt 的系统移动/缩放接口；KDE 可向支持的平台插件传递应用配色。macOS 保留原生窗口按钮和全屏行为，退出独立配色时恢复原始 NSWindow 属性；自定义装饰能力为 false。**Linux/macOS 的原生窗口行为尚未在本机运行验证。** 不改动操作系统全局主题。
 
@@ -50,7 +50,7 @@ Windows 提供应用内 Luna 标题栏及移动、缩放、最大化、系统菜
 
 `classic-appearance.json` 使用 QSaveFile 原子保存，包含 `requested`、`effective`、`pending`、`lastKnownGood`、`revision` 和初始化标记。旧设置首次打开时迁入；之后旧下拉框和 API 都通过同一服务提交。提交必须提供 `baseRevision`，过期草稿不会覆盖新状态。初始化中断或组件缺失时恢复可用外观。
 
-包安装在 `theme-packages/<sha256>`。下载后校验大小及来源提供的 SHA-256/MD5；在工作线程完成限额解压与扫描，再以安装锁和目录重命名发布。相同内容重复导入不会复制资源，可追加注册其他组件。新版本保留独立内容目录；使用中、待重启、恢复点及图标继承引用受到卸载保护。
+包安装在独立的 `theme-packages/<sha256>` 目录。下载后校验大小及来源提供的 SHA-256/MD5；在工作线程完成限额解压与扫描，再以安装锁和目录重命名发布。包含大小写冲突的 KDE 归档会先尝试只给该包的 staging 目录及其子目录启用 NTFS 目录级大小写敏感；磁盘类型、系统版本或权限不支持时自动保留一个可移植的大小写折叠路径，不修改实例目录或全局目录。相同内容重复导入不会复制资源，可追加注册其他组件。新版本保留独立内容目录；使用中、待重启、恢复点及图标继承引用受到卸载保护。
 
 目录响应缓存位于 `cache/theme-store`，一小时内复用，离线失败可返回带时间戳的旧数据；KDE 签名下载地址每次安装重新解析。目录缓存上限 100 个文件 / 32 MiB；截图缓存七天、128 个文件 / 32 MiB。清理缓存不删除已安装主题。
 
@@ -115,6 +115,8 @@ Kvantum 控件组件声明为 `"widgets": {"engine":"Kvantum", "config":"widgets
 原生测试还覆盖缩略图请求合并、四任务并发上限、缓存复用和取消后忽略旧回调。`theme_widgets_smoke.py --native-tests <ThemeCenter_test.exe> --output <目录> --real-theme <上游主题文件夹>` 会保留各主题的预览、原生控件及卡片截图、测试日志和 `verification.json`。商店截图使用本地目录响应及真实主题预览作为确定性测试数据；本次上游 KDE Store 仍连接超时，不把这些截图记作联网商店验证。
 
 原生控件及卡片网格另在实际设备像素比 1、1.5、2 下运行通过，并检查窗口缩窄后的卡片边界。
+
+主题中心测试的 `LUNA_THEME_TEST_PROFILE` 仅作为外观配置和主题资源的只读来源；测试在临时副本中运行，不复制账户、实例或商店缓存。卡片测试生成的 18 项目录和纯色缩略图只写入该临时目录。商店缓存带有版本及请求来源信息，旧版未标记缓存（包括此前测试遗留的目录）会失效并重新获取，网络失败时也不会回退到这些旧条目。回归测试覆盖缓存复用、离线回退，以及版本或请求身份不符时拒绝缓存。
 
 ```powershell
 pixi run meson compile -C build-meson-neo-ui lunalauncher lunalauncher-cli ThemePackage_test ThemeCenter_test -j 8

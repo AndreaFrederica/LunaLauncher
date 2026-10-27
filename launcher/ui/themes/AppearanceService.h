@@ -32,6 +32,9 @@ class AppearanceService final : public QObject {
     QString packageDirectory() const;
     QString cacheDirectory() const;
     void preview(const QJsonObject& configuration, QWidget* parent, QString& error);
+    // Refresh existing native windows after legacy callers apply a Qt theme
+    // directly through ThemeManager.
+    void refreshWindowLayouts();
     QList<Task::Ptr> tasks() const { return m_tasks; }
     void retainTask(const Task::Ptr& task);
    signals:
@@ -45,7 +48,9 @@ class AppearanceService final : public QObject {
     QJsonObject defaults() const;
     bool validate(const QJsonObject& config, QString& error) const;
     bool render(const QJsonObject& config, bool initial, QString& error);
+    void queueWindowLayoutRefresh();
     QJsonObject resolvedConfiguration(const QJsonObject& input) const;
+    QJsonObject resolvedEffects(const QJsonObject& config) const;
     void installSystemWatchers();
     ThemeManager* m_manager;
     std::unique_ptr<WindowChromeController> m_chrome;
@@ -53,6 +58,6 @@ class AppearanceService final : public QObject {
     QJsonObject m_requested, m_effective, m_pending, m_lastGood;
     QString m_error;
     qint64 m_revision = 0;
-    bool m_initialized = false, m_rendering = false;
+    bool m_initialized = false, m_rendering = false, m_layoutRefreshQueued = false;
     QList<Task::Ptr> m_tasks;
 };

@@ -120,3 +120,5 @@ dist/
 
 # Local PCL comparison notes
 /docs/pcl-neoui-*.md
+
+temp-msvc/

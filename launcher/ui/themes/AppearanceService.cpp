@@ -208,6 +208,30 @@ void AppearanceService::reloadCatalog()
                                          { "format", "prism" },
                                          { "path", background->path() } });
     }
+    // KDE global themes refer to color schemes by their desktop names.  Keep
+    // the two basic Breeze schemes in the executable so a look-and-feel
+    // package can still be resolved on a clean installation or while offline.
+    // The aliases cover the spelling used by Plasma 5/6 defaults files.
+    m_components.append(QJsonObject{
+        { "id", "kde-breeze-light" },
+        { "kind", "palette" },
+        { "name", tr("Breeze Light (内置 KDE 基础配色)") },
+        { "format", "kde-colors" },
+        { "path", ":/kde/breeze-light.colors" },
+        { "builtin", true },
+        { "dark", false },
+        { "aliases", QJsonArray{ "Breeze", "BreezeLight", "Breeze Light" } },
+    });
+    m_components.append(QJsonObject{
+        { "id", "kde-breeze-dark" },
+        { "kind", "palette" },
+        { "name", tr("Breeze Dark (内置 KDE 基础配色)") },
+        { "format", "kde-colors" },
+        { "path", ":/kde/breeze-dark.colors" },
+        { "builtin", true },
+        { "dark", true },
+        { "aliases", QJsonArray{ "BreezeDark", "Breeze Dark", "Breeze-dark" } },
+    });
     QDir packages(packageDirectory());
     for (const auto& directory : packages.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
         if (!QRegularExpression("^[a-f0-9]{64}$").match(directory).hasMatch())
@@ -221,6 +245,29 @@ void AppearanceService::reloadCatalog()
         auto entries = record.value("catalog").toArray();
         if (entries.isEmpty())
             entries = ThemePackage::inspect(root, error);
+        // Older installers stored an empty dependency list for KDE's
+        // metadata.desktop packages because that format uses commas while the
+        // original parser only accepted semicolons. Re-read the global
+        // manifest during catalog loading so existing installations are
+        // upgraded in memory without requiring a delete/reinstall cycle.
+        QJsonArray recoveredDependencies;
+        for (qsizetype i = 0; i < entries.size(); ++i) {
+            auto data = entries.at(i).toObject();
+            if (data.value("kind") != "bundle" || data.value("format") != "kde-global" ||
+                !data.value("dependencies").toArray().isEmpty())
+                continue;
+            QString globalError;
+            const auto global = ThemePackage::readGlobalTheme(root.filePath(data.value("file").toString()), globalError);
+            if (!globalError.isEmpty())
+                continue;
+            data.insert("references", global.value("references"));
+            data.insert("dependencies", global.value("dependencies"));
+            entries.replace(i, data);
+            for (const auto& dependency : global.value("dependencies").toArray())
+                recoveredDependencies.append(dependency);
+        }
+        if (!recoveredDependencies.isEmpty())
+            record.insert("dependencies", recoveredDependencies);
         for (const auto& value : entries) {
             const auto entry = value.toObject();
             if (!QRegularExpression("^[a-f0-9]{16}$").match(entry.value("id").toString()).hasMatch() ||
@@ -363,20 +410,30 @@ QJsonObject AppearanceService::packageConfiguration(const QString& id, QString& 
     for (const auto& kind : { "widgets", "palette", "icons", "background", "decoration" }) {
         QJsonArray candidates, matching;
         const auto reference = references.value(kind).toString();
+        const auto normalizedName = [](QString value) {
+            value.remove(QRegularExpression("[^A-Za-z0-9]"));
+            return value.toLower();
+        };
+        const auto normalizedReference = normalizedName(reference);
         auto matches = [&](const QJsonObject& entry) {
             if (reference.isEmpty())
                 return false;
-            if (QString(kind) == "widgets" && reference.compare("kvantum", Qt::CaseInsensitive) == 0)
+            for (const auto& alias : entry.value("aliases").toArray())
+                if (alias.toString().compare(reference, Qt::CaseInsensitive) == 0)
+                    return true;
+            if (QString(kind) == "widgets" && reference.startsWith("kvantum", Qt::CaseInsensitive))
                 return entry.value("engine").toString().compare("Kvantum", Qt::CaseInsensitive) == 0;
             for (const auto& value : { entry.value("name").toString(), entry.value("id").toString(),
                                        QFileInfo(entry.value("path").toString()).completeBaseName(),
                                        QFileInfo(entry.value("directory").toString()).fileName() })
-                if (value.compare(reference, Qt::CaseInsensitive) == 0)
+                if (value.compare(reference, Qt::CaseInsensitive) == 0 ||
+                    (!normalizedReference.isEmpty() && normalizedName(value) == normalizedReference))
                     return true;
             // The shipped Breeze icon variants use Prism's historical IDs.
             return QString(kind) == "icons" &&
-                   ((reference == "breeze" && entry.value("id") == "breeze_light") ||
-                    (reference == "breeze-dark" && entry.value("id") == "breeze_dark"));
+                   ((reference.compare("breeze", Qt::CaseInsensitive) == 0 && entry.value("id") == "breeze_light") ||
+                    (reference.compare("breeze-light", Qt::CaseInsensitive) == 0 && entry.value("id") == "breeze_light") ||
+                    (reference.compare("breeze-dark", Qt::CaseInsensitive) == 0 && entry.value("id") == "breeze_dark"));
         };
         for (const auto& value : m_components) {
             const auto entry = value.toObject();
@@ -387,6 +444,15 @@ QJsonObject AppearanceService::packageConfiguration(const QString& id, QString& 
             if (matches(entry))
                 matching.append(entry);
         }
+        // Breeze is the default Plasma widget style, but Qt's Breeze plugin
+        // is not guaranteed to be installed on Windows/macOS. Fusion is the
+        // stable Qt fallback and lets the rest of the KDE package apply
+        // without repeatedly asking the store for an unavailable widget.
+        if (matching.isEmpty() && QString(kind) == "widgets" && reference.compare("Breeze", Qt::CaseInsensitive) == 0) {
+            for (const auto& value : m_components)
+                if (value.toObject().value("kind") == "widgets" && value.toObject().value("id") == "Fusion")
+                    matching.append(value.toObject());
+        }
         if (!reference.isEmpty()) {
             QJsonArray preferred;
             for (const auto& entry : candidates)
@@ -394,8 +460,24 @@ QJsonObject AppearanceService::packageConfiguration(const QString& id, QString& 
                     preferred.append(entry);
             if (!preferred.isEmpty())
                 candidates = preferred;
-            else if (!matching.isEmpty())
-                candidates = matching;
+            else if (!matching.isEmpty()) {
+                if (QString(kind) == "widgets" && reference.startsWith("kvantum", Qt::CaseInsensitive)) {
+                    const auto hint = normalizedName(bundle.value("name").toString());
+                    QJsonArray packageMatches;
+                    for (const auto& entry : matching) {
+                        const auto name = normalizedName(entry.toObject().value("name").toString());
+                        if (!hint.isEmpty() && (name == hint || name.startsWith(hint)))
+                            packageMatches.append(entry);
+                    }
+                    // An unrelated installed Kvantum theme must not make a
+                    // global package appear complete. Leave this unresolved
+                    // so the completion path can search for the package by
+                    // its global theme name.
+                    candidates = packageMatches;
+                } else {
+                    candidates = matching;
+                }
+            }
             else {
                 // A KDE global theme may refer to a dependency by its desktop
                 // name while the dependency package exposes a different
@@ -414,9 +496,48 @@ QJsonObject AppearanceService::packageConfiguration(const QString& id, QString& 
         if (selected.value("kind") == kind && !selected.contains("unavailable"))
             candidates = QJsonArray{ selected };
         if (candidates.isEmpty()) {
-            if (!reference.isEmpty())
-                missing.append(QJsonObject{ { "kind", kind }, { "name", reference } });
+            if (!reference.isEmpty()) {
+                QJsonObject unresolved{ { "kind", kind }, { "name", reference } };
+                // KDE look-and-feel packages frequently only say
+                // `widgetStyle=kvantum` in contents/defaults.  The actual
+                // Kvantum package is a separate store entry and the defaults
+                // file does not contain its content id.  Preserve the global
+                // package name as a search hint so completion can resolve
+                // Sweet -> Sweet KDE instead of selecting an arbitrary top
+                // result from the entire Kvantum catalog.
+                if (QString(kind) == "widgets" && reference.startsWith("kvantum", Qt::CaseInsensitive)) {
+                    auto search = bundle.value("name").toString().trimmed();
+                    search.replace(QRegularExpression("\\s+(?:KDE|Plasma(?:\\s+[56])?|Global\\s+Themes?)$",
+                                                      QRegularExpression::CaseInsensitiveOption), QString());
+                    if (!search.isEmpty())
+                        unresolved.insert("search", search);
+                }
+                missing.append(unresolved);
+            }
             continue;
+        }
+        if (QString(kind) == "widgets" && reference.startsWith("kvantum", Qt::CaseInsensitive) && candidates.size() > 1) {
+            // `widgetStyle=kvantum` is an engine name, so every installed
+            // Kvantum theme technically matches it. Prefer the components
+            // whose name belongs to this global package (Sweet -> Sweet-*),
+            // keeping unrelated installed themes out of the completion
+            // choices. Multiple variants of the same package remain choices.
+            auto normalize = [](QString value) {
+                value.remove(QRegularExpression("[^A-Za-z0-9]"));
+                return value.toCaseFolded();
+            };
+            const auto hint = normalize(bundle.value("name").toString());
+            if (!hint.isEmpty()) {
+                QJsonArray preferred;
+                for (const auto& value : candidates) {
+                    const auto entry = value.toObject();
+                    const auto name = normalize(entry.value("name").toString());
+                    if (name == hint || name.startsWith(hint))
+                        preferred.append(entry);
+                }
+                if (!preferred.isEmpty())
+                    candidates = preferred;
+            }
         }
         hasApplicationComponents = true;
         if (candidates.size() > 1) {
@@ -460,7 +581,7 @@ QJsonObject AppearanceService::capabilities() const
                                                        { "blur", QJsonObject{ { "minimum", 0 }, { "maximum", 100 } } },
                                                        { "roundedCorners", true } } },
              { "paletteHotSwap", true },
-             { "thirdPartyStyleRequiresRestart", true },
+             { "thirdPartyStyleRequiresRestart", false },
              { "scope", "application" } };
 }
 
@@ -691,12 +812,14 @@ bool AppearanceService::render(const QJsonObject& requested, bool initial, QStri
     // those semantic hints to the cross-platform controller even when the
     // user keeps the native system title bar.
     m_chrome->setEffects(resolvedEffects(config));
-    if (initial) {
-        QJsonObject decoration;
-        if (!config.value("decorationTheme").toString().isEmpty())
-            decoration = component(config.value("decorationTheme").toString()).value("config").toObject();
-        m_chrome->initialize(config.value("decoration") == "luna", decoration);
-    }
+    QJsonObject decoration;
+    if (!config.value("decorationTheme").toString().isEmpty())
+        decoration = component(config.value("decorationTheme").toString()).value("config").toObject();
+    // The native frame is a regular Qt event-filtered decoration, so it can
+    // be switched and reconfigured while the launcher is running. Keeping
+    // this in render() also makes theme-center and legacy settings use the
+    // same live-apply path.
+    m_chrome->initialize(config.value("decoration") == "luna", decoration);
     // Style sheets, palettes and native window attributes can each enqueue a
     // layout request. Run once now and once after those deferred requests so
     // switching back to a theme never needs a manual resize to recover.
@@ -785,46 +908,29 @@ QJsonObject AppearanceService::apply(const QJsonObject& input, qint64 baseRevisi
         return {};
     const auto oldRequested = m_requested, oldPending = m_pending, oldEffective = m_effective, oldGood = m_lastGood;
     m_requested = config;
-    bool restart = false;
-    for (const auto& key : { "theme", "mode", "decoration", "decorationTheme" })
-        restart |= config.value(key) != m_effective.value(key);
-    m_pending = restart ? config : QJsonObject();
+    // Widget styles and the Luna decoration are both hot-swappable in this
+    // implementation. Render first, then persist the new effective state so
+    // a failed style load never leaves a saved configuration that only works
+    // after a restart.
+    m_pending = {};
+    if (!render(config, false, error)) {
+        m_requested = oldRequested;
+        m_pending = oldPending;
+        return {};
+    }
+    m_effective = config;
+    m_lastGood = config;
     ++m_revision;
     if (!persist(error)) {
         m_requested = oldRequested;
         m_pending = oldPending;
+        m_effective = oldEffective;
+        m_lastGood = oldGood;
         --m_revision;
+        QString recovery;
+        render(m_effective, true, recovery);
+        persist(recovery);
         return {};
-    }
-    if (restart) {
-        // Window materials are independent from the Qt widget engine. Apply
-        // them immediately so a theme's Mica/Acrylic/opacity conversion is
-        // visible while the style itself waits for the normal safe restart.
-        m_chrome->setEffects(resolvedEffects(config));
-    }
-    if (!restart) {
-        if (!render(config, false, error)) {
-            m_requested = oldRequested;
-            m_pending = oldPending;
-            --m_revision;
-            QString recovery;
-            render(m_effective, false, recovery);
-            persist(recovery);
-            return {};
-        }
-        m_effective = config;
-        m_lastGood = config;
-        if (!persist(error)) {
-            m_requested = oldRequested;
-            m_pending = oldPending;
-            m_effective = oldEffective;
-            m_lastGood = oldGood;
-            --m_revision;
-            QString recovery;
-            render(m_effective, true, recovery);
-            persist(recovery);
-            return {};
-        }
     }
     auto settings = APPLICATION->settings();
     settings->set("ApplicationTheme", config.value("mode") == "system" ? "system" : config.value("theme").toString());

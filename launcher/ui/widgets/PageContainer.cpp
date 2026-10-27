@@ -155,6 +155,7 @@ void PageContainer::refreshContainer()
             // FIXME: unhandled corner case: what to do when there's no page to select?
         }
     }
+    synchronizePageVisibility();
 }
 
 void PageContainer::createUI()
@@ -178,6 +179,10 @@ void PageContainer::createUI()
 
     m_pageStack->setContentsMargins(0, 0, 0, 0);
     m_pageStack->addWidget(new QWidget(this));
+    // Page widgets commonly use transparent stylesheet backgrounds. Keep a
+    // stable palette backdrop behind the stack so a translucent top-level
+    // window cannot retain pixels from the page that was just hidden.
+    setAutoFillBackground(true);
 
     m_layout = new QGridLayout;
     m_layout->addLayout(headerHLayout, 0, 1, 1, 1);
@@ -224,13 +229,56 @@ void PageContainer::showPage(int row)
         m_currentPage = nullptr;
     }
     if (m_currentPage) {
+        // Keep the stacked layout in its single-page mode even when a style
+        // or native window frame update has caused a layout request while a
+        // selection change is being processed.
+        m_pageStack->setStackingMode(QStackedLayout::StackOne);
         m_pageStack->setCurrentIndex(m_currentPage->stackIndex);
         m_header->setText(m_currentPage->displayName());
         m_currentPage->opened();
     } else {
+        m_pageStack->setStackingMode(QStackedLayout::StackOne);
         m_pageStack->setCurrentIndex(0);
         m_header->setText(QString());
     }
+    synchronizePageVisibility();
+}
+
+void PageContainer::synchronizePageVisibility()
+{
+    if (!m_pageStack || m_synchronizingPageVisibility)
+        return;
+
+    m_synchronizingPageVisibility = true;
+
+    const int activeIndex = m_currentPage ? m_currentPage->stackIndex : -1;
+    if (activeIndex >= 0 && activeIndex < m_pageStack->count() && m_pageStack->currentIndex() != activeIndex)
+        m_pageStack->setCurrentIndex(activeIndex);
+
+    // QStackedLayout normally manages this visibility itself. Explicitly
+    // enforce it as well because stylesheet/native-frame changes can issue
+    // visibility and layout requests while a page switch is in flight. The
+    // old page must never remain visible underneath the newly selected page.
+    for (int index = 0; index < m_pageStack->count(); ++index) {
+        auto* item = m_pageStack->itemAt(index);
+        auto* widget = item ? item->widget() : nullptr;
+        if (!widget)
+            continue;
+
+        const bool visible = index == activeIndex;
+        if (widget->isVisible() != visible)
+            widget->setVisible(visible);
+        if (visible)
+            widget->raise();
+    }
+
+    m_pageStack->invalidate();
+    m_pageStack->activate();
+    // A translucent top-level window does not always erase the region that
+    // belonged to a hidden child. Queue a repaint of the container backdrop
+    // so the next page cannot be composited over stale pixels.
+    update();
+    m_synchronizingPageVisibility = false;
 }
 
 void PageContainer::help()
@@ -287,6 +335,22 @@ void PageContainer::changeEvent(QEvent* event)
         retranslate();
     }
     QWidget::changeEvent(event);
+}
+
+bool PageContainer::event(QEvent* event)
+{
+    const bool handled = QWidget::event(event);
+    switch (event->type()) {
+        case QEvent::Show:
+        case QEvent::LayoutRequest:
+        case QEvent::StyleChange:
+        case QEvent::FontChange:
+            synchronizePageVisibility();
+            break;
+        default:
+            break;
+    }
+    return handled;
 }
 
 QSize PageContainer::sizeHint() const

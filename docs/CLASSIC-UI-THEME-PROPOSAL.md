@@ -266,13 +266,13 @@ HTTP 缓存与主题管理缓存应接入项目统一缓存服务，按命名空
 | WindowChromeController | 窗口登记、平台行为、装饰创建与状态同步 | MainWindow、普通 QDialog、macOS 原生辅助代码 |
 | IconResolver | 图标继承、应用别名、内置 fallback、更新通知 | IconTheme、调用 QIcon 的视图 |
 
-在现有 appearance API 上向后兼容扩展 `capabilities`、`state`、`query`、`files`、`preview`、`apply` 等能力；旧 `select` 进入同一个提交入口，不再独立写设置。安装返回 `operationId`，状态变更发带 revision 的事件，耗时解析不阻塞 GUI 线程。尚未生效返回 `requiresRestart` 和具体原因。
+在现有 appearance API 上向后兼容扩展 `capabilities`、`state`、`query`、`files`、`preview`、`apply` 等能力；旧 `select` 进入同一个提交入口，不再独立写设置。安装返回 `operationId`，状态变更发带 revision 的事件，耗时解析不阻塞 GUI 线程。Classic UI 的 Qt 控件和 Luna 装饰在提交后即时生效；`requiresRestart` 仅保留为兼容字段，外部桌面组件仍可能自行要求重启。
 
 本轮主题渲染对象是 Classic 的 Qt Widgets。NeoUI 可以复用目录、下载、缓存和管理 API，但其 Vue/CSS 外壳不会自动获得 QSS 外观。API 明确 `target: classic` 与实际作用范围，避免用户在 NeoUI 保存 Qt 主题后误以为 Web 页面已经换肤；后续若统一配色 token，应另加 Web 渲染适配。
 
 **11. 预览与恢复不依赖在主窗口反复换皮。** 增加专用主题预览模式，在独立进程中使用只读主题路径和临时设置快照，展示按钮、输入框、列表、树、选中态、禁用态、菜单、日志颜色与标题栏。该进程不打开账号、实例和后台下载服务，不竞争主数据目录的运行锁；拟议 `--theme-preview` 参数目前并不存在。
 
-预览加载失败不改变已保存设置。用户正式应用完整皮肤时保存 pending 配置，提示需要重启；不在下载、启动游戏或仍有重要未保存界面状态时自行重启程序。
+预览加载失败不改变已保存设置。用户正式应用完整皮肤时先完成渲染，再原子保存当前生效组合；不在下载、启动游戏或仍有重要未保存界面状态时自行重启程序。
 
 启动阶段在实际加载成功前保留 lastKnownGood；加载失败则恢复上一组合并提供原因。早期启动标记只覆盖主题初始化阶段，不能把后续任何游戏或网络崩溃都归因于主题。增加临时安全外观启动入口（拟议 `--safe-theme`），可绕过自定义 QSS 和装饰而不删除主题文件。首帧显示只证明初始化成功，不能证明第三方主题文字对比度合格，因此预览和安全入口都需要保留。
 

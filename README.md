@@ -247,6 +247,8 @@ For Fedora/COPR packaging, see [packaging/fedora/README.md](packaging/fedora/REA
 
 ## License
 
-All launcher code is available under the **GPL-3.0-only** license.
+All old Prism launcher code is available under the **GPL-3.0-only** license.
+
+Some new Luna code is available under the **MPL2.0** license. **You can use it in your project.**
 
 The logo and related assets are licensed under **CC BY-SA 4.0**.

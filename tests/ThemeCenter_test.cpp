@@ -36,6 +36,7 @@
 #include "ui/widgets/PageContainer.h"
 #include "ui/themes/AppearanceService.h"
 #include "ui/themes/ThemeManager.h"
+#include "ui/themes/ThemePackage.h"
 #include "ui/themes/ThemeThumbnailLoader.h"
 #include "ui/themes/WindowChromeController.h"
 
@@ -193,7 +194,6 @@ class ThemeCenterTest : public QObject {
             layout->addWidget(widget);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
-        qInfo() << "Native widget scale:" << window.devicePixelRatioF();
         QTest::mouseClick(input, Qt::LeftButton);
         QTest::keyClicks(input, "Luna native theme");
         QCOMPARE(input->text(), QString("Luna native theme"));
@@ -366,6 +366,14 @@ class ThemeCenterTest : public QObject {
         auto files = center.findChild<QComboBox*>("themeFiles");
         QVERIFY(online);
         QVERIFY(files);
+        auto service = APPLICATION->themeManager()->appearance();
+        for (const auto& id : { QStringLiteral("kde-breeze-light"), QStringLiteral("kde-breeze-dark") }) {
+            const auto builtin = service->component(id);
+            QVERIFY2(!builtin.isEmpty(), qPrintable("Missing built-in KDE palette: " + id));
+            ThemePackage::Palette palette;
+            QString paletteError;
+            QVERIFY2(ThemePackage::readColors(builtin.value("path").toString(), palette, paletteError), qPrintable(paletteError));
+        }
         if (!qEnvironmentVariableIsEmpty("LUNA_THEME_TEST_PROFILE")) {
             auto installed = center.findChild<QTreeWidget*>("themeInstalled");
             QVERIFY(installed);
@@ -375,15 +383,44 @@ class ThemeCenterTest : public QObject {
                 const auto package = installed->topLevelItem(i);
                 for (int j = 0; j < package->childCount(); ++j) {
                     const auto component = package->child(j);
-                    hasIncompleteGlobal |= component->text(1).contains(QStringLiteral("kde-global")) &&
-                                           component->text(2).contains(QStringLiteral("需要补齐"));
+                    const auto componentData = component->data(0, Qt::UserRole).toJsonObject();
+                    if (componentData.value("dependency").toBool())
+                        QVERIFY2(!componentData.value("parentPackageId").toString().isEmpty(),
+                                 "Dependency rows must retain their owning package for post-download re-resolution.");
+                    if (component->text(1).contains(QStringLiteral("kde-global")) &&
+                        component->text(2).contains(QStringLiteral("需要补齐"))) {
+                        QString error;
+                        const auto data = componentData;
+                        const auto resolved = service->packageConfiguration(data.value("id").toString(), error);
+                        hasIncompleteGlobal |= error.isEmpty() && !resolved.value("missing").toArray().isEmpty();
+                        if (data.value("name").toString().compare(QStringLiteral("Sweet"), Qt::CaseInsensitive) == 0) {
+                            for (const auto& missingValue : resolved.value("missing").toArray()) {
+                                const auto missing = missingValue.toObject();
+                                if (missing.value("kind") == "widgets" && missing.value("name") == "kvantum")
+                                    QCOMPARE(missing.value("search").toString(), QStringLiteral("Sweet"));
+                            }
+                        }
+                    }
                     hasReferenceRow |= component->text(1) == QStringLiteral("KDE 组件引用");
-                    for (int k = 0; k < component->childCount(); ++k)
+                    for (int k = 0; k < component->childCount(); ++k) {
+                        const auto childData = component->child(k)->data(0, Qt::UserRole).toJsonObject();
+                        if (childData.value("dependency").toBool())
+                            QVERIFY2(!childData.value("parentPackageId").toString().isEmpty(),
+                                     "Reference rows must retain their owning package for post-download re-resolution.");
                         hasReferenceRow |= component->child(k)->text(1) == QStringLiteral("KDE 组件引用");
+                    }
                 }
             }
             if (hasIncompleteGlobal)
                 QVERIFY2(hasReferenceRow, "Global KDE package references should expose an actionable missing-component row.");
+            for (const auto& value : service->components()) {
+                const auto data = value.toObject();
+                if (data.value("kind") != "bundle")
+                    continue;
+                QString error;
+                QVERIFY2(!service->packageConfiguration(data.value("id").toString(), error).isEmpty(),
+                         qPrintable(data.value("name").toString() + ": " + error));
+            }
         }
         QTRY_COMPARE(online->count(), 1);
         QCOMPARE(online->viewMode(), QListView::IconMode);
@@ -414,7 +451,6 @@ class ThemeCenterTest : public QObject {
         QVERIFY(blur);
         QVERIFY(material);
         QVERIFY(rounded);
-        auto service = APPLICATION->themeManager()->appearance();
         if (!qEnvironmentVariableIsEmpty("LUNA_THEME_TEST_PROFILE")) {
             auto installed = center.findChild<QTreeWidget*>("themeInstalled");
             QVERIFY(installed);
@@ -423,14 +459,19 @@ class ThemeCenterTest : public QObject {
                 const auto data = item->data(0, Qt::UserRole).toJsonObject();
                 QString packageError;
                 const auto resolved = service->packageConfiguration(data.value("id").toString(), packageError);
-                if (!data.value("packageId").toString().isEmpty() && resolved.value("complete").toBool()) {
+                const auto hasChoices = !resolved.value("choices").toObject().isEmpty();
+                const auto hasMissing = !resolved.value("missing").toArray().isEmpty();
+                if (!data.value("packageId").toString().isEmpty() &&
+                    ((!resolved.value("complete").toBool() && !hasMissing && hasChoices) || resolved.value("complete").toBool())) {
+                    const auto choiceOnlyPackage = !resolved.value("complete").toBool();
                     installed->setCurrentItem(item);
                     QVERIFY(completeApply->isEnabled());
                     const auto before = service->state();
                     QTest::mouseClick(completeApply, Qt::LeftButton);
                     QCOMPARE(pages->currentIndex(), 2);
                     const auto after = service->state();
-                    QVERIFY(after.value("requiresRestart").toBool() || after.value("requested") == before.value("requested"));
+                    if (choiceOnlyPackage)
+                        QVERIFY(after.value("requiresRestart").toBool() || after.value("requested") != before.value("requested"));
                     if (after.value("requiresRestart").toBool()) {
                         QString undoError;
                         QVERIFY(service->undoPending(after.value("revision").toInteger(), undoError));
@@ -441,13 +482,11 @@ class ThemeCenterTest : public QObject {
         }
         const auto initial = service->state();
         mode->setCurrentIndex(mode->findData("independent"));
-        theme->setCurrentIndex(theme->findData("Fusion"));
+        theme->setCurrentIndex(theme->findData("bright"));
         QTest::mouseClick(apply, Qt::LeftButton);
-        QVERIFY(service->state().value("requiresRestart").toBool());
-        QVERIFY(undo->isEnabled());
-        QCOMPARE(service->state().value("effective"), initial.value("effective"));
-        QTest::mouseClick(undo, Qt::LeftButton);
         QVERIFY(!service->state().value("requiresRestart").toBool());
+        QVERIFY(!undo->isEnabled());
+        QVERIFY(service->state().value("effective") != initial.value("effective"));
         const auto output = qEnvironmentVariable("LUNA_THEME_TEST_OUTPUT");
         if (!output.isEmpty()) {
             QDir().mkpath(output);
@@ -611,6 +650,7 @@ class ThemeCenterTest : public QObject {
 };
 int main(int argc, char** argv)
 {
+    qputenv("LUNA_DISABLE_BACKGROUND_DOWNLOADS", "1");
     const auto original = QDir::currentPath();
     QTemporaryDir profile;
     if (!profile.isValid())
@@ -645,6 +685,7 @@ int main(int argc, char** argv)
         Q_INIT_RESOURCE(pe_blue);
         Q_INIT_RESOURCE(breeze_dark);
         Q_INIT_RESOURCE(breeze_light);
+        Q_INIT_RESOURCE(kde);
         Q_INIT_RESOURCE(OSX);
         Q_INIT_RESOURCE(iOS);
         Q_INIT_RESOURCE(flat);

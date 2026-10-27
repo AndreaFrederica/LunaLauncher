@@ -86,6 +86,7 @@ int runThemePreview(int argc, char** argv, const QString& path)
     app.setStyleSheet(spec.value("qss").toString());
     WindowChromeController chrome;
     chrome.initialize(spec.value("decoration") == "luna", spec.value("decorationConfig").toObject());
+    chrome.setEffects(spec.value("effects").toObject());
     QMainWindow window;
     window.setWindowTitle(QObject::tr("Theme preview — %1").arg(spec.value("name").toString()));
     window.resize(850, 620);

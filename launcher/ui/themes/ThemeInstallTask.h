@@ -3,6 +3,7 @@
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 #include <QTemporaryDir>
 #include <atomic>
 #include "tasks/Task.h"
@@ -33,6 +34,7 @@ class ThemeInstallTask final : public Task {
     void inspect(const QString& path, const QString& name);
     void publish();
     bool reuseInstalledPackage();
+    void enqueueDependencies(const QJsonArray& dependencies);
     void installNextDependency();
     void finishInstall();
     QNetworkAccessManager* m_network;
@@ -44,7 +46,8 @@ class ThemeInstallTask final : public Task {
     shared_qobject_ptr<NetJob> m_download;
     shared_qobject_ptr<ThemeStoreTask> m_dependencyResolver;
     shared_qobject_ptr<ThemeInstallTask> m_dependencyTask;
-    QJsonArray m_dependencies, m_unresolvedDependencies, m_dependencyPackages;
+    QJsonArray m_dependencies, m_unresolvedDependencies, m_dependencyPackages, m_declaredDependencies;
+    QSet<QString> m_dependencySeen;
     int m_dependencyIndex = 0;
     QFutureWatcher<Staged> m_worker;
 };

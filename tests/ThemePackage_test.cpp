@@ -71,6 +71,7 @@ class ThemeFixtureNetwork : public QNetworkAccessManager {
    public:
     using QNetworkAccessManager::QNetworkAccessManager;
     bool multipleFiles = false;
+    bool nestedDependencies = false;
     bool offline = false;
     QStringList requests;
    protected:
@@ -82,12 +83,39 @@ class ThemeFixtureNetwork : public QNetworkAccessManager {
             return new ThemeFixtureReply(request, {}, this, QNetworkReply::HostNotFoundError);
         QByteArray data;
         if (path.endsWith("content/data") || path.contains("content/data/")) {
-            data = "<content><id>123</id><name>Fixture</name><downloadname1>Fixture.colors</downloadname1><downloadway1>1</downloadway1><downloadprice1>0</downloadprice1>";
+            const bool nested = nestedDependencies && path.contains("content/data/456");
+            const auto id = nested ? "456" : "123";
+            const auto name = nested ? "Nested" : "Fixture";
+            const auto file = nestedDependencies && !nested ? "fixture-bundle.zip" : nested ? "Nested.colors" : "Fixture.colors";
+            data = "<content><id>" + QByteArray(id) + "</id><name>" + QByteArray(name) + "</name><downloadname1>" +
+                   QByteArray(file) + "</downloadname1><downloadway1>1</downloadway1><downloadprice1>0</downloadprice1>";
             if (multipleFiles)
                 data += "<downloadname2>FixtureLight.colors</downloadname2><downloadway2>1</downloadway2><downloadprice2>0</downloadprice2>";
             data += "</content>";
         } else if (path.contains("content/download/")) {
-            data = "<content><downloadway>1</downloadway><downloadlink>https://themes.example/fixture.colors</downloadlink></content>";
+            const auto link = nestedDependencies && path.contains("/123/") ? "fixture-bundle.zip"
+                              : nestedDependencies && path.contains("/456/") ? "nested.colors"
+                                                                                : "fixture.colors";
+            data = "<content><downloadway>1</downloadway><downloadlink>https://themes.example/" + QByteArray(link) +
+                   "</downloadlink></content>";
+        } else if (nestedDependencies && path.endsWith("/fixture-bundle.zip")) {
+            QTemporaryDir archive;
+            const auto archivePath = archive.filePath("nested.zip");
+            MMCZip::ArchiveWriter writer(archivePath);
+            writer.open();
+            writer.addFile("nested/contents/defaults", QByteArray("[kdeglobals][General]\nColorScheme=Nested\n"));
+            writer.addFile("nested/metadata.json", QByteArray(
+                R"({"KPlugin":{"Name":"Nested global"},"X-KPackage-Dependencies":["kns://colorschemes.knsrc/api.kde-look.org/456"]})"));
+            writer.addFile("Nested.colors", QByteArray("[General]\nName=Nested\n[Colors:Window]\nBackgroundNormal=30,31,32\nForegroundNormal=240,241,242\n[Colors:View]\nBackgroundNormal=20,21,22\nForegroundNormal=230,231,232\n[Colors:Selection]\nBackgroundNormal=10,120,230\nForegroundNormal=255,255,255\n"));
+            writer.close();
+            QFile archiveFile(archivePath);
+            if (archiveFile.open(QIODevice::ReadOnly)) {
+                const auto bytes = archiveFile.readAll();
+                return new ThemeFixtureReply(request, bytes, this);
+            }
+        } else if (nestedDependencies && path.endsWith("/nested.colors")) {
+            data = "[General]\nName=Nested\n[Colors:Window]\nBackgroundNormal=30,31,32\nForegroundNormal=240,241,242\n[Colors:View]\nBackgroundNormal=20,21,22\nForegroundNormal=230,231,232\n[Colors:Selection]\nBackgroundNormal=10,120,230\nForegroundNormal=255,255,255\n";
+            return new ThemeFixtureReply(request, data, this);
         } else {
             return new ThemeFixtureReply(request, "[General]\nName=Fixture\n[Colors:Window]\nBackgroundNormal=30,31,32\n[Colors:View]\nBackgroundNormal=20,21,22\n", this);
         }
@@ -242,6 +270,23 @@ class ThemePackageTest : public QObject {
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QCOMPARE(entries.size(), 1);
         QCOMPARE(entries.first().toObject().value("kind").toString(), QString("bundle"));
+
+        QTemporaryDir desktopDir;
+        QVERIFY(QDir(desktopDir.path()).mkpath("Fixture/contents"));
+        put(desktopDir.filePath("Fixture/metadata.desktop"),
+            "[Desktop Entry]\nName=Desktop Fixture\n"
+            "X-KPackage-Dependencies=kns://colorschemes.knsrc/api.kde-look.org/111,"
+            "kns://icons.knsrc/api.kde-look.org/222;kns://plasma-themes.knsrc/api.kde-look.org/333\n");
+        put(desktopDir.filePath("Fixture/contents/defaults"),
+            "[kdeglobals][General]\nColorScheme=DesktopFixture\n");
+        error.clear();
+        const auto desktopData = ThemePackage::readGlobalTheme(desktopDir.filePath("Fixture/contents/defaults"), error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto desktopDeps = desktopData.value("dependencies").toArray();
+        QCOMPARE(desktopDeps.size(), 3);
+        QCOMPARE(desktopDeps.at(0).toObject().value("contentId").toString(), QString("111"));
+        QCOMPARE(desktopDeps.at(1).toObject().value("category").toString(), QString("icons"));
+        QCOMPARE(desktopDeps.at(2).toObject().value("supported").toBool(), false);
     }
     void ocsBusinessStatusAndPaging()
     {
@@ -423,6 +468,28 @@ class ThemePackageTest : public QObject {
         QCOMPARE(selected.result().value("dependencyPackages").toArray().size(), 1);
         QVERIFY(network->requests.contains("/ocs/v1/content/download/123/2"));
     }
+    void recursiveDeclaredDependencyInstallation()
+    {
+        QTemporaryDir dir;
+        QVERIFY(QDir(dir.path()).mkpath("source/global/contents"));
+        put(dir.filePath("source/global/contents/defaults"), "[kdeglobals][General]\nColorScheme=Fixture\n");
+        put(dir.filePath("source/global/metadata.json"), QJsonDocument(QJsonObject{
+            { "KPlugin", QJsonObject{ { "Name", "Recursive fixture" } } },
+            { "X-KPackage-Dependencies", QJsonArray{ "kns://colorschemes.knsrc/api.kde-look.org/123" } }
+        }).toJson());
+        ThemeFixtureNetwork network;
+        network.nestedDependencies = true;
+        ThemeInstallTask task(&network, { { "path", dir.filePath("source") } }, dir.filePath("packages"), dir.filePath("cache"));
+        QSignalSpy done(&task, &Task::finished);
+        task.start();
+        QVERIFY(done.wait(10000));
+        QVERIFY2(task.wasSuccessful(), qPrintable(task.failReason()));
+        QCOMPARE(task.result().value("dependencyPackages").toArray().size(), 2);
+        QVERIFY(task.result().value("unresolvedDependencies").toArray().isEmpty());
+        QVERIFY(network.requests.contains("/ocs/v1/content/data/456"));
+        QVERIFY(network.requests.contains("/ocs/v1/content/download/456/1"));
+        QVERIFY(network.requests.contains("/nested.colors"));
+    }
     void immutableImportAndCancellation()
     {
         QTemporaryDir dir;
@@ -481,6 +548,7 @@ class ThemePackageTest : public QObject {
 };
 int main(int argc, char** argv)
 {
+    qputenv("LUNA_DISABLE_BACKGROUND_DOWNLOADS", "1");
     const auto original = QDir::currentPath();
     QTemporaryDir profile;
     int result = 2;

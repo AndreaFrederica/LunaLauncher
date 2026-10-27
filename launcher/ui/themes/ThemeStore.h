@@ -25,7 +25,7 @@ class ThemeStoreTask final : public Task {
     bool loadCache(bool offline);
     void fail(const QString& error);
     QNetworkAccessManager* m_network;
-    QJsonObject m_request, m_result;
+    QJsonObject m_request, m_result, m_cacheIdentity;
     QString m_cacheDirectory, m_cachePath, m_networkError;
     QPointer<QNetworkReply> m_reply;
     QByteArray m_bytes;

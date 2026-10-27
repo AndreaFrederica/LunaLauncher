@@ -93,8 +93,9 @@ bool ThemePackage::readColors(const QString& path, Palette& result, QString& err
         if (!settings.contains(name))
             return fallback;
         auto value = colorValue(settings.value(name));
-        if (!value.isValid())
+        if (!value.isValid()) {
             malformed = true;
+        }
         return value.isValid() ? value : fallback;
     };
     const auto window = read("Colors:Window", "BackgroundNormal", QColor(239, 240, 241));
@@ -816,10 +817,36 @@ QJsonObject ThemePackage::readGlobalTheme(const QString& defaults, QString& erro
         if (!error.isEmpty())
             return {};
     } else {
-        QSettings desktop(directory.filePath("metadata.desktop"), QSettings::IniFormat);
+        const auto desktopPath = directory.filePath("metadata.desktop");
+        QSettings desktop(desktopPath, QSettings::IniFormat);
         metadata.insert("KPlugin", QJsonObject{ { "Name", desktop.value("Desktop Entry/Name").toString() } });
+        // KDE's older metadata.desktop files use a comma-separated list while
+        // some exporters use semicolons. Accept both forms; treating the
+        // whole line as one URL silently drops every dependency in themes
+        // such as Fluent, DeepinV20, Greybird and Materia.
+        QStringList dependencyValues;
+        const auto dependencyValue = desktop.value("Desktop Entry/X-KPackage-Dependencies");
+        dependencyValues = dependencyValue.toStringList();
+        // QSettings treats a semicolon as an INI comment in some Qt builds,
+        // so read the raw desktop entry as a fallback. KDE exporters commonly
+        // use commas and semicolons together for this field.
+        QFile rawDesktop(desktopPath);
+        if (rawDesktop.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            for (const auto& line : QString::fromUtf8(rawDesktop.readAll()).split('\n')) {
+                const auto separator = line.indexOf('=');
+                if (separator <= 0 || line.left(separator).trimmed().compare("X-KPackage-Dependencies", Qt::CaseInsensitive) != 0)
+                    continue;
+                dependencyValues = { line.mid(separator + 1).trimmed() };
+                break;
+            }
+        }
+        if (dependencyValues.isEmpty() && !dependencyValue.toString().isEmpty())
+            dependencyValues.append(dependencyValue.toString());
+        QStringList dependencies;
+        for (const auto& value : dependencyValues)
+            dependencies.append(value.split(QRegularExpression("[,;]"), Qt::SkipEmptyParts));
         metadata.insert("X-KPackage-Dependencies", QJsonArray::fromStringList(
-            desktop.value("Desktop Entry/X-KPackage-Dependencies").toString().split(';', Qt::SkipEmptyParts)));
+            dependencies));
     }
     QJsonArray dependencies;
     const auto declared = metadata.value("X-KPackage-Dependencies");

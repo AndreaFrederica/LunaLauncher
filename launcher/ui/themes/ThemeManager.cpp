@@ -369,6 +369,12 @@ void ThemeManager::setApplicationTheme(const QString& name, bool initial)
         theme->apply(initial);
         setTitlebarColorOfAllWindowsOnMac(qApp->palette().window().color());
 
+        // The legacy Classic UI menu still applies a widget theme directly.
+        // Keep that path subject to the same immediate layout refresh as the
+        // AppearanceService transaction path.
+        if (m_appearance)
+            m_appearance->refreshWindowLayouts();
+
         m_logColors = theme->logColorScheme();
     } else {
         themeWarningLog() << "Tried to set invalid theme:" << name;

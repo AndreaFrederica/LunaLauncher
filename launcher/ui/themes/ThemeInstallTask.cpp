@@ -94,6 +94,19 @@ QString requestIdentityPart(const QJsonValue& value)
     return {};
 }
 
+// Dependencies are identified by their store identity rather than by the
+// signed download URL.  A package may reference the same resource through
+// more than one parent, and store URLs can change between requests.
+QString dependencyKey(const QJsonObject& dependency)
+{
+    const auto provider = requestIdentityPart(dependency.value("provider"));
+    const auto category = requestIdentityPart(dependency.value("category"));
+    const auto contentId = requestIdentityPart(dependency.value("contentId"));
+    if (!provider.isEmpty() && !category.isEmpty() && !contentId.isEmpty())
+        return provider + ':' + category + ':' + contentId;
+    return dependency.value("reference").toString().trimmed();
+}
+
 bool selectedComponentsCoverRequest(const QJsonObject& record, const QJsonObject& request, QJsonArray& selected)
 {
     selected = record.value("selectedComponents").toArray();
@@ -133,8 +146,15 @@ ThemeInstallTask::ThemeInstallTask(QNetworkAccessManager* network, QJsonObject r
 ThemeInstallTask::~ThemeInstallTask()
 {
     *m_cancelled = true;
-    if (m_worker.isRunning())
+    if (m_worker.isRunning()) {
+        // QtConcurrent cannot be interrupted safely, but the worker observes
+        // m_cancelled and the watcher must finish before its owning task goes
+        // away. Disconnect the queued finished callback after the wait so a
+        // cancellation at the end of a test or UI scope cannot invoke
+        // publish() on a destructing object.
         m_worker.waitForFinished();
+    }
+    disconnect(&m_worker, nullptr, this, nullptr);
 }
 QList<Task*> ThemeInstallTask::getSubTasks() const
 {
@@ -155,6 +175,8 @@ void ThemeInstallTask::executeTask()
     m_dependencies = {};
     m_unresolvedDependencies = {};
     m_dependencyPackages = {};
+    m_declaredDependencies = {};
+    m_dependencySeen.clear();
     m_dependencyIndex = 0;
     m_downloadError.clear();
     const int sources = int(m_request.contains("path")) + int(m_request.contains("url")) + int(m_request.contains("provider"));
@@ -232,7 +254,12 @@ bool ThemeInstallTask::reuseInstalledPackage()
         m_result = { { "packageId", directory },
                      { "installed", QJsonArray{ directory } },
                      { "alreadyInstalled", true },
-                     { "components", selected } };
+                     { "components", selected },
+                     // Reusing an immutable package must still expose its
+                     // declared dependencies to a parent install. Otherwise
+                     // a second import would stop recursive resolution at
+                     // the first level.
+                     { "declaredDependencies", record.value("dependencies").toArray() } };
         setAbortable(false);
         setProgress(1, 1);
         setStatus(tr("Already installed · skipped download"));
@@ -490,23 +517,56 @@ void ThemeInstallTask::publish()
                  { "installed", QJsonArray{ staged.digest } },
                  { "alreadyInstalled", existing },
                  { "components", staged.record.value("selectedComponents") } };
+    m_declaredDependencies = staged.record.value("dependencies").toArray();
+    m_result.insert("declaredDependencies", m_declaredDependencies);
     m_downloadDirectory.reset();
     m_resolver.reset();
     m_download.reset();
     if (!m_request.value("skipDependencies").toBool())
-        m_dependencies = staged.record.value("dependencies").toArray();
+        enqueueDependencies(m_declaredDependencies);
     setAbortable(true);
     installNextDependency();
 }
+
+void ThemeInstallTask::enqueueDependencies(const QJsonArray& dependencies)
+{
+    for (const auto& value : dependencies) {
+        const auto dependency = value.toObject();
+        if (dependency.isEmpty())
+            continue;
+        const auto key = dependencyKey(dependency);
+        if (key.isEmpty() || m_dependencySeen.contains(key))
+            continue;
+        bool pending = false;
+        for (qsizetype i = m_dependencyIndex; i < m_dependencies.size(); ++i) {
+            if (dependencyKey(m_dependencies.at(i).toObject()) == key) {
+                pending = true;
+                break;
+            }
+        }
+        if (!pending)
+            m_dependencies.append(dependency);
+    }
+}
+
 void ThemeInstallTask::installNextDependency()
 {
     if (isFinished())
         return;
-    if (m_dependencyIndex >= m_dependencies.size()) {
+    QJsonObject dependency;
+    while (m_dependencyIndex < m_dependencies.size()) {
+        dependency = m_dependencies.at(m_dependencyIndex++).toObject();
+        const auto key = dependencyKey(dependency);
+        if (!key.isEmpty() && !m_dependencySeen.contains(key)) {
+            m_dependencySeen.insert(key);
+            break;
+        }
+        dependency = {};
+    }
+    if (dependency.isEmpty()) {
         finishInstall();
         return;
     }
-    const auto dependency = m_dependencies.at(m_dependencyIndex++).toObject();
     setStatus(tr("Resolving theme dependency %1 (%2/%3)").arg(dependency.value("contentId").toString())
                   .arg(m_dependencyIndex).arg(m_dependencies.size()));
     setProgress(0, 0);
@@ -544,7 +604,11 @@ void ThemeInstallTask::installNextDependency()
         request.insert("fileId", file.value("id"));
         request.insert("name", file.value("name"));
         request.insert("skipDependencies", true);
-        request.insert("components", QJsonArray{ dependency.value("category") });
+        // Keep a KDE global bundle in the child catalog when the archive also
+        // exposes the requested component. Its defaults can declare another
+        // KNS package, and that declaration must be visible to the parent
+        // queue for recursive resolution.
+        request.insert("components", QJsonArray{ dependency.value("category"), "bundle" });
         m_dependencyTask = makeShared<ThemeInstallTask>(m_network, request, m_packageDirectory, m_cacheDirectory);
         auto task = m_dependencyTask.get();
         connect(task, &Task::status, this, [this](const QString& message) { setStatus(tr("Theme dependency: %1").arg(message)); });
@@ -552,9 +616,14 @@ void ThemeInstallTask::installNextDependency()
         connect(task, &Task::finished, this, [this, task, dependency] {
             if (isFinished())
                 return;
-            if (task->wasSuccessful())
+            if (task->wasSuccessful()) {
                 m_dependencyPackages.append(task->result().value("packageId"));
-            else {
+                // The child is installed with skipDependencies so that this
+                // task remains the single queue owner. Add its declarations to
+                // the same queue and continue until the complete dependency
+                // graph has been visited.
+                enqueueDependencies(task->result().value("declaredDependencies").toArray());
+            } else {
                 auto unresolved = dependency;
                 unresolved.insert("error", task->failReason());
                 m_unresolvedDependencies.append(unresolved);
@@ -569,6 +638,7 @@ void ThemeInstallTask::finishInstall()
 {
     m_result.insert("dependencyPackages", m_dependencyPackages);
     m_result.insert("unresolvedDependencies", m_unresolvedDependencies);
+    m_result.insert("declaredDependencies", m_declaredDependencies);
     setProgress(1, 1);
     setStatus(m_unresolvedDependencies.isEmpty() ? tr("Installed · choose components to apply")
                                                : tr("Installed · some dependencies require selection or retry"));

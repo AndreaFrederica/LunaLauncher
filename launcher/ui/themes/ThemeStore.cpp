@@ -232,7 +232,8 @@ void ThemeStoreTask::executeTask()
         if (mode == "query") {
             const auto sort = m_request.value("sort").toString("high");
             const int page = m_request.value("page").toInt();
-            if (!QStringList{ "high", "new", "alpha", "down" }.contains(sort) || page < 0 || page > 10000) {
+            const auto search = m_request.value("search").toString().trimmed();
+            if (!QStringList{ "high", "new", "alpha", "down" }.contains(sort) || page < 0 || page > 10000 || search.size() > 128) {
                 emitFailed(tr("Invalid catalog query."));
                 return;
             }
@@ -242,6 +243,8 @@ void ThemeStoreTask::executeTask()
             query.addQueryItem("sortmode", sort);
             query.addQueryItem("page", QString::number(page));
             query.addQueryItem("pagesize", "24");
+            if (!search.isEmpty())
+                query.addQueryItem("search", search);
             url.setQuery(query);
         } else {
             const auto content = m_request.value("contentId").toString(), file = m_request.value("fileId").toString();
@@ -259,6 +262,12 @@ void ThemeStoreTask::executeTask()
         emitFailed(tr("Invalid theme request."));
         return;
     }
+    m_cacheIdentity = { { "schema", 2 },
+                        { "provider", provider },
+                        { "mode", mode },
+                        { "url", QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded)) },
+                        { "contentId", m_request.value("contentId").toString() },
+                        { "category", provider == "kde" ? m_request.value("category").toString("palette") : QString() } };
     m_cachePath = QDir(m_cacheDirectory)
                       .filePath(QString::fromLatin1(QCryptographicHash::hash(
                                                         url.toEncoded() + mode.toUtf8() + m_request.value("contentId").toString().toUtf8(),
@@ -290,6 +299,11 @@ bool ThemeStoreTask::loadCache(bool offline)
     if (!file.open(QIODevice::ReadOnly) || file.size() > 8 * 1024 * 1024)
         return false;
     auto cached = QJsonDocument::fromJson(file.readAll()).object();
+    // Older test harnesses could leave unversioned fixture entries in a user's
+    // profile. Discard those entries, including during offline fallback, and
+    // bind new entries to the request (files URLs can span several categories).
+    if (cached.take("_lunaThemeCache").toObject() != m_cacheIdentity)
+        return false;
     const auto time = QDateTime::fromString(cached.value("cachedAt").toString(), Qt::ISODate);
     if (!time.isValid() || (!offline && time.secsTo(QDateTime::currentDateTimeUtc()) > 3600) || !cached.value("items").isArray())
         return false;
@@ -333,7 +347,9 @@ void ThemeStoreTask::finishNetwork()
         QDir().mkpath(m_cacheDirectory);
         // Bound the private catalog cache. Installed packages live elsewhere.
         auto entries = QDir(m_cacheDirectory).entryInfoList({ "*.json" }, QDir::Files, QDir::Time | QDir::Reversed);
-        const auto bytes = QJsonDocument(m_result).toJson(QJsonDocument::Compact);
+        auto cached = m_result;
+        cached.insert("_lunaThemeCache", m_cacheIdentity);
+        const auto bytes = QJsonDocument(cached).toJson(QJsonDocument::Compact);
         qint64 total = bytes.size();
         for (const auto& entry : entries)
             total += entry.size();

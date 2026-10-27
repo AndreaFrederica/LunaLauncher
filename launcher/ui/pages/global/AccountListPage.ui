@@ -57,7 +57,6 @@
    <addaction name="actionAddEnhancedOffline"/>
    <addaction name="actionAddYggdrasil"/>
    <addaction name="actionAddUnifiedPass"/>
-   <addaction name="actionAddOfflineForced"/>
    <addaction name="actionRefresh"/>
    <addaction name="actionRemove"/>
    <addaction name="actionSetDefault"/>
@@ -105,20 +104,12 @@
   </action>
   <action name="actionAddEnhancedOffline">
    <property name="text">
-    <string>Add Enhanced Offline</string>
+    <string>Add &amp;Enhanced Offline</string>
    </property>
   </action>
   <action name="actionAddUnifiedPass">
    <property name="text">
     <string>Add &amp;UnifiedPass</string>
-   </property>
-  </action>
-  <action name="actionAddOfflineForced">
-   <property name="text">
-    <string>Add &amp;Dev Offline</string>
-   </property>
-   <property name="toolTip">
-    <string>Developer mode: Add offline account for developer</string>
    </property>
   </action>
   <action name="actionRefresh">

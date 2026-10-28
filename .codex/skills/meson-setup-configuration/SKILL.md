@@ -7,6 +7,20 @@ description: Configure Meson build directories, set compiler options, define bui
 
 `meson setup` creates the build directory and locks in the compiler, toolchain, and option set. Use `meson configure` for later edits and `meson setup --reconfigure` when the build state should be refreshed.
 
+## LunaLauncher configuration policy
+
+Configure this repository with Pixi tasks rather than calling `meson setup` directly:
+
+```powershell
+pixi run configure release
+pixi run configure debug
+pixi run configure-webui release
+```
+
+The task wrapper owns the build directory names, feature flags, install prefix, and compiler selection. On Windows it selects the MSVC environment from Pixi; do not configure the same tree with MSYS2/MinGW or a system Meson. If the toolchain, profile, or Neo UI mode changes, use `pixi run clean <profile>` (or `pixi run clean-all`) and configure again instead of reusing a stale build directory.
+
+The generic `meson setup` examples below describe Meson itself; use the Pixi configuration tasks above for this repository.
+
 ## Useful defaults
 
 ```bash

@@ -7,7 +7,22 @@ description: Run tests and install build targets using Meson. Use this skill whe
 
 `meson test` runs project tests, and `meson install` puts built artifacts into their final location. For pkg-config exports, release tarballs, and packaging layout, use `meson-package-export-distribution`.
 
+## LunaLauncher test and install policy
+
+Use the repository's Pixi tasks so testing and installation use the same configured environment as the build:
+
+```powershell
+pixi run test release
+pixi run test-install release
+pixi run install release
+pixi run install-webui release
+```
+
+Do not run a global `meson test` or `meson install` against an arbitrary build directory. The task wrapper selects the matching `build-meson-*` and `install-*` directories and performs the required deployment steps. For Neo UI validation, run `pixi run test-webui release` after `pixi run install-webui release`.
+
 Runnable examples live under this skill's `examples/` directory.
+
+The generic Meson commands below describe the underlying operations; use the Pixi test/install tasks above for this repository.
 
 ## Quick Start
 

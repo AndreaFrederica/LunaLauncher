@@ -7,6 +7,19 @@ description: Integrate Meson builds into CI/CD pipelines. Use for GitHub Actions
 
 Use CI to prove that the project builds, tests, installs, and packages cleanly.
 
+## LunaLauncher CI entrypoint
+
+CI for this repository must enter the Pixi environment and call the declared tasks. The canonical native workflows are:
+
+```powershell
+pixi install
+pixi run configure release
+pixi run build release
+pixi run test-install release
+```
+
+For Neo UI jobs use `pixi run install-webui release` and, when a desktop runner is available, `pixi run test-webui release`. Do not substitute system Meson/Ninja/MSBuild or MSYS2/MinGW commands for these tasks; the task wrapper pins dependencies and selects the intended compiler. Direct Meson commands in CI are limited to read-only introspection or implementation of the wrapper itself.
+
 Runnable examples live under this skill's `examples/` directory.
 
 ## What CI should verify
@@ -17,6 +30,8 @@ Runnable examples live under this skill's `examples/` directory.
 - install into a staging directory cleanly
 - export the expected metadata cleanly
 - catch regression in cross-platform behavior early
+
+The generic pipeline below is a Meson reference. The repository-specific CI entrypoint above must be used for LunaLauncher jobs.
 
 ## Default pipeline
 

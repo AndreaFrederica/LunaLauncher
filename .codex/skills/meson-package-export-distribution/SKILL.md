@@ -7,6 +7,17 @@ description: Install Meson projects correctly, export pkg-config metadata, versi
 
 Use this skill when the goal is to ship a project cleanly to other users, package managers, or downstream build systems.
 
+## LunaLauncher packaging entrypoint
+
+Build and install release artifacts through Pixi tasks before packaging them:
+
+```powershell
+pixi run install release
+pixi run install-webui release
+```
+
+The tasks invoke Meson through `scripts/pixi_meson.py`, deploy Qt/runtime files, and stage the result in the repository's `install-*` directory. Do not package a tree produced by a system Meson/MSBuild/MSYS2 environment or by an unrelated `build` directory. When a release needs a clean toolchain/profile, run `pixi run clean-all` and rebuild through the task.
+
 Runnable examples live under this skill's `examples/` directory.
 
 ## Install the right things

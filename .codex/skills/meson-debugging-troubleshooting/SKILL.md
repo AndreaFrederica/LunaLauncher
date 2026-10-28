@@ -7,6 +7,12 @@ description: Diagnose Meson setup, compile, test, dependency, and install failur
 
 Use this skill when the build is not behaving the way the user expects and the failure is not just a simple command typo.
 
+## LunaLauncher environment checks
+
+Reproduce build problems through Pixi first. The supported entrypoints are `pixi run configure <profile>`, `pixi run build <profile>`, `pixi run install <profile>`, and `pixi run install-webui <profile>`. These tasks call `scripts/pixi_meson.py` and provide the pinned dependencies and MSVC environment. Do not diagnose a project failure by rerunning the same command with a system Meson, Ninja, MSYS2, MinGW, or another compiler, because that can create a different build tree and hide the actual problem.
+
+Read-only inspection may use the Pixi-provided tools, for example `pixi run meson introspect <builddir> --targets` and `pixi run meson introspect <builddir> --buildoptions`. If the compiler or profile changed, remove/recreate the matching tree with `pixi run clean <profile>` before comparing results.
+
 ## Start with the build shape
 
 Before changing code, inspect what Meson believes the build looks like:

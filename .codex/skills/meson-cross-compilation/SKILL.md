@@ -7,7 +7,20 @@ description: Set up cross-compilation for non-native targets with Meson machine 
 
 Cross-compilation means building on one machine for another machine. Meson uses machine files to describe the compiler, target platform, and any target-specific properties.
 
+## LunaLauncher profile selection
+
+Use the Pixi task that corresponds to the target profile instead of manually invoking Meson with a machine file:
+
+```powershell
+pixi run configure linux-x64-gcc-release
+pixi run build linux-x64-gcc-release
+```
+
+Windows native builds use `pixi run configure release`/`pixi run build release` and the Pixi MSVC environment. Do not use MSYS2 or MinGW for that profile. The task wrapper supplies the repository's cross file for the Linux GCC profile and keeps native/build tools in the correct environment.
+
 Runnable examples live under this skill's `examples/` directory.
+
+The generic machine-file example below documents Meson itself; use the Pixi target profile above for this repository.
 
 ## Quick start
 

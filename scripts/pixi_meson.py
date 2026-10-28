@@ -312,7 +312,7 @@ def configure(root: Path, profile: str) -> None:
 
     build_testing = os.environ.get("LUNA_BUILD_TESTING", "false").lower() in ("1", "true", "yes")
     build_updater = os.environ.get("LUNA_BUILD_UPDATER", "false" if system == "macos" else "true").lower() in ("1", "true", "yes")
-    disable_ownership = os.environ.get("LUNA_DISABLE_OWNERSHIP_CHECK", "false").lower() in ("1", "true", "yes")
+    developer_mode = os.environ.get("LUNA_DEVELOPER_MODE_BUILD", "false").lower() in ("1", "true", "yes")
 
     args = [
         "meson",
@@ -325,7 +325,7 @@ def configure(root: Path, profile: str) -> None:
         "-Ddefault_library=static" if mode == "release" else "-Ddefault_library=shared",
         "-Dwarning_level=0",
         f"-Dbuild_testing={'true' if build_testing else 'false'}",
-        f"-Ddisable_ownership_check={'true' if disable_ownership else 'false'}",
+        f"-Ddeveloper_mode_build={'true' if developer_mode else 'false'}",
         f"-Dbuild_updater={'true' if build_updater else 'false'}",
         f"-Dneo_ui={'enabled' if webui_enabled() else 'disabled'}",
         # Ship the launcher-managed Rust authentication/cache service in every

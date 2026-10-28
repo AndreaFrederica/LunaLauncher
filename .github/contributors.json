@@ -1,0 +1,16 @@
+{
+  "aliases": {
+    "Andrea Frederica": "AndreaFrederica",
+    "AndreaFrederica": "AndreaFrederica"
+  },
+  "exclude": [
+    "github-actions[bot]",
+    "dependabot[bot]",
+    "renovate[bot]",
+    "copilot-swe-agent[bot]"
+  ],
+  "manual": {
+    "luna": [],
+    "upstream": []
+  }
+}

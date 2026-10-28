@@ -34,6 +34,7 @@
  */
 
 #include "AccountList.h"
+#include "DeveloperMode.h"
 #include "LocalYggdrasil.h"
 #include "AccountData.h"
 #include "tasks/Task.h"
@@ -667,15 +668,15 @@ bool AccountList::anyAccountIsValid()
 
 bool AccountList::canAddOfflineAccount() const
 {
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
-    return true;
-#else
+    if (DeveloperMode::isEnabled() && DeveloperMode::hasDebugMarker(DeveloperMode::Marker0)) {
+        return true;
+    } 
+
     for (const auto& account : m_accounts) {
         if (account->ownsMinecraft())
             return true;
     }
     return false;
-#endif
 }
 
 bool AccountList::anyMSAAccountOwnsMinecraft()

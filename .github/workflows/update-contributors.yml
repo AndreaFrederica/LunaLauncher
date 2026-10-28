@@ -1,0 +1,38 @@
+name: Update contributors
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-contributors
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: meson
+          fetch-depth: 0
+      - name: Fetch Prism history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add prism https://github.com/PrismLauncher/PrismLauncher.git
+          branch="$(git ls-remote --symref prism HEAD | sed -n 's@^ref: refs/heads/\(.*\)[[:space:]]HEAD$@\1@p')"
+          test -n "$branch"
+          git fetch --no-tags prism "+refs/heads/$branch:refs/remotes/prism/default"
+      - name: Update README
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/update_contributors.py
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- README.md; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git commit -m 'docs: update contributor acknowledgements'
+          git push origin HEAD:meson

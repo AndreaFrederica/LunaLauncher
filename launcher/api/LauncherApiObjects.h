@@ -13,6 +13,7 @@
 
 #include "Application.h"
 #include "BaseInstance.h"
+#include "DeveloperMode.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
@@ -52,11 +53,12 @@ class LauncherObject {
         if (caps & Application::SupportsFlame) capabilities.append("curseforge");
         if (caps & Application::SupportsGameMode) capabilities.append("game-mode");
         if (caps & Application::SupportsMangoHud) capabilities.append("mangohud");
-#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
-        const bool developerBuild = true;
-#else
-        const bool developerBuild = false;
-#endif
+
+        bool developerBuild = false;
+        if (DeveloperMode::isEnabled() && DeveloperMode::hasDebugMarker(DeveloperMode::Marker0)) {
+            developerBuild = true;
+        }
+
         const bool offlineAccountAllowed = developerBuild || m_application->accounts()->anyAccountIsValid();
         if (offlineAccountAllowed) capabilities.append("offline-account");
         return QJsonObject{ { "applicationVersion", QCoreApplication::applicationVersion() },

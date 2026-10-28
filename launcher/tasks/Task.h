@@ -204,6 +204,7 @@ class Task : public QObject, public QRunnable {
     //! The Task subclass must call this method when the task has failed
     virtual void emitFailed(QString reason = "");
 
+   public:
     virtual void propagateStepProgress(TaskStepProgress const& task_progress);
 
    public slots:

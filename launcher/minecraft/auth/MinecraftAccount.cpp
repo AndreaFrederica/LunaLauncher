@@ -86,6 +86,13 @@ MinecraftAccountPtr MinecraftAccount::createOffline(const QString& username)
     account->data.minecraftProfile.id = uuidFromUsername(username).toString(QUuid::Id128);
     account->data.minecraftProfile.name = username;
     account->data.minecraftProfile.validity = Validity::Certain;
+
+    if (DeveloperMode::isEnabled()) {
+        account->data.minecraftEntitlement.canPlayMinecraft = false;
+        account->data.minecraftEntitlement.ownsMinecraft = false;
+        account->data.minecraftEntitlement.validity = Validity::Certain;
+    }
+
     return account;
 }
 

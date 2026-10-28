@@ -143,10 +143,20 @@ launcher_moc_source_generated = qt.preprocess(
   ],
 )
 
+developer_mode = static_library(
+  'DeveloperMode',
+  ['DeveloperMode.cpp', 'DeveloperMode.h'],
+  include_directories: [launcher_inc],
+  dependencies: [qt_core_dep],
+  cpp_args: launcher_developer_mode_build ? ['-DLAUNCHER_DEVELOPER_MODE_BUILD'] : [],
+)
+
+developer_mode_dep = declare_dependency(
+  include_directories: [launcher_inc],
+  link_with: developer_mode,
+)
+
 launcher_logic_args = ['-DLAUNCHER_APPLICATION']
-if launcher_disable_ownership_check
-  launcher_logic_args += ['-DLAUNCHER_DISABLE_OWNERSHIP_CHECK']
-endif
 if gamemode_dep.found()
   launcher_logic_args += ['-DWITH_GAMEMODE']
 endif
@@ -186,6 +196,7 @@ launcher_logic = static_library(
     libqrencode_dep,
     gamemode_dep,
     macos_frameworks_dep,
+    developer_mode_dep,
   ],
   include_directories: [
     launcher_inc,

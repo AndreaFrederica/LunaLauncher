@@ -7,6 +7,21 @@ description: Entry point for Meson questions. Use this skill for general Meson s
 
 Meson is a declarative build system. Start here when the user asks about `meson.build` syntax, target declarations, build directories, or the standard workflow of setup, compile, test, and install.
 
+## LunaLauncher repository build policy
+
+This repository is built through Pixi tasks. Run commands from the repository root and use the task wrappers so the pinned Meson, Ninja, Python, Qt, Rust, Node, and compiler environment is selected consistently:
+
+```powershell
+pixi run configure release
+pixi run build release
+pixi run install release
+pixi run test-install release
+```
+
+For the complete Neo UI build use `pixi run install-webui release`; it enables the Neo UI profile and deploys the native launcher and Web UI together. Use `pixi run clean release` or `pixi run clean-all` when changing profiles or toolchains. Do not invoke a globally installed `meson`, `ninja`, `cmake`, MSBuild, MSYS2, or MinGW toolchain for this project build. The Pixi tasks call `scripts/pixi_meson.py`, which invokes Meson with the repository's pinned options and selects MSVC on Windows. Direct Meson commands are appropriate only for read-only inspection or when extending the task wrapper itself.
+
+The generic Meson fast path below explains the underlying lifecycle; in this repository, invoke those stages through the Pixi tasks above.
+
 ## Fast path
 
 1. Write or edit `meson.build`

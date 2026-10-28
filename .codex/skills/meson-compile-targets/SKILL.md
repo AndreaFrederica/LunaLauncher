@@ -7,6 +7,20 @@ description: Compile Meson projects with target selection, parallel jobs, and ba
 
 `meson compile` command builds targets using the configured backend (ninja, Visual Studio, Xcode). It supports target selection, parallelism, verbosity control, and backend-specific flags.
 
+## LunaLauncher build entrypoint
+
+Use the Pixi task wrapper for every project compile so Meson runs inside the pinned environment and the correct MSVC toolchain is selected on Windows:
+
+```powershell
+pixi run build release
+pixi run build debug
+pixi run build-webui release
+```
+
+These tasks call `scripts/pixi_meson.py`; do not replace them with a bare `meson compile`, `ninja`, `cmake --build`, MSBuild, MSYS2, or MinGW command. Use `pixi run clean <profile>` before changing the compiler or build shape. `pixi run meson introspect ...` is valid for read-only target inspection, but the actual compile should go through a Pixi task.
+
+The command examples below document Meson's backend syntax. For this repository, use the Pixi build tasks above for the actual compile.
+
 ## Quick Start
 
 **Build everything:**

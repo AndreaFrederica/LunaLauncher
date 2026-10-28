@@ -1,0 +1,59 @@
+<template>
+  <!-- Port of XMCL MarketBase/MarketListHeader/MarketFilterPanel language. -->
+  <section class="xmcl-market">
+    <div class="xmcl-market-tabs"><q-tabs v-model="view" align="left" outside-arrows mobile-arrows><q-tab name="local" :label="t('xmcl.resource.local')" icon="folder"/><q-tab name="online" :label="t('xmcl.resource.online')" icon="cloud_download"/></q-tabs><q-space/><q-btn flat round icon="refresh" :disable="busy" @click="loadLocal"/></div>
+    <div v-if="view==='local'" class="xmcl-market-local"><div class="xmcl-market-toolbar"><strong>{{ label }} <small>{{ local.length }}</small></strong><q-input dark borderless dense v-model="filter" :placeholder="t('xmcl.resource.filter')"><template #prepend><q-icon name="search"/></template></q-input><q-btn flat icon="update" :label="t('xmcl.resource.checkUpdates')" :disable="busy" @click="checkUpdates"/></div><div class="xmcl-resource-list"><article v-for="resource in filtered" :key="resource.fileName" class="xmcl-resource-row" @click="inspect(resource)"><q-avatar rounded size="42px" class="resource-icon"><img v-if="resource.iconUrl || resource.icon" :src="resource.iconUrl || resource.icon" :alt="resource.name || resource.fileName"/><q-icon v-else name="extension" size="22px"/></q-avatar><div class="xmcl-resource-main"><strong>{{ resource.name||resource.fileName }}</strong><small>{{ resource.fileName }} · {{ resource.version||resource.metadata?.version||t('xmcl.resource.localFile') }}</small><small v-if="resource.description" class="resource-description">{{ resource.description }}</small></div><q-badge :color="resource.enabled===false?'grey':'positive'">{{ resource.enabled===false?t('xmcl.resource.disabled'):t('xmcl.resource.enabled') }}</q-badge><q-checkbox :model-value="resource.enabled !== false" :disable="busy || toggling.has(resource.fileName)" color="primary" keep-color @update:model-value="toggle(resource,Boolean($event))" @click.stop/><q-btn flat round dense icon="delete" color="negative" :disable="busy" @click.stop="remove(resource)"/></article><div v-if="!filtered.length" class="xmcl-market-empty">{{ t('xmcl.resource.empty', { kind: label }) }}</div></div><q-dialog v-model="detailsShown"><q-card class="xmcl-detail"><q-card-section><div class="resource-detail-heading"><q-avatar rounded size="64px" class="resource-icon"><img v-if="details?.iconUrl || details?.icon" :src="details.iconUrl || details.icon"/><q-icon v-else name="extension" size="30px"/></q-avatar><div><div class="text-h6">{{ details?.name||details?.metadata?.name||selected?.name||selected?.fileName }}</div><div class="text-caption text-grey-5">{{ details?.fileName||selected?.fileName }}</div><div class="text-caption text-grey-5" v-if="details?.modId">{{ details.modId }} · {{ details.version || t('xmcl.resource.unknownVersion') }}</div></div></div><p v-if="details?.description" class="resource-description resource-detail-description">{{ details.description }}</p><div v-if="details?.authors?.length" class="resource-authors">{{ t('xmcl.resource.authors') }}：{{ details.authors.join('、') }}</div><div class="resource-detail-grid"><div><small>{{ t('xmcl.resource.version') }}</small><span>{{ details?.version||details?.metadata?.version||t('xmcl.resource.unknown') }}</span></div><div><small>Minecraft</small><span>{{ details?.minecraftVersions||details?.metadata?.minecraftVersions?.join(', ')||t('xmcl.resource.unknown') }}</span></div><div><small>{{ t('xmcl.resource.loader') }}</small><span>{{ details?.loaders||details?.side||t('xmcl.resource.unknown') }}</span></div><div><small>{{ t('xmcl.resource.source') }}</small><span>{{ details?.provider||details?.metadata?.url||t('xmcl.resource.localResource') }}</span></div><div><small>{{ t('xmcl.resource.status') }}</small><span>{{ details?.status||t('xmcl.resource.enabled') }}</span></div><div><small>{{ t('xmcl.resource.dependencies') }}</small><span>{{ details?.dependencies?.length ? details.dependencies.join(', ') : t('xmcl.resource.none') }}</span></div></div><q-separator class="q-my-md"/><details><summary>{{ t('xmcl.resource.fullMetadata') }}</summary><pre>{{ JSON.stringify(details||selected,null,2) }}</pre></details></q-card-section></q-card></q-dialog></div><div v-else><CatalogBrowser :instance="instance" :kind="kind" :minecraft-version="minecraftVersion" :busy="busy" :execute="execute" @installed="loadLocal"/></div><q-banner v-if="error" class="bg-red-9 q-mt-md">{{ error }}</q-banner>
+  </section>
+</template>
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import CatalogBrowser from '../components/CatalogBrowser.vue';
+const props=defineProps<{instance:string;kind:string;minecraftVersion?:string;busy:boolean;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
+const { t } = useI18n();
+const view=ref('local'),local=ref<any[]>([]),filter=ref(''),error=ref(''),selected=ref<any>(null),details=ref<any>(null),detailsShown=ref(false),toggling=ref(new Set<string>());const label=computed(()=>t(`xmcl.resource.kinds.${props.kind}`));const filtered=computed(()=>local.value.filter(x=>`${x.name||''} ${x.fileName||''} ${x.modId||''} ${x.description||''}`.toLowerCase().includes(filter.value.toLowerCase())));
+let resourceRequestToken = 0;
+async function loadLocal(){
+  const requestToken = ++resourceRequestToken;
+  error.value = '';
+  try {
+    const r=await props.execute('resource.list',{instance:props.instance,kind:props.kind,includeIcons:false});
+    if (requestToken !== resourceRequestToken) return;
+    const list = Array.isArray(r) ? r : [];
+    local.value = list;
+    void loadIcons(list, requestToken);
+  } catch(e) {
+    if (requestToken === resourceRequestToken) error.value=String(e);
+  }
+}
+async function loadIcons(items:any[], requestToken:number){
+  if (props.kind !== 'mods') return;
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const result = await props.execute('resource.icon',{instance:props.instance,kind:props.kind,resource:item.fileName});
+          if (requestToken !== resourceRequestToken) return;
+          if (result?.icon) {
+            const current = local.value.find(candidate => candidate.fileName === item.fileName);
+            if (current) current.icon = result.icon;
+            break;
+          }
+          if (!result?.pending) break;
+          await new Promise(resolve => setTimeout(resolve, 650));
+        } catch { /* Keep the placeholder for resources without an icon. */ break; }
+      }
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(6,items.length)},worker));
+}
+async function toggle(r:any,enabled:boolean){const next=new Set(toggling.value);next.add(r.fileName);toggling.value=next;error.value='';try{await props.execute(enabled?'resource.enable':'resource.disable',{instance:props.instance,kind:props.kind,resource:r.fileName});r.enabled=enabled;await loadLocal();}catch(e){error.value=String(e);}finally{const done=new Set(toggling.value);done.delete(r.fileName);toggling.value=done;}}
+async function remove(r:any){try{await props.execute('resource.remove',{instance:props.instance,kind:props.kind,resource:r.fileName,confirm:true});await loadLocal();}catch(e){error.value=String(e);}}
+async function inspect(r:any){selected.value=r;try{details.value=await props.execute('resource.inspect',{instance:props.instance,kind:props.kind,resource:r.fileName});}catch{details.value=r;}detailsShown.value=true;}
+async function checkUpdates(){try{const r=await props.execute('resource.updates.check',{instance:props.instance,kind:props.kind});error.value=r.items?.length?t('xmcl.resource.updatesFound',{count:r.items.length}):t('xmcl.resource.noUpdates');}catch(e){error.value=String(e);}}
+watch(()=>[props.instance,props.kind],loadLocal);onMounted(loadLocal);onBeforeUnmount(()=>{resourceRequestToken++;});
+</script>
+<style scoped>.xmcl-market{margin-top:22px}.resource-description{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.62)!important}.resource-detail-description{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0 8px}.resource-authors{color:rgba(255,255,255,.68);font-size:12px;margin:8px 0}.xmcl-market-tabs{display:flex;align-items:center;border-bottom:1px solid rgba(255,255,255,.1)}.xmcl-market-toolbar{display:flex;align-items:center;gap:14px;padding:14px 6px}.xmcl-market-toolbar strong{font-size:16px;white-space:nowrap}.xmcl-market-toolbar strong small{font-size:12px;color:rgba(255,255,255,.5)}.xmcl-market-toolbar .q-input{flex:1}.xmcl-resource-list{display:flex;flex-direction:column;gap:6px}.xmcl-resource-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);cursor:pointer;transition:background .15s,border-color .15s}.xmcl-resource-row:hover{background:rgba(255,255,255,.09);border-color:rgba(129,140,248,.45)}.resource-icon{background:rgba(255,255,255,.07);flex:none}.xmcl-resource-main{flex:1;min-width:0;display:flex;flex-direction:column}.xmcl-resource-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xmcl-resource-main small{color:rgba(255,255,255,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xmcl-market-empty{text-align:center;padding:30px;color:rgba(255,255,255,.5)}.xmcl-detail{max-width:720px;width:90vw;background:#222228;color:#fff}.resource-detail-heading{display:flex;align-items:center;gap:14px}.resource-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.resource-detail-grid div{padding:10px;border-radius:8px;background:rgba(255,255,255,.05)}.resource-detail-grid small{display:block;color:rgba(255,255,255,.5);margin-bottom:4px}.resource-detail-grid span{display:block;overflow-wrap:anywhere}.xmcl-detail details{margin-top:10px}.xmcl-detail pre{max-height:40vh;overflow:auto;white-space:pre-wrap}@media(max-width:600px){.resource-detail-grid{grid-template-columns:1fr}}
+</style>

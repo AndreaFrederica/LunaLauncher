@@ -41,23 +41,23 @@
 
 #include "minecraft/MinecraftInstance.h"
 
+#include "modplatform/BlockedMod.h"
 #include "modplatform/flame/FileResolvingTask.h"
 
 #include "net/NetJob.h"
-
-#include "ui/dialogs/BlockedModsDialog.h"
 
 class FlameCreationTask final : public InstanceCreationTask {
     Q_OBJECT
 
    public:
     FlameCreationTask(const QString& staging_path,
+                      bool trustedSource,
                       SettingsObject* global_settings,
                       QWidget* parent,
                       QString id,
                       QString version_id,
                       QString original_instance_id = {})
-        : InstanceCreationTask(), m_parent(parent), m_managedId(std::move(id)), m_managedVersionId(std::move(version_id))
+        : InstanceCreationTask(), m_parent(parent), m_trustedSource(trustedSource), m_managedId(std::move(id)), m_managedVersionId(std::move(version_id))
     {
         setStagingPath(staging_path);
         setParentSettings(global_settings);
@@ -66,6 +66,7 @@ class FlameCreationTask final : public InstanceCreationTask {
     }
 
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
     bool updateInstance() override;
     std::unique_ptr<BaseInstance> createInstance() override;
@@ -73,12 +74,24 @@ class FlameCreationTask final : public InstanceCreationTask {
    private slots:
     void idResolverSucceeded(QEventLoop&);
     void setupDownloadJob(QEventLoop&);
-    void copyBlockedMods(QList<BlockedMod> const& blocked_mods);
+    void copyBlockedMods(const QList<BlockedMod>& blocked_mods);
     void validateOtherResources(QEventLoop& loop);
     QString getVersionForLoader(QString uid, QString loaderType, QString version, QString mcVersion);
 
+    [[nodiscard]] bool promptForUntrustedMods();
+
+   private:
+    /// True when the file already exists in the staging area with the expected size.
+    bool isFileAlreadyPresent(const Flame::File& file, const QString& path) const;
+    /// Looks for an already downloaded copy of a Modrinth-fallback file in the
+    /// user's download / central mods folders. Returns an empty string if none.
+    QString findLocalCopy(const Flame::File& file) const;
+    /// Offers the failed downloads as blocked mods (manual download) and retries once.
+    void onDownloadFailed(const QString& reason, QEventLoop& loop);
+
    private:
     QWidget* m_parent = nullptr;
+    bool m_trustedSource;
 
     shared_qobject_ptr<Flame::FileResolvingTask> m_modIdResolver;
     Flame::Manifest m_pack;
@@ -94,4 +107,8 @@ class FlameCreationTask final : public InstanceCreationTask {
     std::optional<BaseInstance*> m_instance;
 
     QStringList m_selectedOptionalMods;
+
+    /// Set once the failed downloads were handed to the user, so a second
+    /// failure fails the import instead of showing the dialog again.
+    bool m_blockedFallbackUsed = false;
 };

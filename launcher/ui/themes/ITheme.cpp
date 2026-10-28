@@ -35,18 +35,18 @@
  */
 #include "ITheme.h"
 #include <QDir>
-#include <QStyleFactory>
 #include "Application.h"
 #include "HintOverrideProxyStyle.h"
+#include "ThemeStyle.h"
 #include "rainbow.h"
 
 void ITheme::apply(bool)
 {
     APPLICATION->setStyleSheet(QString());
-    QApplication::setStyle(new HintOverrideProxyStyle(QStyleFactory::create(qtTheme())));
+    QDir::setSearchPaths("theme", searchPaths());
+    QApplication::setStyle(new HintOverrideProxyStyle(ThemeStyle::create(qtTheme(), widgetThemeFile())));
     QApplication::setPalette(colorScheme());
     APPLICATION->setStyleSheet(appStyleSheet());
-    QDir::setSearchPaths("theme", searchPaths());
 }
 
 QPalette ITheme::fadeInactive(QPalette in, qreal bias, QColor color)

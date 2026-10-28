@@ -51,7 +51,11 @@ void INISettingsObject::setFilePath(const QString& filePath)
 
 bool INISettingsObject::reload()
 {
-    return m_ini.loadFile(m_filePath) && SettingsObject::reload();
+    INIFile loaded;
+    if (!loaded.loadFile(m_filePath))
+        return false;
+    m_ini = std::move(loaded);
+    return SettingsObject::reload();
 }
 
 void INISettingsObject::suspendSave()
@@ -65,6 +69,12 @@ void INISettingsObject::resumeSave()
     if (m_doSave) {
         m_ini.saveFile(m_filePath);
     }
+}
+
+void INISettingsObject::resumeSaveWithoutFlush()
+{
+    m_suspendSave = false;
+    m_doSave = false;
 }
 
 void INISettingsObject::changeSetting(const Setting& setting, QVariant value)

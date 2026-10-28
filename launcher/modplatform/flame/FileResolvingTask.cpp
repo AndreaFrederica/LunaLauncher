@@ -45,6 +45,11 @@ bool Flame::FileResolvingTask::abort()
     return aborted ? Task::abort() : false;
 }
 
+QList<Task*> Flame::FileResolvingTask::getSubTasks() const
+{
+    return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{};
+}
+
 void Flame::FileResolvingTask::executeTask()
 {
     if (m_manifest.files.isEmpty()) {  // no file to resolve so leave it empty and emit success immediately
@@ -64,23 +69,23 @@ void Flame::FileResolvingTask::executeTask()
     auto step_progress = std::make_shared<TaskStepProgress>();
     connect(m_task.get(), &Task::succeeded, this, [this, response, step_progress]() {
         step_progress->state = TaskStepState::Succeeded;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
         netJobFinished(response);
     });
     connect(m_task.get(), &Task::failed, this, [this, step_progress](QString reason) {
         step_progress->state = TaskStepState::Failed;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
         emitFailed(reason);
     });
     connect(m_task.get(), &Task::stepProgress, this, &FileResolvingTask::propagateStepProgress);
     connect(m_task.get(), &Task::progress, this, [this, step_progress](qint64 current, qint64 total) {
         qDebug() << "Resolve slug progress" << current << total;
         step_progress->update(current, total);
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
     });
     connect(m_task.get(), &Task::status, this, [this, step_progress](QString status) {
         step_progress->status = status;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
     });
 
     m_task->start();
@@ -161,7 +166,7 @@ void Flame::FileResolvingTask::netJobFinished(QByteArray* response)
     auto step_progress = std::make_shared<TaskStepProgress>();
     connect(m_task.get(), &Task::succeeded, this, [this, modrinthResponse, step_progress]() {
         step_progress->state = TaskStepState::Succeeded;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
         QJsonParseError parse_error{};
         QJsonDocument doc = QJsonDocument::fromJson(*modrinthResponse, &parse_error);
         if (parse_error.error != QJsonParseError::NoError) {
@@ -184,6 +189,7 @@ void Flame::FileResolvingTask::netJobFinished(QByteArray* response)
                             auto file = Modrinth::loadIndexedPackVersion(entry);
 
                             out.version.downloadUrl = file.downloadUrl;
+                            out.fromModrinthFallback = true;
                             qDebug() << "Found alternative on modrinth" << out.version.fileName;
                         } catch (Json::JsonException& e) {
                             qDebug() << e.cause();
@@ -200,18 +206,18 @@ void Flame::FileResolvingTask::netJobFinished(QByteArray* response)
     });
     connect(m_task.get(), &Task::failed, this, [this, step_progress](QString reason) {
         step_progress->state = TaskStepState::Failed;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
         getFlameProjects();
     });
     connect(m_task.get(), &Task::stepProgress, this, &FileResolvingTask::propagateStepProgress);
     connect(m_task.get(), &Task::progress, this, [this, step_progress](qint64 current, qint64 total) {
         qDebug() << "Resolve slug progress" << current << total;
         step_progress->update(current, total);
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
     });
     connect(m_task.get(), &Task::status, this, [this, step_progress](QString status) {
         step_progress->status = status;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
     });
     m_task->start();
 }
@@ -263,24 +269,24 @@ void Flame::FileResolvingTask::getFlameProjects()
             qDebug() << doc;
         }
         step_progress->state = TaskStepState::Succeeded;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
         emitSucceeded();
     });
 
     connect(m_task.get(), &Task::failed, this, [this, step_progress](QString reason) {
         step_progress->state = TaskStepState::Failed;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
         emitFailed(reason);
     });
     connect(m_task.get(), &Task::stepProgress, this, &FileResolvingTask::propagateStepProgress);
     connect(m_task.get(), &Task::progress, this, [this, step_progress](qint64 current, qint64 total) {
         qDebug() << "Resolve slug progress" << current << total;
         step_progress->update(current, total);
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
     });
     connect(m_task.get(), &Task::status, this, [this, step_progress](QString status) {
         step_progress->status = status;
-        stepProgress(*step_progress);
+        propagateStepProgress(*step_progress);
     });
 
     m_task->start();

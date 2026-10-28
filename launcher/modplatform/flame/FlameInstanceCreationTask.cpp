@@ -34,6 +34,14 @@
  */
 
 #include "FlameInstanceCreationTask.h"
+#include "cli/ScopedUserInteraction.h"
+
+#include <QCryptographicHash>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 
 #include "InstanceTask.h"
 #include "QObjectPtr.h"
@@ -49,6 +57,7 @@
 #include "Json.h"
 
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/MirrorDownload.h"
 #include "minecraft/PackProfile.h"
 
 #include "modplatform/helpers/OverrideUtils.h"
@@ -58,33 +67,81 @@
 #include "SysInfo.h"
 #include "tasks/ConcurrentTask.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include "cli/HeadlessBlockedMods.h"
 #include "ui/dialogs/CustomMessageBox.h"
 
 #include <QDebug>
 #include <QFileInfo>
+#include <QDirIterator>
 
 #include "HardwareInfo.h"
 #include "meta/Index.h"
 #include "minecraft/World.h"
 #include "minecraft/mod/tasks/LocalResourceParse.h"
 #include "net/ApiDownload.h"
+#include "ui/dialogs/UntrustedModsDialog.h"
 #include "ui/pages/modplatform/OptionalModDialog.h"
 
 static const FlameAPI api;
+
+namespace {
+/// Hash one file and compare it with the expected hex digest.
+bool fileMatchesHash(const QString& path, const QString& hashType, const QString& expected)
+{
+    if (expected.isEmpty())
+        return false;
+
+    QCryptographicHash::Algorithm algorithm = QCryptographicHash::Sha1;
+    if (hashType.compare(QStringLiteral("md5"), Qt::CaseInsensitive) == 0)
+        algorithm = QCryptographicHash::Md5;
+    else if (hashType.compare(QStringLiteral("sha256"), Qt::CaseInsensitive) == 0)
+        algorithm = QCryptographicHash::Sha256;
+    else if (hashType.compare(QStringLiteral("sha512"), Qt::CaseInsensitive) == 0)
+        algorithm = QCryptographicHash::Sha512;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+
+    QCryptographicHash hash(algorithm);
+    if (!hash.addData(&file))
+        return false;
+
+    return QString::fromLatin1(hash.result().toHex()).compare(expected, Qt::CaseInsensitive) == 0;
+}
+}  // namespace
 
 bool FlameCreationTask::abort()
 {
     if (!canAbort())
         return false;
 
-    if (m_processUpdateFileInfoJob)
-        m_processUpdateFileInfoJob->abort();
-    if (m_filesJob)
-        m_filesJob->abort();
-    if (m_modIdResolver)
-        m_modIdResolver->abort();
+    if (m_processUpdateFileInfoJob && m_processUpdateFileInfoJob->isRunning()) {
+        const auto job = m_processUpdateFileInfoJob;
+        job->abort();
+    }
+    if (m_filesJob && m_filesJob->isRunning()) {
+        const auto job = m_filesJob;
+        job->abort();
+    }
+    if (m_modIdResolver && m_modIdResolver->isRunning()) {
+        const auto resolver = m_modIdResolver;
+        resolver->abort();
+    }
 
     return InstanceCreationTask::abort();
+}
+
+QList<Task*> FlameCreationTask::getSubTasks() const
+{
+    auto result = InstanceCreationTask::getSubTasks();
+    if (m_processUpdateFileInfoJob)
+        result.append(m_processUpdateFileInfoJob.get());
+    if (m_filesJob)
+        result.append(m_filesJob.get());
+    if (m_modIdResolver)
+        result.append(m_modIdResolver.get());
+    return result;
 }
 
 bool FlameCreationTask::updateInstance()
@@ -236,6 +293,11 @@ bool FlameCreationTask::updateInstance()
 
         m_processUpdateFileInfoJob = nullptr;
     } else {
+        if (APPLICATION->isHeadless()) {
+            if (!headlessConfirm(tr("The old pack index is missing; updating may duplicate files. Continue?"))) {
+                m_abort = true; return false;
+            }
+        } else {
         // We don't have an old index file, so we may duplicate stuff!
         auto dialog = CustomMessageBox::selectable(m_parent, tr("No index file."),
                                                    tr("We couldn't find a suitable index file for the older version. This may cause some "
@@ -245,6 +307,7 @@ bool FlameCreationTask::updateInstance()
         if (dialog->exec() == QDialog::DialogCode::Rejected) {
             m_abort = true;
             return false;
+        }
         }
     }
 
@@ -307,6 +370,35 @@ QString FlameCreationTask::getVersionForLoader(QString uid, QString loaderType, 
     return loaderVersion;
 }
 
+bool FlameCreationTask::promptForUntrustedMods()
+{
+    if (m_trustedSource) {
+        return true;
+    }
+
+    QStringList untrustedMods;
+
+    const QDir mcDir{ FS::PathCombine(m_stagingPath, "minecraft") };
+    const QString modsPath{ FS::PathCombine(m_stagingPath, "minecraft/mods") };
+    if (QDir(modsPath).exists()) {
+        QDirIterator iter{ modsPath, QDir::Files, QDirIterator::Subdirectories | QDirIterator::FollowSymlinks };
+        while (iter.hasNext()) {
+            untrustedMods.append(mcDir.relativeFilePath(iter.next()));
+        }
+    }
+
+    if (untrustedMods.empty()) {
+        return true;
+    }
+
+    const auto confirmation = UntrustedModsDialog::confirm(untrustedMods, m_parent);
+    if (!confirmation.has_value()) {
+        setError(tr("This modpack includes untrusted mods and requires explicit confirmation from an interactive client."));
+        return false;
+    }
+    return *confirmation;
+}
+
 std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
 {
     QEventLoop loop;
@@ -329,7 +421,13 @@ std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
     }
 
     if (!m_pack.overrides.isEmpty()) {
-        QString overridePath = FS::PathCombine(m_stagingPath, m_pack.overrides);
+        const auto overridePath = FS::PathCombine(m_stagingPath, m_pack.overrides);
+        if (!QUrl::fromLocalFile(m_stagingPath).isParentOf(QUrl::fromLocalFile(overridePath))) {
+            // This means we somehow got out of the root folder, so abort here to prevent exploits
+            setError(tr("The overrides has a path that leads to an arbitrary location (%1). This is a security risk and isn't allowed.")
+                         .arg(m_pack.overrides));
+            return nullptr;
+        }
         if (QFile::exists(overridePath)) {
             // Create a list of overrides in "overrides.txt" inside flame/
             Override::createOverrides("overrides", parent_folder, overridePath);
@@ -343,6 +441,12 @@ std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
             logWarning(
                 tr("The specified overrides folder (%1) is missing. Maybe the modpack was already used before?").arg(m_pack.overrides));
         }
+    }
+
+    if (!promptForUntrustedMods()) {
+        if (getError().isEmpty())
+            m_abort = true;
+        return nullptr;
     }
 
     QString loaderType;
@@ -496,7 +600,13 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
         }
     }
 
-    if (!optionalFiles.empty()) {
+    if (!optionalFiles.empty() && APPLICATION->isHeadless() && activeUserInteraction) {
+        for (const auto& file : optionalFiles) {
+            const auto choice = activeUserInteraction->select(tr("Enable optional file %1?").arg(file), QJsonArray{ "Enable", "Disable", "Cancel import" });
+            if (!choice || *choice == 2) { emitAborted(); loop.quit(); return; }
+            if (*choice == 0) m_selectedOptionalMods.append(file);
+        }
+    } else if (!optionalFiles.empty() && !APPLICATION->isHeadless()) {
         OptionalModDialog optionalModDialog(m_parent, optionalFiles);
         if (optionalModDialog.exec() == QDialog::Rejected) {
             emitAborted();
@@ -510,6 +620,7 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
     // first check for blocked mods
     QList<BlockedMod> blocked_mods;
     auto anyBlocked = false;
+    auto anyUnmatched = false;
     for (const auto& result : results.values()) {
         if (result.resourceType != ModPlatform::ResourceType::Mod) {
             m_otherResources.append(std::make_pair(result.version.fileName, result.targetFolder));
@@ -518,39 +629,60 @@ void FlameCreationTask::idResolverSucceeded(QEventLoop& loop)
         // skip optional mods that were not selected
         if (result.version.downloadUrl.isEmpty()) {
             BlockedMod blocked_mod;
-            blocked_mod.name = result.version.fileName;
+            blocked_mod.name = FS::RemoveInvalidPathChars(result.version.fileName);
             blocked_mod.websiteUrl = QString("%1/download/%2").arg(result.pack.websiteUrl, QString::number(result.fileId));
             blocked_mod.hash = result.version.hash;
             blocked_mod.matched = false;
             blocked_mod.localPath = "";
             blocked_mod.targetFolder = result.targetFolder;
-            auto fileName = result.version.fileName;
-            fileName = FS::RemoveInvalidPathChars(fileName);
-            auto relpath = FS::PathCombine(result.targetFolder, fileName);
+            auto relpath = FS::PathCombine(result.targetFolder, blocked_mod.name);
             blocked_mod.disabled = !result.required && !m_selectedOptionalMods.contains(relpath);
+
+            // The user may already have downloaded this file into their download
+            // folder from an earlier attempt: use it instead of asking again.
+            const auto localCopy = findLocalCopy(result);
+            if (!localCopy.isEmpty()) {
+                blocked_mod.matched = true;
+                blocked_mod.localPath = localCopy;
+                qDebug() << "Found blocked mod" << blocked_mod.name << "in the download folder:" << localCopy;
+            } else {
+                anyUnmatched = true;
+            }
 
             blocked_mods.append(blocked_mod);
 
             anyBlocked = true;
         }
     }
+    if (anyBlocked && !anyUnmatched) {
+        // Everything is already available locally, no dialog needed.
+        qDebug() << "All blocked mods were found locally, copying them into the instance";
+        copyBlockedMods(blocked_mods);
+        setupDownloadJob(loop);
+        return;
+    }
     if (anyBlocked) {
         qWarning() << "Blocked mods found, displaying mod list";
 
-        BlockedModsDialog message_dialog(m_parent, tr("Blocked mods found"),
+        QString headlessError;
+        const bool accepted = [&] {
+            if (APPLICATION->isHeadless()) return resolveHeadlessBlockedMods(blocked_mods, "sha1", headlessError);
+            BlockedModsDialog message_dialog(m_parent, tr("Blocked mods found"),
                                          tr("The following files are not available for download in third party launchers.<br/>"
                                             "You will need to manually download them and add them to the instance."),
                                          blocked_mods);
 
         message_dialog.setModal(true);
 
-        if (message_dialog.exec()) {
+            return message_dialog.exec() != 0;
+        }();
+        if (accepted) {
             qDebug() << "Post dialog blocked mods list:" << blocked_mods;
             copyBlockedMods(blocked_mods);
             setupDownloadJob(loop);
         } else {
             m_modIdResolver.reset();
-            setError("Canceled");
+            setError(headlessError.isEmpty() ? "Canceled" : headlessError);
             loop.quit();
         }
     } else {
@@ -562,6 +694,7 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
 {
     m_filesJob.reset(new NetJob(tr("Mod Download Flame"), APPLICATION->network()));
     auto results = m_modIdResolver->getResults().files;
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
 
     for (const auto& result : results) {
         auto fileName = result.version.fileName;
@@ -575,29 +708,211 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
         relpath = FS::PathCombine("minecraft", relpath);
         auto path = FS::PathCombine(m_stagingPath, relpath);
 
-        if (!result.version.downloadUrl.isEmpty()) {
-            qDebug() << "Will download" << result.version.downloadUrl << "to" << path;
-            auto dl = Net::ApiDownload::makeFile(result.version.downloadUrl, path);
-            m_filesJob->addNetAction(dl);
+        if (result.version.downloadUrl.isEmpty())
+            continue;
+
+        // The file may already be there: shipped by the pack overrides, supplied
+        // manually after a failed download, or downloaded by a previous attempt.
+        if (isFileAlreadyPresent(result, path)) {
+            qDebug() << "Skipping already present file" << path;
+            continue;
         }
+
+        // Blocked-mod files are often already sitting in the user's downloads
+        // folder (that is where the manual download flow puts them). Prefer such
+        // a local copy over downloading the Modrinth substitute.
+        if (result.fromModrinthFallback) {
+            const auto local = findLocalCopy(result);
+            if (!local.isEmpty()) {
+                FS::ensureFilePathExists(path);
+                if (FS::copy(local, path)()) {
+                    qDebug() << "Using local copy of" << fileName << "from" << local;
+                    continue;
+                }
+                qWarning() << "Found a local copy of" << fileName << "at" << local << "but could not copy it to" << path;
+            }
+        }
+
+        // Modrinth fallback URLs point at cdn.modrinth.com; honour the optional
+        // CDN override so users behind a blocked/slow CDN can reroute them.
+        const QString url = MirrorDownload::rewriteUrl(result.version.downloadUrl, mirror);
+        qDebug() << "Will download" << url << "to" << path;
+        auto dl = Net::ApiDownload::makeFile(QUrl(url), path);
+        if (!result.version.hash.isEmpty())
+            dl->setExpectedIntegrity(result.version.hash_type, result.version.hash, result.version.fileSize);
+        m_filesJob->addNetAction(dl);
     }
 
-    connect(m_filesJob.get(), &NetJob::finished, this, [this, &loop]() {
+    connect(m_filesJob.get(), &NetJob::succeeded, this, [this, &loop]() {
         m_filesJob.reset();
         validateOtherResources(loop);
     });
-    connect(m_filesJob.get(), &NetJob::failed, [this](QString reason) {
+    connect(m_filesJob.get(), &NetJob::failed, this, [this, &loop](QString reason) { onDownloadFailed(reason, loop); });
+    connect(m_filesJob.get(), &NetJob::aborted, this, [this, &loop]() {
         m_filesJob.reset();
-        setError(reason);
+        loop.quit();
     });
     connect(m_filesJob.get(), &NetJob::progress, this, [this](qint64 current, qint64 total) {
         setDetails(tr("%1 out of %2 complete").arg(current).arg(total));
         setProgress(current, total);
     });
+    connect(m_filesJob.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(m_filesJob.get(), &NetJob::stepProgress, this, &FlameCreationTask::propagateStepProgress);
 
     setStatus(tr("Downloading mods..."));
     m_filesJob->start();
+}
+
+bool FlameCreationTask::isFileAlreadyPresent(const Flame::File& file, const QString& path) const
+{
+    QFileInfo info(path);
+    if (!info.exists() || !info.isFile() || info.size() == 0)
+        return false;
+
+    // Without size information the best we have is the assumption that an
+    // existing file came from a good source.
+    if (file.version.fileSize < 0)
+        return true;
+
+    return info.size() == file.version.fileSize;
+}
+
+QString FlameCreationTask::findLocalCopy(const Flame::File& file) const
+{
+    const auto expected = file.version.hash;
+    if (expected.isEmpty())
+        return {};
+
+    const auto& hashType = file.version.hash_type;
+    const QString fileName = FS::RemoveInvalidPathChars(file.version.fileName);
+
+    // Same locations the blocked-mods dialog watches, so files the user has
+    // already downloaded for previous attempts are picked up here.
+    QStringList directories;
+    const auto downloadsDir = APPLICATION->settings()->get("DownloadsDir").toString();
+    if (!downloadsDir.isEmpty())
+        directories << downloadsDir;
+    const auto centralModsDir = APPLICATION->settings()->get("CentralModsDir").toString();
+    if (!centralModsDir.isEmpty())
+        directories << centralModsDir;
+    directories << QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    directories.removeAll(QString());
+    directories.removeDuplicates();
+
+    const bool recursiveDownloads = APPLICATION->settings()->get("DownloadsDirWatchRecursive").toBool();
+
+    for (const auto& directory : directories) {
+        QFileInfo dirInfo(directory);
+        if (!dirInfo.isDir() || !dirInfo.isReadable())
+            continue;
+
+        // 1) The file with the expected name, next to the download folder root.
+        const auto direct = QDir(directory).absoluteFilePath(fileName);
+        if (QFileInfo::exists(direct) && fileMatchesHash(direct, hashType, expected))
+            return direct;
+
+        // 2) Same name somewhere below it. The central mods folder is always
+        // searched recursively; the downloads folder only when the user asked for
+        // it, since it can be huge.
+        const bool recursive = directory != downloadsDir || recursiveDownloads;
+        if (recursive) {
+            int examined = 0;
+            QDirIterator it(directory, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+            while (it.hasNext() && examined++ < 5000) {
+                const auto candidate = it.next();
+                if (QFileInfo(candidate).fileName().compare(fileName, Qt::CaseInsensitive) != 0)
+                    continue;
+                if (fileMatchesHash(candidate, hashType, expected))
+                    return candidate;
+            }
+        }
+
+        // 3) Same size, different name (browsers like to rename downloads).
+        if (file.version.fileSize >= 0) {
+            int examined = 0;
+            const auto entries = QDir(directory).entryInfoList(QDir::Files | QDir::NoSymLinks, QDir::Name);
+            for (const auto& entry : entries) {
+                if (examined++ >= 5000)
+                    break;
+                if (entry.size() != file.version.fileSize)
+                    continue;
+                if (fileMatchesHash(entry.absoluteFilePath(), hashType, expected))
+                    return entry.absoluteFilePath();
+            }
+        }
+    }
+
+    return {};
+}
+
+void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop)
+{
+    auto failedUrls = m_filesJob->getFailedFiles();
+    m_filesJob.reset();
+
+    if (m_blockedFallbackUsed) {
+        setError(reason);
+        loop.quit();
+        return;
+    }
+
+    // Map the failed URLs back to manifest files so we can offer the same manual
+    // download flow that is used for genuinely blocked CurseForge files.
+    auto results = m_modIdResolver->getResults().files;
+    QList<BlockedMod> blocked_mods;
+    for (const auto& result : results) {
+        if (result.version.downloadUrl.isEmpty())
+            continue;
+
+        const auto rewritten = MirrorDownload::rewriteUrl(result.version.downloadUrl, APPLICATION->settings());
+        if (!failedUrls.contains(result.version.downloadUrl) && !failedUrls.contains(rewritten))
+            continue;
+
+        auto fileName = FS::RemoveInvalidPathChars(result.version.fileName);
+        BlockedMod blocked_mod;
+        blocked_mod.name = fileName;
+        blocked_mod.websiteUrl = QString("%1/download/%2").arg(result.pack.websiteUrl, QString::number(result.fileId));
+        blocked_mod.hash = result.version.hash;
+        blocked_mod.matched = false;
+        blocked_mod.localPath = "";
+        blocked_mod.targetFolder = result.targetFolder;
+        blocked_mod.disabled = !result.required && !m_selectedOptionalMods.contains(FS::PathCombine(result.targetFolder, fileName));
+
+        blocked_mods.append(blocked_mod);
+    }
+
+    if (blocked_mods.isEmpty()) {
+        setError(reason);
+        loop.quit();
+        return;
+    }
+
+    qWarning() << "Downloads failed, offering manual download:" << blocked_mods;
+
+    QString headlessError;
+    const bool accepted = [&] {
+        if (APPLICATION->isHeadless())
+            return resolveHeadlessBlockedMods(blocked_mods, "sha1", headlessError);
+
+        BlockedModsDialog message_dialog(m_parent, tr("Some files could not be downloaded"),
+                                         tr("The following files could not be downloaded automatically.<br/>"
+                                            "You can download them manually and add them to the instance."),
+                                         blocked_mods);
+
+        message_dialog.setModal(true);
+
+        return message_dialog.exec() != 0;
+    }();
+
+    if (!accepted) {
+        setError(headlessError.isEmpty() ? "Canceled" : headlessError);
+        loop.quit();
+        return;
+    }
+
+    copyBlockedMods(blocked_mods);
+    m_blockedFallbackUsed = true;
+    setupDownloadJob(loop);
 }
 
 /// @brief copy the matched blocked mods to the instance staging area

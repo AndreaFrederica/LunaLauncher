@@ -54,6 +54,7 @@
    </attribute>
    <addaction name="actionAddMicrosoft"/>
    <addaction name="actionAddOffline"/>
+   <addaction name="actionAddEnhancedOffline"/>
    <addaction name="actionAddOfflineForced"/>
    <addaction name="actionAddYggdrasil"/>
    <addaction name="actionAddUnifiedPass"/>
@@ -108,6 +109,11 @@
   <action name="actionAddYggdrasil">
    <property name="text">
     <string>Add &amp;Yggdrasil</string>
+   </property>
+  </action>
+  <action name="actionAddEnhancedOffline">
+   <property name="text">
+    <string>Add Enhanced Offline</string>
    </property>
   </action>
   <action name="actionAddUnifiedPass">

@@ -62,6 +62,8 @@
 #include "ui/dialogs/NewComponentDialog.h"
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/dialogs/VersionSelectDialog.h"
+#include "api/LauncherApiSpecial.h"
+#include "ui/widgets/SpecialLoaderVersionList.h"
 
 #include "ui/GuiUtil.h"
 
@@ -71,6 +73,7 @@
 #include "minecraft/PackProfile.h"
 #include "minecraft/auth/AccountList.h"
 
+#include "meta/CleanroomMeta.h"
 #include "meta/Index.h"
 #include "meta/VersionList.h"
 
@@ -237,6 +240,13 @@ void VersionPage::updateButtons(int row)
     if (row == -1)
         row = currentRow();
     auto patch = m_profile->getComponent(row);
+    if (patch) {
+        auto versionList = patch->getVersionList();
+        if (versionList) {
+            connect(versionList.get(), &QAbstractItemModel::modelReset, this, &VersionPage::updateVersionControls,
+                    Qt::UniqueConnection);
+        }
+    }
     ui->actionRemove->setEnabled(patch && patch->isRemovable());
     ui->actionMove_down->setEnabled(patch && patch->isMoveable());
     ui->actionMove_up->setEnabled(patch && patch->isMoveable());
@@ -371,6 +381,29 @@ void VersionPage::on_actionChange_version_triggered()
     }
     auto patch = m_profile->getComponent(versionRow);
     auto name = patch->getName();
+    const auto componentId = patch->getID();
+    if (componentId == "net.legacyfabric" || componentId == "net.labymod") {
+        const auto minecraft = m_profile->getComponentVersion("net.minecraft");
+        auto loader = componentId == "net.legacyfabric" ? QStringLiteral("legacyfabric") : QStringLiteral("labymod-production");
+        if (componentId == "net.labymod" && patch->getVersion().contains("|labymod-snapshot"))
+            loader = QStringLiteral("labymod-snapshot");
+        auto specialList = new SpecialLoaderVersionList(loader, minecraft, this);
+        VersionSelectDialog vselect(specialList, tr("Change %1 version").arg(name), this);
+        vselect.setExactIfPresentFilter(BaseVersionList::ParentVersionRole, minecraft);
+        if (!vselect.exec() || !vselect.selectedVersion())
+            return;
+        const auto selected = std::dynamic_pointer_cast<SpecialLoaderVersion>(vselect.selectedVersion());
+        if (!selected)
+            return;
+        QString error;
+        if (!SpecialLoader::install(m_inst, loader, minecraft, selected->loaderVersion(), selected->commitRef(), &error)) {
+            QMessageBox::critical(this, tr("Error"), error.isEmpty() ? tr("Could not install the loader.") : error);
+            return;
+        }
+        reloadPackProfile();
+        m_container->refreshContainer();
+        return;
+    }
     auto list = patch->getVersionList();
     list->clearExternalRecommends();
     if (!list) {
@@ -415,6 +448,26 @@ void VersionPage::on_actionChange_version_triggered()
             m_inst->settings()->set("JavaPath", "");
         }
     }
+
+    if (Meta::Cleanroom::isUid(uid)) {
+        m_profile->saveNow();
+        auto task = Meta::Cleanroom::updateInstanceTask(m_inst->instanceRoot(), vselect.selectedVersion()->descriptor());
+        ProgressDialog dialog(this);
+        if (dialog.execWithTask(task.get()) != QDialog::Accepted) {
+            if (!task->failReason().isEmpty()) {
+                QMessageBox::critical(this, tr("Error"), task->failReason());
+            }
+            return;
+        }
+
+        if (auto result = m_profile->reload(Net::Mode::Online); !result) {
+            QMessageBox::critical(this, tr("Error"), result.error);
+            return;
+        }
+        m_container->refreshContainer();
+        return;
+    }
+
     m_profile->setComponentVersion(uid, vselect.selectedVersion()->descriptor(), important);
     m_profile->resolve(Net::Mode::Online);
     m_container->refreshContainer();

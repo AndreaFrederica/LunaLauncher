@@ -21,7 +21,12 @@
 #include <QJsonObject>
 #include <QObject>
 
+#include <functional>
+#include <optional>
+
 #include "minecraft/auth/AuthStep.h"
+#include "minecraft/auth/steps/YggdrasilAuthStep.h"
+#include "QObjectPtr.h"
 
 /**
  * Step that handles profile selection when multiple profiles are available.
@@ -38,7 +43,10 @@ class YggdrasilProfileSelectStep : public AuthStep {
     QString describe() override;
 
     void setSelectedProfile(const QString& profileId, const QString& profileName);
+    void setSelector(std::function<std::optional<int>(const QJsonArray&)> selector) { m_selector = std::move(selector); }
 
    private:
     QVector<QJsonObject> m_availableProfiles;
+    shared_qobject_ptr<YggdrasilAuthStep> m_bindTask;
+    std::function<std::optional<int>(const QJsonArray&)> m_selector;
 };

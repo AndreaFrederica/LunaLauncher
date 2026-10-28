@@ -41,9 +41,9 @@
 
 #include "InstanceTask.h"
 #include "QObjectPtr.h"
+#include "modplatform/BlockedMod.h"
 #include "modplatform/flame/FileResolvingTask.h"
 #include "net/NetJob.h"
-#include "ui/dialogs/BlockedModsDialog.h"
 
 #include <QWidget>
 

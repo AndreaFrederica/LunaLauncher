@@ -29,6 +29,7 @@
 #include <QNetworkReply>
 
 #include "Application.h"
+#include "minecraft/MirrorDownload.h"
 
 AuthlibInjector* AuthlibInjector::s_instance = nullptr;
 
@@ -102,8 +103,11 @@ QString AuthlibInjector::downloadLatest()
     // Ensure cache directory exists
     QDir().mkpath(QFileInfo(cachePath).absolutePath());
 
-    // Try BMCLAPI mirror first (recommended for Chinese users)
-    QString downloadUrl = "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json";
+    // Prefer the selected mirror; the official source is still the fallback below.
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    QString downloadUrl = mirror.authlibInjectorBase.isEmpty()
+                              ? QStringLiteral("https://authlib-injector.yushi.moe/artifact/latest.json")
+                              : mirror.authlibInjectorBase + QStringLiteral("artifact/latest.json");
 
     QNetworkAccessManager manager;
     QNetworkRequest request((QUrl(downloadUrl)));

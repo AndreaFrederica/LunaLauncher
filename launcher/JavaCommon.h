@@ -7,7 +7,7 @@ class QWidget;
  * Common UI bits for the java pages to use.
  */
 namespace JavaCommon {
-bool checkJVMArgs(QString args, QWidget* parent);
+bool checkJVMArgs(QString args, QWidget* parent, bool showDialog = true);
 
 // Show a dialog saying that the Java binary was usable
 void javaWasOk(QWidget* parent, const JavaChecker::Result& result);

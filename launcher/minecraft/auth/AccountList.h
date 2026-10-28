@@ -58,6 +58,7 @@ class AccountList : public QAbstractListModel {
         TypeColumn,
         SourceColumn,
         StatusColumn,
+        CacheColumn,
 
         NUM_COLUMNS
     };
@@ -98,15 +99,21 @@ class AccountList : public QAbstractListModel {
     void setListFilePath(QString path, bool autosave = false);
 
     bool loadList();
+    /** Clear the in-memory list and load the current accounts.json again. */
+    bool reloadList();
     bool loadV3(QJsonObject& root);
     bool saveList();
 
     MinecraftAccountPtr defaultAccount() const;
     void setDefaultAccount(MinecraftAccountPtr profileId);
     bool anyAccountIsValid();
+    // Offline accounts are only available when ownership checks are disabled
+    // for developer builds, or after a valid Minecraft-owning account exists.
+    bool canAddOfflineAccount() const;
     bool anyMSAAccountOwnsMinecraft();
 
     bool isActive() const;
+    void refreshCacheStatuses();
 
    protected:
     void beginActivity();

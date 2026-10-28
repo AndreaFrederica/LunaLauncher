@@ -1,0 +1,2 @@
+option('install_dir', type: 'string', value: 'tools/yukariconnect', description: 'YukariConnect runtime installation directory')
+

@@ -26,6 +26,7 @@
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "minecraft/MirrorDownload.h"
 #include "minecraft/auth/AuthlibInjector.h"
 
 AuthlibInjectorDownload::AuthlibInjectorDownload(QObject* parent) : Task(parent)
@@ -52,8 +53,11 @@ void AuthlibInjectorDownload::executeTask()
 {
     setStatus(tr("Checking authlib-injector version..."));
 
-    // Try BMCLAPI first, then fall back to official
-    QString infoUrl = "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json";
+    // Prefer the selected mirror; the official source is still the fallback below.
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    QString infoUrl = mirror.authlibInjectorBase.isEmpty()
+                          ? QStringLiteral("https://authlib-injector.yushi.moe/artifact/latest.json")
+                          : mirror.authlibInjectorBase + QStringLiteral("artifact/latest.json");
 
     QNetworkRequest request((QUrl(infoUrl)));
     request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());

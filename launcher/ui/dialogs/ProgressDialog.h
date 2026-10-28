@@ -76,6 +76,7 @@ class ProgressDialog : public QDialog {
 
     void changeStatus(const QString& status);
     void changeProgress(qint64 current, qint64 total);
+    void changeTransferRate(qint64 bytesPerSecond);
     void changeStepProgress(TaskStepProgress const& task_progress);
 
    private slots:

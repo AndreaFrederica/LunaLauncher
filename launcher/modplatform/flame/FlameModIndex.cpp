@@ -1,4 +1,4 @@
-﻿#include "FlameModIndex.h"
+#include "FlameModIndex.h"
 
 #include "FileSystem.h"
 #include "Json.h"
@@ -142,6 +142,7 @@ auto FlameMod::loadIndexedPackVersion(QJsonObject& obj, bool load_changelog) -> 
     file.downloadUrl = obj["downloadUrl"].toString();
     file.fileName = Json::requireString(obj, "fileName");
     file.fileName = FS::RemoveInvalidPathChars(file.fileName);
+    file.fileSize = static_cast<qint64>(obj["fileLength"].toInteger(-1));
 
     ModPlatform::IndexedVersionType ver_type;
     switch (Json::requireInteger(obj, "releaseType")) {

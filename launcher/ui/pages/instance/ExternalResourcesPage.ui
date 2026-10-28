@@ -182,6 +182,20 @@
     <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
+  <action name="actionValidateMods">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Validate Mods</string>
+   </property>
+   <property name="toolTip">
+    <string>Check installed mods for conflicts, missing dependencies, version mismatches, and view the dependency tree (before launching).</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
   <action name="actionExportMetadata">
    <property name="enabled">
     <bool>false</bool>

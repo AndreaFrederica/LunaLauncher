@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: GPL-3.0-only
 /*
  *  Luna Launcher - Minecraft Launcher
  *  Copyright (C) 2025 AndreaFrederica <andreafrederica@outlook.com>
@@ -46,7 +46,8 @@ enum ModLoaderType {
     BTA = 1 << 8,
     LegacyFabric = 1 << 9,
     Ornithe = 1 << 10,
-    Rift = 1 << 11
+    Rift = 1 << 11,
+    Cleanroom = 1 << 12
 };
 Q_DECLARE_FLAGS(ModLoaderTypes, ModLoaderType)
 QList<ModLoaderType> modLoaderTypesToList(ModLoaderTypes flags);
@@ -134,6 +135,8 @@ struct IndexedVersion {
     PluginLoaderTypes pluginLoaders = {};  // For server plugins (Hangar)
     QString hash_type;
     QString hash;
+    // Size of the file in bytes, -1 when the provider does not report it.
+    qint64 fileSize = -1;
     bool is_preferred = true;
     QString changelog;
     QList<Dependency> dependencies;
@@ -157,7 +160,7 @@ struct IndexedVersion {
                 gameVersion = QObject::tr(" for %1").arg(v);
             }
         }
-        return QString("%1%2 鈥?%3%4").arg(version, gameVersion, versionStr, release_type);
+        return QStringLiteral("%1%2 \u2014 %3%4").arg(version, gameVersion, versionStr, release_type);
     }
 };
 

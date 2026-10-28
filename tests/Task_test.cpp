@@ -6,6 +6,7 @@
 #include <tasks/MultipleOptionsTask.h>
 #include <tasks/SequentialTask.h>
 #include <tasks/Task.h>
+#include <tasks/TaskProgressSnapshot.h>
 
 #include <array>
 
@@ -84,10 +85,75 @@ class BigConcurrentTaskThread : public QThread {
     bool passed_the_deadline = false;
 };
 
+class PendingDownloadTask : public Task {
+   public:
+    PendingDownloadTask() { setObjectName("FILE:https://example.test/tiny.ogg"); setProgress(0, -1); }
+    void executeTask() override {}
+    void fail() { emitFailed("test failure"); }
+};
+
+class TaskTreeProxy : public Task {
+   public:
+    Task* child = nullptr;
+    QList<Task*> getSubTasks() const override { return child ? QList<Task*>{ child } : QList<Task*>{}; }
+    void executeTask() override {}
+};
+
 class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void test_SnapshotKeepsActiveFilesAndFullCounts()
+    {
+        ConcurrentTask downloads("assets", 1);
+        for (int i = 0; i < 128; ++i) downloads.addTask(makeShared<BasicTask>(false));
+        auto active = makeShared<PendingDownloadTask>();
+        downloads.addTask(active);
+        downloads.addTask(makeShared<PendingDownloadTask>());
+        downloads.start();
+        QTRY_VERIFY(active->isRunning());
+        active->setProgress(20, 80); // Small files are still bytes, never a heuristic.
+        active->setTransferRate(10);
+        std::array<TaskTreeProxy, 7> proxies;
+        for (int i = 0; i < 6; ++i) proxies[i].child = &proxies[i + 1];
+        proxies.back().child = &downloads;
+        auto snapshot = TaskProgressSnapshot::snapshot(&proxies.front());
+        const auto rows = snapshot.value("children").toArray();
+        QCOMPARE(rows.size(), 96);
+        QVERIFY(snapshot.value("childrenTruncated").toBool());
+        QCOMPARE(rows.first().toObject().value("id").toString(), active->getUid().toString(QUuid::WithoutBraces));
+        QCOMPARE(rows.first().toObject().value("progressUnit").toString(), QString("bytes"));
+        const auto summary = snapshot.value("summary").toObject();
+        QCOMPARE(summary.value("total").toInt(), 130);
+        QCOMPARE(summary.value("succeeded").toInt(), 128);
+        QCOMPARE(summary.value("running").toInt(), 1);
+        QCOMPARE(summary.value("waiting").toInt(), 1);
+        QCOMPARE(summary.value("currentBytes").toInt(), 20);
+        QCOMPARE(summary.value("totalBytes").toInt(), 80);
+        QCOMPARE(summary.value("unknownByteTotals").toInt(), 1);
+        active->fail();
+        bool found = false;
+        for (const auto& step : downloads.getStepProgress()) {
+            if (step->uid != active->getUid()) continue;
+            found = true;
+            QCOMPARE(step->state, TaskStepState::Failed);
+            QCOMPARE(step->transferRate, 0);
+        }
+        QVERIFY(found);
+    }
+
+    void test_SnapshotInactiveIsNotFinishedAndCyclesAreSafe()
+    {
+        PendingDownloadTask queued;
+        TaskTreeProxy root;
+        root.child = &queued;
+        const auto row = TaskProgressSnapshot::snapshot(&root).value("children").toArray().first().toObject();
+        QCOMPARE(row.value("state").toString(), QString("waiting"));
+        QVERIFY(!row.value("finished").toBool());
+        root.child = &root;
+        QVERIFY(TaskProgressSnapshot::snapshot(&root).value("children").toArray().isEmpty());
+    }
+
     void test_SetStatus_NoMultiStep()
     {
         BasicTask t;

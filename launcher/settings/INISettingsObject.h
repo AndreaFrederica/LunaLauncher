@@ -48,6 +48,8 @@ class INISettingsObject : public SettingsObject {
 
     void suspendSave() override;
     void resumeSave() override;
+    /** Resume writes while keeping bootstrap values in memory until the next explicit change. */
+    void resumeSaveWithoutFlush();
 
    protected slots:
     virtual void changeSetting(const Setting& setting, QVariant value) override;

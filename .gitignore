@@ -28,6 +28,12 @@ compile_commands.json
 build
 /build-*
 
+# Meson wrap outputs
+/subprojects/*
+!/subprojects/*.wrap
+!/subprojects/packagefiles/
+!/subprojects/packagefiles/**
+
 # Install dirs
 install
 /install-*
@@ -87,8 +93,32 @@ Testing/Temporary/*
 
 third_party/*
 vcpkg_installed/*
+.meson-empty-pkgconfig/
 aqtinstall.log
 *.pyc
 PrismLauncher-portable-noverify/*
 flatpak/
 dist/
+
+# Local Neo UI/PCL reference and test artifacts
+/.acl-recovery/
+/.pcl-reference/
+/.pixi-cache-neo/
+/neo-ui-test-data*/
+/test-launcher-runtime/
+/test-offline/
+/tools/Msys2Manager/
+/*.png
+/*.err
+/job-*.log
+/offline-build.log
+/settings-launcher.json
+/targets.json
+
+# Verification screenshots are local artifacts
+/docs/*.png
+
+# Local PCL comparison notes
+/docs/pcl-neoui-*.md
+
+temp-msvc/

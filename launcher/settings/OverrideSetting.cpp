@@ -48,5 +48,7 @@ void OverrideSetting::reset()
 
 void OverrideSetting::set(QVariant value)
 {
-    Setting::set(value);
+    // The inherited default is dynamic. Even an equal value must be stored
+    // explicitly so an enabled instance override survives later global changes.
+    emit SettingChanged(*this, value);
 }

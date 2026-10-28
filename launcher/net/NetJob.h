@@ -38,7 +38,9 @@
 
 #include <QtNetwork>
 
+#include <QElapsedTimer>
 #include <QObject>
+#include <QSet>
 #include "net/NetRequest.h"
 #include "tasks/ConcurrentTask.h"
 
@@ -54,7 +56,7 @@ class NetJob : public ConcurrentTask {
     using Ptr = shared_qobject_ptr<NetJob>;
 
     explicit NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> network, int max_concurrent = -1);
-    ~NetJob() override = default;
+    ~NetJob() override;
 
     auto size() const -> int;
 
@@ -64,6 +66,9 @@ class NetJob : public ConcurrentTask {
     auto getFailedActions() -> QList<Net::NetRequest*>;
     auto getFailedFiles() -> QList<QString>;
     void setAskRetry(bool askRetry);
+
+    /** Refresh launcher-controlled concurrency for active default NetJobs. */
+    static void applyRuntimeSettings();
 
    public slots:
     // Qt can't handle auto at the start for some reason?
@@ -80,6 +85,8 @@ class NetJob : public ConcurrentTask {
 
    private:
     bool canDelegateWholeQueueToAria2() const;
+    void updateDownloadSpeed(const QUuid& taskId, qint64 downloadedBytes);
+    void refreshConfiguredConcurrency();
 
    private:
     shared_qobject_ptr<QNetworkAccessManager> m_network;
@@ -87,6 +94,11 @@ class NetJob : public ConcurrentTask {
     int m_try = 1;
     bool m_ask_retry = true;
     int m_manual_try = 0;
-    bool m_is_bmclapi = false;
-    int m_bmclapi_delay_ms = 0;  // Dynamic delay for BMCLAPI rate limiting
+    QHash<QUuid, qint64> m_downloadedBytes;
+    QElapsedTimer m_speedTimer;
+    qint64 m_lastSpeedSampleBytes = 0;
+    bool m_dynamicMaxConcurrent = false;
+    bool m_aria2Delegated = false;
+
+    static QSet<NetJob*> s_dynamicJobs;
 };

@@ -4,6 +4,7 @@
 */
 #pragma once
 #include "BaseInstance.h"
+#include "FileSystem.h"
 #include "modplatform/ModIndex.h"
 
 class ServerInstance : public BaseInstance

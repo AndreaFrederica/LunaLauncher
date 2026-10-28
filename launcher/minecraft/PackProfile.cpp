@@ -56,6 +56,7 @@
 #include "Json.h"
 #include "meta/Index.h"
 #include "meta/JsonFormat.h"
+#include "meta/CleanroomMeta.h"
 #include "minecraft/Component.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/OneSixVersionFormat.h"
@@ -84,6 +85,11 @@ PackProfile::PackProfile(MinecraftInstance* instance) : QAbstractListModel()
 PackProfile::~PackProfile()
 {
     saveNow();
+}
+
+MinecraftInstance* PackProfile::instance() const
+{
+    return d->m_instance;
 }
 
 // BEGIN: component file format
@@ -246,6 +252,11 @@ void PackProfile::buildingFromScratch()
     d->dirty = true;
 }
 
+bool PackProfile::isLoaded() const
+{
+    return d->loaded;
+}
+
 void PackProfile::scheduleSave()
 {
     if (!d->loaded) {
@@ -292,6 +303,10 @@ bool PackProfile::save_internal()
 
 PackProfile::Result PackProfile::load()
 {
+    if (Meta::Cleanroom::normalizeInstance(d->m_instance->instanceRoot())) {
+        qCInfo(instanceProfileC) << d->m_instance->name() << "| Migrated legacy Cleanroom component UID";
+    }
+
     auto filename = componentsFilePath();
 
     // load the new component list and swap it with the current one...
@@ -1049,6 +1064,10 @@ std::optional<ModPlatform::ModLoaderTypes> PackProfile::getSupportedModLoaders()
         loaders |= ModPlatform::Fabric;
     if (getComponentVersion("net.minecraft") == "1.20.1" && (loaders & ModPlatform::NeoForge))
         loaders |= ModPlatform::Forge;
+    // Cleanroom is a Forge fork and mod platforms do not expose a separate
+    // Cleanroom loader filter.
+    if (loaders & ModPlatform::Cleanroom)
+        loaders |= ModPlatform::Forge;
     return loaders;
 }
 
@@ -1067,6 +1086,9 @@ QList<ModPlatform::ModLoaderType> PackProfile::getModLoadersList()
     }
     if (getComponentVersion("net.minecraft") == "1.20.1" && result.contains(ModPlatform::NeoForge) &&
         !result.contains(ModPlatform::Forge)) {
+        result.append(ModPlatform::Forge);
+    }
+    if (result.contains(ModPlatform::Cleanroom) && !result.contains(ModPlatform::Forge)) {
         result.append(ModPlatform::Forge);
     }
     return result;

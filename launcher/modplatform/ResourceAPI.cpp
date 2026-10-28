@@ -63,7 +63,7 @@ Task::Ptr ResourceAPI::searchProjects(SearchArgs&& args, Callback<QList<ModPlatf
     QObject::connect(netJob.get(), &NetJob::failed, [weak, callbacks](const QString& reason) {
         int network_error_code = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failed_action = netJob->getFailedActions().at(0); failed_action)
+            if (auto* failed_action = netJob->getFailedActions().value(0); failed_action)
                 network_error_code = failed_action->replyStatusCode();
         }
         callbacks.on_fail(reason, network_error_code);
@@ -111,7 +111,7 @@ Task::Ptr ResourceAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVe
                     file.addonId = args.pack->addonId;
                 }
 
-                if (file.fileId.isValid() && !file.downloadUrl.isEmpty()) {  // Heuristic to check if the returned value is valid
+                if (file.fileId.isValid() && (!file.downloadUrl.isEmpty() || args.includeRestricted)) {
                     unsortedVersions.append(file);
                 }
             }
@@ -136,7 +136,7 @@ Task::Ptr ResourceAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVe
     QObject::connect(netJob.get(), &NetJob::failed, [weak, callbacks](const QString& reason) {
         int network_error_code = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failed_action = netJob->getFailedActions().at(0); failed_action)
+            if (auto* failed_action = netJob->getFailedActions().value(0); failed_action)
                 network_error_code = failed_action->replyStatusCode();
         }
         callbacks.on_fail(reason, network_error_code);
@@ -149,10 +149,19 @@ Task::Ptr ResourceAPI::getProjectVersions(VersionSearchArgs&& args, Callback<QVe
     return netJob;
 }
 
-Task::Ptr ResourceAPI::getProjectInfo(ProjectInfoArgs&& args, Callback<ModPlatform::IndexedPack::Ptr>&& callbacks) const
+Task::Ptr ResourceAPI::getProjectInfo(ProjectInfoArgs&& args, Callback<ModPlatform::IndexedPack::Ptr>&& callbacks, bool askRetry) const
 {
     auto response = std::make_shared<QByteArray>();
     auto job = getProject(args.pack->addonId.toString(), response);
+    if (!job) {
+        if (callbacks.on_fail) {
+            callbacks.on_fail("Failed to create project request", -1);
+        }
+        return nullptr;
+    }
+    if (auto netJob = qSharedPointerDynamicCast<NetJob>(job)) {
+        netJob->setAskRetry(askRetry);
+    }
 
     QObject::connect(job.get(), &NetJob::succeeded, [this, response, callbacks, args] {
         auto pack = args.pack;
@@ -184,7 +193,7 @@ Task::Ptr ResourceAPI::getProjectInfo(ProjectInfoArgs&& args, Callback<ModPlatfo
         int network_error_code = -1;
         if (auto job = weak.lock()) {
             if (auto netJob = qSharedPointerDynamicCast<NetJob>(job)) {
-                if (auto* failed_action = netJob->getFailedActions().at(0); failed_action) {
+                if (auto* failed_action = netJob->getFailedActions().value(0); failed_action) {
                     network_error_code = failed_action->replyStatusCode();
                 }
             }
@@ -236,7 +245,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(DependencySearchArgs&& args, Callbac
                 file.addonId = args.dependency.addonId;
 
             if (file.fileId.isValid() &&
-                (!file.loaders || args.loader & file.loaders))  // Heuristic to check if the returned value is valid
+                (!args.loader || !file.loaders || args.loader & file.loaders))  // Heuristic to check if the returned value is valid
                 versions.append(file);
         }
 
@@ -256,7 +265,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(DependencySearchArgs&& args, Callbac
     QObject::connect(netJob.get(), &NetJob::failed, [weak, callbacks](const QString& reason) {
         int network_error_code = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failed_action = netJob->getFailedActions().at(0); failed_action)
+            if (auto* failed_action = netJob->getFailedActions().value(0); failed_action)
                 network_error_code = failed_action->replyStatusCode();
         }
         callbacks.on_fail(reason, network_error_code);
@@ -286,7 +295,7 @@ QString ResourceAPI::mapMCVersionToModrinth(Version v) const
     return verStr;
 }
 
-std::pair<Task::Ptr, QByteArray*> ResourceAPI::getProject(QString addonId) const
+std::pair<Task::Ptr, QByteArray*> ResourceAPI::getProject(QString addonId, bool askRetry) const
 {
     auto project_url_optional = getInfoURL(addonId);
     if (!project_url_optional.has_value())
@@ -295,6 +304,7 @@ std::pair<Task::Ptr, QByteArray*> ResourceAPI::getProject(QString addonId) const
     auto project_url = project_url_optional.value();
 
     auto netJob = makeShared<NetJob>(QString("%1::GetProject").arg(addonId), APPLICATION->network());
+    netJob->setAskRetry(askRetry);
 
     auto [action, response] = Net::ApiDownload::makeByteArray(QUrl(project_url));
     netJob->addNetAction(action);

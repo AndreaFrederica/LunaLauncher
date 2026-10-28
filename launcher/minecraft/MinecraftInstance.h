@@ -109,6 +109,8 @@ class MinecraftInstance : public BaseInstance {
 
     // where the instance-local libraries should be
     QString getLocalLibraryPath() const;
+    QString assetsRoot() const;
+    bool usesLocalAssets() const;
 
     /** Returns whether the instance, with its version, has support for demo mode. */
     bool supportsDemo() const;
@@ -181,6 +183,7 @@ class MinecraftInstance : public BaseInstance {
     mutable std::shared_ptr<TexturePackFolderModel> m_texture_pack_list;
     mutable std::shared_ptr<YesSteveModelFolderModel> m_yes_steve_model_list;
     mutable std::shared_ptr<CustomPlayerModelFolderModel> m_custom_player_model_list;
+    mutable std::shared_ptr<SchematicsFolderModel> m_schematics_list;
     mutable std::shared_ptr<DataPackFolderModel> m_data_pack_list;
     mutable std::shared_ptr<WorldList> m_world_list;
 };

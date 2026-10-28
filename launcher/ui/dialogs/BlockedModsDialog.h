@@ -31,20 +31,11 @@
 
 #include <QFileSystemWatcher>
 
+#include "modplatform/BlockedMod.h"
 #include "tasks/ConcurrentTask.h"
 
 class QPushButton;
-
-struct BlockedMod {
-    QString name;
-    QString websiteUrl;
-    QString hash;
-    bool matched;
-    QString localPath;
-    QString targetFolder;
-    bool disabled = false;
-    bool move = false;
-};
+class CurseForgeDownloadPageService;
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -59,6 +50,8 @@ class BlockedModsDialog : public QDialog {
     BlockedModsDialog(QWidget* parent, const QString& title, const QString& text, QList<BlockedMod>& mods, QString hash_type = "sha1");
 
     ~BlockedModsDialog() override;
+
+    bool execHeadless(QString* error = nullptr);
 
    protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -75,8 +68,12 @@ class BlockedModsDialog : public QDialog {
     QSet<QString> m_pendingHashPaths;
     bool m_rehashPending;
     QString m_hashType;
+    CurseForgeDownloadPageService* m_curseForgeDownloadPages = nullptr;
+    bool m_headless = false;
+    QString m_headlessError;
 
     void openAll(bool missingOnly);
+    void openAllInSystemBrowser(bool missingOnly);
     void addDownloadFolder();
     void update();
     void directoryChanged(QString path);
@@ -94,5 +91,3 @@ class BlockedModsDialog : public QDialog {
     bool checkValidPath(QString path);
     bool allModsMatched();
 };
-
-QDebug operator<<(QDebug debug, const BlockedMod& m);

@@ -48,10 +48,16 @@ void LibrariesTask::executeTask()
         libArtifactPool.append(agent.library);
     }
     libArtifactPool.append(profile->getMainJar());
-    processArtifactPool(libArtifactPool, failedLocalLibraries, inst->getLocalLibraryPath());
+    if (!processArtifactPool(libArtifactPool, failedLocalLibraries, inst->getLocalLibraryPath())) {
+        downloadJob.reset();
+        return;
+    }
 
     QStringList failedLocalJarMods;
-    processArtifactPool(profile->getJarMods(), failedLocalJarMods, inst->jarModsDir());
+    if (!processArtifactPool(profile->getJarMods(), failedLocalJarMods, inst->jarModsDir())) {
+        downloadJob.reset();
+        return;
+    }
 
     if (!failedLocalJarMods.empty() || !failedLocalLibraries.empty()) {
         downloadJob.reset();
@@ -65,8 +71,9 @@ void LibrariesTask::executeTask()
     connect(downloadJob.get(), &NetJob::succeeded, this, &LibrariesTask::emitSucceeded);
     connect(downloadJob.get(), &NetJob::failed, this, &LibrariesTask::jarlibFailed);
     connect(downloadJob.get(), &NetJob::aborted, this, &LibrariesTask::emitAborted);
-    connect(downloadJob.get(), &NetJob::progress, this, &LibrariesTask::progress);
+    connect(downloadJob.get(), &NetJob::progress, this, &LibrariesTask::setProgress);
     connect(downloadJob.get(), &NetJob::stepProgress, this, &LibrariesTask::propagateStepProgress);
+    connect(downloadJob.get(), &NetJob::transferRate, this, &LibrariesTask::setTransferRate);
 
     downloadJob->start();
 }

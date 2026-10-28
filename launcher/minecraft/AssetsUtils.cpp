@@ -37,6 +37,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -171,9 +172,9 @@ bool loadAssetsIndexJson(const QString& assetsId, const QString& path, AssetsInd
 }
 
 // FIXME: ugly code duplication
-QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder)
+QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder, const QString& assetsRoot)
 {
-    QDir assetsDir = QDir("assets/");
+    QDir assetsDir(assetsRoot);
     QDir indexDir = QDir(FS::PathCombine(assetsDir.path(), "indexes"));
     QDir objectDir = QDir(FS::PathCombine(assetsDir.path(), "objects"));
     QDir virtualDir = QDir(FS::PathCombine(assetsDir.path(), "virtual"));
@@ -203,9 +204,9 @@ QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder)
 }
 
 // FIXME: ugly code duplication
-bool reconstructAssets(QString assetsId, QString resourcesFolder)
+bool reconstructAssets(QString assetsId, QString resourcesFolder, QString assetsRoot)
 {
-    QDir assetsDir = QDir("assets/");
+    QDir assetsDir(assetsRoot);
     QDir indexDir = QDir(FS::PathCombine(assetsDir.path(), "indexes"));
     QDir objectDir = QDir(FS::PathCombine(assetsDir.path(), "objects"));
     QDir virtualDir = QDir(FS::PathCombine(assetsDir.path(), "virtual"));
@@ -278,11 +279,26 @@ bool reconstructAssets(QString assetsId, QString resourcesFolder)
 
 }  // namespace AssetsUtils
 
-Net::NetRequest::Ptr AssetObject::getDownloadAction()
+Net::NetRequest::Ptr AssetObject::getDownloadAction(bool verifyIntegrity)
 {
     QFileInfo objectFile(getLocalPath());
-    if ((!objectFile.isFile()) || (objectFile.size() != size)) {
+    bool needsDownload = !objectFile.isFile() || objectFile.size() != size;
+    if (!needsDownload && verifyIntegrity && !hash.isEmpty()) {
+        QFile file(objectFile.filePath());
+        QCryptographicHash checksum(QCryptographicHash::Sha1);
+        if (!file.open(QIODevice::ReadOnly)) {
+            needsDownload = true;
+        } else {
+            while (!file.atEnd())
+                checksum.addData(file.read(1024 * 1024));
+            needsDownload = file.error() != QFile::NoError || checksum.result() != QByteArray::fromHex(hash.toLatin1());
+        }
+    }
+    if (needsDownload) {
         auto objectDL = Net::ApiDownload::makeFile(getUrl(), objectFile.filePath());
+        const QUrl officialUrl(BuildConfig.DEFAULT_RESOURCE_BASE + getRelPath());
+        if (getUrl() != officialUrl)
+            objectDL->setFallbackUrl(officialUrl);
         if (hash.size()) {
             objectDL->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, hash));
         }
@@ -308,11 +324,11 @@ QString AssetObject::getRelPath()
     return hash.left(2) + "/" + hash;
 }
 
-NetJob::Ptr AssetsIndex::getDownloadJob()
+NetJob::Ptr AssetsIndex::getDownloadJob(bool verifyIntegrity)
 {
     auto job = makeShared<NetJob>(QObject::tr("Assets for %1").arg(id), APPLICATION->network());
     for (auto& object : objects.values()) {
-        auto dl = object.getDownloadAction();
+        auto dl = object.getDownloadAction(verifyIntegrity);
         if (dl) {
             job->addNetAction(dl);
         }

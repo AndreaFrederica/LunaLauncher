@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Luna download status</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+        background: #17191d;
+        color: #f7f8fa;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 18px 14px;
+        background: #17191d;
+        border-bottom: 1px solid #343840;
+      }
+
+      .identity {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .mark {
+        width: 10px;
+        height: 36px;
+        flex: 0 0 auto;
+        background: #22b8a7;
+      }
+
+      .copy { min-width: 0; }
+
+      .headline {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      #status {
+        flex: 0 0 auto;
+        color: #8edfd4;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      #file-name {
+        overflow: hidden;
+        color: #f7f8fa;
+        font-size: 14px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .details {
+        display: flex;
+        gap: 12px;
+        margin-top: 4px;
+        color: #aeb4be;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      #queue { color: #d7dbe1; }
+      #queue, #size, #speed { font-variant-numeric: tabular-nums; }
+
+      #retry {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        border: 1px solid #4c525c;
+        border-radius: 4px;
+        background: #25282e;
+        color: #f7f8fa;
+        cursor: pointer;
+        font-size: 24px;
+        line-height: 1;
+      }
+
+      #retry:hover { background: #343840; }
+      #retry:focus-visible { outline: 2px solid #72d6c9; outline-offset: 2px; }
+      #retry:disabled { cursor: default; opacity: .45; }
+
+      .progress {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 5px;
+        overflow: hidden;
+        background: #2b2f35;
+      }
+
+      #complete-bar {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0;
+        background: #167a70;
+        transition: width 180ms ease-out;
+      }
+
+      #activity-bar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: max(84px, 14vw);
+        background: #38cfbd;
+        animation: travel 1.35s linear infinite;
+      }
+
+      body.stalled .mark,
+      body.stalled #activity-bar { background: #f0a43a; }
+      body.stalled #status { color: #ffc776; }
+      body.stalled #retry { border-color: #f0a43a; }
+      body.complete #activity-bar { display: none; }
+      body.complete #complete-bar { width: 100% !important; background: #22b8a7; }
+
+      @keyframes travel {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(100vw); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #activity-bar { animation-duration: 3s; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="identity">
+      <div class="mark" aria-hidden="true"></div>
+      <div class="copy">
+        <div class="headline">
+          <span id="status">Waiting</span>
+          <span id="file-name">Preparing CurseForge download page...</span>
+        </div>
+        <div class="details">
+          <span id="queue">1 of 1</span>
+          <span id="size">0 B</span>
+          <span id="speed">0 B/s</span>
+        </div>
+      </div>
+    </div>
+    <button id="retry" type="button" title="Restart current download" aria-label="Restart current download">&#8635;</button>
+    <div class="progress" aria-hidden="true">
+      <div id="complete-bar"></div>
+      <div id="activity-bar"></div>
+    </div>
+    <script>
+      const body = document.body;
+      const statusNode = document.getElementById('status');
+      const fileNameNode = document.getElementById('file-name');
+      const queueNode = document.getElementById('queue');
+      const sizeNode = document.getElementById('size');
+      const speedNode = document.getElementById('speed');
+      const completeBar = document.getElementById('complete-bar');
+      const retryButton = document.getElementById('retry');
+
+      const labels = {
+        waiting: 'Opening page',
+        downloading: 'Downloading',
+        stalled: 'No activity',
+        retrying: 'Restarting',
+        complete: 'Complete'
+      };
+
+      function formatBytes(value) {
+        const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+        let amount = Number(value) || 0;
+        let unit = 0;
+        while (amount >= 1024 && unit < units.length - 1) {
+          amount /= 1024;
+          unit += 1;
+        }
+        return unit === 0 ? `${Math.round(amount)} ${units[unit]}` : `${amount.toFixed(1)} ${units[unit]}`;
+      }
+
+      window.setDownloadState = function (state) {
+        const status = state.status || 'waiting';
+        const index = Math.max(1, Number(state.fileIndex) || 1);
+        const count = Math.max(index, Number(state.fileCount) || index);
+        const completed = status === 'complete' ? count : index - 1;
+
+        body.classList.toggle('stalled', status === 'stalled');
+        body.classList.toggle('complete', status === 'complete');
+        statusNode.textContent = labels[status] || labels.waiting;
+        fileNameNode.textContent = state.fileName || '';
+        queueNode.textContent = `${index} of ${count}`;
+        sizeNode.textContent = formatBytes(state.bytesReceived);
+        speedNode.textContent = `${formatBytes(state.bytesPerSecond)}/s`;
+        completeBar.style.width = `${completed * 100 / count}%`;
+        retryButton.disabled = status === 'retrying' || status === 'complete';
+      };
+
+      retryButton.addEventListener('click', function () {
+        retryButton.disabled = true;
+        statusNode.textContent = labels.retrying;
+        window.location.href = 'luna://retry';
+      });
+    </script>
+  </body>
+</html>

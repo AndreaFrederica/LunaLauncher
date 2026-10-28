@@ -105,7 +105,7 @@ void YggdrasilProfileStep::onRequestDone()
 
     if (m_request->error() != QNetworkReply::NoError) {
         qWarning() << "Yggdrasil profile request failed:" << m_request->errorString();
-        emit finished(AccountTaskState::STATE_FAILED_SOFT, tr("Failed to fetch profile: %1").arg(m_request->errorString()));
+        emit finished(AccountTaskState::STATE_OFFLINE, tr("Yggdrasil profile server is unavailable: %1").arg(m_request->errorString()));
         return;
     }
 

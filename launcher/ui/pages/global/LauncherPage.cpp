@@ -40,6 +40,7 @@
 #include "ui_LauncherPage.h"
 
 #include <QDir>
+#include <QDialog>
 #include <QFileDialog>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -56,6 +57,7 @@
 
 #include <QApplication>
 #include <QProcess>
+#include <QStyle>
 
 // FIXME: possibly move elsewhere
 enum InstSortMode {
@@ -68,6 +70,7 @@ enum InstSortMode {
 LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::LauncherPage)
 {
     ui->setupUi(this);
+    ui->importPrismSettingsBtn->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
 
     ui->sortingModeGroup->setId(ui->sortByNameBtn, Sort_Name);
     ui->sortingModeGroup->setId(ui->sortLastLaunchedBtn, Sort_LastLaunch);
@@ -181,6 +184,36 @@ void LauncherPage::on_skinsDirBrowseBtn_clicked()
     if (!raw_dir.isEmpty() && QDir(raw_dir).exists()) {
         QString cooked_dir = FS::NormalizePath(raw_dir);
         ui->skinsDirTextBox->setText(cooked_dir);
+    }
+}
+
+void LauncherPage::on_importPrismSettingsBtn_clicked()
+{
+    const auto answer = QMessageBox::question(
+        this, tr("Re-import Prism Launcher Settings"),
+        tr("This will overwrite Luna Launcher settings that also exist in Prism Launcher. Luna-only settings will be kept. Continue?"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    QString errorMessage;
+    const int imported = APPLICATION->importPrismSettings(&errorMessage);
+    if (imported < 0) {
+        QMessageBox::critical(this, tr("Import Failed"), errorMessage);
+        return;
+    }
+    if (imported == 0) {
+        QMessageBox::warning(this, tr("Nothing Imported"), tr("No compatible Prism Launcher settings were found."));
+        return;
+    }
+
+    loadSettings();
+    QMessageBox::information(this, tr("Import Complete"), tr("Imported %1 settings from Prism Launcher.").arg(imported));
+
+    // Other settings pages cache their values, so close without applying stale controls.
+    if (auto dialog = qobject_cast<QDialog*>(window())) {
+        dialog->reject();
     }
 }
 

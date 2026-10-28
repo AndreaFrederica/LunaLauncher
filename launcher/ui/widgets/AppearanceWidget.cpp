@@ -40,8 +40,10 @@
 #include <DesktopServices.h>
 #include <QGraphicsOpacityEffect>
 #include "BuildConfig.h"
+#include "ui/dialogs/ThemeDownloadDialog.h"
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
+#include "ui/themes/AppearanceService.h"
 
 #include <Application.h>
 #include "settings/SettingsObject.h"
@@ -86,6 +88,16 @@ AppearanceWidget::AppearanceWidget(bool themesOnly, QWidget* parent)
     connect(m_ui->catPackFolder, &QPushButton::clicked, this,
             [] { DesktopServices::openPath(APPLICATION->themeManager()->getCatPacksFolder().path()); });
     connect(m_ui->reloadThemesButton, &QPushButton::pressed, this, &AppearanceWidget::loadThemeSettings);
+    connect(m_ui->downloadThemesButton, &QPushButton::clicked, this, &ThemeDownloadDialog::openCenter);
+    auto appearance=APPLICATION->themeManager()->appearance();
+    connect(appearance,&AppearanceService::catalogChanged,this,&AppearanceWidget::populateThemeSettings);
+    connect(appearance,&AppearanceService::stateChanged,this,[this]{
+        populateThemeSettings();
+        updateConsolePreview();
+        updateCatPreview();
+        const bool pending=APPLICATION->themeManager()->appearance()->state().value("requiresRestart").toBool();
+        m_ui->widgetStyleComboBox->setToolTip(pending?tr("外观更改已保存，下次启动生效。可在主题中心撤销。"):QString());
+    });
 }
 
 AppearanceWidget::~AppearanceWidget()
@@ -160,6 +172,7 @@ void AppearanceWidget::applyCatTheme(int index)
     auto newCat = m_ui->catPackComboBox->itemData(index).toString();
     if (originalCat != newCat) {
         settings->set("BackgroundCat", newCat);
+        APPLICATION->themeManager()->applyCurrentlySelectedTheme();
     }
 
     APPLICATION->currentCatChanged(index);
@@ -169,6 +182,11 @@ void AppearanceWidget::applyCatTheme(int index)
 void AppearanceWidget::loadThemeSettings()
 {
     APPLICATION->themeManager()->refresh();
+    populateThemeSettings();
+}
+
+void AppearanceWidget::populateThemeSettings()
+{
 
     m_ui->iconsComboBox->blockSignals(true);
     m_ui->widgetStyleComboBox->blockSignals(true);

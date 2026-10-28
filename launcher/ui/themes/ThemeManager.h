@@ -26,6 +26,7 @@
 #include "IconTheme.h"
 #include "ui/themes/CatPack.h"
 #include "ui/themes/ITheme.h"
+class AppearanceService;
 
 inline auto themeDebugLog() {
     return qDebug() << "[Theme]";
@@ -59,8 +60,11 @@ class ThemeManager {
     const LogColors& getLogColors() { return m_logColors; }
 
     void refresh();
+    AppearanceService* appearance();
 
    private:
+    friend class AppearanceService;
+    std::unique_ptr<AppearanceService> m_appearance;
     std::map<QString, std::unique_ptr<ITheme>> m_themes;
     std::map<QString, IconTheme> m_icons;
     QDir m_iconThemeFolder{"iconthemes"};
@@ -87,6 +91,7 @@ class ThemeManager {
     void setTitlebarColorOfAllWindowsOnMac(QColor color);
     // On non-Mac systems, this is a no-op.
     void stopSettingNewWindowColorsOnMac();
+    void restoreSystemWindowColorsOnMac();
 #ifdef Q_OS_MACOS
     NSObject* m_windowTitlebarObserver = nullptr;
 #endif

@@ -1,0 +1,94 @@
+<template>
+  <v-dialog
+    v-model="isShown"
+    :persistent="false"
+    :width="400"
+  >
+    <v-card :title="t('instance.delete')">
+      <v-card-text>
+        {{ isBedrock ? t('instance.deleteHintBedrock') : t('instance.deleteHint') }}
+        <div style="color: grey">
+          {{ t('instance.name') }}: {{ name }}
+        </div>
+        <div style="color: grey">
+          {{ path }}
+        </div>
+        <v-checkbox
+          v-if="!isBedrock"
+          v-model="deleteFiles"
+          :label="t('instance.deleteFile')"
+        />
+      </v-card-text>
+
+      <v-divider />
+      <v-card-actions>
+        <v-btn
+          @click="isShown = false"
+         variant="text">
+          {{ t('delete.no') }}
+        </v-btn>
+        <v-spacer />
+        <v-btn
+          color="error"
+          @click="doDelete"
+        >
+          <v-icon start>
+            delete
+          </v-icon>
+          {{ t('delete.yes') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</template>
+<script lang="ts" setup>
+import { kInstances } from '@/composables/instances'
+import { injection } from '@/util/inject'
+import { useDialog } from '../composables/dialog'
+import { useNotifier } from '@/composables/notifier'
+
+const { t } = useI18n()
+const name = ref('')
+const path = ref('')
+const deleteFiles = ref(true)
+const isBedrock = ref(false)
+const { parameter, isShown } = useDialog('delete-instance')
+watch(isShown, (shown) => {
+  if (shown) {
+    name.value = (typeof parameter.value === 'object') ? (parameter.value).name ?? '' : ''
+    path.value = (typeof parameter.value === 'object') ? (parameter.value).path ?? '' : ''
+    isBedrock.value = (typeof parameter.value === 'object') ? (parameter.value).edition === 'bedrock' : false
+    if (isBedrock.value) {
+      deleteFiles.value = true
+    }
+  }
+})
+const router = useRouter()
+const { remove, selectedInstance } = injection(kInstances)
+const { notify } = useNotifier()
+const doDelete = async () => {
+  const val = parameter.value
+  const instancePath = (val as any).path
+  const isSelectedInstance = selectedInstance.value === instancePath
+  try {
+    const isLastInstance = await remove(instancePath, deleteFiles.value)
+    if (isLastInstance) {
+      await router.push('/me')
+    } else if (router.currentRoute.value.fullPath !== '/' && isSelectedInstance) {
+      await router.push('/')
+    }
+  } catch (e) {
+    if (e instanceof Error && 'code' in e) {
+      if (e.code === 'EBUSY') {
+        notify({
+          title: t('instance.deleteFailed'),
+          body: t('instance.deleteFailedPermission'),
+          level: 'error',
+        })
+      }
+    }
+  }
+  isShown.value = false
+}
+
+</script>

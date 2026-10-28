@@ -28,16 +28,22 @@ class Aria2Page : public QWidget, public BasePage {
    private slots:
     void browseExecutable();
     void detectExecutable();
+    void autoSetupExecutable();
+    void installManagedExecutable();
+    void removeManagedExecutable();
     void updateProxyWidgets();
     void updateTransferWidgets();
 
    private:
     void loadSettings();
     void applySettings();
+    bool ensureExecutableAvailable();
+    QString effectiveExecutablePath() const;
 
    private:
     QCheckBox* m_enabled = nullptr;
     QLineEdit* m_executablePath = nullptr;
+    QCheckBox* m_autoInstall = nullptr;
     QCheckBox* m_fallbackToQt = nullptr;
     QCheckBox* m_followLauncherDownloadLimits = nullptr;
     QSpinBox* m_maxConcurrent = nullptr;
@@ -56,4 +62,6 @@ class Aria2Page : public QWidget, public BasePage {
     QLineEdit* m_proxyUser = nullptr;
     QLineEdit* m_proxyPass = nullptr;
     QLabel* m_detectedPath = nullptr;
+    QLabel* m_systemPath = nullptr;
+    QLabel* m_managedPath = nullptr;
 };

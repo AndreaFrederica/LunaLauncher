@@ -50,6 +50,7 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include "cli/HeadlessBlockedMods.h"
 
 namespace FTB {
 
@@ -99,6 +100,7 @@ void PackInstallTask::executeTask()
     QObject::connect(netJob.get(), &NetJob::failed, this, &PackInstallTask::onManifestDownloadFailed);
     QObject::connect(netJob.get(), &NetJob::aborted, this, &PackInstallTask::abort);
     QObject::connect(netJob.get(), &NetJob::progress, this, &PackInstallTask::setProgress);
+    QObject::connect(netJob.get(), &Task::transferRate, this, &Task::setTransferRate);
 
     m_net_job = netJob;
 
@@ -207,6 +209,12 @@ void PackInstallTask::onResolveModsSucceeded()
     m_modIdResolverTask.reset();
 
     if (anyBlocked) {
+        if (APPLICATION->isHeadless()) {
+            QString error;
+            if (resolveHeadlessBlockedMods(m_blockedMods, "sha1", error)) createInstance();
+            else emitFailed(error);
+            return;
+        }
         qDebug() << "Blocked files found, displaying file list";
 
         BlockedModsDialog message_dialog(m_parent, tr("Blocked files found"),
@@ -320,6 +328,7 @@ void PackInstallTask::downloadPack()
     connect(jobPtr.get(), &NetJob::failed, this, &PackInstallTask::onModDownloadFailed);
     connect(jobPtr.get(), &NetJob::aborted, this, &PackInstallTask::abort);
     connect(jobPtr.get(), &NetJob::progress, this, &PackInstallTask::setProgress);
+    connect(jobPtr.get(), &Task::transferRate, this, &Task::setTransferRate);
 
     m_net_job = jobPtr;
 

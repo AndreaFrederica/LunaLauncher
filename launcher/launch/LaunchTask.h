@@ -63,6 +63,8 @@ class LaunchTask : public Task {
 
     BaseInstance* instance() { return m_instance; }
 
+    QList<Task*> getSubTasks() const override;
+
     void setPid(qint64 pid) { m_pid = pid; }
 
     qint64 pid() { return m_pid; }

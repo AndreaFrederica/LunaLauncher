@@ -49,6 +49,10 @@ set(CORE_SOURCES
     InstanceCopyTask.cpp
     InstanceImportTask.h
     InstanceImportTask.cpp
+    modplatform/pcl/PCLPack.h
+    modplatform/pcl/PCLPack.cpp
+    modplatform/pcl/PCLPlainPack.h
+    modplatform/pcl/PCLPlainPack.cpp
 
     # Resource downloading task
     ResourceDownloadTask.h
@@ -146,6 +150,10 @@ set(NET_SOURCES
     net/Aria2Download.cpp
     net/Aria2Manager.h
     net/Aria2Manager.cpp
+    net/PclDownloadLibrary.h
+    net/PclDownloadLibrary.cpp
+    net/PclDownloadTask.h
+    net/PclDownloadTask.cpp
     net/ApiUpload.cpp
     net/ApiUpload.h
     net/NetRequest.cpp
@@ -217,6 +225,8 @@ set(MINECRAFT_SOURCES
     # Logging
     minecraft/Logging.h
     minecraft/Logging.cpp
+    minecraft/SpecialLoaderInstanceCreationTask.h
+    minecraft/SpecialLoaderInstanceCreationTask.cpp
 
     # Minecraft support
     minecraft/auth/AccountData.cpp
@@ -227,6 +237,11 @@ set(MINECRAFT_SOURCES
     minecraft/auth/AuthSession.h
     minecraft/auth/AuthStep.h
     minecraft/auth/MinecraftAccount.cpp
+    minecraft/auth/LocalYggdrasil.cpp
+    minecraft/auth/LocalYggdrasil.h
+    minecraft/auth/MinecraftUuid.h
+    ui/dialogs/EnhancedOfflineDialog.cpp
+    ui/dialogs/EnhancedOfflineDialog.h
     minecraft/auth/MinecraftAccount.h
     minecraft/auth/Parsers.cpp
     minecraft/auth/Parsers.h
@@ -329,7 +344,10 @@ set(MINECRAFT_SOURCES
     minecraft/mod/MetadataHandler.h
     minecraft/mod/Mod.h
     minecraft/mod/Mod.cpp
+    minecraft/mod/ModDependency.h
     minecraft/mod/ModDetails.h
+    minecraft/mod/ModVersionRange.h
+    minecraft/mod/ModVersionRange.cpp
     minecraft/mod/ModFolderModel.h
     minecraft/mod/ModFolderModel.cpp
     minecraft/mod/Resource.h
@@ -358,6 +376,8 @@ set(MINECRAFT_SOURCES
     minecraft/mod/tasks/ResourceFolderLoadTask.cpp
     minecraft/mod/tasks/LocalModParseTask.h
     minecraft/mod/tasks/LocalModParseTask.cpp
+    minecraft/mod/tasks/ModPreflightTask.h
+    minecraft/mod/tasks/ModPreflightTask.cpp
     minecraft/mod/tasks/LocalResourceUpdateTask.h
     minecraft/mod/tasks/LocalResourceUpdateTask.cpp
     minecraft/mod/tasks/LocalDataPackParseTask.h
@@ -482,6 +502,16 @@ set(META_SOURCES
     # Metadata sources
     meta/JsonFormat.cpp
     meta/JsonFormat.h
+    meta/CleanroomMeta.cpp
+    meta/CleanroomMeta.h
+    meta/CleanroomMetadataProvider.cpp
+    meta/CleanroomMetadataProvider.h
+    meta/MetadataProvider.cpp
+    meta/MetadataProvider.h
+    meta/SpecialLoaderMetadataProvider.cpp
+    meta/SpecialLoaderMetadataProvider.h
+    ui/widgets/SpecialLoaderVersionList.cpp
+    ui/widgets/SpecialLoaderVersionList.h
     meta/BaseEntity.cpp
     meta/BaseEntity.h
     meta/VersionList.cpp
@@ -495,6 +525,8 @@ set(META_SOURCES
 set(API_SOURCES
     modplatform/ModIndex.h
     modplatform/ModIndex.cpp
+    modplatform/ModApiMirror.h
+    modplatform/ModApiMirror.cpp
     modplatform/ResourceType.h
     modplatform/ResourceType.cpp
 
@@ -903,6 +935,8 @@ set(LUNA_FEATURE_SOURCES
     ui/pages/modplatform/PluginModel.h
     ui/pages/modplatform/JSApiPluginPage.cpp
     ui/pages/modplatform/JSApiPluginPage.h
+    ui/pages/modplatform/JSApiModPage.cpp
+    ui/pages/modplatform/JSApiModPage.h
     ui/pages/modplatform/hangar/HangarResourcePages.cpp
     ui/pages/modplatform/hangar/HangarResourcePages.h
     ui/pages/modplatform/hangar/HangarResourceModels.cpp
@@ -962,6 +996,18 @@ SET(LAUNCHER_SOURCES
     DataMigrationTask.cpp
     ApplicationMessage.h
     ApplicationMessage.cpp
+    cli/CliController.cpp
+    cli/CliController.h
+    cli/CliInteraction.cpp
+    cli/CliInteraction.h
+    cli/CliOptions.h
+    cli/McpServer.cpp
+    cli/McpServer.h
+    cli/OperationService.cpp
+    cli/OperationService.h
+    cli/TuiController.cpp
+    cli/TuiController.h
+    cli/UserInteraction.h
     SysInfo.h
     SysInfo.cpp
     HardwareInfo.cpp
@@ -1043,6 +1089,21 @@ SET(LAUNCHER_SOURCES
     ui/themes/SystemTheme.h
     ui/themes/IconTheme.cpp
     ui/themes/IconTheme.h
+    ui/themes/ThemePackage.cpp
+    ui/themes/ThemePackage.h
+    ui/themes/ThemeStyle.cpp
+    ui/themes/ThemeStyle.h
+    ui/themes/ThemeThumbnailLoader.cpp
+    ui/themes/ThemeThumbnailLoader.h
+    ui/themes/AppearanceService.cpp
+    ui/themes/AppearanceService.h
+    ui/themes/WindowChromeController.cpp
+    ui/themes/WindowChromeController.h
+    ui/themes/ThemeStore.cpp
+    ui/themes/ThemeStore.h
+    ui/themes/ThemeInstallTask.cpp
+    ui/themes/ThemeInstallTask.h
+    ui/themes/ThemePreview.cpp
     ui/themes/ThemeManager.cpp
     ui/themes/ThemeManager.h
     ui/themes/CatPack.cpp
@@ -1121,8 +1182,12 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/ProxyPage.h
     ui/pages/global/APIPage.cpp
     ui/pages/global/APIPage.h
+    ui/pages/global/YggdrasilPage.cpp
+    ui/pages/global/YggdrasilPage.h
     ui/pages/global/Aria2Page.cpp
     ui/pages/global/Aria2Page.h
+    ui/pages/global/PclDownloadPage.cpp
+    ui/pages/global/PclDownloadPage.h
     ui/pages/global/Aria2MonitorPanel.cpp
     ui/pages/global/Aria2MonitorPanel.h
 
@@ -1250,14 +1315,23 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/ProgressDialog.h
     ui/dialogs/ReviewMessageBox.cpp
     ui/dialogs/ReviewMessageBox.h
+    ui/dialogs/ModPreflightDialog.cpp
+    ui/dialogs/ModPreflightDialog.h
     ui/dialogs/VersionSelectDialog.cpp
     ui/dialogs/VersionSelectDialog.h
     ui/dialogs/ResourceDownloadDialog.cpp
     ui/dialogs/ResourceDownloadDialog.h
     ui/dialogs/ScrollMessageBox.cpp
     ui/dialogs/ScrollMessageBox.h
+    ui/dialogs/ThemeDownloadDialog.cpp
+    ui/dialogs/ThemeDownloadDialog.h
     ui/dialogs/BlockedModsDialog.cpp
     ui/dialogs/BlockedModsDialog.h
+    modplatform/BlockedMod.h
+    modplatform/flame/CurseForgeExternalTool.cpp
+    modplatform/flame/CurseForgeExternalTool.h
+    modplatform/flame/CurseForgeDownloadPageService.cpp
+    modplatform/flame/CurseForgeDownloadPageService.h
     ui/dialogs/ChooseProviderDialog.h
     ui/dialogs/ChooseProviderDialog.cpp
     ui/dialogs/ResourceUpdateDialog.cpp
@@ -1266,6 +1340,8 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/InstallLoaderDialog.h
     ui/dialogs/ChooseOfflineNameDialog.cpp
     ui/dialogs/ChooseOfflineNameDialog.h
+    ui/dialogs/UntrustedModsDialog.cpp
+    ui/dialogs/UntrustedModsDialog.h
 
     ui/dialogs/skins/SkinManageDialog.cpp
     ui/dialogs/skins/SkinManageDialog.h
@@ -1448,6 +1524,7 @@ qt_wrap_ui(LAUNCHER_UI
     ui/dialogs/ChooseProviderDialog.ui
     ui/dialogs/skins/SkinManageDialog.ui
     ui/dialogs/ChooseOfflineNameDialog.ui
+    ui/dialogs/UntrustedModsDialog.ui
 )
 
 qt_wrap_ui(PRISM_UPDATE_UI
@@ -1461,6 +1538,7 @@ endif()
 qt_add_resources(LAUNCHER_RESOURCES
     resources/backgrounds/backgrounds.qrc
     resources/multimc/multimc.qrc
+    resources/pcl/lucide/lucide.qrc
     resources/pe_dark/pe_dark.qrc
     resources/pe_light/pe_light.qrc
     resources/pe_colored/pe_colored.qrc
@@ -1506,7 +1584,6 @@ target_include_directories(Launcher_logic PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libraries/quickjs-ng
     ${CMAKE_SOURCE_DIR}/libraries/qtermwidget/lib
-    ${CMAKE_SOURCE_DIR}/libraries/simplewebp
 )
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 
@@ -1519,12 +1596,15 @@ target_link_libraries(Launcher_logic
     nbt++
     ${ZLIB_LIBRARIES}
     qdcss
-    simplewebp
     quickjs-interface
     BuildConfig
     Qt${QT_VERSION_MAJOR}::Widgets
     qtermwidget
+    Qt6::Svg
 )
+if(TARGET Luna_kvantum)
+    target_link_libraries(Launcher_logic Luna_kvantum)
+endif()
 
 if(TARGET PkgConfig::libqrencode)
     target_link_libraries(Launcher_logic PkgConfig::libqrencode)
@@ -1765,13 +1845,20 @@ if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     target_compile_options(Launcher_logic PRIVATE /wd4100) # C4100 - unused parameter
     target_compile_options(${Launcher_Name} PRIVATE /wd4100) # C4100 - unused parameter
 else()
-    target_compile_options(Launcher_logic PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-sfinae-incomplete)
-    target_compile_options(${Launcher_Name} PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-sfinae-incomplete)
+    # sfinae-incomplete is a new GCC warning and triggers in Qt headers
+    # no-unknown-warning-option so that compilers that don't have sfinae-incomplete don't error
+    target_compile_options(Launcher_logic PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-unknown-warning-option -Wno-sfinae-incomplete)
+    target_compile_options(${Launcher_Name} PRIVATE -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-field-initializers -Wno-unknown-warning-option -Wno-sfinae-incomplete)
 endif()
 
 #### The bundle mess! ####
 # Bundle utilities are used to complete packages for different platforms - they add all the libraries that would otherwise be missing on the target system.
 # NOTE: it seems that this absolutely has to be here, and nowhere else.
+install(FILES "${QT_PLUGINS_DIR}/imageformats/${QT_WEBP_PLUGIN_NAME}"
+    DESTINATION "${PLUGIN_DEST_DIR}/imageformats"
+    COMPONENT bundle
+)
+
 if(WIN32 OR (UNIX AND APPLE))
     if(WIN32)
         set(QT_DEPLOY_TOOL_OPTIONS "--no-opengl-sw --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --skip-plugin-types generic,networkinformation")
@@ -1915,6 +2002,8 @@ install(
 install(
     FILES
         modplatform/jsapi/modrinth_plugin_api.js
+        modplatform/jsapi/mcim_modrinth_api.js
+        modplatform/jsapi/mcim_curseforge_api.js
         modplatform/jsapi/resource-api.d.ts
         modplatform/jsapi/README.md
         modplatform/jsapi/DEPLOYMENT.md

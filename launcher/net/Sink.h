@@ -35,6 +35,8 @@
 
 #pragma once
 
+#include <QIODevice>
+
 #include "Validator.h"
 #include "tasks/Task.h"
 
@@ -53,6 +55,38 @@ class Sink {
     virtual auto hasLocalData() -> bool = 0;
 
     QString failReason() const { return m_fail_reason; }
+
+    bool hasValidators() const { return !validators.empty(); }
+
+    bool validateExternalData(QIODevice& input, QNetworkRequest& request, QNetworkReply& reply)
+    {
+        if (!initAllValidators(request)) {
+            m_fail_reason = "Failed to initialize validators";
+            failAllValidators();
+            return false;
+        }
+
+        while (!input.atEnd()) {
+            QByteArray chunk = input.read(256 * 1024);
+            if (chunk.isEmpty() && !input.atEnd()) {
+                m_fail_reason = input.errorString();
+                failAllValidators();
+                return false;
+            }
+            if (!writeAllValidators(chunk)) {
+                m_fail_reason = "Failed to write validators";
+                failAllValidators();
+                return false;
+            }
+        }
+
+        if (!finalizeAllValidators(reply)) {
+            m_fail_reason = "Failed to finalize validators";
+            failAllValidators();
+            return false;
+        }
+        return true;
+    }
 
     void addValidator(Validator* validator)
     {

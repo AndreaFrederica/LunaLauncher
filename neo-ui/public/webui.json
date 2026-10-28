@@ -1,0 +1,7 @@
+{
+  "name": "Luna Neo UI",
+  "version": "0.1.0",
+  "description": "Standalone static build of the complete Neo UI",
+  "apiVersion": 1,
+  "nativeFrame": false
+}

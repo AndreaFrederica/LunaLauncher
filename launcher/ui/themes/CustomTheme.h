@@ -54,13 +54,14 @@ class CustomTheme : public ITheme {
     QString qtTheme() override;
     LogColors logColorScheme() override { return m_logColors; }
     QStringList searchPaths() override;
+    QString directory() const { return m_themeDirPath; }
 
    private:
     bool read(const QString& path, bool& hasCustomLogColors);
 
     QPalette m_palette;
     QColor m_fadeColor;
-    double m_fadeAmount;
+    double m_fadeAmount = 0.5;
     QString m_styleSheet;
     QString m_name;
     QString m_id;

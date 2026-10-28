@@ -41,13 +41,20 @@
 
 #include <QDateTime>
 #include <QFileInfo>
+#include <QCryptographicHash>
+#include <QFile>
+#include <QHash>
+#include <QObject>
 #include <memory>
+#include <optional>
 
 #include "ByteArraySink.h"
 #include "ChecksumValidator.h"
 #include "MetaCacheSink.h"
 #if defined(LAUNCHER_APPLICATION)
 #include "net/Aria2Download.h"
+#include "net/PclDownloadTask.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #endif
 
 namespace Net {
@@ -55,7 +62,11 @@ namespace Net {
 #if defined(LAUNCHER_APPLICATION)
 auto Download::makeCached(QUrl url, MetaEntryPtr entry, Options options) -> Download::Ptr
 {
-    if (Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+    const bool localCache = LocalYggdrasil::instance().isCacheUrl(url);
+    if (!localCache && PclDownloadTask::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+        return PclDownloadTask::makeCached(std::move(url), entry, options);
+    }
+    if (!localCache && Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
         return Aria2Download::makeCached(std::move(url), entry, options);
     }
     auto dl = makeShared<Download>();
@@ -86,6 +97,9 @@ auto Download::makeByteArray(QUrl url, Options options) -> std::pair<Download::P
 auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Ptr
 {
 #if defined(LAUNCHER_APPLICATION)
+    if (PclDownloadTask::shouldUseFor(url)) {
+        return PclDownloadTask::makeFile(std::move(url), std::move(path), options);
+    }
     if (Aria2Download::shouldUseFor(url)) {
         return Aria2Download::makeFile(std::move(url), std::move(path), options);
     }
@@ -100,6 +114,85 @@ auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Pt
 
 QNetworkReply* Download::getReply(QNetworkRequest& request)
 {
+#if defined(LAUNCHER_APPLICATION)
+    auto& cache = LocalYggdrasil::instance();
+    if (cache.isCacheUrl(request.url())) {
+        // The gateway owns conditional revalidation. Forwarding Qt's validators
+        // would bypass its disk cache and prevent stale-on-error responses.
+        request.setRawHeader("If-None-Match", {});
+        request.setRawHeader("If-Modified-Since", {});
+        return cache.cacheNetwork()->get(request);
+    }
+#endif
     return m_network->get(request);
+}
+
+namespace {
+std::optional<QCryptographicHash::Algorithm> algorithmForHashType(const QString& type)
+{
+    static const QHash<QString, QCryptographicHash::Algorithm> algorithms = {
+        { QStringLiteral("md5"), QCryptographicHash::Md5 },
+        { QStringLiteral("sha1"), QCryptographicHash::Sha1 },
+        { QStringLiteral("sha256"), QCryptographicHash::Sha256 },
+        { QStringLiteral("sha512"), QCryptographicHash::Sha512 },
+    };
+    auto it = algorithms.find(type.trimmed().toLower());
+    if (it == algorithms.end())
+        return std::nullopt;
+    return *it;
+}
+}  // namespace
+
+void Download::setExpectedIntegrity(const QString& hashType, const QString& hash, qint64 expectedSize)
+{
+    m_expectedHashType = hashType.trimmed().toLower();
+    m_expectedHash = hash.trimmed();
+    m_expectedSize = expectedSize;
+
+    if (m_expectedHash.isEmpty() || !m_sink)
+        return;
+
+    // Unknown hash types are ignored instead of failing the download: some
+    // providers may add new algorithms before the launcher knows about them.
+    if (auto algorithm = algorithmForHashType(m_expectedHashType))
+        m_sink->addValidator(new ChecksumValidator(*algorithm, m_expectedHash));
+}
+
+bool Download::verifyFileIntegrity(const QString& path, QString* error) const
+{
+    auto fail = [error](const QString& reason) {
+        if (error)
+            *error = reason;
+        return false;
+    };
+
+    QFileInfo info(path);
+    if (!info.exists() || !info.isFile())
+        return fail(QObject::tr("file %1 does not exist").arg(path));
+
+    if (m_expectedSize >= 0 && info.size() != m_expectedSize)
+        return fail(QObject::tr("size mismatch for %1 (expected %2, got %3)").arg(path).arg(m_expectedSize).arg(info.size()));
+
+    if (m_expectedHash.isEmpty())
+        return true;
+
+    auto algorithm = algorithmForHashType(m_expectedHashType);
+    if (!algorithm)
+        return true;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return fail(QObject::tr("could not open %1: %2").arg(path, file.errorString()));
+
+    QCryptographicHash digest(*algorithm);
+    if (!digest.addData(&file))
+        return fail(QObject::tr("could not hash %1: %2").arg(path, file.errorString()));
+
+    const QString actual = QString::fromLatin1(digest.result().toHex());
+    if (actual.compare(m_expectedHash, Qt::CaseInsensitive) != 0)
+        return fail(QObject::tr("%1 checksum mismatch for %2 (expected %3, got %4)")
+                        .arg(m_expectedHashType, path, m_expectedHash, actual));
+
+    return true;
 }
 }  // namespace Net

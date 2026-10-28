@@ -27,8 +27,10 @@
 #include "ui_BlockedModsDialog.h"
 
 #include "Application.h"
-#include "settings/SettingsObject.h"
+#include "StringUtils.h"
+#include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "modplatform/helpers/HashUtils.h"
+#include "settings/SettingsObject.h"
 
 #include <QDebug>
 #include <QDesktopServices>
@@ -38,6 +40,7 @@
 #include <QDragEnterEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QEventLoop>
 #include <QMimeData>
 #include <QPushButton>
 #include <QStandardPaths>
@@ -58,6 +61,58 @@ BlockedModsDialog::BlockedModsDialog(QWidget* parent, const QString& title, cons
     connect(ui->downloadFolderButton, &QPushButton::clicked, this, &BlockedModsDialog::addDownloadFolder);
 
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &BlockedModsDialog::directoryChanged);
+
+    const auto downloadProvider = APPLICATION->settings()->get("CurseForgeDownloadBrowser").toString() == "External"
+                                      ? CurseForgeDownloadPageService::Provider::External
+                                      : CurseForgeDownloadPageService::Provider::Embedded;
+    m_curseForgeDownloadPages = new CurseForgeDownloadPageService(downloadProvider, this);
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::failed, this, [this](const QString& reason) {
+        qWarning() << "[Blocked Mods Dialog] CurseForge download provider failed:" << reason;
+        if (m_headless) {
+            m_headlessError = reason;
+            reject();
+            return;
+        }
+        ui->curseForgeDownloadProgressBar->hide();
+        ui->labelModsFound->setText(tr("The CurseForge download provider failed. Missing pages were opened in your system browser."));
+        openAllInSystemBrowser(true);
+    });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::downloadStarted, this,
+            [this](const QString& fileName, int fileIndex, int fileCount) {
+                ui->curseForgeDownloadProgressBar->show();
+                ui->curseForgeDownloadProgressBar->setRange(0, fileCount);
+                ui->curseForgeDownloadProgressBar->setValue(fileIndex - 1);
+                ui->curseForgeDownloadProgressBar->setFormat(tr("Downloading %1 (%2 of %3)").arg(fileName).arg(fileIndex).arg(fileCount));
+            });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::downloadProgress, this,
+            [this](const QString& fileName, int fileIndex, int fileCount, qint64 bytesReceived, qint64 bytesPerSecond) {
+                ui->curseForgeDownloadProgressBar->setFormat(tr("Downloading %1 (%2 of %3) - %4 - %5/s")
+                                                                 .arg(fileName)
+                                                                 .arg(fileIndex)
+                                                                 .arg(fileCount)
+                                                                 .arg(StringUtils::humanReadableFileSize(bytesReceived))
+                                                                 .arg(StringUtils::humanReadableFileSize(bytesPerSecond)));
+            });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::downloadFailed, this,
+            [this](const QString& fileName, int fileIndex, int fileCount) {
+                ui->curseForgeDownloadProgressBar->setFormat(
+                    tr("Download stalled: %1 (%2 of %3) - retry in the browser").arg(fileName).arg(fileIndex).arg(fileCount));
+            });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::fileReady, this,
+            [this](const QString&, int, int) { scanPath(m_curseForgeDownloadPages->downloadDirectory(), true); });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::retrying, this,
+            [this](const QString& fileName, int fileIndex, int fileCount) {
+                ui->curseForgeDownloadProgressBar->setFormat(tr("Restarting %1 (%2 of %3)...").arg(fileName).arg(fileIndex).arg(fileCount));
+            });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::downloadFinished, this,
+            [this](const QString& fileName, int fileIndex, int fileCount) {
+                ui->curseForgeDownloadProgressBar->setValue(fileIndex);
+                ui->curseForgeDownloadProgressBar->setFormat(tr("Downloaded %1 (%2 of %3)").arg(fileName).arg(fileIndex).arg(fileCount));
+            });
+    connect(m_curseForgeDownloadPages, &CurseForgeDownloadPageService::completed, this, [this] {
+        ui->curseForgeDownloadProgressBar->setValue(ui->curseForgeDownloadProgressBar->maximum());
+        ui->curseForgeDownloadProgressBar->setFormat(tr("Downloads complete - verifying files..."));
+    });
 
     qDebug() << "[Blocked Mods Dialog] Mods List:" << mods;
 
@@ -83,6 +138,32 @@ BlockedModsDialog::BlockedModsDialog(QWidget* parent, const QString& title, cons
 BlockedModsDialog::~BlockedModsDialog()
 {
     delete ui;
+}
+
+bool BlockedModsDialog::execHeadless(QString* error)
+{
+    m_headless = true;
+    bool supportsHeadless = false;
+    QString probeError;
+    const auto configuredPath = APPLICATION->settings()->get("CurseForgeExternalToolPath").toString();
+    if (APPLICATION->settings()->get("CurseForgeDownloadBrowser").toString() != "External" ||
+        !CurseForgeDownloadPageService::probeExternalTool(configuredPath, &probeError, &supportsHeadless) || !supportsHeadless) {
+        m_headlessError = probeError.isEmpty() ? tr("A headless-capable CurseForge external tool is required for restricted files.")
+                                               : probeError;
+        if (error)
+            *error = m_headlessError;
+        return false;
+    }
+
+    QEventLoop loop;
+    connect(this, &QDialog::accepted, &loop, &QEventLoop::quit);
+    connect(this, &QDialog::rejected, &loop, &QEventLoop::quit);
+    openAll(true);
+    if (!allModsMatched() && m_headlessError.isEmpty())
+        loop.exec();
+    if (error)
+        *error = m_headlessError;
+    return allModsMatched();
 }
 
 void BlockedModsDialog::dragEnterEvent(QDragEnterEvent* e)
@@ -125,10 +206,55 @@ void BlockedModsDialog::done(int r)
 
 void BlockedModsDialog::openAll(bool missingOnly)
 {
+    const auto configuredProvider = APPLICATION->settings()->get("CurseForgeDownloadBrowser").toString();
+    const bool useDownloadProvider = configuredProvider == "Embedded" || configuredProvider == "External";
+    QVector<CurseForgeDownloadPage> curseForgePages;
+    bool hasUnsupportedPages = false;
+
     for (auto& mod : m_mods) {
-        if (!missingOnly || !mod.matched) {
-            QDesktopServices::openUrl(mod.websiteUrl);
+        if (missingOnly && mod.matched)
+            continue;
+        if (CurseForgeDownloadPageService::isSupportedUrl(mod.websiteUrl))
+            curseForgePages.append({ mod.websiteUrl, mod.name, m_hashType, mod.hash });
+        else
+            hasUnsupportedPages = true;
+    }
+
+    if (!useDownloadProvider || curseForgePages.isEmpty()) {
+        openAllInSystemBrowser(missingOnly);
+        return;
+    }
+
+    watchPath(m_curseForgeDownloadPages->downloadDirectory());
+    ui->curseForgeDownloadProgressBar->setRange(0, curseForgePages.size());
+    ui->curseForgeDownloadProgressBar->setValue(0);
+    ui->curseForgeDownloadProgressBar->setFormat(tr("Waiting for CurseForge download..."));
+    ui->curseForgeDownloadProgressBar->show();
+    if (!m_curseForgeDownloadPages->open(curseForgePages, m_headless ? "cli" : "gui")) {
+        ui->curseForgeDownloadProgressBar->hide();
+        qWarning() << "[Blocked Mods Dialog] Could not start CurseForge download provider:" << m_curseForgeDownloadPages->errorString();
+        if (m_headless) {
+            m_headlessError = m_curseForgeDownloadPages->errorString();
+            reject();
+        } else {
+            openAllInSystemBrowser(missingOnly);
         }
+        return;
+    }
+
+    if (hasUnsupportedPages) {
+        for (const auto& mod : m_mods) {
+            if ((!missingOnly || !mod.matched) && !CurseForgeDownloadPageService::isSupportedUrl(mod.websiteUrl))
+                QDesktopServices::openUrl(mod.websiteUrl);
+        }
+    }
+}
+
+void BlockedModsDialog::openAllInSystemBrowser(bool missingOnly)
+{
+    for (const auto& mod : m_mods) {
+        if (!missingOnly || !mod.matched)
+            QDesktopServices::openUrl(mod.websiteUrl);
     }
 }
 
@@ -171,9 +297,12 @@ void BlockedModsDialog::update()
     ui->textBrowserWatched->setText(watching);
 
     if (allModsMatched()) {
+        ui->curseForgeDownloadProgressBar->hide();
         ui->labelModsFound->setText("<span style=\"color:green\">✔</span>" + tr("All mods found"));
         ui->openMissingButton->setDisabled(true);
         ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("OK"));
+        if (m_headless)
+            accept();
     } else {
         ui->labelModsFound->setText(tr("Please download the missing mods."));
         ui->openMissingButton->setDisabled(false);
@@ -304,6 +433,12 @@ void BlockedModsDialog::checkMatchHash(QString hash, QString path)
 
             qDebug() << "[Blocked Mods Dialog] Hash match found:" << mod.name << hash << "| From path:" << path;
 
+            const auto preservedPath = m_curseForgeDownloadPages->acceptDownloadedFile(path, hash);
+            if (!preservedPath.isEmpty()) {
+                mod.localPath = preservedPath;
+                mod.move = false;
+            }
+
             break;
         }
     }
@@ -379,7 +514,7 @@ bool BlockedModsDialog::checkValidPath(QString path)
 
 bool BlockedModsDialog::allModsMatched()
 {
-    return std::all_of(m_mods.begin(), m_mods.end(), [](auto const& mod) { return mod.matched; });
+    return std::all_of(m_mods.begin(), m_mods.end(), [](const auto& mod) { return mod.matched; });
 }
 
 /// @brief ensure matched file paths still exist
@@ -434,15 +569,4 @@ void BlockedModsDialog::hashTaskFinished()
         qDebug() << "[Blocked Mods Dialog] task finished with a rehash pending, rerunning";
         runHashTask();
     }
-}
-
-/// qDebug print support for the BlockedMod struct
-QDebug operator<<(QDebug debug, const BlockedMod& m)
-{
-    QDebugStateSaver saver(debug);
-
-    debug.nospace() << "{ name: " << m.name << ", websiteUrl: " << m.websiteUrl << ", hash: " << m.hash << ", matched: " << m.matched
-                    << ", localPath: " << m.localPath << "}";
-
-    return debug;
 }

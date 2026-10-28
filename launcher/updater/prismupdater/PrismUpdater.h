@@ -107,7 +107,11 @@ class PrismUpdaterApp : public QApplication {
     QString m_prismExecutable;
     QUrl m_prismRepoUrl;
     Version m_userSelectedVersion;
-    bool m_checkOnly;
+    bool m_headless = false;
+    bool m_jsonReleases = false;
+    qint64 m_waitPid = 0;
+    QString m_assetName;
+    bool m_checkOnly = false;
     bool m_forceUpdate;
     bool m_printOnly;
     bool m_selectUI;
@@ -127,7 +131,7 @@ class PrismUpdaterApp : public QApplication {
     GitHubRelease m_install_release;
 
     Status m_status = Status::Starting;
-    std::unique_ptr<QNetworkAccessManager> m_network;
+    shared_qobject_ptr<QNetworkAccessManager> m_network;
     QString m_current_url;
     Task::Ptr m_current_task;
     QList<GitHubRelease> m_releases;

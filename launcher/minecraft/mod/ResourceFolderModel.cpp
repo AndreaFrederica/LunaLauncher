@@ -57,6 +57,7 @@ bool ResourceFolderModel::startWatching(const QStringList& paths)
 {
     // Remove orphaned metadata next time
     m_first_folder_load = true;
+    m_loaded = false;
 
     if (m_is_watching)
         return false;
@@ -138,9 +139,10 @@ bool ResourceFolderModel::installResource(QString original_path)
             QFileInfo new_path_file_info(new_path);
             resource.setFile(new_path_file_info);
 
-            if (!m_is_watching)
-                return update();
-
+            if (!m_is_watching) {
+                // A queued refresh does not undo the successful filesystem install.
+                update();
+            }
             return true;
         }
         case ResourceType::FOLDER: {
@@ -157,9 +159,10 @@ bool ResourceFolderModel::installResource(QString original_path)
             QFileInfo newpathInfo(new_path);
             resource.setFile(newpathInfo);
 
-            if (!m_is_watching)
-                return update();
-
+            if (!m_is_watching) {
+                // A queued refresh does not undo the successful filesystem install.
+                update();
+            }
             return true;
         }
         default:
@@ -406,6 +409,7 @@ void ResourceFolderModel::onUpdateSucceeded()
     QSet<QString> new_set(new_list.begin(), new_list.end());
 
     applyUpdates(current_set, new_set, new_resources);
+    m_loaded = true;
 }
 
 void ResourceFolderModel::onParseSucceeded(int ticket, QString resource_id)

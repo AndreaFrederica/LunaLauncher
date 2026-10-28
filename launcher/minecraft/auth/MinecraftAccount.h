@@ -112,7 +112,7 @@ class MinecraftAccount : public QObject, public Usable {
     QJsonObject saveToJson() const;
 
    public: /* manipulation */
-    shared_qobject_ptr<AuthFlow> login(bool useDeviceCode = false);
+    shared_qobject_ptr<AuthFlow> login(bool useDeviceCode = false, AuthFlow::ProfileSelector selector = {});
 
     shared_qobject_ptr<AuthFlow> refresh();
 
@@ -162,6 +162,9 @@ class MinecraftAccount : public QObject, public Usable {
             } break;
             case AccountType::Yggdrasil: {
                 return "yggdrasil";
+            } break;
+            case AccountType::UnifiedPass: {
+                return "unified-pass";
             } break;
             default: {
                 return "unknown";

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Luna CurseForge WebView",
+  "version": "0.1.0",
+  "identifier": "org.lunalauncher.curseforge-webview",
+  "build": {
+    "frontendDist": "assets"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["../../program_info/lunalauncher.ico"]
+  }
+}

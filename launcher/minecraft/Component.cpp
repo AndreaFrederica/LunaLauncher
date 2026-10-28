@@ -37,6 +37,7 @@
 #include <meta/Index.h>
 #include <meta/VersionList.h>
 
+
 #include <QSaveFile>
 
 #include "Application.h"
@@ -50,10 +51,18 @@
 #include <assert.h>
 
 const QMap<QString, ModloaderMapEntry> Component::KNOWN_MODLOADERS = {
-    { "net.neoforged", { ModPlatform::NeoForge, { "net.minecraftforge", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
-    { "net.minecraftforge", { ModPlatform::Forge, { "net.neoforged", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
-    { "net.fabricmc.fabric-loader", { ModPlatform::Fabric, { "net.minecraftforge", "net.neoforged", "org.quiltmc.quilt-loader" } } },
-    { "org.quiltmc.quilt-loader", { ModPlatform::Quilt, { "net.minecraftforge", "net.neoforged", "net.fabricmc.fabric-loader" } } },
+    { "net.neoforged",
+      { ModPlatform::NeoForge, { "net.minecraftforge", "com.cleanroommc.cleanroom", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
+    { "net.minecraftforge",
+      { ModPlatform::Forge, { "net.neoforged", "com.cleanroommc.cleanroom", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
+    { "com.cleanroommc.cleanroom",
+      { ModPlatform::Cleanroom, { "net.minecraftforge", "net.neoforged", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
+    { "net.fabricmc.fabric-loader",
+      { ModPlatform::Fabric, { "net.minecraftforge", "net.neoforged", "com.cleanroommc.cleanroom", "org.quiltmc.quilt-loader" } } },
+    { "net.legacyfabric",
+      { ModPlatform::LegacyFabric, { "net.neoforged", "net.minecraftforge", "com.cleanroommc.cleanroom", "net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader" } } },
+    { "org.quiltmc.quilt-loader",
+      { ModPlatform::Quilt, { "net.minecraftforge", "net.neoforged", "com.cleanroommc.cleanroom", "net.fabricmc.fabric-loader" } } },
     { "com.mumfrey.liteloader", { ModPlatform::LiteLoader, {} } }
 };
 
@@ -108,6 +117,8 @@ std::shared_ptr<class VersionFile> Component::getVersionFile() const
 std::shared_ptr<class Meta::VersionList> Component::getVersionList() const
 {
     // FIXME: what if the metadata index isn't loaded yet?
+    // UIDs handled by metadata providers (e.g. Cleanroom) are pre-registered
+    // at startup via registerBuiltinProviders(), so hasUid() returns true.
     if (APPLICATION->metadataIndex()->hasUid(m_uid)) {
         return APPLICATION->metadataIndex()->get(m_uid);
     }

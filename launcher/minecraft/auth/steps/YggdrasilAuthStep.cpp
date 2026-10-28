@@ -117,10 +117,6 @@ void YggdrasilAuthStep::perform()
             requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
 
             qDebug() << "Yggdrasil authenticate request to:" << url.toString();
-            qDebug() << "Username:" << username;
-            qDebug() << "Password length:" << password.length();
-            qDebug() << "ClientToken:" << clientToken;
-            qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             break;
         }
         case RequestType::Refresh: {
@@ -146,7 +142,6 @@ void YggdrasilAuthStep::perform()
                 }
 
                 qDebug() << "OAuth refresh request to:" << url.toString();
-                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             } else if (m_data->yggdrasilConfig.tokenType == YggdrasilTokenType::OAuth && !hasRefreshToken) {
                 // OAuth without refresh_token (like LittleSkin) - use standard authenticate endpoint with password
                 QString password = m_data->yggdrasilToken.extra["credentials"].toString();
@@ -177,7 +172,6 @@ void YggdrasilAuthStep::perform()
 
                 requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
                 qDebug() << "OAuth re-authentication request to:" << url.toString();
-                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             } else {
                 // Standard Yggdrasil token refresh
                 QString endpoint = m_data->yggdrasilConfig.refreshEndpoint.isEmpty()
@@ -190,12 +184,13 @@ void YggdrasilAuthStep::perform()
                 if (!clientToken.isEmpty()) {
                     reqObj["clientToken"] = clientToken;
                 }
+                const auto selected = m_data->yggdrasilToken.extra.value("pendingSelectedProfile").toJsonObject();
+                if (!selected.isEmpty()) reqObj["selectedProfile"] = selected;
                 // Note: requestUser is NOT part of the standard Yggdrasil refresh endpoint
                 // It's only used in authenticate endpoint
 
                 requestBody = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
                 qDebug() << "Yggdrasil refresh request to:" << url.toString();
-                qDebug() << "Request body:" << QString::fromUtf8(requestBody);
             }
             qDebug() << "accessToken length:" << accessToken.length();
             qDebug() << "clientToken length:" << clientToken.length();
@@ -254,6 +249,15 @@ void YggdrasilAuthStep::perform()
 
 void YggdrasilAuthStep::onRequestDone()
 {
+    // A reachable provider rejecting credentials is an authentication failure.
+    // Treating HTTP 401/403 as an offline outage would incorrectly offer a stale
+    // cached session for a mistyped or revoked third-party account.
+    const auto status = m_request->replyStatusCode();
+    if ((status == 401 || status == 403) && m_requestType != RequestType::Validate) {
+        emit finished(AccountTaskState::STATE_FAILED_HARD,
+                      tr("Yggdrasil authentication was rejected by the provider (HTTP %1).").arg(status));
+        return;
+    }
     if (m_request->error() != QNetworkReply::NoError) {
         if (m_request->error() == QNetworkReply::ContentNotFoundError) {
             // Validate request returns 204 No Content on success
@@ -263,8 +267,8 @@ void YggdrasilAuthStep::onRequestDone()
             }
         }
         qWarning() << "Yggdrasil API request failed:" << m_request->errorString();
-        emit finished(AccountTaskState::STATE_FAILED_SOFT,
-                     tr("Yggdrasil authentication failed: %1").arg(m_request->errorString()));
+        emit finished(AccountTaskState::STATE_OFFLINE,
+                     tr("Yggdrasil authentication server is unavailable: %1").arg(m_request->errorString()));
         return;
     }
 
@@ -305,11 +309,6 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
 
     // Debug: log the authenticate response to see what fields are present
     qDebug() << "Authenticate response keys:" << obj.keys();
-    if (obj.contains("refresh_token")) {
-        qDebug() << "Has refresh_token:" << obj.value("refresh_token").toString();
-    }
-    QJsonDocument debugDoc(obj);
-    qDebug() << "Full authenticate response:" << QString::fromUtf8(debugDoc.toJson(QJsonDocument::Compact));
 
     // Check for error
     if (obj.contains("error")) {
@@ -370,6 +369,8 @@ void YggdrasilAuthStep::processAuthenticateResponse(QByteArray& data)
 
         emit finished(AccountTaskState::STATE_WORKING, tr("Authentication succeeded"));
     } else if (availableProfiles.size() > 0) {
+        m_data->minecraftProfile.id.clear();
+        m_data->minecraftProfile.name.clear();
         // Multiple profiles available, need to select one
         // Store available profiles for selection step
         QJsonArray profilesArray;

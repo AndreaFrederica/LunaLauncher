@@ -63,7 +63,15 @@ bool run(const QString& application, const QStringList& args, const QString& wor
 bool openUrl(const QUrl& url)
 {
     qDebug() << "Opening URL" << url.toString();
-    return QDesktopServices::openUrl(url);
+    if (QDesktopServices::openUrl(url)) return true;
+#ifdef Q_OS_WIN
+    // The CLI sidecar is often launched without a GUI event loop. In that
+    // environment QDesktopServices can return false even when a browser is
+    // registered; ShellExecute through url.dll is the portable fallback.
+    return QProcess::startDetached("rundll32.exe", { "url.dll,FileProtocolHandler", url.toString() });
+#else
+    return false;
+#endif
 }
 
 bool isFlatpak()

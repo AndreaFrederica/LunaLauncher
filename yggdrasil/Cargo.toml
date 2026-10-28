@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+rust-version = "1.88"
+
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = { version = "0.8", features = ["multipart"] }
+argon2 = "0.5"
+base64 = "0.22"
+clap = { version = "4", features = ["derive", "env"] }
+hex = "0.4"
+http = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+md-5 = "0.10"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks", "stream"] }
+rsa = { version = "0.9", features = ["sha1", "sha2"] }
+sea-orm = { version = "1.1", default-features = false, features = ["macros", "runtime-tokio-rustls", "sqlx-sqlite", "sqlx-postgres", "sqlx-mysql"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = { version = "1", features = ["uuid1"] }
+sha1 = { version = "0.10", features = ["oid"] }
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tower = { version = "0.5", features = ["util", "limit"] }
+tower-http = { version = "0.6", features = ["fs"] }
+url = { version = "2", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "v3", "v5", "serde"] }
+tempfile = "3"
+yggdrasil-core = { path = "crates/yggdrasil-core" }
+yggdrasil-storage = { path = "crates/yggdrasil-storage" }
+yggdrasil-service = { path = "crates/yggdrasil-service" }
+yggdrasil-upstream = { path = "crates/yggdrasil-upstream" }
+yggdrasil-federation = { path = "crates/yggdrasil-federation" }
+yggdrasil-cache = { path = "crates/yggdrasil-cache" }
+yggdrasil-protocol-http = { path = "crates/yggdrasil-protocol-http" }
+yggdrasil-management-api = { path = "crates/yggdrasil-management-api" }
+
+[profile.release]
+lto = "thin"
+strip = true

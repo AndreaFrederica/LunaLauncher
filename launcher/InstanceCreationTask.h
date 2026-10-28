@@ -11,6 +11,7 @@ class InstanceCreationTask : public InstanceTask {
     virtual ~InstanceCreationTask() = default;
 
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
    protected:
     void executeTask() final override;

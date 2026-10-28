@@ -29,6 +29,16 @@
 #include <optional>
 
 namespace MMCZip {
+static void configureReader(archive* archive, const QString& passphrase)
+{
+    archive_read_support_format_all(archive);
+    archive_read_support_filter_all(archive);
+    if (!passphrase.isEmpty()) {
+        const auto utf8 = passphrase.toUtf8();
+        archive_read_add_passphrase(archive, utf8.constData());
+    }
+}
+
 QStringList ArchiveReader::getFiles()
 {
     return m_fileNames;
@@ -59,6 +69,23 @@ QString ArchiveReader::File::filename()
     return decodeLibArchivePath(m_entry, archive_entry_pathname_utf8, archive_entry_pathname);
 }
 
+bool ArchiveReader::File::isDirectory()
+{
+    return archive_entry_filetype(m_entry) == AE_IFDIR;
+}
+
+QString ArchiveReader::File::linkTarget()
+{
+    if (archive_entry_hardlink(m_entry))
+        return decodeLibArchivePath(m_entry, archive_entry_hardlink_utf8, archive_entry_hardlink);
+    return decodeLibArchivePath(m_entry, archive_entry_symlink_utf8, archive_entry_symlink);
+}
+
+bool ArchiveReader::File::isHardLink()
+{
+    return archive_entry_hardlink(m_entry) != nullptr;
+}
+
 QByteArray ArchiveReader::File::readAll(int* outStatus)
 {
     QByteArray data;
@@ -79,6 +106,29 @@ QByteArray ArchiveReader::File::readAll(int* outStatus)
     return data;
 }
 
+bool ArchiveReader::File::copyTo(QIODevice& output, qint64 maximumBytes)
+{
+    const void* buffer = nullptr;
+    size_t size = 0;
+    la_int64_t offset = 0;
+
+    int status = ARCHIVE_OK;
+    qint64 written = 0;
+    while ((status = archive_read_data_block(m_archive.get(), &buffer, &size, &offset)) == ARCHIVE_OK) {
+        if (maximumBytes >= 0 && (size > static_cast<quint64>(maximumBytes - written))) return false;
+        if (output.write(static_cast<const char*>(buffer), static_cast<qint64>(size)) != static_cast<qint64>(size)) {
+            qWarning() << "Failed writing extracted archive member:" << output.errorString();
+            return false;
+        }
+        written += static_cast<qint64>(size);
+    }
+    if (status != ARCHIVE_EOF) {
+        qWarning() << "libarchive read error:" << archive_error_string(m_archive.get());
+        return false;
+    }
+    return true;
+}
+
 QDateTime ArchiveReader::File::dateTime()
 {
     auto mtime = archive_entry_mtime(m_entry);
@@ -96,8 +146,7 @@ auto ArchiveReader::goToFile(const QString& filename) -> std::unique_ptr<File>
 {
     auto f = std::make_unique<File>();
     auto* a = f->m_archive.get();
-    archive_read_support_format_all(a);
-    archive_read_support_filter_all(a);
+    configureReader(a, m_passphrase);
     auto fileName = m_archivePath.toStdWString();
     if (archive_read_open_filename_w(a, fileName.data(), m_blockSize) != ARCHIVE_OK) {
         qCritical() << "Failed to open archive file:" << m_archivePath << "-" << archive_error_string(a);
@@ -215,8 +264,7 @@ bool ArchiveReader::parse(const std::function<bool(File*, bool&)>& doStuff)
 {
     auto f = std::make_unique<File>();
     auto* a = f->m_archive.get();
-    archive_read_support_format_all(a);
-    archive_read_support_filter_all(a);
+    configureReader(a, m_passphrase);
     auto fileName = m_archivePath.toStdWString();
     if (archive_read_open_filename_w(a, fileName.data(), m_blockSize) != ARCHIVE_OK) {
         qCritical() << "Failed to open archive file:" << m_archivePath << "-" << f->error();
@@ -246,6 +294,14 @@ bool ArchiveReader::parse(const std::function<bool(File*)>& doStuff)
 bool ArchiveReader::File::isFile()
 {
     return (archive_entry_filetype(m_entry) & AE_IFMT) == AE_IFREG;
+}
+bool ArchiveReader::File::isEncrypted()
+{
+    return archive_entry_is_encrypted(m_entry) == 1;
+}
+qint64 ArchiveReader::File::size()
+{
+    return archive_entry_size(m_entry);
 }
 bool ArchiveReader::File::skip()
 {

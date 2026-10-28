@@ -38,6 +38,7 @@
 #include "MinecraftInstance.h"
 #include "Application.h"
 #include "BuildConfig.h"
+#include "Commandline.h"
 #include "Json.h"
 #include "QObjectPtr.h"
 #include "settings/Setting.h"
@@ -135,7 +136,8 @@
     for (const auto& gpu : gpus) {
         QString name = qvariant_cast<QString>(gpu[QStringLiteral("Name")]);
         bool defaultGpu = qvariant_cast<bool>(gpu[QStringLiteral("Default")]);
-        if (!defaultGpu) {
+        bool discrete = qvariant_cast<bool>(gpu.value(QStringLiteral("Discrete"), !defaultGpu));
+        if (discrete) {
             QStringList envList = qvariant_cast<QStringList>(gpu[QStringLiteral("Environment")]);
             for (int i = 0; i + 1 < envList.size(); i += 2) {
                 env.insert(envList[i], envList[i + 1]);
@@ -239,13 +241,27 @@ void MinecraftInstance::loadSpecificSettings()
         auto envSetting = m_settings->registerSetting("OverrideEnv", false);
         m_settings->registerOverride(global_settings->getSetting("Env"), envSetting);
 
-        m_settings->set("InstanceType", "OneSix");
+        // Asset cache policy
+        auto assetVerificationOverride = m_settings->registerSetting("OverrideAssetVerification", false);
+        m_settings->registerOverride(global_settings->getSetting("AssetVerificationMode"), assetVerificationOverride);
+        m_settings->registerOverride(global_settings->getSetting("AssetCacheExpiryDays"), assetVerificationOverride);
+        // Set only after a completed full integrity check. This is a
+        // per-instance trust marker for skipping repeated asset hashes.
+        m_settings->registerSetting("AssetIntegrityTrusted", false);
+
+        if (m_settings->get("InstanceType").toString() != "OneSix") {
+            m_settings->set("InstanceType", "OneSix");
+        }
     }
 
     // Join server on launch, this does not have a global override
     m_settings->registerSetting("JoinServerOnLaunch", false);
     m_settings->registerSetting("JoinServerOnLaunchAddress", "");
     m_settings->registerSetting("JoinWorldOnLaunch", "");
+    m_settings->registerSetting("ExtraGameArgs", "");
+    m_settings->registerSetting("UseLocalAssets", false);
+    m_settings->registerSetting("OverrideVersionType", false);
+    m_settings->registerSetting("VersionType", "");
 
     // Use account for instance, this does not have a global override
     m_settings->registerSetting("UseAccountForInstance", false);
@@ -374,6 +390,18 @@ QString MinecraftInstance::getLocalLibraryPath() const
 {
     QDir libraries_dir(FS::PathCombine(instanceRoot(), "libraries/"));
     return libraries_dir.absolutePath();
+}
+
+QString MinecraftInstance::assetsRoot() const
+{
+    if (usesLocalAssets())
+        return FS::PathCombine(instanceRoot(), "assets");
+    return QDir("assets/").absolutePath();
+}
+
+bool MinecraftInstance::usesLocalAssets() const
+{
+    return m_settings->get("UseLocalAssets").toBool();
 }
 
 bool MinecraftInstance::supportsDemo() const
@@ -579,7 +607,8 @@ QStringList MinecraftInstance::javaArguments(AuthSessionPtr session)
             args << QString("-javaagent:%1=%2").arg(authlibInjectorPath, session->yggdrasilApiUrl);
 
             if (!session->yggdrasilApiUrl.isEmpty()) {
-                session->yggdrasilPrefetched = AuthlibInjector::instance().getYggdrasilMeta(session->yggdrasilApiUrl);
+                if (session->yggdrasilPrefetched.isEmpty())
+                    session->yggdrasilPrefetched = AuthlibInjector::instance().getYggdrasilMeta(session->yggdrasilApiUrl);
                 if (!session->yggdrasilPrefetched.isEmpty()) {
                     args << QString("-Dauthlibinjector.yggdrasil.prefetched=%1").arg(session->yggdrasilPrefetched);
                 }
@@ -787,10 +816,11 @@ QProcessEnvironment MinecraftInstance::createLaunchEnvironment()
 QStringList MinecraftInstance::processMinecraftArgs(AuthSessionPtr session, MinecraftTarget::Ptr targetToJoin) const
 {
     auto profile = m_components->getProfile();
-    auto args = profile->getMinecraftArguments().split(' ', Qt::SkipEmptyParts);
+    auto args = Commandline::splitArgs(profile->getMinecraftArguments());
     for (auto tweaker : profile->getTweakers()) {
         args << "--tweakClass" << tweaker;
     }
+    args.append(Commandline::splitArgs(m_settings->get("ExtraGameArgs").toString()));
 
     if (targetToJoin) {
         if (!targetToJoin->address.isEmpty()) {
@@ -931,6 +961,14 @@ QStringList MinecraftInstance::verboseDescription(AuthSessionPtr session, Minecr
     constexpr auto emptyLine = "";
 
     QStringList out;
+
+    out << "Components:";
+    for (int i = 0; i < m_components->rowCount(); ++i) {
+        const auto& component = m_components->getComponent(i);
+        out << indent +
+                   QString("%1) %2 (%3) %4").arg(QString::number(i + 1), component->getName(), component->getID(), component->getVersion());
+    }
+    out << emptyLine;
 
     out << "Launcher: " + getLauncher();
     out << "Main class: " + getMainClass() << emptyLine;
@@ -1081,13 +1119,15 @@ QMap<QString, QString> MinecraftInstance::makeProfileVarMapping(std::shared_ptr<
 
     result["profile_name"] = name();
     result["version_name"] = profile->getMinecraftVersion();
-    result["version_type"] = profile->getMinecraftVersionType();
+    result["version_type"] = m_settings->get("OverrideVersionType").toBool()
+                                 ? m_settings->get("VersionType").toString()
+                                 : profile->getMinecraftVersionType();
 
     QString absRootDir = QDir(gameRoot()).absolutePath();
     result["game_directory"] = absRootDir;
-    QString absAssetsDir = QDir("assets/").absolutePath();
+    const auto absAssetsDir = assetsRoot();
     auto assets = profile->getMinecraftAssets();
-    result["game_assets"] = AssetsUtils::getAssetsDir(assets->id, resourcesDir()).absolutePath();
+    result["game_assets"] = AssetsUtils::getAssetsDir(assets->id, resourcesDir(), absAssetsDir).absolutePath();
 
     // 1.7.3+ assets tokens
     result["assets_root"] = absAssetsDir;
@@ -1194,7 +1234,7 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
 
     // load meta
     {
-        auto mode = session->launchMode != LaunchMode::Offline ? Net::Mode::Online : Net::Mode::Offline;
+        auto mode = session->launchMode != LaunchMode::Offline && !session->localYggdrasilFallback ? Net::Mode::Online : Net::Mode::Offline;
         process->appendStep(makeShared<TaskStepWrapper>(pptr, makeShared<MinecraftLoadAndCheck>(this, mode)));
     }
 
@@ -1220,10 +1260,18 @@ LaunchTask* MinecraftInstance::createLaunchTask(AuthSessionPtr session, Minecraf
         step->setWorkingDirectory(gameRoot());
         process->appendStep(step);
     }
+    if (const auto command = settings()->get("AppendPreLaunchCommand").toString();
+        settings()->get("EnableAppendPreLaunchCommand").toBool() && !command.isEmpty()) {
+        auto step = makeShared<PreLaunchCommand>(pptr, command, settings()->get("AppendPreLaunchCommandUseShell").toBool());
+        step->setWorkingDirectory(gameRoot());
+        process->appendStep(step);
+    }
 
     // if we aren't in offline mode
     if (session->launchMode != LaunchMode::Offline) {
         process->appendStep(makeShared<ClaimAccount>(pptr, session));
+    }
+    if (session->launchMode != LaunchMode::Offline && !session->localYggdrasilFallback) {
         for (auto t : createUpdateTask()) {
             process->appendStep(makeShared<TaskStepWrapper>(pptr, t));
         }
@@ -1366,7 +1414,6 @@ std::shared_ptr<CustomPlayerModelFolderModel> MinecraftInstance::customPlayerMod
 
 std::shared_ptr<SchematicsFolderModel> MinecraftInstance::schematicsList()
 {
-    static std::shared_ptr<SchematicsFolderModel> m_schematics_list;
     if (!m_schematics_list) {
         QDir dir(QDir(gameRoot()).filePath("schematics"));
         m_schematics_list.reset(new SchematicsFolderModel(dir, this));

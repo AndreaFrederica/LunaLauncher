@@ -17,10 +17,13 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLocale>
 #include <QPair>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -28,7 +31,10 @@
 #include <QDebug>
 
 #include "Application.h"
+#include "DesktopServices.h"
 #include "FileSystem.h"
+#include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/mod/tasks/LocalModParseTask.h"
 #include "translations/TranslationsModel.h"
 #include "ui/widgets/InfoFrame.h"
@@ -272,6 +278,11 @@ bool CustomUIPanelPage::initJsRuntime()
     JS_SetPropertyStr(m_jsContext, launcher, "setState", JS_NewCFunction(m_jsContext, jsSetState, "setState", 2));
     JS_SetPropertyStr(m_jsContext, launcher, "getState", JS_NewCFunction(m_jsContext, jsGetState, "getState", 1));
     JS_SetPropertyStr(m_jsContext, launcher, "saveState", JS_NewCFunction(m_jsContext, jsSaveState, "saveState", 0));
+    JS_SetPropertyStr(m_jsContext, launcher, "getInstanceSetting",
+                      JS_NewCFunction(m_jsContext, jsGetInstanceSetting, "getInstanceSetting", 1));
+    JS_SetPropertyStr(m_jsContext, launcher, "setInstanceSetting",
+                      JS_NewCFunction(m_jsContext, jsSetInstanceSetting, "setInstanceSetting", 2));
+    JS_SetPropertyStr(m_jsContext, launcher, "openFolder", JS_NewCFunction(m_jsContext, jsOpenFolder, "openFolder", 2));
 
     JSValue fs = JS_NewObject(m_jsContext);
     JS_SetPropertyStr(m_jsContext, fs, "exists", JS_NewCFunction(m_jsContext, jsFsExists, "exists", 1));
@@ -544,15 +555,18 @@ void CustomUIPanelPage::addControl(QWidget* parent, QVBoxLayout* layout, const Q
         if (!tooltip.isEmpty()) {
             check->setToolTip(tooltip);
         }
-        auto initial = m_state.contains(controlId) ? m_state.value(controlId) : control.value("default");
+        const auto sourceSetting = control.value("sourceSetting").toString();
+        auto initial = !sourceSetting.isEmpty() && m_instance->settings()->getSetting(sourceSetting)
+                           ? jsonFromVariant(m_instance->settings()->get(sourceSetting))
+                           : (m_state.contains(controlId) ? m_state.value(controlId) : control.value("default"));
         bool checked = valueToBool(initial, false);
         check->setChecked(checked);
-        if (!controlId.isEmpty()) {
+        if (!controlId.isEmpty() && sourceSetting.isEmpty()) {
             m_state.insert(controlId, checked);
         }
 
-        connect(check, &QCheckBox::toggled, this, [this, control, controlId](bool value) {
-            if (!controlId.isEmpty()) {
+        connect(check, &QCheckBox::toggled, this, [this, control, controlId, sourceSetting](bool value) {
+            if (!controlId.isEmpty() && sourceSetting.isEmpty()) {
                 m_state.insert(controlId, value);
             }
             onControlTriggered(control, QJsonValue(value));
@@ -598,7 +612,10 @@ void CustomUIPanelPage::addControl(QWidget* parent, QVBoxLayout* layout, const Q
             }
         }
 
-        auto initial = m_state.contains(controlId) ? m_state.value(controlId) : control.value("default");
+        const auto sourceSetting = control.value("sourceSetting").toString();
+        auto initial = !sourceSetting.isEmpty() && m_instance->settings()->getSetting(sourceSetting)
+                           ? jsonFromVariant(m_instance->settings()->get(sourceSetting))
+                           : (m_state.contains(controlId) ? m_state.value(controlId) : control.value("default"));
         auto initialStr = valueToString(initial);
         if (!initialStr.isEmpty()) {
             for (int i = 0; i < combo->count(); i++) {
@@ -609,13 +626,13 @@ void CustomUIPanelPage::addControl(QWidget* parent, QVBoxLayout* layout, const Q
             }
         }
 
-        if (!controlId.isEmpty()) {
+        if (!controlId.isEmpty() && sourceSetting.isEmpty()) {
             m_state.insert(controlId, jsonFromVariant(combo->currentData()));
         }
 
-        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, control, controlId](int) {
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, control, controlId, sourceSetting](int) {
             auto value = jsonFromVariant(combo->currentData());
-            if (!controlId.isEmpty()) {
+            if (!controlId.isEmpty() && sourceSetting.isEmpty()) {
                 m_state.insert(controlId, value);
             }
             onControlTriggered(control, value);
@@ -638,9 +655,105 @@ void CustomUIPanelPage::addControl(QWidget* parent, QVBoxLayout* layout, const Q
         return;
     }
 
+    if (type == "input" || type == "lineedit" || type == "textarea") {
+        auto* wrapper = new QWidget(parent);
+        auto* wrapperLayout = new QVBoxLayout(wrapper);
+        wrapperLayout->setContentsMargins(0, 0, 0, 0);
+        wrapperLayout->setSpacing(4);
+        auto* label = new QLabel(resolveLocalizedField(control, "label", controlId), wrapper);
+        wrapperLayout->addWidget(label);
+
+        const auto sourceSetting = control.value("sourceSetting").toString();
+        auto initial = !sourceSetting.isEmpty() && m_instance->settings()->getSetting(sourceSetting)
+                           ? m_instance->settings()->get(sourceSetting).toString()
+                           : valueToString(m_state.contains(controlId) ? m_state.value(controlId) : control.value("default"));
+        const auto tooltip = resolveLocalizedField(control, "tooltip");
+        if (type == "textarea") {
+            auto* edit = new QPlainTextEdit(initial, wrapper);
+            edit->setMinimumHeight(80);
+            edit->setToolTip(tooltip);
+            connect(edit, &QPlainTextEdit::textChanged, this, [this, edit, control, controlId, sourceSetting]() {
+                const QJsonValue value(edit->toPlainText());
+                if (!controlId.isEmpty() && sourceSetting.isEmpty())
+                    m_state.insert(controlId, value);
+                onControlTriggered(control, value);
+            });
+            wrapperLayout->addWidget(edit);
+        } else {
+            auto* edit = new QLineEdit(initial, wrapper);
+            edit->setToolTip(tooltip);
+            connect(edit, &QLineEdit::editingFinished, this, [this, edit, control, controlId, sourceSetting]() {
+                const QJsonValue value(edit->text());
+                if (!controlId.isEmpty() && sourceSetting.isEmpty())
+                    m_state.insert(controlId, value);
+                onControlTriggered(control, value);
+            });
+            wrapperLayout->addWidget(edit);
+        }
+        layout->addWidget(wrapper);
+        return;
+    }
+
+    if (type == "number" || type == "spinbox") {
+        auto* row = new QWidget(parent);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        auto* label = new QLabel(resolveLocalizedField(control, "label", controlId), row);
+        auto* spin = new QSpinBox(row);
+        spin->setRange(control.value("minimum").toInt(0), control.value("maximum").toInt(1024 * 1024));
+        const auto sourceSetting = control.value("sourceSetting").toString();
+        const auto initial = !sourceSetting.isEmpty() && m_instance->settings()->getSetting(sourceSetting)
+                                 ? m_instance->settings()->get(sourceSetting).toInt()
+                                 : control.value("default").toInt();
+        spin->setValue(initial);
+        spin->setToolTip(resolveLocalizedField(control, "tooltip"));
+        rowLayout->addWidget(label);
+        rowLayout->addWidget(spin, 1);
+        connect(spin, &QSpinBox::valueChanged, this, [this, control, controlId, sourceSetting](int current) {
+            const QJsonValue value(current);
+            if (!controlId.isEmpty() && sourceSetting.isEmpty())
+                m_state.insert(controlId, value);
+            onControlTriggered(control, value);
+        });
+        layout->addWidget(row);
+        return;
+    }
+
+    if (type == "accountselect" || type == "account-select") {
+        auto* row = new QWidget(parent);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        auto* label = new QLabel(resolveLocalizedField(control, "label", tr("Account")), row);
+        auto* combo = new QComboBox(row);
+        combo->addItem(tr("Ask when launching"), QString());
+
+        const auto selectedId = m_instance->settings()->get("InstanceAccountId").toString();
+        const auto accounts = APPLICATION->accounts();
+        for (int i = 0; i < accounts->count(); i++) {
+            const auto account = accounts->at(i);
+            combo->addItem(account->getFace(), account->profileName(), account->profileId());
+            if (account->profileId() == selectedId)
+                combo->setCurrentIndex(combo->count() - 1);
+        }
+
+        combo->setToolTip(resolveLocalizedField(control, "tooltip"));
+        rowLayout->addWidget(label);
+        rowLayout->addWidget(combo, 1);
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo](int) {
+            const auto profileId = combo->currentData().toString();
+            m_instance->settings()->set("UseAccountForInstance", !profileId.isEmpty());
+            m_instance->settings()->set("InstanceAccountId", profileId);
+        });
+        layout->addWidget(row);
+        return;
+    }
+
     if (type == "button") {
         auto text = resolveLocalizedField(control, "text", resolveLocalizedField(control, "label", tr("Run")));
         auto* button = new QPushButton(text, parent);
+        const auto iconName = control.value("icon").toString();
+        if (!iconName.isEmpty())
+            button->setIcon(QIcon::fromTheme(iconName));
         auto tooltip = resolveLocalizedField(control, "tooltip");
         if (!tooltip.isEmpty()) {
             button->setToolTip(tooltip);
@@ -886,6 +999,20 @@ bool CustomUIPanelPage::executeActionObject(const QJsonObject& action, const QSt
 
     if (name == "saveState") {
         return saveState();
+    }
+
+    if (name == "setInstanceSetting") {
+        const auto setting = action.value("setting").toString();
+        if (setting.isEmpty() || !m_instance->settings()->getSetting(setting))
+            return false;
+        const auto settingValue = action.contains("value") ? action.value("value") : value;
+        return m_instance->settings()->set(setting, settingValue.toVariant());
+    }
+
+    if (name == "openFolder") {
+        const auto path = action.value("path").toString();
+        const auto create = action.value("create").toBool(false);
+        return openInstanceFolder(path, create);
     }
 
     if (name == "reloadTabs" || name == "refreshTabs") {
@@ -1209,6 +1336,31 @@ bool CustomUIPanelPage::resolveFsPath(const QString& userPath, QString& absolute
     return true;
 }
 
+bool CustomUIPanelPage::openInstanceFolder(const QString& userPath, bool create)
+{
+    QString resolved;
+    if (!resolveFsPath(userPath, resolved))
+        return false;
+
+    const auto rootCanonical = QFileInfo(m_instance->instanceRoot()).canonicalFilePath();
+    const auto ancestor = FS::nearestExistentAncestor(resolved);
+    const auto ancestorCanonical = ancestor.isEmpty() ? QString() : QFileInfo(ancestor).canonicalFilePath();
+    if (rootCanonical.isEmpty() || ancestorCanonical.isEmpty() || !isPathInRoot(ancestorCanonical, rootCanonical))
+        return false;
+
+    QFileInfo target(resolved);
+    if (!target.exists()) {
+        if (!create || !FS::ensureFolderPathExists(resolved))
+            return false;
+        target.refresh();
+    }
+
+    const auto targetCanonical = target.canonicalFilePath();
+    if (!target.isDir() || targetCanonical.isEmpty() || !isPathInRoot(targetCanonical, rootCanonical))
+        return false;
+    return DesktopServices::openPath(targetCanonical);
+}
+
 bool CustomUIPanelPage::setModEnabledByName(const QString& modName, bool enabled)
 {
     if (modName.isEmpty())
@@ -1509,6 +1661,58 @@ JSValue CustomUIPanelPage::jsSaveState(JSContext* ctx, JSValueConst thisVal, int
     if (!self)
         return JS_NewBool(ctx, false);
     return JS_NewBool(ctx, self->saveState());
+}
+
+JSValue CustomUIPanelPage::jsGetInstanceSetting(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv)
+{
+    Q_UNUSED(thisVal);
+    auto* self = static_cast<CustomUIPanelPage*>(JS_GetContextOpaque(ctx));
+    if (!self || argc < 1)
+        return JS_UNDEFINED;
+    const char* raw = JS_ToCString(ctx, argv[0]);
+    if (!raw)
+        return JS_UNDEFINED;
+    const auto key = QString::fromUtf8(raw);
+    JS_FreeCString(ctx, raw);
+    if (!self->m_instance->settings()->getSetting(key))
+        return JS_UNDEFINED;
+    return self->jsonValueToJs(jsonFromVariant(self->m_instance->settings()->get(key)));
+}
+
+JSValue CustomUIPanelPage::jsSetInstanceSetting(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv)
+{
+    Q_UNUSED(thisVal);
+    auto* self = static_cast<CustomUIPanelPage*>(JS_GetContextOpaque(ctx));
+    if (!self || argc < 2)
+        return JS_NewBool(ctx, false);
+    const char* raw = JS_ToCString(ctx, argv[0]);
+    if (!raw)
+        return JS_NewBool(ctx, false);
+    const auto key = QString::fromUtf8(raw);
+    JS_FreeCString(ctx, raw);
+    if (!self->m_instance->settings()->getSetting(key))
+        return JS_NewBool(ctx, false);
+    JSValue copy = JS_DupValue(ctx, argv[1]);
+    const auto value = self->jsValueToJson(copy);
+    JS_FreeValue(ctx, copy);
+    return JS_NewBool(ctx, self->m_instance->settings()->set(key, value.toVariant()));
+}
+
+JSValue CustomUIPanelPage::jsOpenFolder(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv)
+{
+    Q_UNUSED(thisVal);
+    auto* self = static_cast<CustomUIPanelPage*>(JS_GetContextOpaque(ctx));
+    if (!self || argc < 1)
+        return JS_NewBool(ctx, false);
+
+    const char* rawPath = JS_ToCString(ctx, argv[0]);
+    if (!rawPath)
+        return JS_NewBool(ctx, false);
+    const auto path = QString::fromUtf8(rawPath);
+    JS_FreeCString(ctx, rawPath);
+
+    const bool create = argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1]) && JS_ToBool(ctx, argv[1]) > 0;
+    return JS_NewBool(ctx, self->openInstanceFolder(path, create));
 }
 
 JSValue CustomUIPanelPage::jsFsExists(JSContext* ctx, JSValueConst thisVal, int argc, JSValueConst* argv)

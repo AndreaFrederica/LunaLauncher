@@ -783,6 +783,96 @@ It is most likely you will need to change the path - please refer to the mod's w
                </widget>
               </item>
              </layout>
+           </widget>
+          </item>
+           <item>
+            <widget class="QGroupBox" name="assetVerificationGroupBox">
+             <property name="title">
+              <string>Asset cache policy override</string>
+             </property>
+             <property name="checkable">
+              <bool>false</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_assetVerif">
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_assetMode">
+                <item>
+                 <widget class="QLabel" name="assetModeLabelInst">
+                  <property name="text">
+                   <string>Cache policy:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="assetVerificationModeComboBox">
+                  <property name="toolTip">
+                   <string>Select the asset verification policy for this instance.</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_assetMode">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_assetExpiry">
+                <item>
+                 <widget class="QLabel" name="assetExpiryLabelInst">
+                  <property name="text">
+                   <string>Cache lifetime (days):</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="assetExpiryDaysSpinBox">
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>365</number>
+                  </property>
+                  <property name="value">
+                   <number>7</number>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_assetExpiry">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QPushButton" name="verifyAssetsButton">
+                <property name="text">
+                 <string>Verify asset integrity now</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </widget>
            </item>
            <item>
@@ -858,32 +948,71 @@ It is most likely you will need to change the path - please refer to the mod's w
   <tabstop>openGlobalSettingsButton</tabstop>
   <tabstop>settingsTabs</tabstop>
   <tabstop>scrollArea</tabstop>
+
+  <!-- game window settings -->
+  <tabstop>windowSizeGroupBox</tabstop>
   <tabstop>maximizedCheckBox</tabstop>
-  <tabstop>windowHeightSpinBox</tabstop>
   <tabstop>windowWidthSpinBox</tabstop>
+  <tabstop>windowHeightSpinBox</tabstop>
   <tabstop>closeAfterLaunchCheck</tabstop>
   <tabstop>quitAfterGameStopCheck</tabstop>
+
+  <!-- console settings -->
+  <tabstop>consoleSettingsBox</tabstop>
   <tabstop>showConsoleCheck</tabstop>
   <tabstop>showConsoleErrorCheck</tabstop>
   <tabstop>autoCloseConsoleCheck</tabstop>
+
+  <!-- global data packs -->
+  <tabstop>globalDataPacksGroupBox</tabstop>
+  <tabstop>dataPacksPathEdit</tabstop>
+  <tabstop>dataPacksPathBrowse</tabstop>
+
+  <!-- game time -->-->
+  <tabstop>gameTimeGroupBox</tabstop>
   <tabstop>showGameTime</tabstop>
   <tabstop>recordGameTime</tabstop>
   <tabstop>showGlobalGameTime</tabstop>
   <tabstop>showGameTimeWithoutDays</tabstop>
+
+  <!-- default account -->
   <tabstop>instanceAccountGroupBox</tabstop>
   <tabstop>instanceAccountSelector</tabstop>
+
+  <!-- auto join -->
   <tabstop>serverJoinGroupBox</tabstop>
   <tabstop>serverJoinAddressButton</tabstop>
   <tabstop>serverJoinAddress</tabstop>
   <tabstop>worldJoinButton</tabstop>
   <tabstop>worldsCb</tabstop>
+
+  <!-- mod loaders-->
+  <tabstop>loaderGroup</tabstop>
+  <tabstop>neoForge</tabstop>
+  <tabstop>forge</tabstop>
+  <tabstop>fabric</tabstop>
+  <tabstop>quilt</tabstop>
+  <tabstop>liteLoader</tabstop>
+  <tabstop>babric</tabstop>
+  <tabstop>btaBabric</tabstop>
+  <tabstop>legacyFabric</tabstop>
+  <tabstop>ornithe</tabstop>
+  <tabstop>rift</tabstop>
+
   <tabstop>javaScrollArea</tabstop>
   <tabstop>scrollArea_2</tabstop>
+
+  <!-- legacy tweaks -->
+  <tabstop>legacySettingsGroupBox</tabstop>
   <tabstop>onlineFixes</tabstop>
+
+  <!-- native library workarounds -->
+  <tabstop>nativeWorkaroundsGroupBox</tabstop>
   <tabstop>useNativeGLFWCheck</tabstop>
   <tabstop>lineEditGLFWPath</tabstop>
   <tabstop>useNativeOpenALCheck</tabstop>
   <tabstop>lineEditOpenALPath</tabstop>
+
   <tabstop>enableFeralGamemodeCheck</tabstop>
   <tabstop>enableMangoHud</tabstop>
   <tabstop>useDiscreteGpuCheck</tabstop>

@@ -117,6 +117,11 @@ class HttpMetaCache : public QObject {
 
     void addBase(QString base, QString base_root);
 
+    int entryCount() const;
+    int baseCount() const { return m_entries.size(); }
+    qint64 byteCount() const;
+    QString indexPath() const { return m_index_file; }
+
     // (re)start a timer that calls SaveNow later.
     void SaveEventually();
     void Load();

@@ -213,7 +213,7 @@ void YukariConnectPage::onInstallFromFileButtonClicked()
     }
 
     // Get target path
-    QString targetPath = YukariConnect::instance().getLocalPath();
+    QString targetPath = YukariConnect::instance().getManagedPath();
     QString targetDir = QFileInfo(targetPath).absolutePath();
 
     // Ensure target directory exists
@@ -242,7 +242,7 @@ void YukariConnectPage::onInstallFromFileButtonClicked()
 
 void YukariConnectPage::onDeleteButtonClicked()
 {
-    QString path = YukariConnect::instance().getLocalPath();
+    QString path = YukariConnect::instance().getManagedPath();
     QString metadataPath = YukariConnect::instance().getMetadataPath();
     QFileInfo fileInfo(path);
 
@@ -341,7 +341,7 @@ void YukariConnectPage::updateStatus()
             sizeStr = tr("%1 KB (%2 bytes)").arg(fileSizeKB).arg(fileInfo.size());
         }
         ui->label_size_value->setText(sizeStr);
-        ui->pushButton_delete->setEnabled(true);
+        ui->pushButton_delete->setEnabled(QFileInfo::exists(YukariConnect::instance().getManagedPath()));
     } else {
         ui->label_installed_value->setText(tr("No"));
         ui->label_version_value->setText(tr("-"));

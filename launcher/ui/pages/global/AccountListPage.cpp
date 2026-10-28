@@ -41,6 +41,7 @@
 #include <QItemSelectionModel>
 #include <QMenu>
 #include <QPushButton>
+#include <QTimer>
 
 #include <QDebug>
 
@@ -48,6 +49,7 @@
 #include "ui/dialogs/CustomMessageBox.h"
 #include "ui/dialogs/MSALoginDialog.h"
 #include "ui/dialogs/YggdrasilLoginDialog.h"
+#include "ui/dialogs/EnhancedOfflineDialog.h"
 #include "ui/dialogs/UnifiedPassLoginDialog.h"
 
 #include "Application.h"
@@ -73,6 +75,7 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     ui->listView->header()->setSectionResizeMode(AccountList::VListColumns::TypeColumn, QHeaderView::ResizeToContents);
     ui->listView->header()->setSectionResizeMode(AccountList::VListColumns::SourceColumn, QHeaderView::ResizeToContents);
     ui->listView->header()->setSectionResizeMode(AccountList::VListColumns::StatusColumn, QHeaderView::ResizeToContents);
+    ui->listView->header()->setSectionResizeMode(AccountList::VListColumns::CacheColumn, QHeaderView::ResizeToContents);
     ui->listView->setSelectionMode(QAbstractItemView::SingleSelection);
 
     // Expand the account column
@@ -90,6 +93,7 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     connect(m_accounts, &AccountList::defaultAccountChanged, this, &AccountListPage::listChanged);
 
     updateButtonStates();
+    QTimer::singleShot(0, this, [this] { m_accounts->refreshCacheStatuses(); });
 
     // Xbox authentication won't work without a client identifier, so disable the button if it is missing
     if (~APPLICATION->capabilities() & Application::SupportsMSA) {
@@ -277,6 +281,15 @@ void AccountListPage::on_actionAddYggdrasil_triggered()
     }
 }
 
+void AccountListPage::on_actionAddEnhancedOffline_triggered()
+{
+    auto account = createEnhancedOfflineAccount(this);
+    if (account) {
+        m_accounts->addAccount(account);
+        if (m_accounts->count() == 1) m_accounts->setDefaultAccount(account);
+    }
+}
+
 void AccountListPage::on_actionAddUnifiedPass_triggered()
 {
     auto account = UnifiedPassLoginDialog::newAccount(this);
@@ -361,7 +374,8 @@ void AccountListPage::updateButtonStates()
     }
     ui->actionMoveUp->setEnabled(accountCanMoveUp);
     ui->actionMoveDown->setEnabled(accountCanMoveDown);
-    ui->listView->resizeColumnToContents(3);
+    ui->listView->resizeColumnToContents(AccountList::VListColumns::StatusColumn);
+    ui->listView->resizeColumnToContents(AccountList::VListColumns::CacheColumn);
 }
 
 void AccountListPage::on_actionManageSkins_triggered()

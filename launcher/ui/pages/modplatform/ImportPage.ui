@@ -58,6 +58,19 @@
       </widget>
      </item>
      <item>
+      <widget class="QLabel" name="pclSupportLabel">
+       <property name="text">
+        <string>- Plain Craft Launcher (PCL) modpacks (experimental support; ZIP and mrpack)</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="label_2">
        <property name="text">
         <string>- Prism Launcher, PolyMC or MultiMC exported instances (ZIP)</string>

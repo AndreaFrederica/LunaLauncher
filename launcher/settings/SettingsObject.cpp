@@ -17,6 +17,7 @@
 #include <QDebug>
 #include "PassthroughSetting.h"
 #include "settings/OverrideSetting.h"
+#include "settings/INIFile.h"
 #include "settings/Setting.h"
 
 #include <QDir>
@@ -215,6 +216,28 @@ void SettingsObject::reset(const QString& id) const
 bool SettingsObject::contains(const QString& id)
 {
     return m_settings.contains(id);
+}
+
+int SettingsObject::importSettings(const INIFile& source)
+{
+    Lock lock(this);
+    int imported = 0;
+
+    for (const auto& setting : m_settings) {
+        for (const auto& key : setting->configKeys()) {
+            auto sourceValue = source.constFind(key);
+            if (sourceValue == source.constEnd()) {
+                continue;
+            }
+
+            if (set(setting->id(), sourceValue.value())) {
+                ++imported;
+            }
+            break;
+        }
+    }
+
+    return imported;
 }
 
 bool SettingsObject::reload()

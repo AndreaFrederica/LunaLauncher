@@ -1,0 +1,21 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+QPushButton, QComboBox, QLineEdit {
+    border: 1px solid palette(mid);
+    border-radius: 5px;
+    padding: 5px 9px;
+}
+QPushButton:hover, QComboBox:hover {
+    border-color: palette(highlight);
+}
+QPushButton:focus, QComboBox:focus, QLineEdit:focus {
+    border: 1px solid palette(highlight);
+}
+QTreeView, QListView, QScrollArea {
+    border: 1px solid palette(mid);
+    border-radius: 5px;
+}
+QToolTip {
+    color: palette(tool-tip-text);
+    background-color: palette(tool-tip-base);
+    padding: 4px;
+}

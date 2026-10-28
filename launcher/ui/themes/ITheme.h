@@ -58,6 +58,7 @@ class ITheme {
     virtual bool hasStyleSheet() = 0;
     virtual QString appStyleSheet() = 0;
     virtual QString qtTheme() = 0;
+    virtual QString widgetThemeFile() { return {}; }
     virtual QPalette colorScheme() = 0;
     virtual QColor fadeColor() = 0;
     virtual double fadeAmount() = 0;

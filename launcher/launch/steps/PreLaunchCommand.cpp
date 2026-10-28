@@ -36,6 +36,8 @@
 #include "PreLaunchCommand.h"
 #include <launch/LaunchTask.h>
 
+#include <utility>
+
 PreLaunchCommand::PreLaunchCommand(LaunchTask* parent) : LaunchStep(parent)
 {
     auto instance = m_parent->instance();
@@ -45,13 +47,30 @@ PreLaunchCommand::PreLaunchCommand(LaunchTask* parent) : LaunchStep(parent)
     connect(&m_process, &LoggedProcess::stateChanged, this, &PreLaunchCommand::on_state);
 }
 
+PreLaunchCommand::PreLaunchCommand(LaunchTask* parent, QString command, bool useNativeShell)
+    : LaunchStep(parent), m_command(std::move(command)), m_useNativeShell(useNativeShell)
+{
+    auto instance = m_parent->instance();
+    m_process.setProcessEnvironment(instance->createEnvironment());
+    connect(&m_process, &LoggedProcess::log, this, &PreLaunchCommand::logLines);
+    connect(&m_process, &LoggedProcess::stateChanged, this, &PreLaunchCommand::on_state);
+}
+
 void PreLaunchCommand::executeTask()
 {
     auto cmd = m_parent->substituteVariables(m_command);
     emit logLine(tr("Running Pre-Launch command: %1").arg(cmd), MessageLevel::Launcher);
-    auto args = QProcess::splitCommand(cmd);
-    const QString program = args.takeFirst();
-    m_process.start(program, args);
+    if (m_useNativeShell) {
+#ifdef Q_OS_WIN
+        m_process.start("cmd.exe", { "/d", "/s", "/c", cmd });
+#else
+        m_process.start("/bin/sh", { "-c", cmd });
+#endif
+    } else {
+        auto args = QProcess::splitCommand(cmd);
+        const QString program = args.takeFirst();
+        m_process.start(program, args);
+    }
 }
 
 void PreLaunchCommand::on_state(LoggedProcess::State state)

@@ -36,6 +36,8 @@
 #pragma once
 
 #include <QWidget>
+
+#include "Application.h"
 #include "BaseInstance.h"
 #include "ui/pages/BasePage.h"
 #include "ui/widgets/MinecraftSettingsWidget.h"
@@ -46,7 +48,7 @@ class InstanceSettingsPage : public MinecraftSettingsWidget, public BasePage {
    public:
     explicit InstanceSettingsPage(MinecraftInstance* instance, QWidget* parent = nullptr) : MinecraftSettingsWidget(instance, parent)
     {
-        connect(APPLICATION, &Application::globalSettingsAboutToOpen, this, &InstanceSettingsPage::saveSettings);
+        connect(APPLICATION, &Application::globalSettingsAboutToOpen, this, &InstanceSettingsPage::apply);
         connect(APPLICATION, &Application::globalSettingsApplied, this, &InstanceSettingsPage::loadSettings);
     }
     ~InstanceSettingsPage() override {}
@@ -55,6 +57,7 @@ class InstanceSettingsPage : public MinecraftSettingsWidget, public BasePage {
     QString id() const override { return "settings"; }
     bool apply() override
     {
+        SettingsObject::Lock lock(m_instance->settings());
         saveSettings();
         return true;
     }

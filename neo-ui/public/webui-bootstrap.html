@@ -1,0 +1,22 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!doctype html>
+<html lang="en-US"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Luna Launcher</title>
+<style>body{background:#0b0f17;color:#e2e8f0;font:16px system-ui;display:grid;place-content:center;height:100vh;margin:0}button{padding:12px;margin:8px;border-radius:8px;cursor:pointer}p{max-width:620px;overflow-wrap:anywhere;color:#94a3b8}</style></head>
+<body><h2>Luna Launcher</h2><p id="status" data-i18n="bootstrapReading">Reading Web UI…</p><div id="recovery" hidden><button id="retry" data-i18n="bootstrapRetry">Reconnect</button><button id="builtin" data-i18n="bootstrapBuiltin">Open built-in Neo UI</button><button id="manager" data-i18n="bootstrapManager">Web UI manager</button></div>
+<script src="webui-i18n.js"></script>
+<script>
+const invoke = (command, parameters) => window.__TAURI__.core.invoke(command, parameters);
+window.lunaWebUiApply(document);
+function connect() {
+document.getElementById('recovery').hidden = true;
+document.getElementById('status').textContent = window.lunaWebUiI18n.t('bootstrapConnecting');
+invoke('webui_initialize').catch(error => {
+  document.getElementById('status').textContent = window.lunaWebUiI18n.error(error);
+  document.getElementById('recovery').hidden = false;
+});
+}
+document.getElementById('retry').onclick = connect;
+connect();
+document.getElementById('builtin').onclick = () => invoke('webui_select', {id:'builtin'});
+document.getElementById('manager').onclick = () => invoke('webui_manager');
+</script></body></html>

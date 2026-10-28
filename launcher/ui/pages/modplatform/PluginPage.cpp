@@ -51,10 +51,11 @@ QMap<QString, QString> PluginPage::urlHandlers() const
 
 void PluginPage::addResourceToPage(ModPlatform::IndexedPack::Ptr pack,
                                    ModPlatform::IndexedVersion& version,
-                                   ResourceFolderModel* base_model)
+                                   ResourceFolderModel* base_model,
+                                   QString downloadReason)
 {
     bool is_indexed = !APPLICATION->settings()->get("ModMetadataDisabled").toBool();
-    m_model->addPack(pack, version, base_model, is_indexed);
+    m_model->addPack(pack, version, base_model, is_indexed, std::move(downloadReason));
 }
 
 }  // namespace ResourceDownload

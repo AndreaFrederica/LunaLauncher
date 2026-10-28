@@ -30,7 +30,7 @@ void ReconstructAssets::executeTask()
     auto profile = components->getProfile();
     auto assets = profile->getMinecraftAssets();
 
-    if (!AssetsUtils::reconstructAssets(assets->id, instance->resourcesDir())) {
+    if (!AssetsUtils::reconstructAssets(assets->id, instance->resourcesDir(), instance->assetsRoot())) {
         emit logLine("Failed to reconstruct Minecraft assets.", MessageLevel::Error);
     }
 

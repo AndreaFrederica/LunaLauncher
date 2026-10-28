@@ -1,0 +1,10 @@
+# Copy to config.local.toml. Bootstrap secrets through environment variables.
+listen = "127.0.0.1:25585"
+public_url = "http://127.0.0.1:25585"
+data_dir = "data"
+# database_url = "postgres://user:password@localhost/yggdrasil"
+# database_url = "mysql://user:password@localhost/yggdrasil"
+# static_dir = "frontend/dist"
+# Public self-registration is enabled by default. Set false for operator-only provisioning.
+registration_enabled = true
+# Upstreams, rules and cache routes are dynamic resources managed via /api/v1.

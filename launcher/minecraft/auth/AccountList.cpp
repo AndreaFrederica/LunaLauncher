@@ -34,6 +34,7 @@
  */
 
 #include "AccountList.h"
+#include "LocalYggdrasil.h"
 #include "AccountData.h"
 #include "tasks/Task.h"
 
@@ -156,6 +157,7 @@ void AccountList::removeAccount(QModelIndex index)
     int row = index.row();
     if (index.isValid() && row >= 0 && row < m_accounts.size()) {
         auto& account = m_accounts[row];
+        const auto snapshotId = account->accountType() == AccountType::MSA ? account->profileId() : QString();
         if (account == m_defaultAccount) {
             m_defaultAccount = nullptr;
             onDefaultAccountChanged();
@@ -166,6 +168,8 @@ void AccountList::removeAccount(QModelIndex index)
         m_accounts.removeAt(index.row());
         endRemoveRows();
         onListChanged();
+        if (!snapshotId.isEmpty())
+            LocalYggdrasil::instance().removeAccountSnapshot(snapshotId);
     }
 }
 
@@ -374,6 +378,16 @@ QVariant AccountList::data(const QModelIndex& index, int role) const
                 }
                 case StatusColumn:
                     return getAccountStatus(account->accountState());
+                case CacheColumn:
+                    switch (account->accountData()->cacheState) {
+                        case CacheState::Cached:
+                            return tr("Cached", "Account cache status");
+                        case CacheState::NotCached:
+                            return tr("Not cached", "Account cache status");
+                        case CacheState::Unknown:
+                        default:
+                            return tr("Checking…", "Account cache status");
+                    }
                 default:
                     return QVariant();
             }
@@ -404,6 +418,8 @@ QVariant AccountList::headerData(int section, [[maybe_unused]] Qt::Orientation o
                     return tr("Source");
                 case StatusColumn:
                     return tr("Status");
+                case CacheColumn:
+                    return tr("Cache");
                 default:
                     return QVariant();
             }
@@ -418,12 +434,26 @@ QVariant AccountList::headerData(int section, [[maybe_unused]] Qt::Orientation o
                     return tr("Source of the account (e.g., Microsoft, skin server name)");
                 case StatusColumn:
                     return tr("Current status of the account.");
+                case CacheColumn:
+                    return tr("Whether a local UUID/profile/texture snapshot is available for offline authentication.");
                 default:
                     return QVariant();
             }
 
         default:
             return QVariant();
+    }
+}
+
+void AccountList::refreshCacheStatuses()
+{
+    for (int i = 0; i < count(); ++i) {
+        auto account = at(i);
+        if (account->accountType() != AccountType::MSA && account->accountType() != AccountType::Yggdrasil)
+            account->accountData()->cacheState = CacheState::NotCached;
+        else
+            LocalYggdrasil::instance().refreshAccountSnapshotStatus(*account->accountData());
+        emit dataChanged(index(i, CacheColumn), index(i, CacheColumn));
     }
 }
 
@@ -514,6 +544,15 @@ bool AccountList::loadList()
     // Attempt to rename the old version.
     file.rename(newName);
     return false;
+}
+
+bool AccountList::reloadList()
+{
+    beginResetModel();
+    m_accounts.clear();
+    m_defaultAccount = nullptr;
+    endResetModel();
+    return loadList();
 }
 
 bool AccountList::loadV3(QJsonObject& root)
@@ -626,6 +665,19 @@ bool AccountList::anyAccountIsValid()
     return false;
 }
 
+bool AccountList::canAddOfflineAccount() const
+{
+#ifdef LAUNCHER_DISABLE_OWNERSHIP_CHECK
+    return true;
+#else
+    for (const auto& account : m_accounts) {
+        if (account->ownsMinecraft())
+            return true;
+    }
+    return false;
+#endif
+}
+
 bool AccountList::anyMSAAccountOwnsMinecraft()
 {
     for (auto account : m_accounts) {
@@ -685,9 +737,17 @@ void AccountList::tryNext()
     while (m_refreshQueue.length()) {
         auto accountId = m_refreshQueue.front();
         m_refreshQueue.pop_front();
+        bool found = false;
         for (int i = 0; i < count(); i++) {
             auto account = at(i);
             if (account->internalId() == accountId) {
+                found = true;
+                if (!account->shouldRefresh()) {
+                    // Account no longer needs refreshing, skip it.
+                    qDebug() << "RefreshSchedule: Skipping account" << account->profileName() << "with internal ID"
+                             << accountId << "(no longer needs refresh)";
+                    break;
+                }
                 m_currentTask = account->refresh();
                 if (m_currentTask) {
                     connect(m_currentTask.get(), &Task::succeeded, this, &AccountList::authSucceeded);
@@ -697,9 +757,12 @@ void AccountList::tryNext()
                              << accountId;
                     return;
                 }
+                break;
             }
         }
-        qDebug() << "RefreshSchedule: Account with internal ID" << accountId << "not found.";
+        if (!found) {
+            qDebug() << "RefreshSchedule: Account with internal ID" << accountId << "not found.";
+        }
     }
     // if we get here, no account needed refreshing. Schedule refresh in an hour.
     m_refreshTimer->start(1000 * 3600);

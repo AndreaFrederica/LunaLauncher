@@ -66,6 +66,27 @@ HttpMetaCache::~HttpMetaCache()
     SaveNow();
 }
 
+int HttpMetaCache::entryCount() const
+{
+    int count = 0;
+    for (const auto& group : m_entries)
+        for (const auto& entry : group.entry_list)
+            if (entry && !entry->m_stale) ++count;
+    return count;
+}
+
+qint64 HttpMetaCache::byteCount() const
+{
+    qint64 total = 0;
+    for (const auto& group : m_entries) {
+        for (const auto& entry : group.entry_list) {
+            if (!entry || entry->m_stale) continue;
+            total += QFileInfo(FS::PathCombine(group.base_path, entry->m_relativePath)).size();
+        }
+    }
+    return total;
+}
+
 auto HttpMetaCache::getEntry(QString base, QString resource_path) -> MetaEntryPtr
 {
     // no base. no base path. can't store
@@ -182,7 +203,7 @@ auto HttpMetaCache::evictAll() -> bool
         }
         map.entry_list.clear();
         // AND all return codes together so the result is true iff all runs of deletePath() are true
-        ret &= FS::deletePath(map.base_path);
+        ret &= FS::deleteContents(map.base_path);
     }
     return ret;
 }

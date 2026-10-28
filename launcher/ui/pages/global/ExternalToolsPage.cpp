@@ -44,6 +44,7 @@
 #include <FileSystem.h>
 #include <tools/MCEditTool.h>
 #include "Application.h"
+#include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "settings/SettingsObject.h"
 #include "tools/BaseProfiler.h"
 
@@ -70,6 +71,9 @@ void ExternalToolsPage::loadSettings()
     ui->jprofilerPathEdit->setText(s->get("JProfilerPath").toString());
     ui->jvisualvmPathEdit->setText(s->get("JVisualVMPath").toString());
     ui->mceditPathEdit->setText(s->get("MCEditPath").toString());
+    ui->curseForgeExternalToolPathEdit->setText(s->get("CurseForgeExternalToolPath").toString());
+    ui->curseForgeExternalToolEnabledCheckBox->setChecked(s->get("CurseForgeExternalToolEnabled").toBool());
+    on_curseForgeExternalToolEnabledCheckBox_toggled(ui->curseForgeExternalToolEnabledCheckBox->isChecked());
 
     // Editors
     ui->jsonEditorTextBox->setText(s->get("JsonEditor").toString());
@@ -81,6 +85,10 @@ void ExternalToolsPage::applySettings()
     s->set("JProfilerPath", ui->jprofilerPathEdit->text());
     s->set("JVisualVMPath", ui->jvisualvmPathEdit->text());
     s->set("MCEditPath", ui->mceditPathEdit->text());
+    s->set("CurseForgeExternalToolEnabled", ui->curseForgeExternalToolEnabledCheckBox->isChecked());
+    const auto configuredCurseForgeTool = ui->curseForgeExternalToolPathEdit->text().trimmed();
+    const auto resolvedCurseForgeTool = CurseForgeDownloadPageService::resolveExternalToolPath(configuredCurseForgeTool);
+    s->set("CurseForgeExternalToolPath", resolvedCurseForgeTool.isEmpty() ? configuredCurseForgeTool : resolvedCurseForgeTool);
 
     // Editors
     QString jsonEditor = ui->jsonEditorTextBox->text();
@@ -208,8 +216,51 @@ void ExternalToolsPage::on_jsonEditorBrowseBtn_clicked()
     }
 }
 
+void ExternalToolsPage::on_curseForgeExternalToolBrowseBtn_clicked()
+{
+    const auto rawFile =
+        QFileDialog::getOpenFileName(this, tr("CurseForge External Download Tool"), ui->curseForgeExternalToolPathEdit->text());
+    if (rawFile.isEmpty())
+        return;
+
+    const auto executable = CurseForgeDownloadPageService::resolveExternalToolPath(FS::NormalizePath(rawFile));
+    if (executable.isEmpty()) {
+        QMessageBox::warning(this, tr("Invalid"), tr("The selected file does not seem to be executable."));
+        return;
+    }
+    ui->curseForgeExternalToolPathEdit->setText(executable);
+}
+
+void ExternalToolsPage::on_curseForgeExternalToolCheckBtn_clicked()
+{
+    QString error;
+    bool supportsHeadless = false;
+    if (!CurseForgeDownloadPageService::probeExternalTool(ui->curseForgeExternalToolPathEdit->text(), &error, &supportsHeadless)) {
+        QMessageBox::critical(this, tr("Error"), tr("The CurseForge external download tool is not compatible:\n%1").arg(error));
+        return;
+    }
+
+    QMessageBox::information(this, tr("OK"),
+                             supportsHeadless ? tr("The tool supports the required protocol and headless operation.")
+                                              : tr("The tool supports the required protocol but did not declare headless operation."));
+}
+
+void ExternalToolsPage::on_curseForgeExternalToolEnabledCheckBox_toggled(bool enabled)
+{
+    ui->curseForgeExternalToolPathLabel->setEnabled(enabled);
+    ui->curseForgeExternalToolPathEdit->setEnabled(enabled);
+    ui->curseForgeExternalToolBrowseBtn->setEnabled(enabled);
+    ui->curseForgeExternalToolCheckBtn->setEnabled(enabled);
+}
+
 bool ExternalToolsPage::apply()
 {
+    if (ui->curseForgeExternalToolEnabledCheckBox->isChecked() &&
+        CurseForgeDownloadPageService::resolveExternalToolPath(ui->curseForgeExternalToolPathEdit->text()).isEmpty()) {
+        QMessageBox::warning(this, tr("Invalid CurseForge tool"),
+                             tr("Select an executable CurseForge external download tool or disable tool invocation."));
+        return false;
+    }
     applySettings();
     return true;
 }

@@ -124,6 +124,7 @@
 #include "ui/widgets/WideBar.h"
 
 #include "minecraft/PackProfile.h"
+#include "minecraft/update/AssetUpdateTask.h"
 #include "minecraft/VersionFile.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/mod/ModFolderModel.h"
@@ -622,6 +623,26 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         QAction* actionVoid = new QAction(m_selectedInstance->name(), this);
         actionVoid->setEnabled(false);
         actions.prepend(actionVoid);
+
+        auto* instance = m_selectedInstance;
+        QAction* actionEnhancedOffline = new QAction(tr("Launch Enhanced Offline"), this);
+        actionEnhancedOffline->setToolTip(
+            tr("Launch with the cached UUID, profile and textures through the local Yggdrasil service."));
+        actionEnhancedOffline->setEnabled(instance && instance->canLaunch() && !instance->traits().contains("server"));
+        connect(actionEnhancedOffline, &QAction::triggered, this, [instance] {
+            if (instance)
+                APPLICATION->launch(instance, LaunchMode::Normal, nullptr, nullptr, QString(), true);
+        });
+        const auto launchIndex = actions.indexOf(ui->actionLaunchInstance);
+        if (launchIndex >= 0)
+            actions.insert(launchIndex + 1, actionEnhancedOffline);
+
+        QAction* actionSep2 = new QAction("", this);
+        actionSep2->setSeparator(true);
+        QAction* actionVerifyAssets = new QAction(tr("Verify asset integrity..."), this);
+        connect(actionVerifyAssets, &QAction::triggered, this, &MainWindow::on_actionVerifyAssets_triggered);
+        actions.append(actionSep2);
+        actions.append(actionVerifyAssets);
     } else {
         auto group = view->groupNameAt(pos);
 
@@ -1013,6 +1034,9 @@ void MainWindow::processURLs(QList<QUrl> urls)
 {
     // NOTE: This loop only processes one dropped file!
     for (auto& url : urls) {
+        if (url.isEmpty() || url.toString().trimmed().isEmpty())
+            continue;
+
         qDebug() << "Processing" << url;
 
         // The isLocalFile() check below doesn't work as intended without an explicit scheme.
@@ -1119,6 +1143,11 @@ void MainWindow::processURLs(QList<QUrl> urls)
 
         auto localFileName = QDir::toNativeSeparators(local_url.toLocalFile());
         QFileInfo localFileInfo(localFileName);
+
+        if (localFileName.isEmpty() || !localFileInfo.exists()) {
+            qDebug() << "Ignoring invalid path" << localFileName;
+            continue;
+        }
 
         auto type = ResourceUtils::identify(localFileInfo);
 
@@ -1398,6 +1427,41 @@ void MainWindow::on_actionEditInstance_triggered()
                                      QMessageBox::Critical)
             ->show();
     }
+}
+
+void MainWindow::on_actionVerifyAssets_triggered()
+{
+    if (!m_selectedInstance)
+        return;
+
+    auto* mcInst = dynamic_cast<MinecraftInstance*>(m_selectedInstance);
+    if (!mcInst) {
+        CustomMessageBox::selectable(this, tr("Unsupported"), tr("Asset integrity checks are only available for Minecraft instances."),
+                                     QMessageBox::Warning)
+            ->show();
+        return;
+    }
+
+    auto* instSettings = mcInst->settings();
+    const bool hadOverride = instSettings->get("OverrideAssetVerification").toBool();
+    const int savedMode = instSettings->get("AssetVerificationMode").toInt();
+
+    instSettings->set("OverrideAssetVerification", true);
+    instSettings->set("AssetVerificationMode", static_cast<int>(AssetVerificationMode::AlwaysVerify));
+
+    unique_qobject_ptr<Task> task(new AssetUpdateTask(mcInst, true));
+    ProgressDialog dlg(this);
+    dlg.setSkipButton(true, tr("Abort"));
+    const int result = dlg.execWithTask(task.get());
+
+    instSettings->set("OverrideAssetVerification", hadOverride);
+    if (hadOverride)
+        instSettings->set("AssetVerificationMode", savedMode);
+    else
+        instSettings->reset("AssetVerificationMode");
+
+    if (result == QDialog::Accepted)
+        QMessageBox::information(this, tr("Integrity check complete"), tr("Missing or corrupted asset files were repaired."));
 }
 
 void MainWindow::on_actionManageAccounts_triggered()

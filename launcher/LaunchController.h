@@ -37,6 +37,8 @@
 #include <BaseInstance.h>
 #include <tools/BaseProfiler.h>
 
+#include <functional>
+
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/launch/MinecraftTarget.h"
 
@@ -60,6 +62,8 @@ class LaunchController : public Task {
 
     void setOfflineName(const QString& offlineName) { m_offlineName = offlineName; }
 
+    void setForceLocalYggdrasil(bool force) { m_forceLocalYggdrasil = force; }
+
     void setProfiler(BaseProfilerFactory* profiler) { m_profiler = profiler; }
 
     void setParentWidget(QWidget* widget) { m_parentWidget = widget; }
@@ -68,9 +72,17 @@ class LaunchController : public Task {
 
     void setAccountToUse(MinecraftAccountPtr accountToUse) { m_accountToUse = std::move(accountToUse); }
 
+    void setHeadless(bool headless) { m_headless = headless; }
+    void setReauthenticateHandler(std::function<MinecraftAccountPtr(const MinecraftAccountPtr&, const QString&)> handler)
+    {
+        m_reauthenticateHandler = std::move(handler);
+    }
+
     QString id() const { return m_instance->id(); }
 
     bool abort() override;
+    bool canAbort() const override;
+    QList<Task*> getSubTasks() const override;
 
    private:
     void login();
@@ -78,7 +90,7 @@ class LaunchController : public Task {
     void decideAccount();
     LaunchDecision decideLaunchMode();
     bool askPlayDemo() const;
-    QString askOfflineName(const QString& playerName, bool* ok = nullptr) const;
+    QString askOfflineName(const QString& playerName, bool* ok = nullptr);
     bool reauthenticateAccount(const MinecraftAccountPtr& account, const QString& reason);
 
    private slots:
@@ -87,6 +99,10 @@ class LaunchController : public Task {
     void onSucceeded();
     void onFailed(QString reason);
     void onProgressRequested(Task* task) const;
+
+   signals:
+    void gameStarted(qint64 pid);
+    void logLine(const QString& line);
 
    private:
     LaunchMode m_wantedLaunchMode = LaunchMode::Normal;
@@ -100,4 +116,9 @@ class LaunchController : public Task {
     AuthSessionPtr m_session = nullptr;
     LaunchTask* m_launcher = nullptr;
     MinecraftTarget::Ptr m_targetToJoin = nullptr;
+    bool m_headless = false;
+    bool m_forceLocalYggdrasil = false;
+    Task* m_authTask = nullptr; // Owned by the account and the local refresh task handle.
+    bool m_authCancelled = false;
+    std::function<MinecraftAccountPtr(const MinecraftAccountPtr&, const QString&)> m_reauthenticateHandler;
 };

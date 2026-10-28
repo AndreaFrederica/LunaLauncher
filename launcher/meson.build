@@ -1,0 +1,399 @@
+subdir('source_lists')
+
+if not is_windows
+  _filtered = []
+  foreach src : launcher_logic_sources
+    if src != 'console/WindowsConsole.cpp' and src != 'console/WindowsConsole.h'
+      _filtered += [src]
+    endif
+  endforeach
+  launcher_logic_sources = _filtered
+endif
+
+if is_macos
+  _macos_logic_sources = []
+  foreach src : launcher_logic_sources
+    if src != 'ui/dialogs/UpdateAvailableDialog.cpp' and src != 'ui/dialogs/UpdateAvailableDialog.h'
+      _macos_logic_sources += [src]
+    endif
+  endforeach
+  launcher_logic_sources = _macos_logic_sources
+
+  _macos_moc_headers = []
+  foreach header : launcher_moc_headers
+    if header != 'ui/dialogs/UpdateAvailableDialog.h'
+      _macos_moc_headers += [header]
+    endif
+  endforeach
+  launcher_moc_headers = _macos_moc_headers
+
+  _macos_ui_sources = []
+  foreach ui_source : launcher_ui_sources
+    if ui_source != 'ui/dialogs/UpdateAvailableDialog.ui'
+      _macos_ui_sources += [ui_source]
+    endif
+  endforeach
+  launcher_ui_sources = _macos_ui_sources
+
+  launcher_logic_sources += [
+    'macsandbox/SecurityBookmarkFileAccess.h',
+    'macsandbox/SecurityBookmarkFileAccess.mm',
+    'ui/themes/ThemeManager.mm',
+  ]
+  macos_frameworks_dep = dependency(
+    'appleframeworks',
+    modules: ['AppKit', 'Carbon', 'Foundation', 'ApplicationServices'],
+  )
+  macos_moc_dep = declare_dependency(compile_args: ['-DQ_OS_MACOS'])
+else
+  macos_frameworks_dep = dependency('', required: false)
+  macos_moc_dep = dependency('', required: false)
+endif
+
+launcher_inc = include_directories('.', 'include')
+launcher_minecraft_inc = include_directories('minecraft')
+
+auth_logging_conf = configuration_data()
+auth_logging_conf.set('HEADER_NAME', 'Logging.h')
+auth_logging_conf.set('IDENTIFIER', 'authCredentials')
+auth_logging_conf.set('ARG_CATEGORY_NAME', 'launcher.auth.credentials')
+auth_logging_conf.set('ARG_DEFAULT_SEVERITY', 'Warning')
+auth_logging_conf.set('GUARD_NAME', 'LUNALAUNCHER_LOGGING_H')
+auth_logging_conf.set('OPEN_NAMESPACES', '')
+auth_logging_conf.set('CLOSE_NAMESPACES', '')
+
+auth_logging_header = configure_file(
+  input: meson.project_source_root() / 'libraries/extra-cmake-modules/modules/ECMQtDeclareLoggingCategory.h.in',
+  output: 'Logging.h',
+  configuration: auth_logging_conf,
+)
+
+auth_logging_source = configure_file(
+  input: meson.project_source_root() / 'libraries/extra-cmake-modules/modules/ECMQtDeclareLoggingCategory.cpp.in',
+  output: 'Logging.cpp',
+  configuration: auth_logging_conf,
+)
+
+launcher_ui_generated = qt.preprocess(
+  ui_files: files(launcher_ui_sources),
+  qresources: files(launcher_qrc_sources) + [launcher_logo_qrc_file],
+)
+
+launcher_moc_header_generated = qt.preprocess(
+  moc_headers: files(launcher_moc_headers),
+  include_directories: [
+    launcher_inc,
+    launcher_minecraft_inc,
+    quickjs_inc,
+    qtermwidget_inc,
+  ],
+  dependencies: [
+    buildconfig_dep,
+    qt_core_dep,
+    qt_widgets_dep,
+    qt_svg_dep,
+    qt_network_dep,
+    qt_networkauth_dep,
+    qt_concurrent_dep,
+    qt_websockets_dep,
+    qt_xml_dep,
+    qt_gui_dep,
+    qt_opengl_dep,
+    qtermwidget_dep,
+    libcmark_dep,
+    localpeer_dep,
+    rainbow_dep,
+    zlib_dep,
+    libarchive_dep,
+    tomlplusplus_dep,
+    libqrencode_dep,
+    macos_moc_dep,
+  ],
+  preserve_paths: true,
+)
+
+launcher_moc_source_generated = qt.preprocess(
+  moc_sources: files(launcher_moc_sources),
+  include_directories: [
+    launcher_inc,
+    launcher_minecraft_inc,
+    quickjs_inc,
+    qtermwidget_inc,
+  ],
+  dependencies: [
+    buildconfig_dep,
+    qt_core_dep,
+    qt_widgets_dep,
+    qt_network_dep,
+    qt_networkauth_dep,
+    qt_concurrent_dep,
+    qt_websockets_dep,
+    qt_xml_dep,
+    qt_gui_dep,
+    qt_opengl_dep,
+    qtermwidget_dep,
+    libcmark_dep,
+    localpeer_dep,
+    rainbow_dep,
+    zlib_dep,
+    libarchive_dep,
+    tomlplusplus_dep,
+    libqrencode_dep,
+    macos_moc_dep,
+  ],
+)
+
+launcher_logic_args = ['-DLAUNCHER_APPLICATION']
+if launcher_disable_ownership_check
+  launcher_logic_args += ['-DLAUNCHER_DISABLE_OWNERSHIP_CHECK']
+endif
+if gamemode_dep.found()
+  launcher_logic_args += ['-DWITH_GAMEMODE']
+endif
+
+hardware_info_dep = is_windows ? cpp.find_library('dxgi', required: true) : dependency('', required: false)
+
+launcher_logic = static_library(
+  'Launcher_logic',
+  files(launcher_logic_sources) + [
+    auth_logging_header,
+    auth_logging_source,
+    launcher_ui_generated,
+    launcher_moc_header_generated,
+    launcher_moc_source_generated,
+  ],
+  dependencies: [
+    murmur2_dep,
+    kvantum_dep,
+    libnbt_dep,
+    qdcss_dep,
+    quickjs_dep,
+    buildconfig_dep,
+    qt_core_dep,
+    qt_widgets_dep,
+    qt_network_dep,
+    qt_networkauth_dep,
+    qt_concurrent_dep,
+    qt_websockets_dep,
+    qt_xml_dep,
+    qt_gui_dep,
+    qt_opengl_dep,
+    qtermwidget_dep,
+    libcmark_dep,
+    localpeer_dep,
+    rainbow_dep,
+    zlib_dep,
+    libarchive_dep,
+    tomlplusplus_dep,
+    libqrencode_dep,
+    gamemode_dep,
+    macos_frameworks_dep,
+    hardware_info_dep,
+  ],
+  include_directories: [
+    launcher_inc,
+    launcher_minecraft_inc,
+    quickjs_inc,
+    qtermwidget_inc,
+  ],
+  cpp_args: launcher_logic_args,
+  cpp_pch: get_option('use_pch') ? ['include/base.pch.hpp', 'include/qtcore.pch.hpp', 'include/qtgui.pch.hpp'] : [],
+)
+
+launcher_main_sources = ['main.cpp']
+if is_windows
+  launcher_main_sources += windows.compile_resources(launcher_windows_rc_file)
+endif
+
+if is_windows
+  launcher_exe = executable(
+    launcher_app_binary_name,
+    launcher_main_sources,
+    link_with: launcher_logic,
+    include_directories: [
+      launcher_inc,
+      launcher_minecraft_inc,
+    ],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+      qt_entrypoint_dep,
+    ],
+    install: true,
+    install_dir: binary_dest_dir,
+    win_subsystem: 'windows',
+    name_suffix: 'exe',
+  )
+
+  launcher_cli_exe = executable(
+    launcher_app_binary_name + '-cli',
+    launcher_main_sources,
+    link_with: launcher_logic,
+    include_directories: [
+      launcher_inc,
+      launcher_minecraft_inc,
+    ],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+    ],
+    cpp_args: ['-DLAUNCHER_HEADLESS_ENTRYPOINT'],
+    install: true,
+    install_dir: binary_dest_dir,
+    win_subsystem: 'console',
+    name_suffix: 'exe',
+  )
+else
+  launcher_exe = executable(
+    launcher_app_binary_name,
+    launcher_main_sources,
+    link_with: launcher_logic,
+    include_directories: [
+      launcher_inc,
+      launcher_minecraft_inc,
+    ],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+      macos_frameworks_dep,
+    ],
+    install: true,
+    install_dir: binary_dest_dir,
+    install_rpath: is_macos ? '@loader_path/../Frameworks' : '',
+  )
+endif
+
+if is_windows and get_option('build_filelinker')
+  filelink_generated = qt.preprocess(
+    moc_headers: files(filelink_moc_headers + ['FileSystem.h']),
+    moc_sources: files(filelink_moc_sources),
+    include_directories: [launcher_inc],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+    ],
+    preserve_paths: true,
+  )
+
+  filelink_logic = static_library(
+    'filelink_logic',
+    [
+      'console/WindowsConsole.cpp',
+      'console/WindowsConsole.h',
+      'filelink/FileLink.cpp',
+      'filelink/FileLink.h',
+      'FileSystem.cpp',
+      'FileSystem.h',
+      'Exception.h',
+      'StringUtils.cpp',
+      'StringUtils.h',
+      'DesktopServices.cpp',
+      'DesktopServices.h',
+      filelink_generated,
+    ],
+    include_directories: [launcher_inc],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+      qt_entrypoint_dep,
+    ],
+    cpp_pch: get_option('use_pch') ? ['include/base.pch.hpp', 'include/qtcore.pch.hpp', 'include/qtgui.pch.hpp'] : [],
+  )
+
+  executable(
+    'lunalauncher_filelink',
+    ['filelink/filelink_main.cpp'],
+    link_with: filelink_logic,
+    include_directories: [launcher_inc],
+    dependencies: [
+      buildconfig_dep,
+      qt_core_dep,
+      qt_gui_dep,
+      qt_widgets_dep,
+      qt_network_dep,
+      qt_entrypoint_dep,
+    ],
+    install: true,
+    install_dir: binary_dest_dir,
+    win_subsystem: 'windows',
+    name_suffix: 'exe',
+  )
+endif
+
+if get_option('build_updater')
+  updater_deps = [buildconfig_dep, qt_core_dep, qt_gui_dep, qt_widgets_dep, qt_network_dep, libcmark_dep, libarchive_dep, macos_frameworks_dep]
+  updater_generated = qt.preprocess(
+    moc_headers: files('updater/prismupdater/PrismUpdater.h', 'updater/prismupdater/UpdaterDialogs.h',
+      'FileSystem.h', 'tasks/Task.h', 'net/NetRequest.h', 'net/Download.h',
+      'ui/dialogs/ProgressDialog.h', 'ui/widgets/SubTaskProgressBar.h'),
+    ui_files: files('updater/prismupdater/SelectReleaseDialog.ui', 'ui/dialogs/ProgressDialog.ui', 'ui/widgets/SubTaskProgressBar.ui'),
+    include_directories: [launcher_inc],
+    dependencies: updater_deps,
+    preserve_paths: false,
+  )
+  updater_sources = files('updater/prismupdater/updater_main.cpp', 'updater/prismupdater/PrismUpdater.cpp',
+    'updater/prismupdater/UpdaterDialogs.cpp', 'updater/prismupdater/GitHubRelease.cpp',
+    'FileSystem.cpp', 'DesktopServices.cpp', 'StringUtils.cpp', 'Json.cpp', 'Version.cpp', 'MMCTime.cpp',
+    'Markdown.cpp', 'MMCZip.cpp', 'archive/ArchiveReader.cpp', 'archive/ArchiveWriter.cpp',
+    'tasks/Task.cpp', 'net/NetRequest.cpp', 'net/Download.cpp', 'net/FileSink.cpp', 'net/Logging.cpp',
+    'ui/dialogs/ProgressDialog.cpp', 'ui/widgets/SubTaskProgressBar.cpp')
+  if is_windows
+    updater_sources += files('console/WindowsConsole.cpp')
+  endif
+  executable(launcher_app_binary_name + '_updater', updater_sources + updater_generated,
+    include_directories: [launcher_inc, include_directories('updater/prismupdater', 'ui/dialogs', 'ui/widgets')], dependencies: updater_deps,
+    install: true, install_dir: binary_dest_dir,
+  )
+endif
+
+install_data('qtlogging.ini', install_dir: resources_dest_dir)
+if not system_install
+  install_data(qt_webp_plugin, install_dir: join_paths(plugin_dest_dir, 'imageformats'))
+endif
+if is_windows
+  install_data(qt_crypto_dll, install_dir: binary_dest_dir)
+endif
+
+if is_macos
+  install_data(launcher_macos_info_plist, install_dir: app_bundle_dir)
+  install_data(launcher_icns_file, install_dir: resources_dest_dir, rename: launcher_name + '.icns')
+endif
+
+if launcher_bundle_aria2c and launcher_aria2c_path != ''
+  install_data(launcher_aria2c_path, install_dir: 'tools/aria2')
+endif
+
+install_data('translations/zh.po', install_dir: join_paths(exresource_dest_dir, 'translations'))
+install_subdir('exresources/themes', install_dir: exresource_dest_dir)
+install_subdir('exresources/iconthemes', install_dir: exresource_dest_dir)
+install_subdir('exresources/translations', install_dir: exresource_dest_dir)
+install_subdir('exresources/catpacks', install_dir: exresource_dest_dir)
+install_subdir('exresources/icons', install_dir: exresource_dest_dir)
+install_subdir('exresources/fonts', install_dir: exresource_dest_dir)
+
+install_data(
+  [
+    'modplatform/jsapi/modrinth_plugin_api.js',
+    'modplatform/jsapi/mcim_modrinth_api.js',
+    'modplatform/jsapi/mcim_curseforge_api.js',
+    'modplatform/jsapi/resource-api.d.ts',
+    'modplatform/jsapi/README.md',
+    'modplatform/jsapi/DEPLOYMENT.md',
+  ],
+  install_dir: join_paths(exresource_dest_dir, 'jsapi'),
+)

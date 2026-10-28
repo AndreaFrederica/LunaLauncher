@@ -37,15 +37,23 @@
 
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QTemporaryFile>
 #include <QUrl>
+#include <memory>
 #include "InstanceTask.h"
 
 class InstanceImportTask : public InstanceTask {
     Q_OBJECT
    public:
+    // Existing Luna API callers import arbitrary URLs; do not implicitly trust them.
     explicit InstanceImportTask(const QUrl& sourceUrl, QWidget* parent = nullptr, QMap<QString, QString>&& extra_info = {});
+    explicit InstanceImportTask(const QUrl& sourceUrl,
+                                bool trustedSource,
+                                QWidget* parent = nullptr,
+                                QMap<QString, QString>&& extra_info = {});
     virtual ~InstanceImportTask() = default;
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
    protected:
     //! Entry point for tasks.
@@ -56,6 +64,8 @@ class InstanceImportTask : public InstanceTask {
     void processTechnic();
     void processFlame();
     void processModrinth();
+    void processPCLPlain();
+    void addPclCompatibilityWarning();
 
    private slots:
     void processZipPack();
@@ -63,7 +73,13 @@ class InstanceImportTask : public InstanceTask {
 
    private: /* data */
     QUrl m_sourceUrl;
+    bool m_trustedSource;
     QString m_archivePath;
+    std::unique_ptr<QTemporaryFile> m_nestedArchive;
+    int m_nestedArchiveDepth = 0;
+    bool m_pclWrapperDetected = false;
+    QString m_archivePassphrase;
+    QString m_pclPlainVersion;
     Task::Ptr m_task;
     enum class ModpackType {
         Unknown,
@@ -71,6 +87,7 @@ class InstanceImportTask : public InstanceTask {
         Technic,
         Flame,
         Modrinth,
+        PCLPlain,
     } m_modpackType = ModpackType::Unknown;
 
     // Extra info we might need, that's available before, but can't be derived from

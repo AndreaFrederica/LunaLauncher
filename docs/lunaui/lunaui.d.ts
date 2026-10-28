@@ -61,6 +61,9 @@ declare global {
         setState(key: string, value: JsonValue): boolean;
         getState(key: string): JsonValue | undefined;
         saveState(): boolean;
+        getInstanceSetting(name: string): JsonValue | undefined;
+        setInstanceSetting(name: string, value: JsonValue): boolean;
+        openFolder(path: string, create?: boolean): boolean;
         fs: LunaFsApi;
     }
 
@@ -77,10 +80,12 @@ declare global {
         text?: LunaLocalizedText;
         title?: LunaLocalizedText;
         tooltip?: LunaLocalizedText;
+        icon?: string;
         action?: LunaActionValue;
         onChange?: string;
         onClick?: string;
         saveOnChange?: boolean;
+        sourceSetting?: string;
         [key: string]: JsonValue | undefined;
     }
 
@@ -116,6 +121,22 @@ declare global {
         type: "button";
     }
 
+    interface LunaInputControl extends LunaBaseControl {
+        type: "input" | "lineedit" | "textarea";
+        default?: string;
+    }
+
+    interface LunaNumberControl extends LunaBaseControl {
+        type: "number" | "spinbox";
+        default?: number;
+        minimum?: number;
+        maximum?: number;
+    }
+
+    interface LunaAccountSelectControl extends LunaBaseControl {
+        type: "accountselect" | "account-select";
+    }
+
     interface LunaModDetailsItem {
         mod?: string;
         name?: LunaLocalizedText;
@@ -142,6 +163,9 @@ declare global {
         | LunaToggleControl
         | LunaSelectControl
         | LunaButtonControl
+        | LunaInputControl
+        | LunaNumberControl
+        | LunaAccountSelectControl
         | LunaModDetailsControl
         | LunaBaseControl;
 
@@ -167,6 +191,18 @@ declare global {
         action: "saveState";
     }
 
+    interface LunaActionSetInstanceSetting {
+        action: "setInstanceSetting";
+        setting: string;
+        value?: JsonValue;
+    }
+
+    interface LunaActionOpenFolder {
+        action: "openFolder";
+        path: string;
+        create?: boolean;
+    }
+
     interface LunaActionReloadTabs {
         action: "reloadTabs" | "refreshTabs";
     }
@@ -181,6 +217,8 @@ declare global {
         | LunaActionActivateVariant
         | LunaActionSetState
         | LunaActionSaveState
+        | LunaActionSetInstanceSetting
+        | LunaActionOpenFolder
         | LunaActionReloadTabs
         | LunaActionRunHandler;
 

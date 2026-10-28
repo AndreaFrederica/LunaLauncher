@@ -58,6 +58,7 @@ class APIPage : public QWidget, public BasePage {
     QString helpPage() const override { return "APIs"; }
     virtual bool apply() override;
     void retranslate() override;
+    void setPclDownloadEnabled(bool enabled);
 
    private:
     int baseURLPasteType;
@@ -65,6 +66,7 @@ class APIPage : public QWidget, public BasePage {
     void updateBaseURLNote(int index);
     void updateBaseURLPlaceholder(int index);
     void updateMirrorSelection();
+    void updateModApiMirrorSelection();
     void loadSettings();
     void applySettings();
 

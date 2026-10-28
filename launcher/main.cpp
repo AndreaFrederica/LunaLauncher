@@ -34,8 +34,11 @@
  */
 
 #include <iostream>
+#include <QWidget>
 
 #include "Application.h"
+
+int runThemePreview(int argc, char** argv, const QString& path);
 
 #if defined Q_OS_WIN32
 #include "console/WindowsConsole.h"
@@ -43,33 +46,84 @@
 
 int main(int argc, char* argv[])
 {
+    for (int i=1; i+1<argc; ++i)
+        if (QByteArray(argv[i]) == "--theme-preview") return runThemePreview(argc, argv, QString::fromLocal8Bit(argv[i+1]));
+    for(int i=1;i<argc;++i) if(QByteArray(argv[i])=="--safe-theme") {
+        qputenv("LUNA_SAFE_THEME","1");
+        for(int j=i;j<argc;++j)argv[j]=argv[j+1];
+        --argc; --i;
+    }
 #if defined Q_OS_WIN32
-    // used on Windows to attach the standard IO streams
+    // Attach before validating the entry point so Windows GUI builds can report
+    // an actionable error to the terminal that launched them.
     console::WindowsConsoleGuard _consoleGuard;
 #endif
+
+    bool headless = false;
+    for (int i = 1; i < argc; ++i) {
+        const QByteArray argument(argv[i]);
+        if (argument == "--cli" || argument == "--mcp" || argument == "--tui") {
+            headless = true;
+            break;
+        }
+    }
+#ifdef LAUNCHER_HEADLESS_ENTRYPOINT
+    if (!headless) {
+        std::cerr << "lunalauncher-cli requires one of --cli, --tui, or --mcp." << std::endl;
+        return 2;
+    }
+#elif defined Q_OS_WIN32
+    if (headless) {
+        std::cerr << "Headless modes on Windows require lunalauncher-cli.exe." << std::endl;
+        return 2;
+    }
+#endif
+    if (headless && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+
+    // Register resources before constructing Application. ThemeManager is
+    // created from Application's constructor and scans the built-in icon
+    // themes immediately. Registering these qrc bundles afterwards makes
+    // the scan see empty paths, so Prism icons disappear until a later
+    // refresh (and the missing built-in themes can never become valid for
+    // that process).
+    Q_INIT_RESOURCE(multimc);
+    Q_INIT_RESOURCE(lucide);
+    Q_INIT_RESOURCE(backgrounds);
+    Q_INIT_RESOURCE(documents);
+    Q_INIT_RESOURCE(lunalauncher);
+    Q_INIT_RESOURCE(pe_dark);
+    Q_INIT_RESOURCE(pe_light);
+    Q_INIT_RESOURCE(pe_blue);
+    Q_INIT_RESOURCE(pe_colored);
+    Q_INIT_RESOURCE(breeze_dark);
+    Q_INIT_RESOURCE(breeze_light);
+    Q_INIT_RESOURCE(kde);
+    Q_INIT_RESOURCE(OSX);
+    Q_INIT_RESOURCE(iOS);
+    Q_INIT_RESOURCE(flat);
+    Q_INIT_RESOURCE(flat_white);
+    Q_INIT_RESOURCE(shaders);
 
     // initialize Qt
     Application app(argc, argv);
     switch (app.status()) {
         case Application::StartingUp:
         case Application::Initialized: {
-            Q_INIT_RESOURCE(multimc);
-            Q_INIT_RESOURCE(backgrounds);
-            Q_INIT_RESOURCE(documents);
-            Q_INIT_RESOURCE(lunalauncher);
+            // Native Windows decorations use the application icon as the
+            // fallback for dialogs that do not provide a window-specific
+            // icon. Set it after the launcher resources are registered so
+            // the Luna title bar follows the same behavior.
+            if (app.windowIcon().isNull())
+                app.setWindowIcon(app.logo());
+            // Setup dialogs may already exist by this point. Give every
+            // existing top-level window the same fallback icon used by the
+            // native frame.
+            if (!app.windowIcon().isNull())
+                for (auto* window : QApplication::topLevelWidgets())
+                    if (window->windowIcon().isNull())
+                        window->setWindowIcon(app.windowIcon());
 
-            Q_INIT_RESOURCE(pe_dark);
-            Q_INIT_RESOURCE(pe_light);
-            Q_INIT_RESOURCE(pe_blue);
-            Q_INIT_RESOURCE(pe_colored);
-            Q_INIT_RESOURCE(breeze_dark);
-            Q_INIT_RESOURCE(breeze_light);
-            Q_INIT_RESOURCE(OSX);
-            Q_INIT_RESOURCE(iOS);
-            Q_INIT_RESOURCE(flat);
-            Q_INIT_RESOURCE(flat_white);
-
-            Q_INIT_RESOURCE(shaders);
             return app.exec();
         }
         case Application::Failed:

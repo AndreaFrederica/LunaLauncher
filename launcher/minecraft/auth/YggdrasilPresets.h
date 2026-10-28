@@ -35,12 +35,17 @@ struct YggdrasilPreset {
     QString oauthTokenEndpoint;    // default: "/oauth2/token"
     // The token type to use
     YggdrasilTokenType tokenType = YggdrasilTokenType::Standard;
+    // Use Luna's launcher-managed local verification service.
+    bool managedLocal = false;
+    // Microsoft's official account service, not a Yggdrasil endpoint.
+    bool official = false;
+    QString sourceName;
 };
 
 class YggdrasilPresets {
 public:
     static const QVector<YggdrasilPreset>& getDefaults();
-    static bool addCustomPreset(const YggdrasilPreset& preset);
+    static bool addCustomPreset(const YggdrasilPreset& preset, const QString& replaceName = {});
     static bool removeCustomPreset(const QString& name);
     static QVector<YggdrasilPreset> getCustomPresets();
     static QVector<YggdrasilPreset> getAllPresets();

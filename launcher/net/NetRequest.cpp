@@ -44,6 +44,7 @@
 #include <QNetworkReply>
 #include <QUrl>
 #include <QTimer>
+#include <algorithm>
 #include <memory>
 
 #if defined(LAUNCHER_APPLICATION)
@@ -136,8 +137,8 @@ void NetRequest::onProgress(qint64 bytesReceived, qint64 bytesTotal)
     // use milliseconds for speed precision
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
     auto bytes_received_since = bytesReceived - m_last_progress_bytes;
-    auto dl_speed_bps = (double)bytes_received_since / elapsed_ms.count() * 1000;
-    auto remaining_time_s = (bytesTotal - bytesReceived) / dl_speed_bps;
+    const auto dl_speed_bps = elapsed_ms.count() > 0 ? static_cast<double>(bytes_received_since) / elapsed_ms.count() * 1000 : 0.0;
+    const auto remaining_time_s = dl_speed_bps > 0 ? (bytesTotal - bytesReceived) / dl_speed_bps : 0;
 
     //: Current amount of bytes downloaded, out of the total amount of bytes in the download
     QString dl_progress =
@@ -155,6 +156,7 @@ void NetRequest::onProgress(qint64 bytesReceived, qint64 bytesTotal)
 
     setDetails(dl_progress + "\n" + dl_speed_str);
 
+    setTransferRate(static_cast<qint64>(std::max(0.0, dl_speed_bps)));
     setProgress(bytesReceived, bytesTotal);
 }
 
@@ -251,49 +253,37 @@ void NetRequest::downloadFinished()
         return;
     }
 
-    // Check for BMCLAPI 429 error - handle internal retry
-    if (m_state == State::Failed && m_reply && replyStatusCode() == 429) {
-        QString urlStr = m_url.toString();
-        if (urlStr.contains("bmclapi2.bangbang93.com")) {
-            m_retry_count++;
+    // Mirror rate limiting: retry the mirror a few times, then use the
+    // original official URL that the download was created from.
+    if (m_state == State::Failed && m_reply && replyStatusCode() == 429 && m_isMirrorRequest) {
+        m_retry_count++;
 
-            if (m_retry_count < MAX_RETRIES) {
-                // Retry with delay
-                int delay_ms = 100 * m_retry_count;  // 100ms, 200ms, 300ms...
-                qCWarning(logCat) << getUid().toString() << "BMCLAPI 429 error, retrying in" << delay_ms << "ms (attempt" << m_retry_count << "of" << MAX_RETRIES << ")";
+        if (m_retry_count < MAX_RETRIES) {
+            // Retry with delay
+            int delay_ms = 100 * m_retry_count;  // 100ms, 200ms, 300ms...
+            qCWarning(logCat) << getUid().toString() << "Mirror 429 error, retrying in" << delay_ms << "ms (attempt"
+                              << m_retry_count << "of" << MAX_RETRIES << ")";
 
-                // Reset state for retry
-                m_state = State::Inactive;
-                m_reply.reset();
+            // Reset state for retry
+            m_state = State::Inactive;
+            m_reply.reset();
 
-                QTimer::singleShot(delay_ms, this, [this]() { executeTask(); });
-                return;
-            } else {
-                // After MAX_RETRIES, switch to official source
-                qCWarning(logCat) << getUid().toString() << "BMCLAPI 429 error after" << MAX_RETRIES << "retries, switching to official source";
+            QTimer::singleShot(delay_ms, this, [this]() { executeTask(); });
+            return;
+        }
 
-                // Store original URL on first fallback
-                if (m_original_url.isEmpty()) {
-                    m_original_url = m_url;
-                }
+        if (m_fallbackUrl.isValid() && m_url != m_fallbackUrl) {
+            qCWarning(logCat) << getUid().toString() << "Mirror 429 error after" << MAX_RETRIES << "retries, switching to official source";
 
-                // Replace BMCLAPI URL with official Mojang URL
-                QString newUrlStr = urlStr;
-                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://launcher.mojang.com/");
-                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://piston-data.mojang.com/");
-                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://piston-meta.mojang.com/");
-                newUrlStr.replace("https://bmclapi2.bangbang93.com/", "https://launchermeta.mojang.com/");
+            m_url = m_fallbackUrl;
+            m_state = State::Inactive;
+            m_reply.reset();
+            m_retry_count = 0;  // Reset retry count for the official URL
 
-                m_url = QUrl(newUrlStr);
-                m_state = State::Inactive;
-                m_reply.reset();
-                m_retry_count = 0;  // Reset retry count for the new URL
+            qCWarning(logCat) << getUid().toString() << "Retrying with official source:" << m_url.toString();
 
-                qCWarning(logCat) << getUid().toString() << "Retrying with official source:" << m_url.toString();
-
-                QTimer::singleShot(0, this, [this]() { executeTask(); });
-                return;
-            }
+            QTimer::singleShot(0, this, [this]() { executeTask(); });
+            return;
         }
     }
 
@@ -302,19 +292,26 @@ void NetRequest::downloadFinished()
     {
         qCDebug(logCat) << getUid().toString() << "Request failed but we are allowed to proceed:" << m_url.toString();
         m_sink->abort();
+        // QNetworkReply is parented to the network manager. Release our
+        // deferred-delete pointer while the reply is still alive so a later
+        // network-manager teardown cannot leave a dangling QScopedPointer.
+        m_reply.reset();
         emit succeeded();
         emit finished();
         return;
     } else if (m_state == State::Failed) {
         qCDebug(logCat) << getUid().toString() << "Request failed in previous step:" << m_url.toString();
         m_sink->abort();
-        m_failReason = m_reply->errorString();
-        emit failed(m_reply->errorString());
+        const auto reason = m_reply->errorString();
+        m_failReason = reason;
+        m_reply.reset();
+        emit failed(reason);
         emit finished();
         return;
     } else if (m_state == State::AbortedByUser) {
         qCDebug(logCat) << getUid().toString() << "Request aborted in previous step:" << m_url.toString();
         m_sink->abort();
+        m_reply.reset();
         emit aborted();
         emit finished();
         return;
@@ -329,6 +326,7 @@ void NetRequest::downloadFinished()
             qCDebug(logCat) << getUid().toString() << "Request failed to write:" << m_url.toString();
             m_sink->abort();
             m_failReason = m_sink->failReason();
+            m_reply.reset();
             emit failed(m_sink->failReason());
             emit finished();
             return;
@@ -341,12 +339,14 @@ void NetRequest::downloadFinished()
         qCDebug(logCat) << getUid().toString() << "Request failed to finalize:" << m_url.toString();
         m_sink->abort();
         m_failReason = m_sink->failReason();
+        m_reply.reset();
         emit failed(m_sink->failReason());
         emit finished();
         return;
     }
 
     qCDebug(logCat) << getUid().toString() << "Request succeeded:" << m_url.toString();
+    m_reply.reset();
     emit succeeded();
     emit finished();
 }

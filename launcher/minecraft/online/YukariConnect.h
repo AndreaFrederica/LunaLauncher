@@ -146,6 +146,12 @@ class YukariConnect : public QObject {
     QString getLocalPath() const;
 
     /**
+     * @brief Get the writable path used for downloaded or manually installed overrides
+     * @return Absolute path inside the launcher data directory
+     */
+    QString getManagedPath() const;
+
+    /**
      * @brief Get the path to the metadata JSON file
      * @return Absolute path to the metadata file
      */
@@ -371,6 +377,7 @@ class YukariConnect : public QObject {
     void metaChanged(const YukariConnectTypes::MetaInfo& meta);
 
    private:
+    QString getBundledPath() const;
     YukariConnect(QObject* parent = nullptr);
     ~YukariConnect();
 

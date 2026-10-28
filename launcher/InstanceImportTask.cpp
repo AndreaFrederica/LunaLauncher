@@ -35,6 +35,7 @@
  */
 
 #include "InstanceImportTask.h"
+#include "cli/ScopedUserInteraction.h"
 
 #include "Application.h"
 #include "FileSystem.h"
@@ -45,22 +46,36 @@
 #include "archive/ExtractZipTask.h"
 #include "icons/IconList.h"
 #include "icons/IconUtils.h"
+#include "meta/CleanroomMeta.h"
+#include "minecraft/MinecraftInstance.h"
 
 #include "modplatform/flame/FlameInstanceCreationTask.h"
 #include "modplatform/modrinth/ModrinthInstanceCreationTask.h"
+#include "modplatform/pcl/PCLPack.h"
+#include "modplatform/pcl/PCLPlainPack.h"
 #include "modplatform/technic/TechnicPackProcessor.h"
 
 #include "settings/INISettingsObject.h"
 #include "tasks/Task.h"
+#include "ui/dialogs/CustomMessageBox.h"
 
 #include "net/ApiDownload.h"
 
 #include <QFileInfo>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QTemporaryFile>
 #include <QtConcurrentRun>
+#include <limits>
 #include <memory>
+#include <utility>
 
 InstanceImportTask::InstanceImportTask(const QUrl& sourceUrl, QWidget* parent, QMap<QString, QString>&& extra_info)
-    : m_sourceUrl(sourceUrl), m_extra_info(extra_info), m_parent(parent)
+    : InstanceImportTask(sourceUrl, false, parent, std::move(extra_info))
+{}
+
+InstanceImportTask::InstanceImportTask(const QUrl& sourceUrl, bool trustedSource, QWidget* parent, QMap<QString, QString>&& extra_info)
+    : m_sourceUrl(sourceUrl), m_trustedSource(trustedSource), m_extra_info(extra_info), m_parent(parent)
 {}
 
 bool InstanceImportTask::abort()
@@ -101,6 +116,7 @@ void InstanceImportTask::downloadFromUrl()
 
     connect(filesNetJob.get(), &NetJob::succeeded, this, &InstanceImportTask::processZipPack);
     connect(filesNetJob.get(), &NetJob::progress, this, &InstanceImportTask::setProgress);
+    connect(filesNetJob.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(filesNetJob.get(), &NetJob::stepProgress, this, &InstanceImportTask::propagateStepProgress);
     connect(filesNetJob.get(), &NetJob::failed, this, &InstanceImportTask::emitFailed);
     connect(filesNetJob.get(), &NetJob::aborted, this, &InstanceImportTask::emitAborted);
@@ -118,6 +134,20 @@ QString cleanPath(QString path)
     return result;
 }
 
+QList<Task*> InstanceImportTask::getSubTasks() const
+{
+    return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{};
+}
+
+class DiscardWriteDevice final : public QIODevice {
+   public:
+    DiscardWriteDevice() { open(QIODevice::WriteOnly); }
+
+   protected:
+    qint64 readData(char*, qint64) override { return -1; }
+    qint64 writeData(const char*, qint64 size) override { return size; }
+};
+
 void InstanceImportTask::processZipPack()
 {
     setStatus(tr("Attempting to determine instance type"));
@@ -129,36 +159,55 @@ void InstanceImportTask::processZipPack()
     qDebug() << "Attempting to determine instance type";
 
     QString root;
+    QStringList nestedPackCandidates;
+    QStringList archiveFiles;
+    QString encryptedValidationPath;
+    qint64 encryptedValidationSize = std::numeric_limits<qint64>::max();
+    m_modpackType = ModpackType::Unknown;
     // NOTE: Prioritize modpack platforms that aren't searched for recursively.
     // Especially Flame has a very common filename for its manifest, which may appear inside overrides for example
     // https://docs.modrinth.com/docs/modpacks/format_definition/#storage
-    auto detectInstance = [this, &extractDir, &root](MMCZip::ArchiveReader::File* f, bool& stop) {
+    auto detectInstance = [this, &extractDir, &root, &nestedPackCandidates, &archiveFiles, &encryptedValidationPath,
+                           &encryptedValidationSize](MMCZip::ArchiveReader::File* f, bool& stop) {
         if (!isRunning()) {
             stop = true;
             return true;
         }
         auto fileName = f->filename();
+        if (f->isFile()) {
+            archiveFiles.append(fileName);
+            const auto fileSize = f->size();
+            if (f->isEncrypted() && fileSize >= 0 &&
+                (encryptedValidationSize == std::numeric_limits<qint64>::max() ||
+                 (fileSize > 0 && (encryptedValidationSize == 0 || fileSize < encryptedValidationSize)))) {
+                encryptedValidationPath = fileName;
+                encryptedValidationSize = fileSize;
+            }
+        }
+        if (f->isFile() && !PCL::findNestedPackCandidates({ fileName }).isEmpty()) {
+            nestedPackCandidates.append(fileName);
+        }
+        if (m_modpackType != ModpackType::Unknown) {
+            QCoreApplication::processEvents();
+            return true;
+        }
         if (fileName == "modrinth.index.json") {
             // process as Modrinth pack
             qDebug() << "Modrinth:" << true;
             m_modpackType = ModpackType::Modrinth;
-            stop = true;
         } else if (fileName == "bin/modpack.jar" || fileName == "bin/version.json") {
             // process as Technic pack
             qDebug() << "Technic:" << true;
             extractDir.mkpath("minecraft");
             extractDir.cd("minecraft");
             m_modpackType = ModpackType::Technic;
-            stop = true;
         } else if (fileName == "manifest.json") {
             qDebug() << "Flame:" << true;
             m_modpackType = ModpackType::Flame;
-            stop = true;
         } else if (QFileInfo fileInfo(fileName); fileInfo.fileName() == "instance.cfg") {
             qDebug() << "MultiMC:" << true;
             m_modpackType = ModpackType::MultiMC;
             root = cleanPath(fileInfo.path());
-            stop = true;
         }
         QCoreApplication::processEvents();
         return true;
@@ -167,37 +216,166 @@ void InstanceImportTask::processZipPack()
         emitFailed(tr("Unable to open supplied modpack zip file."));
         return;
     }
+    auto requestArchivePassphrase = [this, &encryptedValidationPath]() {
+        if (encryptedValidationPath.isEmpty() || !m_archivePassphrase.isEmpty())
+            return true;
+        if (APPLICATION->isHeadless()) {
+            while (activeUserInteraction) {
+                const auto password = activeUserInteraction->input(tr("Enter the archive password:"), true);
+                if (!password) { emitAborted(); return false; }
+                MMCZip::ArchiveReader validator(m_archivePath, *password);
+                auto encryptedFile = validator.goToFile(encryptedValidationPath);
+                DiscardWriteDevice sink;
+                if (encryptedFile && encryptedFile->copyTo(sink)) { m_archivePassphrase = *password; return true; }
+                activeUserInteraction->status(tr("Incorrect archive password. Try again or cancel."));
+            }
+            emitFailed(tr("Archive password input is unavailable.")); return false;
+        }
+        while (true) {
+            bool accepted = false;
+            const auto passphrase = QInputDialog::getText(m_parent, tr("Encrypted modpack"), tr("Enter the archive password:"),
+                                                          QLineEdit::Password, QString(), &accepted);
+            if (!accepted) {
+                emitAborted();
+                return false;
+            }
+            MMCZip::ArchiveReader validator(m_archivePath, passphrase);
+            auto encryptedFile = validator.goToFile(encryptedValidationPath);
+            DiscardWriteDevice sink;
+            if (encryptedFile && encryptedFile->copyTo(sink)) {
+                m_archivePassphrase = passphrase;
+                return true;
+            }
+            CustomMessageBox::selectable(m_parent, tr("Incorrect archive password"),
+                                         tr("The password could not decrypt this modpack. Try again or cancel the import."),
+                                         QMessageBox::Warning)
+                ->exec();
+        }
+    };
     if (m_modpackType == ModpackType::Unknown) {
-        emitFailed(tr("Archive does not contain a recognized modpack type."));
-        return;
+        nestedPackCandidates.removeDuplicates();
+        if (nestedPackCandidates.size() > 1) {
+            emitFailed(tr("Archive contains multiple nested modpacks. Remove all but one modpack.mrpack or modpack.zip and try again."));
+            return;
+        }
+        if (nestedPackCandidates.size() == 1) {
+            if (m_nestedArchiveDepth >= 1) {
+                emitFailed(tr("Nested modpack depth exceeds the supported PCL wrapper format."));
+                return;
+            }
+
+            if (!requestArchivePassphrase())
+                return;
+            MMCZip::ArchiveReader nestedSource(m_archivePath, m_archivePassphrase);
+            auto nestedFile = nestedSource.goToFile(nestedPackCandidates.constFirst());
+            constexpr qint64 MAX_NESTED_PACK_SIZE = 8LL * 1024 * 1024 * 1024;
+            if (!nestedFile || !nestedFile->isFile() || nestedFile->size() <= 0 || nestedFile->size() > MAX_NESTED_PACK_SIZE) {
+                emitFailed(tr("The nested PCL modpack is empty or exceeds the 8 GiB safety limit."));
+                return;
+            }
+
+            auto temporary = std::make_unique<QTemporaryFile>(QDir::tempPath() + "/luna-pcl-XXXXXX.mrpack");
+            temporary->setAutoRemove(true);
+            if (!temporary->open() || !nestedFile->copyTo(*temporary) || !temporary->flush()) {
+                emitFailed(tr("Could not extract the nested PCL modpack."));
+                return;
+            }
+            temporary->close();
+
+            MMCZip::ArchiveReader nestedReader(temporary->fileName());
+            bool hasModrinthIndex = false;
+            const bool validArchive = nestedReader.parse([&hasModrinthIndex](MMCZip::ArchiveReader::File* file, bool& stop) {
+                if (QDir::fromNativeSeparators(file->filename()).compare("modrinth.index.json", Qt::CaseInsensitive) == 0) {
+                    hasModrinthIndex = true;
+                    stop = true;
+                }
+                return true;
+            });
+            if (!validArchive || !hasModrinthIndex) {
+                emitFailed(tr("The nested PCL modpack is not a valid Modrinth pack."));
+                return;
+            }
+
+            m_nestedArchive = std::move(temporary);
+            m_archivePath = m_nestedArchive->fileName();
+            m_archivePassphrase.clear();
+            m_nestedArchiveDepth++;
+            m_pclWrapperDetected = true;
+            setStatus(tr("Opening nested PCL modpack"));
+            processZipPack();
+            return;
+        }
+        const auto candidates = PCL::findPlainPackCandidates(archiveFiles);
+        if (!candidates.isEmpty()) {
+            int selectedIndex = 0;
+            if (candidates.size() > 1) {
+                if (APPLICATION->isHeadless()) {
+                    QJsonArray choices;
+                    for (const auto& candidate : candidates) choices.append(candidate.version + " (" + candidate.root + ")");
+                    const auto selected = activeUserInteraction ? activeUserInteraction->select(tr("Select the PCL version to import:"), choices) : std::nullopt;
+                    if (!selected) { emitAborted(); return; }
+                    selectedIndex = *selected;
+                } else {
+                    QStringList labels;
+                    for (const auto& candidate : candidates)
+                        labels.append(
+                            QString("%1 (%2)").arg(candidate.version, candidate.root.isEmpty() ? tr("archive root") : candidate.root));
+                    bool accepted = false;
+                    const auto selected = QInputDialog::getItem(m_parent, tr("Select PCL version"),
+                                                                tr("This archive contains multiple PCL versions. Select the one to import:"),
+                                                                labels, 0, false, &accepted);
+                    if (!accepted) {
+                        emitAborted();
+                        return;
+                    }
+                    selectedIndex = labels.indexOf(selected);
+                }
+            }
+
+            const auto candidate = candidates.at(selectedIndex);
+            m_modpackType = ModpackType::PCLPlain;
+            m_pclPlainVersion = candidate.version;
+            root = candidate.root;
+            m_pclWrapperDetected = true;
+        } else {
+            emitFailed(tr("Archive does not contain a recognized modpack type."));
+            return;
+        }
     }
+    if (!requestArchivePassphrase())
+        return;
     setStatus(tr("Extracting modpack"));
 
     // make sure we extract just the pack
-    auto zipTask = makeShared<MMCZip::ExtractZipTask>(m_archivePath, extractDir, root);
+    if (m_modpackType == ModpackType::PCLPlain) {
+        extractDir.mkpath("pcl-source");
+        extractDir.cd("pcl-source");
+    }
+    auto zipTask = makeShared<MMCZip::ExtractZipTask>(m_archivePath, extractDir, root, m_archivePassphrase);
 
     auto progressStep = std::make_shared<TaskStepProgress>();
     connect(zipTask.get(), &Task::finished, this, [this, progressStep] {
         progressStep->state = TaskStepState::Succeeded;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
 
     connect(zipTask.get(), &Task::succeeded, this, &InstanceImportTask::extractFinished, Qt::QueuedConnection);
     connect(zipTask.get(), &Task::aborted, this, &InstanceImportTask::emitAborted);
     connect(zipTask.get(), &Task::failed, this, [this, progressStep](QString reason) {
         progressStep->state = TaskStepState::Failed;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
         emitFailed(reason);
     });
     connect(zipTask.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
 
     connect(zipTask.get(), &Task::progress, this, [this, progressStep](qint64 current, qint64 total) {
         progressStep->update(current, total);
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
+    connect(zipTask.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(zipTask.get(), &Task::status, this, [this, progressStep](QString status) {
         progressStep->status = status;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
     connect(zipTask.get(), &Task::warningLogged, this, [this](const QString& line) { m_Warnings.append(line); });
     m_task.reset(zipTask);
@@ -245,6 +423,9 @@ void InstanceImportTask::extractFinished()
         case ModpackType::Modrinth:
             processModrinth();
             return;
+        case ModpackType::PCLPlain:
+            processPCLPlain();
+            return;
         case ModpackType::Unknown:
             emitFailed(tr("Archive does not contain a recognized modpack type."));
             return;
@@ -270,6 +451,43 @@ bool installIcon(QString root, QString instIconKey)
     return false;
 }
 
+void InstanceImportTask::processPCLPlain()
+{
+    QString configPath = FS::PathCombine(m_stagingPath, "instance.cfg");
+    auto instanceSettings = std::make_unique<INISettingsObject>(configPath);
+    auto instance = std::make_unique<MinecraftInstance>(m_globalSettings, std::move(instanceSettings), m_stagingPath);
+    instance->setName(name());
+    if (m_instIcon != "default")
+        instance->setIconKey(m_instIcon);
+
+    const auto conversion = PCL::convertPlainPack(*instance, FS::PathCombine(m_stagingPath, "pcl-source"), m_pclPlainVersion);
+    if (!conversion.succeeded) {
+        emitFailed(conversion.error);
+        return;
+    }
+
+    const auto configConversion = PCL::convertInstanceConfig(*instance);
+    if (configConversion.found && !configConversion.error.isEmpty())
+        logWarning(tr("Some PCL settings could not be converted: %1").arg(configConversion.error));
+    instance->saveNow();
+
+    if (!FS::deletePath(FS::PathCombine(m_stagingPath, "pcl-source")))
+        logWarning(tr("Could not remove temporary PCL source files from the imported instance."));
+
+    addPclCompatibilityWarning();
+    emitSucceeded();
+}
+
+void InstanceImportTask::addPclCompatibilityWarning()
+{
+    const auto warning =
+        tr("This instance was imported from a PCL modpack using experimental compatibility support. Some PCL-specific settings "
+           "or files may not behave exactly as they do in PCL. Review the PCL compatibility page and the reports in "
+           "lunaui/migration before launching the instance.");
+    if (!m_Warnings.contains(warning))
+        logWarning(warning);
+}
+
 void InstanceImportTask::processFlame()
 {
     shared_qobject_ptr<FlameCreationTask> inst_creation_task = nullptr;
@@ -287,11 +505,12 @@ void InstanceImportTask::processFlame()
         if (original_instance_id_it != m_extra_info.constEnd())
             original_instance_id = original_instance_id_it.value();
 
-        inst_creation_task =
-            makeShared<FlameCreationTask>(m_stagingPath, m_globalSettings, m_parent, pack_id, pack_version_id, original_instance_id);
+        inst_creation_task = makeShared<FlameCreationTask>(m_stagingPath, m_trustedSource, m_globalSettings, m_parent, pack_id,
+                                                           pack_version_id, original_instance_id);
     } else {
         // FIXME: Find a way to get IDs in directly imported ZIPs
-        inst_creation_task = makeShared<FlameCreationTask>(m_stagingPath, m_globalSettings, m_parent, QString(), QString());
+        inst_creation_task =
+            makeShared<FlameCreationTask>(m_stagingPath, m_trustedSource, m_globalSettings, m_parent, QString(), QString());
     }
 
     inst_creation_task->setName(*this);
@@ -316,6 +535,7 @@ void InstanceImportTask::processFlame()
     });
     connect(inst_creation_task.get(), &Task::failed, this, &InstanceImportTask::emitFailed);
     connect(inst_creation_task.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+    connect(inst_creation_task.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(inst_creation_task.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
     connect(inst_creation_task.get(), &Task::status, this, &InstanceImportTask::setStatus);
     connect(inst_creation_task.get(), &Task::details, this, &InstanceImportTask::setDetails);
@@ -341,6 +561,8 @@ void InstanceImportTask::processTechnic()
 
 void InstanceImportTask::processMultiMC()
 {
+    Meta::Cleanroom::normalizeInstance(m_stagingPath);
+
     QString configPath = FS::PathCombine(m_stagingPath, "instance.cfg");
     auto instanceSettings = std::make_unique<INISettingsObject>(configPath);
 
@@ -348,6 +570,9 @@ void InstanceImportTask::processMultiMC()
 
     // reset time played on import... because packs.
     instance.resetTimePlayed();
+
+    // UUID is carried over on export, but this is a distinct instance, so give it its own
+    instance.regenerateUuid();
 
     // set a new nice name
     instance.setName(name());
@@ -381,8 +606,8 @@ void InstanceImportTask::processModrinth()
         if (original_instance_id_it != m_extra_info.constEnd())
             original_instance_id = original_instance_id_it.value();
 
-        inst_creation_task =
-            makeShared<ModrinthCreationTask>(m_stagingPath, m_globalSettings, m_parent, pack_id, pack_version_id, original_instance_id);
+        inst_creation_task = makeShared<ModrinthCreationTask>(m_stagingPath, m_trustedSource, m_globalSettings, m_parent, pack_id,
+                                                              pack_version_id, original_instance_id);
     } else {
         QString pack_id;
         if (!m_sourceUrl.isEmpty()) {
@@ -391,7 +616,7 @@ void InstanceImportTask::processModrinth()
         }
 
         // FIXME: Find a way to get the ID in directly imported ZIPs
-        inst_creation_task = makeShared<ModrinthCreationTask>(m_stagingPath, m_globalSettings, m_parent, pack_id);
+        inst_creation_task = makeShared<ModrinthCreationTask>(m_stagingPath, m_trustedSource, m_globalSettings, m_parent, pack_id);
     }
 
     inst_creation_task->setName(*this);
@@ -411,11 +636,16 @@ void InstanceImportTask::processModrinth()
     connect(inst_creation_task.get(), &Task::succeeded, this, [this, weak] {
         if (auto sp = weak.lock()) {
             setOverride(sp->shouldOverride(), sp->originalInstanceID());
+            if (m_pclWrapperDetected || sp->isPclPack())
+                addPclCompatibilityWarning();
+        } else if (m_pclWrapperDetected) {
+            addPclCompatibilityWarning();
         }
         emitSucceeded();
     });
     connect(inst_creation_task.get(), &Task::failed, this, &InstanceImportTask::emitFailed);
     connect(inst_creation_task.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+    connect(inst_creation_task.get(), &Task::transferRate, this, &Task::setTransferRate);
     connect(inst_creation_task.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
     connect(inst_creation_task.get(), &Task::status, this, &InstanceImportTask::setStatus);
     connect(inst_creation_task.get(), &Task::details, this, &InstanceImportTask::setDetails);

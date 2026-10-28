@@ -70,6 +70,13 @@ void LaunchTask::prependStep(shared_qobject_ptr<LaunchStep> step)
     m_steps.prepend(step);
 }
 
+QList<Task*> LaunchTask::getSubTasks() const
+{
+    if (currentStep >= 0 && currentStep < m_steps.size() && m_steps[currentStep])
+        return { m_steps[currentStep].get() };
+    return {};
+}
+
 void LaunchTask::executeTask()
 {
     m_instance->setCrashed(false);

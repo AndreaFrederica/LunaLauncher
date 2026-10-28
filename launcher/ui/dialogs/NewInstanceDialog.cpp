@@ -54,8 +54,10 @@
 
 #include <QDialogButtonBox>
 #include <QFileDialog>
+#include <QGuiApplication>
 #include <QLayout>
 #include <QPushButton>
+#include <QRect>
 #include <QScreen>
 #include <QValidator>
 #include <utility>
@@ -139,13 +141,28 @@ NewInstanceDialog::NewInstanceDialog(const QString& initialGroup,
 
     updateDialogState();
 
-    if (APPLICATION->settings()->get("NewInstanceGeometry").isValid()) {
-        restoreGeometry(QByteArray::fromBase64(APPLICATION->settings()->get("NewInstanceGeometry").toString().toUtf8()));
-    } else {
-        auto screen = parent->screen();
-        auto geometry = screen->availableSize();
-        resize(width(), qMin(geometry.height() - 50, 710));
+    const auto savedGeometry = APPLICATION->settings()->get("NewInstanceGeometry").toString();
+    const bool restored = !savedGeometry.isEmpty() &&
+                          restoreGeometry(QByteArray::fromBase64(savedGeometry.toUtf8()));
+
+    // A monitor can be disconnected or its layout can change between runs.
+    // Keep the dialog usable instead of restoring it entirely off-screen.
+    QScreen* screen = parent ? parent->screen() : QGuiApplication::primaryScreen();
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    const QRect available = screen ? screen->availableGeometry() : QRect();
+    if (!restored || (screen && !frameGeometry().intersects(available))) {
+        if (screen) {
+            resize(width(), qMin(available.height() - 50, 710));
+            move(available.center() - rect().center());
+        }
     }
+
+    // exec() normally shows a dialog, but explicitly activating it avoids a
+    // modal child remaining behind the main window on Windows.
+    show();
+    raise();
+    activateWindow();
 
     connect(m_container, &PageContainer::selectedPageChanged, this, &NewInstanceDialog::selectedPageChanged);
 }

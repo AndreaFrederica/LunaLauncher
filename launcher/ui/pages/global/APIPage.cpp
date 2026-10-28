@@ -42,6 +42,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QTabBar>
 #include <QValidator>
@@ -50,9 +51,13 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "minecraft/MirrorDownload.h"
+#include "modplatform/ModApiMirror.h"
+#include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "net/PasteUpload.h"
+#include "net/PclDownloadLibrary.h"
 #include "settings/SettingsObject.h"
 #include "tools/BaseProfiler.h"
+#include "ui/pages/global/PclDownloadPage.h"
 
 APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 {
@@ -77,7 +82,50 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
         ui->mirrorTypeComboBox->addItem(tr(MirrorDownload::MirrorTypes.at(mirrorType).name.toUtf8()), mirrorType);
     }
 
+    for (auto* comboBox : { ui->modrinthMirrorComboBox, ui->curseForgeMirrorComboBox }) {
+        comboBox->addItem(tr("Official"), ModApiMirror::Official);
+        comboBox->addItem(tr("MCIM"), ModApiMirror::MCIM);
+        comboBox->addItem(tr("Custom"), ModApiMirror::Custom);
+    }
+
+    ui->curseForgeDownloadBrowserComboBox->addItem(tr("Embedded browser"), "Embedded");
+    ui->curseForgeDownloadBrowserComboBox->addItem(tr("System browser"), "System");
+    ui->curseForgeDownloadBrowserComboBox->addItem(tr("External tool"), "External");
+    if (!CurseForgeDownloadPageService::isAvailable()) {
+        const auto embeddedIndex = ui->curseForgeDownloadBrowserComboBox->findData("Embedded");
+        ui->curseForgeDownloadBrowserComboBox->setItemData(embeddedIndex, false, Qt::UserRole - 1);
+        ui->curseForgeDownloadBrowserComboBox->setItemData(
+            embeddedIndex, tr("The embedded CurseForge browser was not built or is unavailable."), Qt::ToolTipRole);
+    }
+    if (!CurseForgeDownloadPageService::isAvailable(CurseForgeDownloadPageService::Provider::External)) {
+        const auto externalIndex = ui->curseForgeDownloadBrowserComboBox->findData("External");
+        ui->curseForgeDownloadBrowserComboBox->setItemData(
+            externalIndex, tr("Configure and enable the CurseForge external download tool on the Tools settings page."), Qt::ToolTipRole);
+    }
+
+    // Add download backend dropdown
+    ui->downloadBackendComboBox->addItem(tr("Qt (Built-in)"), 0);
+    ui->downloadBackendComboBox->addItem(tr("aria2"), 1);
+    ui->downloadBackendComboBox->addItem(tr("dotNetDownload"), 2);
+
+    // Loading also initializes the NativeAOT engine. Merely checking isLoaded()
+    // would leave this option disabled until another page happened to load it.
+    auto& pclDownload = PclDownloadLibrary::instance();
+    if (!BuildConfig.PCL_DOWNLOAD_ENABLED || (!pclDownload.isLoaded() && !pclDownload.load())) {
+        ui->downloadBackendComboBox->setItemData(2, false, Qt::UserRole - 1);
+        ui->downloadBackendComboBox->setItemData(
+            2, tr("PCL.Download library was not built or is unavailable: %1").arg(pclDownload.errorString()), Qt::ToolTipRole);
+    }
+
     void (QComboBox::*currentIndexChangedSignal)(int)(&QComboBox::currentIndexChanged);
+    connect(ui->downloadBackendComboBox, currentIndexChangedSignal, this, [this](int index) {
+        if (!m_container)
+            return;
+        auto* pclPage = dynamic_cast<PclDownloadPage*>(m_container->getPage("dotnet-download-settings"));
+        if (pclPage) {
+            pclPage->setEnabledFromBackend(ui->downloadBackendComboBox->itemData(index).toInt() == 2);
+        }
+    });
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLPlaceholder);
     // This function needs to be called even when the ComboBox's index is still in its default state.
     updateBaseURLPlaceholder(ui->pasteTypeComboBox->currentIndex());
@@ -87,6 +135,8 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     ui->libraryURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->libraryURL));
     ui->fmlLibsURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->fmlLibsURL));
     ui->mojangDownloadsMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->mojangDownloadsMirrorURL));
+    ui->modrinthMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->modrinthMirrorURL));
+    ui->curseForgeMirrorURL->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->curseForgeMirrorURL));
     ui->baseURLEntry->setValidator(new QRegularExpressionValidator(s_validUrlRegExp, ui->baseURLEntry));
     ui->msaClientID->setValidator(new QRegularExpressionValidator(s_validMSAClientID, ui->msaClientID));
     ui->flameKey->setValidator(new QRegularExpressionValidator(s_validFlameKey, ui->flameKey));
@@ -99,9 +149,12 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 
     // Connect mirror selection change
     connect(ui->mirrorTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateMirrorSelection);
+    connect(ui->modrinthMirrorComboBox, currentIndexChangedSignal, this, &APIPage::updateModApiMirrorSelection);
+    connect(ui->curseForgeMirrorComboBox, currentIndexChangedSignal, this, &APIPage::updateModApiMirrorSelection);
 
     loadSettings();
     updateMirrorSelection();  // Initialize UI state
+    updateModApiMirrorSelection();
 
     resetBaseURLNote();
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLNote);
@@ -111,6 +164,16 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 APIPage::~APIPage()
 {
     delete ui;
+}
+
+void APIPage::setPclDownloadEnabled(bool enabled)
+{
+    const int backend = enabled ? 2 : 0;
+    if (!enabled && ui->downloadBackendComboBox->currentData().toInt() != 2)
+        return;
+
+    const QSignalBlocker blocker(ui->downloadBackendComboBox);
+    ui->downloadBackendComboBox->setCurrentIndex(ui->downloadBackendComboBox->findData(backend));
 }
 
 void APIPage::resetBaseURLNote()
@@ -147,7 +210,23 @@ void APIPage::updateMirrorSelection()
     ui->fmlLibsURL->setEnabled(isCustom);
     ui->mojangDownloadsMirrorURL->setEnabled(isCustom);
 
-    if (!isCustom) {
+    if (isCustom) {
+        // Show the user's saved custom endpoints. Without this, switching from
+        // BMCLAPI to Custom would silently keep the BMCLAPI preset URLs and
+        // applying the page would save them as if they were custom values.
+        auto s = APPLICATION->settings();
+        ui->metaURL->setText(s->get("MetaURLOverride").toString());
+        ui->resourceURL->setText(s->get("ResourceURLOverride").toString());
+        ui->libraryURL->setText(s->get("LibrariesURL").toString());
+        ui->fmlLibsURL->setText(s->get("LegacyFMLLibsURLOverride").toString());
+        ui->mojangDownloadsMirrorURL->setText(s->get("MojangDownloadsMirrorURL").toString());
+
+        ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+        ui->resourceURL->setPlaceholderText(BuildConfig.DEFAULT_RESOURCE_BASE);
+        ui->libraryURL->setPlaceholderText(BuildConfig.LIBRARY_BASE);
+        ui->fmlLibsURL->setPlaceholderText(BuildConfig.LEGACY_FMLLIBS_BASE_URL);
+        ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("Use Default"));
+    } else {
         // Populate fields with preset values (for display only)
         const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(mirrorType);
 
@@ -177,6 +256,12 @@ void APIPage::updateMirrorSelection()
     }
 }
 
+void APIPage::updateModApiMirrorSelection()
+{
+    ui->modrinthMirrorURL->setEnabled(ui->modrinthMirrorComboBox->currentData().toInt() == ModApiMirror::Custom);
+    ui->curseForgeMirrorURL->setEnabled(ui->curseForgeMirrorComboBox->currentData().toInt() == ModApiMirror::Custom);
+}
+
 void APIPage::loadSettings()
 {
     auto s = APPLICATION->settings();
@@ -201,15 +286,43 @@ void APIPage::loadSettings()
     }
     ui->mirrorTypeComboBox->setCurrentIndex(mirrorTypeIndex);
 
+    const auto loadModApiMirror = [](QComboBox* comboBox, int mirror) {
+        int index = comboBox->findData(mirror);
+        if (index == -1) {
+            index = comboBox->findData(ModApiMirror::Official);
+        }
+        comboBox->setCurrentIndex(index);
+    };
+    loadModApiMirror(ui->modrinthMirrorComboBox, s->get("ModrinthMirror").toInt());
+    loadModApiMirror(ui->curseForgeMirrorComboBox, s->get("CurseForgeMirror").toInt());
+    ui->modrinthMirrorURL->setText(s->get("ModrinthMirrorURL").toString());
+    ui->curseForgeMirrorURL->setText(s->get("CurseForgeMirrorURL").toString());
+    ui->modrinthDownloadMirrorURL->setText(s->get("ModrinthDownloadMirrorURL").toString());
+
+    const auto curseForgeDownloadBrowser = s->get("CurseForgeDownloadBrowser").toString();
+    auto curseForgeDownloadBrowserIndex = ui->curseForgeDownloadBrowserComboBox->findData(curseForgeDownloadBrowser);
+    if (curseForgeDownloadBrowserIndex < 0 || (curseForgeDownloadBrowser == "Embedded" && !CurseForgeDownloadPageService::isAvailable())) {
+        curseForgeDownloadBrowserIndex = ui->curseForgeDownloadBrowserComboBox->findData("System");
+    }
+    ui->curseForgeDownloadBrowserComboBox->setCurrentIndex(curseForgeDownloadBrowserIndex);
+
+    // Load download backend
+    int backend = s->get("DownloadBackend").toInt();
+    int backendIndex = ui->downloadBackendComboBox->findData(backend);
+    if (backendIndex == -1) {
+        backendIndex = 0;  // Default to Qt
+    }
+    ui->downloadBackendComboBox->setCurrentIndex(backendIndex);
+
     QString msaClientID = s->get("MSAClientIDOverride").toString();
     ui->msaClientID->setText(msaClientID);
     QString metaURL = s->get("MetaURLOverride").toString();
     ui->metaURL->setText(metaURL);
-    QString resourceURL = s->get("ResourceURL").toString();
+    QString resourceURL = s->get("ResourceURLOverride").toString();
     ui->resourceURL->setText(resourceURL);
     QString libraryURL = s->get("LibrariesURL").toString();
     ui->libraryURL->setText(libraryURL);
-    QString fmlLibsURL = s->get("FMLLibsURL").toString();
+    QString fmlLibsURL = s->get("LegacyFMLLibsURLOverride").toString();
     ui->fmlLibsURL->setText(fmlLibsURL);
     QString mojangDownloadsMirrorURL = s->get("MojangDownloadsMirrorURL").toString();
     ui->mojangDownloadsMirrorURL->setText(mojangDownloadsMirrorURL);
@@ -232,6 +345,15 @@ void APIPage::applySettings()
     // Save mirror type and URLs based on selection
     int mirrorType = ui->mirrorTypeComboBox->currentData().toInt();
     s->set("DownloadMirrorType", mirrorType);
+    s->set("ModrinthMirror", ui->modrinthMirrorComboBox->currentData().toInt());
+    s->set("CurseForgeMirror", ui->curseForgeMirrorComboBox->currentData().toInt());
+    s->set("ModrinthMirrorURL", ui->modrinthMirrorURL->text().trimmed());
+    s->set("CurseForgeMirrorURL", ui->curseForgeMirrorURL->text().trimmed());
+    s->set("ModrinthDownloadMirrorURL", ui->modrinthDownloadMirrorURL->text().trimmed());
+    s->set("CurseForgeDownloadBrowser", ui->curseForgeDownloadBrowserComboBox->currentData().toString());
+
+    // Save download backend
+    s->set("DownloadBackend", ui->downloadBackendComboBox->currentData().toInt());
 
     if (mirrorType == MirrorDownload::Custom) {
         // Save custom URLs
@@ -294,25 +416,25 @@ void APIPage::applySettings()
         }
 
         s->set("MetaURLOverride", metaURL.toString());
-        s->set("ResourceURL", resourceURL.toString());
+        s->set("ResourceURLOverride", resourceURL.toString());
         s->set("LibrariesURL", libraryURL.toString());
-        s->set("FMLLibsURL", fmlLibsURL.toString());
+        s->set("LegacyFMLLibsURLOverride", fmlLibsURL.toString());
         s->set("MojangDownloadsMirrorURL", mojangDownloadsMirrorURL.toString());
     } else if (mirrorType == MirrorDownload::Official) {
         // Clear overrides to use official servers
         s->set("MetaURLOverride", "");
-        s->set("ResourceURL", BuildConfig.DEFAULT_RESOURCE_BASE);
+        s->set("ResourceURLOverride", "");
         s->set("LibrariesURL", "");
-        s->set("FMLLibsURL", "");
+        s->set("LegacyFMLLibsURLOverride", "");
         s->set("MojangDownloadsMirrorURL", "");
     } else if (mirrorType == MirrorDownload::BMCLAPI) {
         // Set BMCLAPI URLs for Minecraft assets only
         // BMCLAPI does NOT provide Prism Launcher's meta files, so don't override MetaURLOverride
         const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::BMCLAPI);
         s->set("MetaURLOverride", "");  // Keep default for Prism Launcher meta
-        s->set("ResourceURL", mirrorInfo.defaultAssetsUrl);
+        s->set("ResourceURLOverride", mirrorInfo.defaultAssetsUrl);
         s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
-        s->set("FMLLibsURL", mirrorInfo.defaultFMLLibsUrl);
+        s->set("LegacyFMLLibsURLOverride", mirrorInfo.defaultFMLLibsUrl);
         s->set("MojangDownloadsMirrorURL", "");  // BMCLAPI URL is handled in code, not stored
     }
 

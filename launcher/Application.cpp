@@ -43,20 +43,36 @@
  */
 
 #include "Application.h"
+
+// Qt's bundled rcc emits this probe when resources are compressed with zstd.
+// Some MSVC Qt distributions omit the private export, while the generated
+// resources still reference it. Keep the probe available in the launcher so
+// CLI and GUI link consistently with that Qt build.
+unsigned char qResourceFeatureZstd()
+{
+    return 1;
+}
 #include "BuildConfig.h"
 
 #include <QDirIterator>
 #include <QFontDatabase>
 
 #include "DataMigrationTask.h"
+#include "Filter.h"
 #include "java/JavaInstallList.h"
+#include "launch/LaunchTask.h"
+#include "meta/MetadataProvider.h"
 #include "minecraft/MirrorDownload.h"
+#include "minecraft/update/AssetUpdateTask.h"
+#include "modplatform/ModApiMirror.h"
 #include "net/Aria2Manager.h"
 #include "net/PasteUpload.h"
+#include "net/PclDownloadLibrary.h"
 #include "tasks/Task.h"
 #include "tools/GenericProfiler.h"
 #include "ui/InstanceWindow.h"
 #include "ui/MainWindow.h"
+#include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
 #include "ui/dialogs/ProgressDialog.h"
@@ -64,6 +80,8 @@
 
 #include "ui/pages/BasePageProvider.h"
 #include "ui/pages/global/APIPage.h"
+#include "ui/pages/global/YggdrasilPage.h"
+#include "ui/pages/global/AssetsPage.h"
 #include "ui/pages/global/AccountListPage.h"
 #include "ui/pages/global/AppearancePage.h"
 #include "ui/pages/global/Aria2Page.h"
@@ -74,6 +92,7 @@
 #include "ui/pages/global/LauncherPage.h"
 #include "ui/pages/global/MinecraftPage.h"
 #include "ui/pages/global/Nide8AuthPage.h"
+#include "ui/pages/global/PclDownloadPage.h"
 #include "ui/pages/global/ProxyPage.h"
 #include "ui/pages/global/TerracottaPage.h"
 #include "ui/pages/global/YukariConnectPage.h"
@@ -107,6 +126,9 @@
 #include <QFileInfo>
 #include <QFileOpenEvent>
 #include <QIcon>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QLibraryInfo>
 #include <QList>
 #include <QNetworkAccessManager>
@@ -130,6 +152,7 @@
 #include "tools/MCEditTool.h"
 
 #include "settings/INISettingsObject.h"
+#include "settings/INIFile.h"
 #include "settings/Setting.h"
 
 #include "meta/Index.h"
@@ -145,7 +168,9 @@
 #ifdef Q_OS_LINUX
 #include <dlfcn.h>
 #include "LibraryUtils.h"
+#ifdef WITH_GAMEMODE
 #include "gamemode_client.h"
+#endif
 #endif
 
 #if defined(Q_OS_LINUX)
@@ -175,6 +200,9 @@
 #endif
 
 #include "console/Console.h"
+#include "cli/CliController.h"
+#include "cli/McpServer.h"
+#include "cli/TuiController.h"
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
@@ -346,8 +374,31 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "a", "profile" }, "Use the account specified by its profile name (only valid in combination with --launch)", "profile" },
           { { "o", "offline" }, "Launch offline, with given player name (only valid in combination with --launch)", "offline" },
           { "alive", "Write a small '" + liveCheckFile + "' file after the launcher starts" },
+          { "show-window", "Show the main launcher window (useful in combination with --launch)" },
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
-          { "show", "Opens the window for the specified instance (by instance ID)", "show" } });
+          { "show", "Opens the window for the specified instance (by instance ID)", "show" },
+          { "cli", "Run one command without displaying the GUI" },
+          { "print-startup-context", "Print resolved data directory and single-instance ID without starting a backend (requires --cli)" },
+          { "mcp", "Run an MCP server over standard input/output" },
+          { "tui", "Run the interactive terminal interface" },
+          { "json", "Print CLI results as JSON" },
+          { "non-interactive", "Fail instead of prompting for missing CLI input" },
+          { "password-stdin", "Read one account password from standard input" },
+          { "wait", "Wait for the launched game to exit" },
+          { "detach", "Detach after the game process starts (the default)" },
+          { "reveal-secrets", "Include sensitive values in headless settings output" },
+          { "yes", "Confirm a destructive headless operation" },
+          { "permanent", "Permanently delete an instance instead of moving it to the trash" },
+          { "force", "Allow a destructive operation despite linked instances" },
+          { "name", "Override the imported instance name", "name" },
+          { "username", "Account username", "username" },
+          { "auth-url", "Yggdrasil authentication server URL", "url" },
+          { "session-url", "Yggdrasil session server URL", "url" },
+          { "source-name", "Yggdrasil service display name", "name" },
+          { "server-id", "UnifiedPass server ID", "id" },
+          { "profile-id", "Select a specific third-party game profile", "id" },
+          { "minecraft-profile-name", "Create a missing Microsoft Java profile with this name", "name" } });
+
     // Has to be positional for some OS to handle that properly
     parser.addPositionalArgument("URL", "Import the resource(s) at the given URL(s) (same as -I / --import)", "[URL...]");
 
@@ -355,6 +406,43 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     parser.addVersionOption();
 
     parser.process(arguments());
+
+    m_cliOptions.cli = parser.isSet("cli");
+    m_cliOptions.mcp = parser.isSet("mcp");
+    m_cliOptions.tui = parser.isSet("tui");
+    m_cliOptions.json = parser.isSet("json");
+    m_cliOptions.nonInteractive = parser.isSet("non-interactive");
+    m_cliOptions.passwordStdin = parser.isSet("password-stdin");
+    m_cliOptions.wait = parser.isSet("wait");
+    m_cliOptions.detach = parser.isSet("detach");
+    m_cliOptions.revealSecrets = parser.isSet("reveal-secrets");
+    m_cliOptions.yes = parser.isSet("yes");
+    m_cliOptions.permanent = parser.isSet("permanent");
+    m_cliOptions.force = parser.isSet("force");
+    m_cliOptions.command = parser.positionalArguments();
+    m_cliOptions.name = parser.value("name");
+    m_cliOptions.profile = parser.value("profile");
+    m_cliOptions.offlineName = parser.value("offline");
+    m_cliOptions.server = parser.value("server");
+    m_cliOptions.world = parser.value("world");
+    m_cliOptions.username = parser.value("username");
+    m_cliOptions.authUrl = parser.value("auth-url");
+    m_cliOptions.sessionUrl = parser.value("session-url");
+    m_cliOptions.sourceName = parser.value("source-name");
+    m_cliOptions.serverId = parser.value("server-id");
+    m_cliOptions.profileId = parser.value("profile-id");
+    m_cliOptions.minecraftProfileName = parser.value("minecraft-profile-name");
+    const int headlessModes = static_cast<int>(m_cliOptions.cli) + static_cast<int>(m_cliOptions.mcp) + static_cast<int>(m_cliOptions.tui);
+    if (headlessModes > 1) {
+        std::cerr << "--cli, --mcp and --tui are mutually exclusive\n";
+        m_status = Application::Failed;
+        return;
+    }
+    if (parser.isSet("print-startup-context") && !m_cliOptions.cli) {
+        std::cerr << "--print-startup-context requires --cli\n";
+        m_status = Application::Failed;
+        return;
+    }
 
     m_instanceIdToLaunch = parser.value("launch");
     m_serverToJoin = parser.value("server");
@@ -367,18 +455,22 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     m_liveCheck = parser.isSet("alive");
 
     m_instanceIdToShowWindowOf = parser.value("show");
+    m_showMainWindow = parser.isSet("show-window");
 
-    for (auto url : parser.values("import")) {
-        m_urlsToImport.append(normalizeImportUrl(url));
-    }
+    if (!m_cliOptions.isHeadless()) {
+        for (auto url : parser.values("import")) {
+            m_urlsToImport.append(normalizeImportUrl(url));
+        }
 
-    // treat unspecified positional arguments as import urls
-    for (auto url : parser.positionalArguments()) {
-        m_urlsToImport.append(normalizeImportUrl(url));
+        // treat unspecified positional arguments as import urls
+        for (auto url : parser.positionalArguments()) {
+            m_urlsToImport.append(normalizeImportUrl(url));
+        }
     }
 
     // error if --launch is missing with --server or --profile
-    if ((!m_serverToJoin.isEmpty() || !m_worldToJoin.isEmpty() || !m_profileToUse.isEmpty() || m_launchOffline) &&
+    if (!m_cliOptions.isHeadless() &&
+        (!m_serverToJoin.isEmpty() || !m_worldToJoin.isEmpty() || !m_profileToUse.isEmpty() || m_launchOffline) &&
         m_instanceIdToLaunch.isEmpty()) {
         std::cerr << "--server, --profile and --offline can only be used in combination with --launch!" << std::endl;
         m_status = Application::Failed;
@@ -495,7 +587,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                                   .arg(dataPath));
         return;
     }
-    m_dataPath = dataPath;
+    // Keep the resolved absolute path.  NeoUI may complete migration after
+    // startup, and relative paths would otherwise be resolved against the
+    // already changed working directory a second time.
+    m_dataPath = QDir::currentPath();
 
     /*
      * Establish the mechanism for communication with an already running PrismLauncher that uses the same data path.
@@ -503,11 +598,25 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
      * We want to initialize this before logging to avoid messing with the log of a potential already running copy.
      */
     auto appID = ApplicationId::fromPathAndVersion(QDir::currentPath(), BuildConfig.printableVersionString());
+    if (parser.isSet("print-startup-context")) {
+        // Native and Web UIs must agree on portable/environment/--dir resolution.
+        // This query is safe while another backend owns the directory: it returns
+        // before acquiring LocalPeer or opening logs, settings and accounts.
+        const QJsonObject context{ { "dataRoot", QDir::currentPath() }, { "instanceId", appID.toString() } };
+        std::cout << QJsonDocument(context).toJson(QJsonDocument::Compact).constData() << std::endl;
+        m_status = Application::Succeeded;
+        return;
+    }
     {
         // FIXME: you can run the same binaries with multiple data dirs and they won't clash. This could cause issues for updates.
         m_peerInstance = new LocalPeer(this, appID);
         connect(m_peerInstance, &LocalPeer::messageReceived, this, &Application::messageReceived);
         if (m_peerInstance->isClient()) {
+            if (m_cliOptions.isHeadless()) {
+                std::cerr << "The launcher data directory is already in use by another process.\n";
+                m_status = Application::Failed;
+                return;
+            }
             bool sentMessage = false;
             int timeout = 2000;
 
@@ -635,20 +744,38 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     }
 
     {
-        bool migrated = false;
-
-        if (!migrated)
-            migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
-                "PrismLauncher", "prismlauncher.cfg");
-        if (!migrated)
-            migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
-                "polymc.cfg");
-        if (!migrated)
-            migrated = handleDataMigration(
-                dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"), "MultiMC",
-                "multimc.cfg");
+        // A headless sidecar has no QWidget to show the classic migration
+        // prompt. Record the same candidates and let NeoUI ask the user before
+        // copying anything. The classic UI keeps its existing startup flow.
+        if (isHeadless()) {
+            const auto addCandidate = [this](const QString& oldData, const QString& name, const QString& configFile) {
+                const QString nomigratePath = FS::PathCombine(m_dataPath, name + "_nomigrate.txt");
+                const QStringList configPaths = { FS::PathCombine(oldData, configFile), FS::PathCombine(oldData, BuildConfig.LAUNCHER_CONFIGFILE) };
+                bool configExists = false;
+                for (const auto& path : configPaths) configExists |= QFileInfo::exists(path);
+                if (!configExists || QFileInfo::exists(nomigratePath)) return;
+                const bool currentExists = QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
+                m_pendingDataMigrations.append({ name, oldData, configFile, currentExists });
+            };
+            addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
+                         "PrismLauncher", "prismlauncher.cfg");
+            addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC", "polymc.cfg");
+            addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"), "MultiMC", "multimc.cfg");
+        } else {
+            bool migrated = false;
+            if (!migrated)
+                migrated = handleDataMigration(
+                    m_dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
+                    "PrismLauncher", "prismlauncher.cfg");
+            if (!migrated)
+                migrated = handleDataMigration(
+                    m_dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
+                    "polymc.cfg");
+            if (!migrated)
+                migrated = handleDataMigration(
+                    m_dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"), "MultiMC",
+                    "multimc.cfg");
+        }
     }
 
     {
@@ -661,9 +788,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "Compiled by                : " << BuildConfig.compilerID();
         qInfo() << "Build Artifact             : " << BuildConfig.BUILD_ARTIFACT;
         qInfo() << "Updates Enabled           : " << (updaterEnabled() ? "Yes" : "No");
-
-        // Initialize JavaScript API manager
-        JSAPIManager::instance().initialize();
 
         if (adjustedBy.size()) {
             qInfo() << "Work dir before adjustment : " << origcwdPath;
@@ -700,21 +824,34 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         }
     }
 
+    // A fresh headless backend must leave the config absent until the first
+    // explicit change. Bootstrap defaults otherwise create a config before
+    // NeoUI can ask about migration, making every candidate look unsafe.
+    const bool deferInitialSettingsSave = isHeadless() && !QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
+
     // Initialize application settings
     {
         // Provide a fallback for migration from PolyMC
         m_settings.reset(new INISettingsObject({ BuildConfig.LAUNCHER_CONFIGFILE, "polymc.cfg", "multimc.cfg" }, this));
+        if (deferInitialSettingsSave)
+            m_settings->suspendSave();
 
         // Theming
         m_settings->registerSetting("IconTheme", QString());
         m_settings->registerSetting("ApplicationTheme", QString());
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
+        m_settings->registerSetting("ThemeDownloadSources", QStringList{ "https://github.com/PrismLauncher/Themes" });
+        m_settings->registerSetting("ThemeDownloadSource", QString("https://github.com/PrismLauncher/Themes"));
 
         // Remembered state
         m_settings->registerSetting("LastUsedGroupForNewInstance", QString());
 
         m_settings->registerSetting("MenuBarInsteadOfToolBar", false);
         m_settings->registerSetting("UseNewUI", false);
+        // Alternate UIs persist their first-run wizard completion in the
+        // launcher settings so switching between Classic UI and NeoUI does not
+        // restart the wizard or depend on WebView localStorage.
+        m_settings->registerSetting("NeoUISetupComplete", false);
 
         // Multiplayer features visibility
         m_settings->registerSetting("ShowServerPreview", true);
@@ -731,6 +868,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("RequestTimeout", 60);
         m_settings->registerSetting("Aria2Enabled", false);
         m_settings->registerSetting("Aria2ExecutablePath", "");
+        m_settings->registerSetting("Aria2AutoInstall", true);
         m_settings->registerSetting("Aria2FallbackToQt", true);
         m_settings->registerSetting("Aria2FollowLauncherDownloadLimits", true);
         m_settings->registerSetting("Aria2MaxConcurrentDownloads", 6);
@@ -749,6 +887,11 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("Aria2ProxyUser", "");
         m_settings->registerSetting("Aria2ProxyPass", "");
 
+        // Download backend: 0=Qt, 1=Aria2, 2=dotNetDownload (default)
+        m_settings->registerSetting("DownloadBackend", 2);
+        m_settings->registerSetting("PclDownloadFallbackToQt", true);
+        m_settings->registerSetting("PclDownloadThreadLimit", 8);
+        m_settings->registerSetting("PclDownloadSpeedLimitKBps", 0);
         QString defaultMonospace;
         int defaultSize = 11;
 #ifdef Q_OS_WIN32
@@ -788,6 +931,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("DownloadsDir", QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
         m_settings->registerSetting("DownloadsDirWatchRecursive", false);
         m_settings->registerSetting("MoveModsFromDownloadsDir", false);
+        m_settings->registerSetting("CurseForgeDownloadBrowser", "Embedded");
+        m_settings->registerSetting("CurseForgeExternalToolEnabled", false);
+        m_settings->registerSetting("CurseForgeExternalToolPath", "");
         m_settings->registerSetting("SkinsDir", "skins");
         m_settings->registerSetting("JavaDir", "java");
 
@@ -873,6 +1019,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("ModMetadataDisabled", false);
         m_settings->registerSetting("ModDependenciesDisabled", false);
         m_settings->registerSetting("SkipModpackUpdatePrompt", false);
+        m_settings->registerSetting("ShowModIncompat", false);
 
         // Minecraft offline player name
         m_settings->registerSetting("LastOfflinePlayerName", "");
@@ -914,6 +1061,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("UpdateDialogGeometry", "");
 
+        m_settings->registerSetting("NewsGeometry", "");
+
         m_settings->registerSetting("ModDownloadGeometry", "");
         m_settings->registerSetting("RPDownloadGeometry", "");
         m_settings->registerSetting("TPDownloadGeometry", "");
@@ -949,28 +1098,40 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         }
         {
             // Meta URL
-            m_settings->registerSetting("MetaURLOverride", "");
+        m_settings->registerSetting("MetaURLOverride", "");
+        m_settings->registerSetting("LocalServiceCache", true);
+        m_settings->registerSetting("YggdrasilAccountCache", true);
+        m_settings->registerSetting("LocalYggdrasilExternal", false);
+        m_settings->registerSetting("LocalYggdrasilPort", 25585);
+        m_settings->registerSetting("LocalYggdrasilPublicUrl", "");
 
             QUrl metaUrl(m_settings->get("MetaURLOverride").toString());
 
             // get rid of invalid meta urls
-            if (!metaUrl.isValid() || (metaUrl.scheme() != "http" && metaUrl.scheme() != "https"))
+            if (!metaUrl.isEmpty() && (!metaUrl.isValid() || (metaUrl.scheme() != "http" && metaUrl.scheme() != "https")))
                 m_settings->reset("MetaURLOverride");
 
             // Resource URL
-            m_settings->registerSetting("ResourceURL", BuildConfig.DEFAULT_RESOURCE_BASE);
+            m_settings->registerSetting({ "ResourceURLOverride", "ResourceURL" }, "");
 
-            QUrl resourceUrl(m_settings->get("ResourceURL").toString());
+            QUrl resourceUrl(m_settings->get("ResourceURLOverride").toString());
 
             // get rid of invalid resource urls
-            if (!resourceUrl.isValid() || (resourceUrl.scheme() != "http" && resourceUrl.scheme() != "https"))
-                m_settings->reset("ResourceURL");
+            if (!resourceUrl.isEmpty() && (!resourceUrl.isValid() || (resourceUrl.scheme() != "http" && resourceUrl.scheme() != "https")))
+                m_settings->reset("ResourceURLOverride");
         }
         {
             // Download Mirror Settings
             m_settings->registerSetting("DownloadMirrorType", MirrorDownload::MirrorType::Official);
+            m_settings->registerSetting("ModrinthMirror", ModApiMirror::Official);
+            m_settings->registerSetting("CurseForgeMirror", ModApiMirror::Official);
+            m_settings->registerSetting("ModrinthMirrorURL", "");
+            m_settings->registerSetting("CurseForgeMirrorURL", "");
+            // Optional replacement base for cdn.modrinth.com file downloads
+            // (used by the blocked-mod Modrinth fallback). Empty = official CDN.
+            m_settings->registerSetting("ModrinthDownloadMirrorURL", "");
             m_settings->registerSetting("LibrariesURL", "");
-            m_settings->registerSetting("FMLLibsURL", "");
+            m_settings->registerSetting({ "LegacyFMLLibsURLOverride", "FMLLibsURL" }, "");
             m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON
 
             QUrl librariesUrl(m_settings->get("LibrariesURL").toString());
@@ -980,10 +1141,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 m_settings->reset("LibrariesURL");
             }
 
-            QUrl fmlLibsUrl(m_settings->get("FMLLibsURL").toString());
+            QUrl fmlLibsUrl(m_settings->get("LegacyFMLLibsURLOverride").toString());
             // get rid of invalid fml libs urls
             if (!fmlLibsUrl.isEmpty() && (!fmlLibsUrl.isValid() || (fmlLibsUrl.scheme() != "http" && fmlLibsUrl.scheme() != "https"))) {
-                m_settings->reset("FMLLibsURL");
+                m_settings->reset("LegacyFMLLibsURLOverride");
             }
 
             QUrl mojangDownloadsMirrorUrl(m_settings->get("MojangDownloadsMirrorURL").toString());
@@ -993,12 +1154,21 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                  (mojangDownloadsMirrorUrl.scheme() != "http" && mojangDownloadsMirrorUrl.scheme() != "https"))) {
                 m_settings->reset("MojangDownloadsMirrorURL");
             }
+
+            for (const auto& key : { QStringLiteral("ModrinthMirrorURL"), QStringLiteral("CurseForgeMirrorURL") }) {
+                const QUrl customApiUrl(m_settings->get(key).toString());
+                if (!customApiUrl.isEmpty() && (!customApiUrl.isValid() || (customApiUrl.scheme() != "http" && customApiUrl.scheme() != "https")))
+                    m_settings->reset(key);
+            }
         }
 
         m_settings->registerSetting("CloseAfterLaunch", false);
         m_settings->registerSetting("QuitAfterGameStop", false);
 
         m_settings->registerSetting("Env", "{}");
+
+        m_settings->registerSetting("AssetVerificationMode", AssetVerificationMode::CheckExistence);
+        m_settings->registerSetting("AssetCacheExpiryDays", 7);
 
         // Custom Microsoft Authentication Client ID
         m_settings->registerSetting("MSAClientIDOverride", "");
@@ -1014,6 +1184,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 m_settings->set("FlameKeyOverride", flameKey);
             m_settings->reset("CFKeyOverride");
         }
+        m_settings->registerSetting("FallbackMRBlockedMods", true);
         m_settings->registerSetting("ModrinthToken", "");
         m_settings->registerSetting("UserAgentOverride", "");
 
@@ -1045,8 +1216,11 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider->addPage<MinecraftPage>();
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
+            m_globalSettingsProvider->addPage<YggdrasilPage>();
             m_globalSettingsProvider->addPage<APIPage>();
+            m_globalSettingsProvider->addPage<AssetsPage>();
             m_globalSettingsProvider->addPage<Aria2Page>();
+            m_globalSettingsProvider->addPage<PclDownloadPage>();
             m_globalSettingsProvider->addPage<AuthlibInjectorPage>();
             m_globalSettingsProvider->addPage<Nide8AuthPage>();
             m_globalSettingsProvider->addPage<TerracottaPage>();
@@ -1137,7 +1311,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "Loading accounts...";
         m_accounts->setListFilePath("accounts.json", true);
         m_accounts->loadList();
-        m_accounts->fillQueue();
+        if (!m_cliOptions.isHeadless())
+            m_accounts->fillQueue();
         qInfo() << "<> Accounts loaded.";
     }
 
@@ -1159,12 +1334,16 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_metacache->addBase("translations", QDir("translations").absolutePath());
         m_metacache->addBase("meta", QDir("meta").absolutePath());
         m_metacache->addBase("java", QDir("cache/java").absolutePath());
+        m_metacache->addBase("feed", QDir("cache/feed").absolutePath());
+        JSAPIManager::instance().initialize();
         m_metacache->Load();
+        Meta::registerBuiltinProviders();
         qInfo() << "<> Cache initialized.";
     }
 
     // now we have network, download translation updates
-    m_translations->downloadIndex();
+    if (qEnvironmentVariableIsEmpty("LUNA_DISABLE_BACKGROUND_DOWNLOADS"))
+        m_translations->downloadIndex();
 
     // FIXME: what to do with these?
     m_profilers.insert("jprofiler", std::shared_ptr<BaseProfilerFactory>(new JProfilerFactory()));
@@ -1213,6 +1392,23 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     updateCapabilities();
 
     detectLibraries();
+
+    if (m_cliOptions.isHeadless()) {
+        if (deferInitialSettingsSave)
+            static_cast<INISettingsObject*>(m_settings.get())->resumeSaveWithoutFlush();
+        m_status = Application::Initialized;
+        if (m_cliOptions.mcp) {
+            auto server = new McpServer(this);
+            QMetaObject::invokeMethod(server, &McpServer::start, Qt::QueuedConnection);
+        } else if (m_cliOptions.tui) {
+            auto controller = new TuiController(this);
+            QMetaObject::invokeMethod(controller, &TuiController::run, Qt::QueuedConnection);
+        } else {
+            auto controller = new CliController(m_cliOptions, this);
+            QMetaObject::invokeMethod(controller, &CliController::run, Qt::QueuedConnection);
+        }
+        return;
+    }
 
     // check update locks
     {
@@ -1349,6 +1545,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         }
     }
 
+    if (qgetenv("XDG_CURRENT_DESKTOP") == "gamescope") {
+        installEventFilter(new ToolTipFilter);
+    }
+
     if (createSetupWizard()) {
         return;
     }
@@ -1381,6 +1581,17 @@ bool Application::createSetupWizard()
                    !settings()->get("AutomaticJavaSwitch").toBool() && !settings()->get("UserAskedAboutAutomaticJavaDownload").toBool();
     bool languageRequired = settings()->get("Language").toString().isEmpty();
     bool pasteInterventionRequired = settings()->get("PastebinURL") != "";
+
+    // Managed appearance packages (including KDE global themes) are
+    // registered lazily by AppearanceService.  The setup wizard is created
+    // before the normal startup theme is applied, so checking the legacy
+    // settings first would treat a persisted `managed-...` theme as missing
+    // on every launch and add the Appearance page again.  Constructing the
+    // service here only reloads its catalog and registers the components; it
+    // does not apply or mutate the selected appearance.  The existing
+    // validity checks below can then correctly recognize installed package
+    // themes while retaining the first-run behavior for empty settings.
+    m_themeManager->appearance();
     bool validWidgets = m_themeManager->isValidApplicationTheme(settings()->get("ApplicationTheme").toString());
     bool validIcons = m_themeManager->isValidIconTheme(settings()->get("IconTheme").toString());
     bool login = !m_accounts->anyAccountIsValid() && capabilities() & Application::SupportsMSA;
@@ -1510,7 +1721,10 @@ void Application::performMainStartupAction()
             }
 
             launch(inst, m_launchOffline ? LaunchMode::Offline : LaunchMode::Normal, targetToJoin, accountToUse, m_offlineName);
-            return;
+
+            if (!m_showMainWindow) {
+                return;
+            }
         }
     }
     if (!m_instanceIdToShowWindowOf.isEmpty()) {
@@ -1555,6 +1769,10 @@ void Application::performMainStartupAction()
 void Application::showFatalErrorMessage(const QString& title, const QString& content)
 {
     m_status = Application::Failed;
+    if (m_cliOptions.isHeadless()) {
+        std::cerr << title.toStdString() << "\n" << content.toStdString() << "\n";
+        return;
+    }
     auto dialog = CustomMessageBox::selectable(nullptr, title, content, QMessageBox::Critical);
     dialog->exec();
 }
@@ -1681,7 +1899,8 @@ bool Application::launch(BaseInstance* instance,
                          LaunchMode mode,
                          MinecraftTarget::Ptr targetToJoin,
                          MinecraftAccountPtr accountToUse,
-                         const QString& offlineName)
+                         const QString& offlineName,
+                         bool forceLocalYggdrasil)
 {
     if (m_updateRunning) {
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
@@ -1702,6 +1921,7 @@ bool Application::launch(BaseInstance* instance,
         controller->setTargetToJoin(targetToJoin);
         controller->setAccountToUse(accountToUse);
         controller->setOfflineName(offlineName);
+        controller->setForceLocalYggdrasil(forceLocalYggdrasil);
         if (window) {
             controller->setParentWidget(window);
         } else if (m_mainWindow) {
@@ -1734,7 +1954,10 @@ bool Application::kill(BaseInstance* instance)
     if (controller) {
         return controller->abort();
     }
-    return true;
+    // Headless API launches detach their controller once the game starts. The
+    // instance still owns the launch task and its running game process.
+    auto task = instance->getLaunchTask();
+    return task && task->canAbort() && task->abort();
 }
 
 void Application::closeCurrentWindow()
@@ -1930,6 +2153,7 @@ void Application::on_windowClose()
 
 void Application::updateProxySettings(QString proxyTypeStr, QString addr, int port, QString user, QString password)
 {
+    QNetworkProxyFactory::setUseSystemConfiguration(proxyTypeStr == "Default");
     // Set the application proxy settings.
     if (proxyTypeStr == "SOCKS5") {
         QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, addr, port, user, password));
@@ -1946,6 +2170,7 @@ void Application::updateProxySettings(QString proxyTypeStr, QString addr, int po
     qDebug() << "Detecting proxy settings...";
     QNetworkProxy proxy = QNetworkProxy::applicationProxy();
     m_network->setProxy(proxy);
+    PclDownloadLibrary::instance().setProxy(proxyTypeStr, addr, port, user, password);
 
     QString proxyDesc;
     if (proxy.type() == QNetworkProxy::NoProxy) {
@@ -2002,10 +2227,12 @@ void Application::updateCapabilities()
     if (!getFlameAPIKey().isEmpty())
         m_capabilities |= SupportsFlame;
 
-#ifdef Q_OS_LINUX
+#ifdef WITH_GAMEMODE
     if (gamemode_query_status() >= 0)
         m_capabilities |= SupportsGameMode;
+#endif
 
+#ifdef Q_OS_LINUX
     if (!LibraryUtils::findMangoHud().isEmpty())
         m_capabilities |= SupportsMangoHud;
 #endif
@@ -2076,11 +2303,41 @@ QString Application::getUserAgent()
     return BuildConfig.USER_AGENT;
 }
 
+int Application::importPrismSettings(QString* errorMessage)
+{
+    const QString prismData =
+        FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher");
+    const QString configPath = FS::PathCombine(prismData, "prismlauncher.cfg");
+
+    if (!QFileInfo::exists(configPath)) {
+        if (errorMessage) {
+            *errorMessage = tr("No Prism Launcher settings file was found at %1.").arg(QDir::toNativeSeparators(configPath));
+        }
+        return -1;
+    }
+
+    INIFile source;
+    if (!source.loadFile(configPath)) {
+        if (errorMessage) {
+            *errorMessage = tr("The Prism Launcher settings file could not be read: %1")
+                                .arg(QDir::toNativeSeparators(configPath));
+        }
+        return -1;
+    }
+
+    return m_settings->importSettings(source);
+}
+
 bool Application::handleDataMigration(const QString& currentData,
                                       const QString& oldData,
                                       const QString& name,
                                       const QString& configFile) const
 {
+    // A sidecar must never wait for an invisible migration dialog. Keep the old
+    // profile intact; the existing GUI can offer migration on its next launch.
+    if (isHeadless())
+        return false;
+
     QString nomigratePath = FS::PathCombine(currentData, name + "_nomigrate.txt");
     QStringList configPaths = { FS::PathCombine(oldData, configFile), FS::PathCombine(oldData, BuildConfig.LAUNCHER_CONFIGFILE) };
 
@@ -2153,6 +2410,16 @@ bool Application::handleDataMigration(const QString& currentData,
         ProgressDialog diag;
         DataMigrationTask task(oldData, currentData, any(std::move(filters)));
         if (diag.execWithTask(&task)) {
+            const QString migratedConfig = FS::PathCombine(currentData, configFile);
+            const QString lunaConfig = FS::PathCombine(currentData, BuildConfig.LAUNCHER_CONFIGFILE);
+            if (configFile != BuildConfig.LAUNCHER_CONFIGFILE && QFileInfo::exists(migratedConfig) && !QFileInfo::exists(lunaConfig) &&
+                !FS::move(migratedConfig, lunaConfig)) {
+                const QString reason = tr("Could not rename %1 to %2.")
+                                           .arg(QDir::toNativeSeparators(migratedConfig), QDir::toNativeSeparators(lunaConfig));
+                qWarning() << "<> Migration failed:" << reason;
+                QMessageBox::critical(nullptr, BuildConfig.LAUNCHER_DISPLAYNAME, tr("Migration failed! Reason: %1").arg(reason));
+                return true;
+            }
             qDebug() << "<> Migration succeeded";
             setDoNotMigrate();
         } else {
@@ -2163,6 +2430,145 @@ bool Application::handleDataMigration(const QString& currentData,
         qWarning() << "<> Migration was skipped, due to existing data";
     }
     return true;
+}
+
+QJsonArray Application::dataMigrationCandidates() const
+{
+    QJsonArray result;
+    for (const auto& candidate : m_pendingDataMigrations) {
+        result.append(QJsonObject{ { "name", candidate.name },
+                                   { "source", candidate.oldData },
+                                   { "configFile", candidate.configFile },
+                                   { "target", m_dataPath },
+                                   { "currentDataExists", candidate.currentExists },
+                                   { "canMigrate", !candidate.currentExists } });
+    }
+    return result;
+}
+
+QJsonObject Application::startupStatus() const
+{
+    const auto candidates = dataMigrationCandidates();
+    const bool setupComplete = m_settings && m_settings->get("NeoUISetupComplete").toBool();
+    const bool languageRequired = m_settings && m_settings->get("Language").toString().isEmpty();
+    const bool javaRequired = m_settings && !(BuildConfig.JAVA_DOWNLOADER_ENABLED && m_settings->get("AutomaticJavaDownload").toBool()) &&
+                              !m_settings->get("IgnoreJavaWizard").toBool() &&
+                              FS::ResolveExecutable(m_settings->get("JavaPath").toString()).isNull();
+    const bool appearanceRequired = m_settings && m_themeManager &&
+        (!m_themeManager->isValidApplicationTheme(m_settings->get("ApplicationTheme").toString()) ||
+         !m_themeManager->isValidIconTheme(m_settings->get("IconTheme").toString()));
+    const bool javaQuestionRequired = m_settings && BuildConfig.JAVA_DOWNLOADER_ENABLED && !javaRequired &&
+        !m_settings->get("AutomaticJavaDownload").toBool() && !m_settings->get("AutomaticJavaSwitch").toBool() &&
+        !m_settings->get("UserAskedAboutAutomaticJavaDownload").toBool();
+    const bool pasteRequired = m_settings && !m_settings->get("PastebinURL").toString().isEmpty();
+    const bool firstRun = !QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
+    return QJsonObject{ { "firstRun", firstRun },
+                        { "setupComplete", setupComplete },
+                        { "needsSetup", !setupComplete || !candidates.isEmpty() || languageRequired || javaRequired || appearanceRequired ||
+                                        javaQuestionRequired || pasteRequired },
+                        { "migrationRequired", !candidates.isEmpty() },
+                        { "migrations", candidates },
+                        { "dataRoot", m_dataPath },
+                        { "portable", m_portable },
+                        { "headless", isHeadless() },
+                        { "languageRequired", languageRequired },
+                        { "javaRequired", javaRequired },
+                        { "javaQuestionRequired", javaQuestionRequired },
+                        { "javaDownloaderEnabled", BuildConfig.JAVA_DOWNLOADER_ENABLED },
+                        { "appearanceRequired", appearanceRequired },
+                        { "pasteRequired", pasteRequired },
+                        { "loginAvailable", m_capabilities.testFlag(Application::SupportsMSA) },
+                        { "loginRequired", m_accounts && !m_accounts->anyAccountIsValid() && m_capabilities.testFlag(Application::SupportsMSA) },
+                        { "hasAccounts", m_accounts && m_accounts->count() > 0 } };
+}
+
+std::unique_ptr<DataMigrationTask> Application::createDataMigrationTask(const QString& name, QString* errorMessage) const
+{
+    for (const auto& candidate : m_pendingDataMigrations) {
+        if (candidate.name != name) continue;
+        if (candidate.currentExists || QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE))) {
+            if (errorMessage) *errorMessage = tr("The current Luna data directory already contains a configuration file; automatic migration is unsafe.");
+            return nullptr;
+        }
+        using namespace Filters;
+        QList<Filter> filters;
+        filters.append(equals(candidate.configFile));
+        filters.append(equals(BuildConfig.LAUNCHER_CONFIGFILE));
+        filters.append(startsWith("logs/"));
+        filters.append(equals("accounts.json"));
+        filters.append(startsWith("accounts/"));
+        filters.append(startsWith("assets/"));
+        filters.append(startsWith("icons/"));
+        filters.append(startsWith("instances/"));
+        filters.append(startsWith("libraries/"));
+        filters.append(startsWith("mods/"));
+        filters.append(startsWith("themes/"));
+        return std::make_unique<DataMigrationTask>(candidate.oldData, m_dataPath, any(std::move(filters)));
+    }
+    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
+    return nullptr;
+}
+
+bool Application::finishDataMigration(const QString& name, QString* errorMessage)
+{
+    for (int i = 0; i < m_pendingDataMigrations.size(); ++i) {
+        const auto candidate = m_pendingDataMigrations.at(i);
+        if (candidate.name != name) continue;
+        const QString migratedConfig = FS::PathCombine(m_dataPath, candidate.configFile);
+        const QString lunaConfig = FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE);
+        if (candidate.configFile != BuildConfig.LAUNCHER_CONFIGFILE && QFileInfo::exists(migratedConfig) && !QFileInfo::exists(lunaConfig) &&
+            !FS::move(migratedConfig, lunaConfig)) {
+            if (errorMessage) *errorMessage = tr("Could not rename %1 to %2.").arg(migratedConfig, lunaConfig);
+            return false;
+        }
+        // The sidecar was already initialized before the user approved the
+        // migration. Reload the same native models that Classic UI initializes
+        // after copying the files so the imported instances/accounts/settings
+        // are visible immediately without restarting NeoUI.
+        if (m_settings && !m_settings->reload()) {
+            if (errorMessage) *errorMessage = tr("Could not load the migrated launcher configuration.");
+            return false;
+        }
+        if (m_instances) m_instances->loadList();
+        if (m_accounts) m_accounts->reloadList();
+        if (m_translations) m_translations->selectLanguage(m_settings->get("Language").toString());
+        if (m_themeManager) {
+            m_themeManager->refresh();
+            m_themeManager->applyCurrentlySelectedTheme(true);
+        }
+        updateCapabilities();
+        QFile marker(FS::PathCombine(m_dataPath, name + "_nomigrate.txt"));
+        if (!marker.open(QIODevice::WriteOnly)) {
+            if (errorMessage) *errorMessage = marker.errorString();
+            return false;
+        }
+        marker.close();
+        m_pendingDataMigrations.removeAt(i);
+        // Once one legacy profile has supplied the active configuration, the
+        // remaining profiles cannot be merged safely by the same automatic
+        // operation. Keep them visible so the user can explicitly skip them.
+        for (auto& remaining : m_pendingDataMigrations) remaining.currentExists = true;
+        return true;
+    }
+    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
+    return false;
+}
+
+bool Application::declineDataMigration(const QString& name, QString* errorMessage)
+{
+    for (int i = 0; i < m_pendingDataMigrations.size(); ++i) {
+        if (m_pendingDataMigrations.at(i).name != name) continue;
+        QFile marker(FS::PathCombine(m_dataPath, name + "_nomigrate.txt"));
+        if (!marker.open(QIODevice::WriteOnly)) {
+            if (errorMessage) *errorMessage = marker.errorString();
+            return false;
+        }
+        marker.close();
+        m_pendingDataMigrations.removeAt(i);
+        return true;
+    }
+    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
+    return false;
 }
 
 void Application::triggerUpdateCheck()

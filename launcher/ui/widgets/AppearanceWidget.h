@@ -48,6 +48,7 @@ class AppearanceWidget : public QWidget {
     void applyWidgetTheme(int index);
     void applyCatTheme(int index);
     void loadThemeSettings();
+    void populateThemeSettings();
 
     void updateConsolePreview();
     void updateCatPreview();

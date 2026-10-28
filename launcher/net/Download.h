@@ -65,7 +65,26 @@ class Download : public NetRequest {
     static auto makeByteArray(QUrl url, Options options = Option::NoOptions) -> std::pair<Download::Ptr, QByteArray*>;
     static auto makeFile(QUrl url, QString path, Options options = Option::NoOptions) -> Download::Ptr;
 
+    /**
+     * Declare the expected integrity of the downloaded file.
+     *
+     * The hash is attached to the sink, so the Qt path validates it while
+     * streaming; the native backends (PCL.Download / aria2) get the same
+     * information and verify the finished file themselves.
+     */
+    void setExpectedIntegrity(const QString& hashType, const QString& hash, qint64 expectedSize = -1);
+    /// Verify an already written file against the declared integrity.
+    bool verifyFileIntegrity(const QString& path, QString* error = nullptr) const;
+
+    QString expectedHash() const { return m_expectedHash; }
+    qint64 expectedSize() const { return m_expectedSize; }
+
    protected:
     virtual QNetworkReply* getReply(QNetworkRequest&) override;
+
+   private:
+    QString m_expectedHashType;
+    QString m_expectedHash;
+    qint64 m_expectedSize = -1;
 };
 }  // namespace Net

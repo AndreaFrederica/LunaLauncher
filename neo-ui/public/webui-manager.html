@@ -1,0 +1,74 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!doctype html>
+<html lang="en-US"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Web UI manager</title>
+<style>
+*{box-sizing:border-box}body{background:#101722;color:#e2e8f0;font:14px/1.6 system-ui;margin:0;padding:24px}h1{margin:0;font-size:24px}p{color:#94a3b8}header{display:flex;justify-content:space-between;align-items:center;gap:12px}button{background:#263247;color:#e2e8f0;border:1px solid #43516b;border-radius:8px;padding:8px 14px;cursor:pointer;white-space:nowrap}button:disabled{opacity:.5;cursor:default}button:hover:enabled{background:#364560}.entry{padding:16px;margin-top:12px;border:1px solid #334155;border-radius:12px;background:#182233}.entry.active{border-color:#818cf8}.entry p{margin:8px 0}.path{font:12px monospace;overflow-wrap:anywhere;white-space:normal}.error{color:#fca5a5;white-space:pre-wrap}.roots{border-top:1px solid #334155;margin-top:22px;padding-top:14px}.root{margin-bottom:12px}small{color:#94a3b8}strong{font-size:16px}#status:empty{display:none}
+</style></head><body>
+<header><h1 data-i18n="managerTitle">Web UI manager</h1><button id="refresh" data-i18n="refresh">Refresh list</button></header>
+<p data-i18n="intro">Place compiled static files in a separate folder under webui, with index.html as the entry point. An optional webui.json can describe the name and version.</p>
+<p data-i18n="switching">Switching reloads the page and loses unsaved interface input. Running clients continue; finish the current download or login first.</p>
+<p id="status" role="status" class="error"></p>
+<form id="settings" class="entry">
+  <strong data-i18n="settingsTitle">Interface loading settings</strong>
+  <p data-i18n="settingsIntro">Saving settings does not switch the current page. Startup options take effect the next time the launcher opens.</p>
+  <label><input id="remember" type="checkbox"> <span data-i18n="remember">Restore the last interface at startup</span></label>
+  <label><span data-i18n="startup">Startup interface</span> <select id="startup"></select></label>
+  <label><input id="scan-install" type="checkbox"> <span data-i18n="scanInstall">Scan webui in the launcher directory</span></label>
+  <label><input id="scan-data" type="checkbox"> <span data-i18n="scanData">Scan webui in the data directory</span></label>
+  <label><span data-i18n="extra">Additional scan directories (one absolute path per line; each UI must be in a child directory)</span><textarea id="additional" rows="3" spellcheck="false" placeholder="D:\MyWebUIs"></textarea></label>
+  <label><input id="show-manager" type="checkbox"> <span data-i18n="showManager">Open the Web UI manager at startup</span></label>
+  <p id="override" class="error"></p>
+  <button type="submit" data-i18n="save">Save loading settings</button> <button type="button" id="reset" data-i18n="reset">Restore default settings</button>
+  <p id="settings-path" class="path"></p>
+</form>
+<div id="entries"></div><section class="roots"><strong data-i18n="roots">Scan directories</strong><div id="roots"></div></section>
+<style>form label{display:block;margin:12px 0}select,textarea{display:block;width:100%;margin-top:6px;border:1px solid #43516b;border-radius:6px;padding:8px;background:#101722;color:#e2e8f0}input[type=checkbox]{accent-color:#818cf8}select:disabled{opacity:.5}</style>
+<p><small data-i18n="shortcut">Press Ctrl / ⌘ + Shift + U to open this window at any time. Use only Web UIs you trust; they can call the launcher API.</small></p>
+<script src="webui-i18n.js"></script>
+<script>
+const invoke = (name, parameters) => window.__TAURI__.core.invoke(name, parameters);
+window.lunaWebUiApply(document);
+const status = document.getElementById('status');
+function element(tag, text, className) { const e=document.createElement(tag); e.textContent=text; if(className)e.className=className; return e; }
+async function refresh(){
+  try {
+    const [result,settings]=await Promise.all([invoke('webui_list'),invoke('webui_settings_get')]); status.textContent=result.warning ? window.lunaWebUiI18n.error(result.warning) : '';
+    document.getElementById('remember').checked=settings.rememberLastUi;
+    document.getElementById('scan-install').checked=settings.scanInstallDirectory;
+    document.getElementById('scan-data').checked=settings.scanDataDirectory;
+    document.getElementById('additional').value=settings.additionalDirectories.join('\n');
+    document.getElementById('show-manager').checked=settings.showManagerOnStart;
+    const startup=document.getElementById('startup');startup.replaceChildren();
+    for(const entry of result.entries.filter(e=>!e.error)){const option=element('option',entry.name);option.value=entry.id;startup.append(option);}
+    if(!result.entries.some(e=>e.id===settings.startupUi&&!e.error)){const option=element('option',settings.startupUi+window.lunaWebUiI18n.t('unavailable'));option.value=settings.startupUi;startup.append(option);}
+    startup.value=settings.startupUi;startup.disabled=settings.rememberLastUi;
+    document.getElementById('override').textContent=result.startupOverride?window.lunaWebUiI18n.t('override')+result.startupOverride+window.lunaWebUiI18n.t('overrideTail'):'';
+    document.getElementById('settings-path').textContent=window.lunaWebUiI18n.t('savedPath')+result.settingsPath;
+    const list=document.getElementById('entries'); list.replaceChildren();
+    for(const entry of result.entries){
+      const card=element('article','','entry'+(entry.id===result.active?' active':''));
+      const header=element('header',''); header.append(element('strong',entry.name));
+      const button=element('button',entry.id===result.active?window.lunaWebUiI18n.t('reload'):window.lunaWebUiI18n.t('use')); button.disabled=!!entry.error;
+      button.onclick=async()=>{button.disabled=true;try{await invoke('webui_select',{id:entry.id});status.textContent=entry.name;setTimeout(refresh,500);}catch(e){status.textContent=window.lunaWebUiI18n.error(e);button.disabled=false;}};
+      const source=entry.source==='builtin'?window.lunaWebUiI18n.t('sourceBuiltin'):entry.source==='install'?window.lunaWebUiI18n.t('sourceInstall'):entry.source==='data'?window.lunaWebUiI18n.t('sourceData'):window.lunaWebUiI18n.t('sourceExtra');
+      header.append(button);card.append(header,element('small',`${source} ${entry.version}`));
+      if(entry.description)card.append(element('p',entry.description));
+      if(entry.path)card.append(element('p',entry.path,'path'));
+      if(entry.error)card.append(element('p',window.lunaWebUiI18n.error(entry.error),'error'));
+      list.append(card);
+    }
+    const roots=document.getElementById('roots');roots.replaceChildren();
+    for(const root of result.roots){const row=element('div','','root');const button=element('button',root.source==='data'?window.lunaWebUiI18n.t('openData'):root.source==='install'?window.lunaWebUiI18n.t('openInstall'):window.lunaWebUiI18n.t('openExtra'));button.onclick=()=>invoke('webui_open_folder',{source:root.source}).catch(e=>status.textContent=window.lunaWebUiI18n.error(e));row.append(element('p',root.path,'path'),button);roots.append(row);}
+  }catch(e){status.textContent=window.lunaWebUiI18n.error(e);}
+}
+document.getElementById('remember').onchange=event=>document.getElementById('startup').disabled=event.target.checked;
+async function save(patch){
+  const buttons=document.querySelectorAll('#settings button');buttons.forEach(b=>b.disabled=true);
+  try{await invoke('webui_settings_update',{patch});await refresh();status.textContent=window.lunaWebUiI18n.t('saved');}
+  catch(e){status.textContent=window.lunaWebUiI18n.error(e);}
+  finally{buttons.forEach(b=>b.disabled=false);}
+}
+document.getElementById('settings').onsubmit=event=>{event.preventDefault();void save({rememberLastUi:document.getElementById('remember').checked,startupUi:document.getElementById('startup').value,scanInstallDirectory:document.getElementById('scan-install').checked,scanDataDirectory:document.getElementById('scan-data').checked,additionalDirectories:document.getElementById('additional').value.split('\n').map(v=>v.trim()).filter(Boolean),showManagerOnStart:document.getElementById('show-manager').checked});};
+document.getElementById('reset').onclick=()=>save({rememberLastUi:true,startupUi:'builtin',scanInstallDirectory:true,scanDataDirectory:true,additionalDirectories:[],showManagerOnStart:false});
+document.getElementById('refresh').onclick=refresh;refresh();
+</script></body></html>

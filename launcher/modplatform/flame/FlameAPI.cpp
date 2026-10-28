@@ -5,11 +5,11 @@
 #include "FlameAPI.h"
 #include <memory>
 #include <optional>
-#include "BuildConfig.h"
 #include "FlameModIndex.h"
 
 #include "Application.h"
 #include "Json.h"
+#include "modplatform/ModApiMirror.h"
 #include "modplatform/ModIndex.h"
 #include "net/ApiDownload.h"
 #include "net/ApiUpload.h"
@@ -29,7 +29,7 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::matchFingerprints(const QList<uint>&
 
     QJsonDocument body(body_obj);
     auto body_raw = body.toJson();
-    auto [action, response] = Net::ApiUpload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/fingerprints"), body_raw);
+    auto [action, response] = Net::ApiUpload::makeByteArray(QString(ModApiMirror::curseForgeBaseUrl() + "/fingerprints"), body_raw);
     netJob->addNetAction(action);
 
     return { netJob, response };
@@ -42,7 +42,7 @@ QString FlameAPI::getModFileChangelog(int modId, int fileId)
 
     auto netJob = makeShared<NetJob>(QString("Flame::FileChangelog"), APPLICATION->network());
     auto [action, response] = Net::ApiDownload::makeByteArray(
-        QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files/%2/changelog")
+        QString(ModApiMirror::curseForgeBaseUrl() + "/mods/%1/files/%2/changelog")
             .arg(QString::fromStdString(std::to_string(modId)), QString::fromStdString(std::to_string(fileId))));
     netJob->addNetAction(action);
 
@@ -76,7 +76,7 @@ QString FlameAPI::getModDescription(int modId)
 
     auto netJob = makeShared<NetJob>(QString("Flame::ModDescription"), APPLICATION->network());
     auto [action, response] =
-        Net::ApiDownload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/description").arg(QString::number(modId)));
+        Net::ApiDownload::makeByteArray(QString(ModApiMirror::curseForgeBaseUrl() + "/mods/%1/description").arg(QString::number(modId)));
     netJob->addNetAction(action);
 
     QObject::connect(netJob.get(), &NetJob::succeeded, [&netJob, response, &description] {
@@ -116,7 +116,7 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::getProjects(QStringList addonIds) co
 
     QJsonDocument body(body_obj);
     auto body_raw = body.toJson();
-    auto [action, response] = Net::ApiUpload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods"), body_raw);
+    auto [action, response] = Net::ApiUpload::makeByteArray(QString(ModApiMirror::curseForgeBaseUrl() + "/mods"), body_raw);
     netJob->addNetAction(action);
 
     QObject::connect(netJob.get(), &NetJob::failed, [body_raw] { qDebug() << body_raw; });
@@ -148,7 +148,7 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::getFiles(const QStringList& fileIds)
     QJsonDocument body(body_obj);
     auto body_raw = body.toJson();
 
-    auto [action, response] = Net::ApiUpload::makeByteArray(QString(BuildConfig.FLAME_BASE_URL + "/mods/files"), body_raw);
+    auto [action, response] = Net::ApiUpload::makeByteArray(QString(ModApiMirror::curseForgeBaseUrl() + "/mods/files"), body_raw);
     netJob->addNetAction(action);
 
     QObject::connect(netJob.get(), &NetJob::failed, [body_raw] { qDebug() << body_raw; });
@@ -160,7 +160,7 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::getFile(const QString& addonId, cons
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetFile"), APPLICATION->network());
     auto [action, response] =
-        Net::ApiDownload::makeByteArray(QUrl(QString(BuildConfig.FLAME_BASE_URL + "/mods/%1/files/%2").arg(addonId, fileId)));
+        Net::ApiDownload::makeByteArray(QUrl(QString(ModApiMirror::curseForgeBaseUrl() + "/mods/%1/files/%2").arg(addonId, fileId)));
     netJob->addNetAction(action);
 
     QObject::connect(netJob.get(), &NetJob::failed, [addonId, fileId] { qDebug() << "Flame API file failure" << addonId << fileId; });
@@ -185,7 +185,7 @@ std::pair<Task::Ptr, QByteArray*> FlameAPI::getCategories(ModPlatform::ResourceT
 {
     auto netJob = makeShared<NetJob>(QString("Flame::GetCategories"), APPLICATION->network());
     auto [action, response] = Net::ApiDownload::makeByteArray(
-        QUrl(QString(BuildConfig.FLAME_BASE_URL + "/categories?gameId=432&classId=%1").arg(getClassId(type))));
+        QUrl(QString(ModApiMirror::curseForgeBaseUrl() + "/categories?gameId=432&classId=%1").arg(getClassId(type))));
     netJob->addNetAction(action);
     QObject::connect(netJob.get(), &Task::failed, [](QString msg) { qDebug() << "Flame failed to get categories:" << msg; });
     return { netJob, response };

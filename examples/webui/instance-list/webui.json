@@ -1,0 +1,7 @@
+{
+  "name": "实例列表示例",
+  "version": "1.0.0",
+  "description": "独立静态 Web UI 示例，演示读取实例、图标和切换界面。",
+  "apiVersion": 1,
+  "nativeFrame": true
+}

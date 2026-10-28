@@ -1,0 +1,47 @@
+<template>
+  <div
+    v-roving-tabindex
+    role="toolbar"
+    aria-orientation="horizontal"
+    :aria-label="t('shaderPack.name', 2)"
+    class="flex items-center justify-end gap-3"
+  >
+    <v-btn
+      v-if="i18nEnabled"
+      v-shared-tooltip="() => 'Alt'"
+      icon
+      variant="text"
+      large
+      :aria-pressed="isEnabledState"
+      :class="{ 'v-btn--active': isEnabledState }"
+      @click="isEnabledState = !isEnabledState"
+    >
+      <v-icon>translate</v-icon>
+    </v-btn>
+    <v-btn
+      v-shared-tooltip="() => t('shaderPack.showDirectory')"
+      icon
+      variant="text"
+      large
+      @click="showDirectory(path)"
+    >
+      <v-icon>folder</v-icon>
+    </v-btn>
+  </div>
+</template>
+<script lang="ts" setup>
+import { useAutoI18nEnabled, useService } from '@/composables'
+import { kInstance } from '@/composables/instance'
+import { kLocalizedContent } from '@/composables/localizedContent'
+import { vRovingTabindex } from '@/directives/rovingTabindex'
+import { vSharedTooltip } from '@/directives/sharedTooltip'
+import { injection } from '@/util/inject'
+import { InstanceShaderPacksServiceKey } from '@xmcl/runtime-api'
+
+const i18nEnabled = useAutoI18nEnabled()
+const { showDirectory } = useService(InstanceShaderPacksServiceKey)
+const { path } = injection(kInstance)
+
+const { isEnabledState } = injection(kLocalizedContent)
+const { t } = useI18n()
+</script>

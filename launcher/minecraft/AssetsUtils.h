@@ -24,14 +24,14 @@ struct AssetObject {
     QString getRelPath();
     QUrl getUrl();
     QString getLocalPath();
-    Net::NetRequest::Ptr getDownloadAction();
+    Net::NetRequest::Ptr getDownloadAction(bool verifyIntegrity = false);
 
     QString hash;
     qint64 size;
 };
 
 struct AssetsIndex {
-    NetJob::Ptr getDownloadJob();
+    NetJob::Ptr getDownloadJob(bool verifyIntegrity = false);
 
     QString id;
     QMap<QString, AssetObject> objects;
@@ -43,8 +43,8 @@ struct AssetsIndex {
 namespace AssetsUtils {
 bool loadAssetsIndexJson(const QString& id, const QString& file, AssetsIndex& index);
 
-QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder);
+QDir getAssetsDir(const QString& assetsId, const QString& resourcesFolder, const QString& assetsRoot = "assets/");
 
 /// Reconstruct a virtual assets folder for the given assets ID and return the folder
-bool reconstructAssets(QString assetsId, QString resourcesFolder);
+bool reconstructAssets(QString assetsId, QString resourcesFolder, QString assetsRoot = "assets/");
 }  // namespace AssetsUtils

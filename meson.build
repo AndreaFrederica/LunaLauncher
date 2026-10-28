@@ -1,0 +1,359 @@
+project(
+  'LunaLauncher',
+  ['c', 'cpp', 'java'],
+  version: '11.1.1',
+  meson_version: '>=1.4.0',
+  default_options: [
+    'buildtype=release',
+    'b_ndebug=if-release',
+    'b_vscrt=md',
+    'c_std=c11',
+    'cpp_std=c++20',
+    'warning_level=0',
+  ],
+)
+
+host_system = host_machine.system()
+is_windows = host_system == 'windows'
+is_linux = host_system == 'linux'
+is_macos = host_system == 'darwin'
+system_install = get_option('install_layout') == 'system'
+if system_install and not is_linux
+  error('The system install layout is only supported on Linux.')
+endif
+
+if is_macos
+  add_languages('objcpp', required: true)
+endif
+
+if not is_windows and not is_linux and not is_macos
+  error('This Meson build supports Windows, Linux, and macOS targets.')
+endif
+
+if meson.project_source_root() == meson.project_build_root()
+  error('In-source Meson builds are not supported.')
+endif
+
+qt = import('qt6')
+fs = import('fs')
+if is_windows
+  windows = import('windows')
+endif
+
+git_prog = find_program('git', required: false)
+python_prog = find_program('python3', 'python', required: true)
+
+cc = meson.get_compiler('c')
+cpp = meson.get_compiler('cpp')
+
+if cpp.get_argument_syntax() == 'msvc'
+  add_project_arguments(
+    [
+      '-DUNICODE',
+      '-D_UNICODE',
+      '/permissive-',
+      '/Zc:__cplusplus',
+      '/Zc:preprocessor',
+      '/utf-8',
+      '/W4',
+      '/wd4100',
+    ],
+    language: 'cpp',
+  )
+  add_project_link_arguments(['/STACK:8388608'], language: ['c', 'cpp'])
+else
+  add_project_arguments(
+    [
+      '-fstack-protector-strong',
+      '-DQT_NO_DEBUG',
+    ],
+    language: ['c', 'cpp'],
+  )
+endif
+
+add_project_arguments(
+  [
+    '-DQT_WARN_DEPRECATED_UP_TO=0x060400',
+    '-DQT_DISABLE_DEPRECATED_UP_TO=0x060400',
+  ],
+  language: 'cpp',
+)
+
+qt_core_dep = dependency('Qt6Core', method: 'cmake', required: true)
+qt_widgets_dep = dependency('Qt6Widgets', method: 'cmake', required: true)
+qt_svg_dep = dependency('Qt6Svg', method: 'cmake', required: true)
+qt_network_dep = dependency('Qt6Network', method: 'cmake', required: true)
+qt_networkauth_dep = dependency('Qt6NetworkAuth', method: 'cmake', required: true)
+qt_concurrent_dep = dependency('Qt6Concurrent', method: 'cmake', required: true)
+qt_websockets_dep = dependency('Qt6WebSockets', method: 'cmake', required: true)
+qt_xml_dep = dependency('Qt6Xml', method: 'cmake', required: true)
+qt_gui_dep = dependency('Qt6Gui', method: 'cmake', required: true)
+qt_test_dep = dependency('Qt6Test', method: 'cmake', required: true)
+qt_opengl_dep = dependency('Qt6OpenGL', method: 'cmake', required: true)
+qt_multimedia_dep = dependency('Qt6Multimedia', method: 'cmake', required: true)
+qt_dbus_dep = dependency('Qt6DBus', method: 'cmake', required: false)
+qt_plugin_dir = run_command(
+  python_prog,
+  '-c',
+  'import os; print(os.environ.get("LUNA_QT_PLUGIN_DIR", ""))',
+  check: true,
+).stdout().strip()
+if qt_plugin_dir == ''
+  qtpaths_prog = find_program('qtpaths6', 'qtpaths', required: true)
+  qt_plugin_dir = run_command(qtpaths_prog, '--query', 'QT_INSTALL_PLUGINS', check: true).stdout().strip()
+endif
+if is_windows
+  qt_webp_plugin_name = get_option('buildtype') == 'debug' ? 'qwebpd.dll' : 'qwebp.dll'
+elif is_macos
+  qt_webp_plugin_name = 'libqwebp.dylib'
+else
+  qt_webp_plugin_name = 'libqwebp.so'
+endif
+qt_webp_plugin = join_paths(qt_plugin_dir, 'imageformats', qt_webp_plugin_name)
+if not fs.exists(qt_webp_plugin)
+  error('Qt WebP image plugin was not found: ' + qt_webp_plugin)
+endif
+
+if is_windows
+  # Qt's Windows OpenSSL builds provide this runtime DLL next to the Qt
+  # binaries. Install it with the launcher so QtNetwork can initialize TLS
+  # on machines without OpenSSL already installed.
+  qt_crypto_candidates = [
+    qt_plugin_dir / '..' / 'bin' / 'libcrypto-3-x64.dll',
+    qt_plugin_dir / '..' / '..' / '..' / 'bin' / 'libcrypto-3-x64.dll',
+  ]
+  pixi_crypto_dll = run_command(
+    python_prog,
+    '-c',
+    'from pathlib import Path; import os, shutil, sys; name = "libcrypto-3-x64.dll"; env = Path(sys.executable).parent; candidates = [Path(shutil.which(name))] if shutil.which(name) else []; candidates += [env / "Library" / "bin" / name, env / "bin" / name, Path(os.environ.get("CONDA_PREFIX", "")) / "Library" / "bin" / name]; print(next((str(path) for path in candidates if path.is_file()), ""))',
+    check: true,
+  ).stdout().strip()
+  if pixi_crypto_dll != ''
+    qt_crypto_candidates += pixi_crypto_dll
+  endif
+  qt_crypto_dll = ''
+  foreach candidate : qt_crypto_candidates
+    if fs.exists(candidate)
+      qt_crypto_dll = candidate
+      break
+    endif
+  endforeach
+  if qt_crypto_dll == ''
+    error('Qt OpenSSL runtime was not found near: ' + qt_plugin_dir)
+  endif
+endif
+if is_windows
+  qt_entrypoint_dep = cpp.find_library(
+    'Qt6EntryPoint',
+    dirs: [meson.project_source_root() / 'third_party/qt/6.10.1/msvc2022_64/lib'],
+    required: true,
+  )
+else
+  qt_entrypoint_dep = dependency('', required: false)
+endif
+
+zlib_dep = dependency('zlib', fallback: ['zlib', 'zlib_dep'], required: true)
+libarchive_dep = dependency('libarchive', fallback: ['libarchive', 'libarchive_dep'], required: true)
+libqrencode_dep = dependency('libqrencode', fallback: ['qrencode', 'qrencode_dep'], required: true)
+tomlplusplus_dep = dependency('tomlplusplus', fallback: ['tomlplusplus', 'tomlplusplus_dep'], required: true)
+
+threads_dep = dependency('threads', required: false)
+dl_dep = dependency('dl', required: false)
+math_dep = cc.find_library('m', required: false)
+gamemode_dep = dependency('gamemode', required: is_linux ? get_option('gamemode') : false)
+
+launcher_name = 'LunaLauncher'
+launcher_common_name = 'LunaLauncher'
+launcher_display_name = 'Luna Launcher'
+launcher_app_binary_name = 'lunalauncher'
+launcher_app_id = 'org.lunalauncher.LunaLauncher'
+launcher_svg_file_name = 'org.lunalauncher.LunaLauncher.svg'
+launcher_env_name = 'LUNALAUNCHER'
+launcher_domain = 'lunalauncher.org'
+launcher_config_file = 'lunalauncher.cfg'
+launcher_git_url = 'https://github.com/AndreaFrederica/LunaLauncher'
+launcher_copyright = '© 2025 Luna Launcher Contributors\\n© 2022-2025 Prism Launcher Contributors\\n© 2021-2022 PolyMC Contributors\\n© 2012-2021 MultiMC Contributors'
+launcher_version_major = 11
+launcher_version_minor = 1
+launcher_version_patch = 1
+launcher_version_prerelease = ''
+launcher_version_name = '@0@.@1@.@2@'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
+launcher_version_name4 = '@0@.@1@.@2@.0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
+launcher_version_name4_comma = '@0@,@1@,@2@,0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
+launcher_build_platform = get_option('build_platform')
+if launcher_build_platform == ''
+  launcher_build_platform = '@0@-@1@'.format(host_machine.system(), host_machine.cpu_family())
+endif
+launcher_updater_github_repo = get_option('updater_github_repo')
+launcher_build_artifact = ''
+launcher_news_rss_url = 'https://prismlauncher.org/feed/feed.xml'
+launcher_news_open_url = 'https://prismlauncher.org/news'
+launcher_wiki_url = 'https://prismlauncher.org/wiki/'
+launcher_help_url = 'https://prismlauncher.org/wiki/help-pages/%1'
+launcher_login_callback_url = 'https://lunalauncher.sirrus.cc/oauth-callback.html'
+launcher_legacy_fmllibs_base_url = 'https://files.prismlauncher.org/fmllibs/'
+launcher_meta_url = 'https://meta.prismlauncher.org/v1/'
+launcher_imgur_client_id = '5b97b0713fba4a3'
+launcher_bug_tracker_url = 'https://github.com/AndreaFrederica/LunaLauncher/issues'
+launcher_translations_url = 'https://hosted.weblate.org/projects/prismlauncher/launcher/'
+launcher_translation_files_url = 'https://i18n.prismlauncher.org/'
+launcher_matrix_url = 'https://prismlauncher.org/matrix'
+launcher_discord_url = 'https://prismlauncher.org/discord'
+launcher_subreddit_url = 'https://prismlauncher.org/reddit'
+launcher_user_agent = '@0@/@1@'.format(launcher_common_name, launcher_version_name)
+if is_windows
+  launcher_glfw_library_name = 'glfw.dll'
+  launcher_openal_library_name = 'OpenAL.dll'
+elif is_macos
+  launcher_glfw_library_name = 'libglfw.dylib'
+  launcher_openal_library_name = 'libopenal.dylib'
+else
+  launcher_glfw_library_name = 'libglfw.so'
+  launcher_openal_library_name = 'libopenal.so'
+endif
+launcher_msa_client_id = 'a60a8e54-8c3c-4b25-9fe4-8ec4e616c410'
+launcher_curseforge_api_key = '$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC'
+launcher_enable_java_downloader = get_option('enable_java_downloader')
+launcher_enable_pcl_download = get_option('build_pcl_download')
+launcher_enable_yukari_connect = get_option('build_yukari_connect')
+launcher_disable_ownership_check = get_option('disable_ownership_check')
+launcher_bundle_aria2c = get_option('bundle_aria2c')
+launcher_aria2c_path = get_option('aria2c_path')
+
+curseforge_webview_opt = get_option('curseforge_webview')
+cargo_prog = find_program('cargo', required: curseforge_webview_opt)
+launcher_enable_curseforge_webview = cargo_prog.found()
+if launcher_enable_curseforge_webview and is_linux
+  webkit2gtk_dep = dependency('webkit2gtk-4.1', required: curseforge_webview_opt)
+  gtk3_dep = dependency('gtk+-3.0', required: curseforge_webview_opt)
+  launcher_enable_curseforge_webview = webkit2gtk_dep.found() and gtk3_dep.found()
+endif
+
+git_commit = ''
+git_tag = 'GIT-NOTFOUND'
+git_refspec = 'refs/heads/stable'
+if git_prog.found()
+  git_commit_result = run_command(git_prog, 'rev-parse', 'HEAD', check: false)
+  if git_commit_result.returncode() == 0
+    git_commit = git_commit_result.stdout().strip()
+  endif
+
+  git_tag_result = run_command(git_prog, 'describe', '--tags', '--exact-match', check: false)
+  if git_tag_result.returncode() == 0
+    git_tag = git_tag_result.stdout().strip()
+  endif
+
+  git_refspec_result = run_command(git_prog, 'symbolic-ref', 'HEAD', check: false)
+  if git_refspec_result.returncode() == 0
+    git_refspec = git_refspec_result.stdout().strip()
+  elif git_commit != ''
+    git_refspec = git_commit.substring(0, 8)
+  endif
+endif
+
+build_date = run_command(
+  python_prog,
+  '-c',
+  'import datetime; print(datetime.date.today().isoformat())',
+  check: true,
+).stdout().strip()
+
+compiler_name = cpp.get_id()
+compiler_version = cpp.version()
+compiler_target_system = host_machine.system()
+compiler_target_system_version = host_machine.kernel()
+compiler_target_processor = host_machine.cpu_family()
+
+if is_linux
+  binary_dest_dir = 'bin'
+  exresource_dest_dir = join_paths('share', launcher_name, 'resources')
+  library_dest_dir = '.'
+  plugin_dest_dir = '.'
+  resources_dest_dir = '.'
+  jars_dest_dir = 'jars'
+  framework_dest_dir = '.'
+  if system_install
+    binary_dest_dir = get_option('bindir')
+    resources_dest_dir = get_option('datadir') / launcher_name
+    jars_dest_dir = resources_dest_dir
+    exresource_dest_dir = resources_dest_dir / 'resources'
+  endif
+elif is_macos
+  app_bundle_dir = launcher_name + '.app/Contents'
+  binary_dest_dir = join_paths(app_bundle_dir, 'MacOS')
+  exresource_dest_dir = join_paths(app_bundle_dir, 'Resources')
+  library_dest_dir = join_paths(app_bundle_dir, 'MacOS')
+  plugin_dest_dir = join_paths(app_bundle_dir, 'MacOS')
+  resources_dest_dir = join_paths(app_bundle_dir, 'Resources')
+  jars_dest_dir = join_paths(app_bundle_dir, 'MacOS', 'jars')
+  framework_dest_dir = join_paths(app_bundle_dir, 'Frameworks')
+else
+  binary_dest_dir = '.'
+  exresource_dest_dir = 'resource'
+  library_dest_dir = '.'
+  plugin_dest_dir = '.'
+  resources_dest_dir = '.'
+  jars_dest_dir = 'jars'
+  framework_dest_dir = '.'
+endif
+
+subdir('program_info')
+subdir('buildconfig')
+subdir('libraries/cmark')
+subdir('libraries')
+subdir('launcher')
+if not get_option('yggdrasil').disabled()
+  subdir('yggdrasil')
+endif
+
+if launcher_enable_curseforge_webview
+  subdir('tools/curseforge-webview')
+endif
+
+neo_ui_opt = get_option('neo_ui')
+if not neo_ui_opt.disabled()
+  pnpm_prog = find_program('pnpm', required: neo_ui_opt)
+  cargo_prog = find_program('cargo', required: neo_ui_opt)
+  if pnpm_prog.found() and cargo_prog.found()
+    subdir('neo-ui')
+  endif
+endif
+
+if launcher_enable_pcl_download
+  subdir('libraries/PCL.Download')
+
+  # Copy the native library next to the launcher executable in the build tree,
+  # so the loader finds it when running from the build directory.
+  # (If dotnet is missing, pcl_download_lib is a disabler and this target is
+  # silently disabled as well.)
+  custom_target(
+    'pcl-download-deploy',
+    input: pcl_download_lib,
+    output: 'pcl_download_deploy.stamp',
+    command: [
+      python_prog,
+      '-c',
+      'import shutil, sys, pathlib; shutil.copy2(sys.argv[1], sys.argv[2]); pathlib.Path(sys.argv[3]).write_text("ok")',
+      '@INPUT@',
+      meson.current_build_dir() / 'launcher',
+      '@OUTPUT@',
+    ],
+    build_by_default: true,
+  )
+endif
+
+if launcher_enable_yukari_connect
+  yukari_connect_install_dir = (
+    is_macos
+    ? join_paths(resources_dest_dir, 'tools', 'yukariconnect')
+    : join_paths('tools', 'yukariconnect')
+  )
+  yukari_connect_project = subproject(
+    'yukariconnect',
+    default_options: ['install_dir=' + yukari_connect_install_dir],
+  )
+endif
+
+if get_option('build_testing')
+  subdir('tests')
+endif

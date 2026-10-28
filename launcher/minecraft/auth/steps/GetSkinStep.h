@@ -16,10 +16,6 @@ class GetSkinStep : public AuthStep {
 
     QString describe() override;
 
-   private slots:
-    void onRequestDone(QByteArray* response);
-
    private:
-    Net::Download::Ptr m_request;
     NetJob::Ptr m_task;
 };

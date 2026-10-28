@@ -18,6 +18,9 @@
 
 LaunchStep::LaunchStep(LaunchTask* parent) : Task(), m_parent(parent)
 {
+    // Download preparation can run before there is a game launch to attach to.
+    if (!parent)
+        return;
     connect(this, &LaunchStep::readyForLaunch, parent, &LaunchTask::onReadyForLaunch);
     connect(this, &LaunchStep::logLine, parent, &LaunchTask::onLogLine);
     connect(this, &LaunchStep::logLines, parent, &LaunchTask::onLogLines);

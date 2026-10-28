@@ -56,8 +56,10 @@ class QGridLayout;
 class PageContainer : public QWidget, public BasePageContainer {
     Q_OBJECT
    public:
-    explicit PageContainer(BasePageProvider* pageProvider, QString defaultId = QString(), QWidget* parent = 0);
-    virtual ~PageContainer() {}
+    explicit PageContainer(BasePageProvider* pageProvider,
+                           QString defaultId = QString(),
+                           QWidget* parent = nullptr);
+    ~PageContainer() override = default;
 
     void addButtons(QWidget* buttons);
     void addButtons(QLayout* buttons);
@@ -89,12 +91,16 @@ class PageContainer : public QWidget, public BasePageContainer {
     virtual void setParentContainer(BasePageContainer* container) { m_container = container; };
 
     void changeEvent(QEvent*) override;
+    bool event(QEvent*) override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
 
     void hidePageList() { m_pageList->hide(); }
 
    private:
     void createUI();
     void retranslate();
+    void synchronizePageVisibility();
 
    public slots:
     void help();
@@ -116,4 +122,5 @@ class PageContainer : public QWidget, public BasePageContainer {
     QListView* m_pageList;
     QLabel* m_header;
     QGridLayout* m_layout;
+    bool m_synchronizingPageVisibility = false;
 };

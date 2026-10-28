@@ -37,7 +37,8 @@
 
 #include "NetJob.h"
 #include <QNetworkReply>
-#include <QTimer>
+#include <algorithm>
+#include <utility>
 #include "net/NetRequest.h"
 #include "tasks/ConcurrentTask.h"
 #if defined(LAUNCHER_APPLICATION)
@@ -49,59 +50,128 @@
 #include "ui/dialogs/NetworkJobFailedDialog.h"
 #endif
 
+QSet<NetJob*> NetJob::s_dynamicJobs;
+
 NetJob::NetJob(QString job_name, shared_qobject_ptr<QNetworkAccessManager> network, int max_concurrent)
     : ConcurrentTask(job_name), m_network(network)
 {
 #if defined(LAUNCHER_APPLICATION)
-    if (APPLICATION_DYN && max_concurrent < 0) {
-        max_concurrent = APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt();
-
-        // Check if using BMCLAPI for dynamic rate limiting
-        int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
-        if (mirrorType == MirrorDownload::BMCLAPI) {
-            m_is_bmclapi = true;
-            // Don't limit concurrency by default - will add delay dynamically if 429 occurs
-        }
+    m_dynamicMaxConcurrent = max_concurrent < 0;
+    if (APPLICATION_DYN && m_dynamicMaxConcurrent) {
+        max_concurrent = qMax(1, APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
     }
 #endif
     if (max_concurrent > 0)
         setMaxConcurrent(max_concurrent);
+    if (m_dynamicMaxConcurrent)
+        s_dynamicJobs.insert(this);
+}
+
+NetJob::~NetJob()
+{
+    s_dynamicJobs.remove(this);
+}
+
+void NetJob::applyRuntimeSettings()
+{
+#if defined(LAUNCHER_APPLICATION)
+    if (!APPLICATION_DYN)
+        return;
+    const auto limit = qMax(1, APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+    for (auto* job : s_dynamicJobs) {
+        if (!job || job->m_aria2Delegated)
+            continue;
+        job->setMaxConcurrent(limit);
+        if (job->isRunning()) {
+            // ConcurrentTask normally queues one refill after each child
+            // finishes.  A live limit increase must fill every newly opened
+            // slot immediately, otherwise changing 1 -> 6 still leaves five
+            // downloads idle until the first child completes.
+            const auto availableSlots = qMax(0, limit - job->m_doing.size());
+            for (auto i = 0; i < availableSlots; ++i)
+                QMetaObject::invokeMethod(job, &NetJob::executeNextSubTask, Qt::QueuedConnection);
+        }
+    }
+#endif
+}
+
+void NetJob::refreshConfiguredConcurrency()
+{
+#if defined(LAUNCHER_APPLICATION)
+    if (APPLICATION_DYN && m_dynamicMaxConcurrent && !m_aria2Delegated)
+        setMaxConcurrent(qMax(1, APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt()));
+#endif
 }
 
 auto NetJob::addNetAction(Net::NetRequest::Ptr action) -> bool
 {
     action->setNetwork(m_network);
 
+    const auto taskId = action->getUid();
+    connect(action.get(), &Task::progress, this, [this, taskId](qint64 current, qint64) { updateDownloadSpeed(taskId, current); });
+
     addTask(action);
 
     return true;
 }
 
+void NetJob::updateDownloadSpeed(const QUuid& taskId, qint64 downloadedBytes)
+{
+    auto& recorded = m_downloadedBytes[taskId];
+    recorded = std::max(recorded, downloadedBytes);
+
+    if (!m_speedTimer.isValid()) {
+        m_speedTimer.start();
+        return;
+    }
+
+    constexpr qint64 sampleIntervalMs = 250;
+    const auto elapsedMs = m_speedTimer.elapsed();
+    if (elapsedMs < sampleIntervalMs) {
+        return;
+    }
+
+    qint64 totalDownloaded = 0;
+    for (const auto bytes : std::as_const(m_downloadedBytes)) {
+        totalDownloaded += bytes;
+    }
+    const auto bytesSinceLastSample = std::max<qint64>(0, totalDownloaded - m_lastSpeedSampleBytes);
+    setTransferRate(bytesSinceLastSample * 1000 / elapsedMs);
+    m_lastSpeedSampleBytes = totalDownloaded;
+    m_speedTimer.restart();
+}
+
 void NetJob::executeTask()
 {
+    m_aria2Delegated = false;
     if (canDelegateWholeQueueToAria2()) {
+        m_aria2Delegated = true;
         setMaxConcurrent(static_cast<int>(totalSize()));
         ConcurrentTask::executeTask();
         return;
     }
 
-    // For BMCLAPI, start only 1 task at a time to avoid 429 errors
-    if (m_is_bmclapi) {
-        QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection);
-    } else {
-        ConcurrentTask::executeTask();
-    }
+    refreshConfiguredConcurrency();
+    ConcurrentTask::executeTask();
 }
 
 void NetJob::executeNextSubTask()
 {
-    // For BMCLAPI with active rate limiting, add delay between requests
-    if (m_is_bmclapi && m_bmclapi_delay_ms > 0 && !m_queue.isEmpty()) {
-        QTimer::singleShot(m_bmclapi_delay_ms, this,
-                           [this]() { QMetaObject::invokeMethod(this, "executeNextSubTask", Qt::QueuedConnection); });
-    } else {
-        ConcurrentTask::executeNextSubTask();
+    // We're finished, check for failures and retry if we can (up to 3 times).
+    if (isRunning() && m_queue.isEmpty() && m_doing.isEmpty() && !m_failed.isEmpty() && m_try < 3) {
+        m_try += 1;
+        m_failed.removeIf([this](QHash<Task*, Task::Ptr>::iterator task) {
+            // there is no point in retying on 404 Not Found
+            if (static_cast<Net::NetRequest*>(task->get())->replyStatusCode() == 404) {
+                return false;
+            }
+            m_done.remove(task->get());
+            m_queue.enqueue(*task);
+            return true;
+        });
     }
+    refreshConfiguredConcurrency();
+    ConcurrentTask::executeNextSubTask();
 }
 
 bool NetJob::canDelegateWholeQueueToAria2() const
@@ -146,12 +216,17 @@ auto NetJob::canAbort() const -> bool
 
 auto NetJob::abort() -> bool
 {
-    bool fullyAborted = true;
-
     // fail all downloads on the queue
     for (auto task : m_queue)
         m_failed.insert(task.get(), task);
     m_queue.clear();
+
+    if (m_doing.isEmpty()) {
+        // no downloads to abort, NetJob is not running
+        return true;
+    }
+
+    bool fullyAborted = true;
 
     // abort active downloads
     auto toKill = m_doing.values();
@@ -187,7 +262,7 @@ auto NetJob::getFailedFiles() -> QList<QString>
 
 void NetJob::updateState()
 {
-    emit progress(m_done.count(), totalSize());
+    setProgress(m_done.count(), totalSize());
     QString status = tr("Executing %1 task(s) (%2 out of %3 are done)")
                          .arg(QString::number(m_doing.count()), QString::number(m_done.count()), QString::number(totalSize()));
 
@@ -220,7 +295,8 @@ void NetJob::emitFailed(QString reason)
 {
 #if defined(LAUNCHER_APPLICATION)
 
-    if (APPLICATION_DYN && m_ask_retry && m_manual_try < APPLICATION->settings()->get("NumberOfManualRetries").toInt() && isOnline()) {
+    if (APPLICATION_DYN && !APPLICATION->isHeadless() && m_ask_retry &&
+        m_manual_try < APPLICATION->settings()->get("NumberOfManualRetries").toInt() && isOnline()) {
         m_manual_try++;
         auto failed = getFailedActions();
         auto dialog = new NetworkJobFailedDialog(objectName(), m_try, m_done.size(), failed.size(), nullptr);

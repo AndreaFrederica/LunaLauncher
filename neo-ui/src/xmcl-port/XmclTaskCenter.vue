@@ -1,0 +1,81 @@
+<template>
+  <q-dialog v-model="shown" persistent :maximized="false" transition-show="slide-up" transition-hide="slide-down" @hide="emit('closed')">
+    <q-card class="task-card text-white">
+      <q-card-section class="task-header"><div><div class="eyebrow">{{ t('ui.taskCenter') }}</div><div class="text-h6">{{ task?.name || title || t('xmcl.task.running') }}</div><div class="text-caption text-grey-5">{{ task?.status || status || t('xmcl.task.preparing') }}</div></div><q-btn v-if="task?.canAbort || busy" flat round icon="close" color="orange" :aria-label="t('xmcl.task.cancel')" @click="emit('cancel')" /></q-card-section>
+      <q-linear-progress :value="progress" color="primary" track-color="grey-8" rounded class="q-mx-lg" />
+      <q-card-section class="task-body">
+        <div class="task-progress-row"><strong>{{ progressLabel }}</strong><span v-if="task">{{ formatRate(effectiveRate) }}<span v-if="eta"> · {{ eta }}</span></span></div>
+        <div v-if="taskCountLabel" class="task-count">{{ taskCountLabel }}</div>
+        <div v-if="task?.details && task.details !== taskCountLabel" class="task-details">{{ task.details }}</div>
+        <q-banner v-if="task?.failReason" dense class="task-error q-mb-sm">{{ task.failReason }}</q-banner>
+        <div v-if="stepRows.length" class="task-section-label">{{ t('xmcl.task.details') }}</div>
+        <q-list v-if="stepRows.length" dense class="task-steps">
+          <q-item v-for="step in stepRows" :key="step.id">
+            <q-item-section avatar><q-icon :name="taskState(step) === 'succeeded' ? 'check_circle' : step.state === 'failed' ? 'error' : step.state === 'running' ? 'sync' : 'radio_button_unchecked'" :color="taskState(step) === 'succeeded' ? 'positive' : step.state === 'failed' ? 'negative' : step.state === 'running' ? 'primary' : 'grey'" /></q-item-section>
+            <q-item-section><q-item-label>{{ taskLabel(step) }}</q-item-label><q-item-label v-if="step.details && step.status" caption class="task-detail-line">{{ step.details }}</q-item-label><q-linear-progress v-if="step.total > 0" :value="ratio(step.current, step.total)" color="primary" track-color="grey-8" rounded class="task-step-progress" /></q-item-section>
+            <q-item-section side><span v-if="step.current != null && step.total > 0">{{ taskItemProgressText(step) }}</span><span v-if="step.transferRate > 0" class="task-step-rate">{{ formatRate(step.transferRate) }}</span></q-item-section>
+          </q-item>
+        </q-list>
+        <div v-if="activeRows.length" class="task-section-label">{{ t('xmcl.task.currentDownload') }}</div>
+        <q-list v-if="activeRows.length" dense class="task-children">
+          <q-item v-for="row in activeRows" :key="row.id">
+            <q-item-section avatar><q-icon name="sync" color="primary" /></q-item-section>
+            <q-item-section><q-item-label>{{ taskLabel(row.item) }}</q-item-label><q-item-label v-if="row.item.details || row.item.status" caption class="task-detail-line">{{ row.item.details || row.item.status }}</q-item-label><q-linear-progress v-if="childTotal(row.item) > 0" :value="ratio(childCurrent(row.item), childTotal(row.item))" color="primary" track-color="grey-8" rounded class="task-step-progress" /></q-item-section>
+            <q-item-section side><span v-if="childTotal(row.item) > 0">{{ taskItemProgressText(row.item) }}</span><span v-if="row.item.transferRate > 0" class="task-step-rate">{{ formatRate(row.item.transferRate) }}</span></q-item-section>
+          </q-item>
+        </q-list>
+      </q-card-section>
+      <q-card-actions align="right"><q-btn flat :label="t('xmcl.task.background')" :disable="!canBackground" @click="shown=false" /><q-btn v-if="task?.finished" color="primary" :label="t('xmcl.task.done')" @click="shown=false" /><q-btn v-else flat color="orange" :label="t('xmcl.task.cancelTask')" @click="emit('cancel')" /></q-card-actions>
+    </q-card>
+  </q-dialog>
+</template>
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { launcher } from '../boot/launcher-api';
+import { useI18n } from 'vue-i18n';
+import { flattenTaskItems, taskProgressStats, taskItemProgressText, taskItemLabel, taskItemCurrent, taskItemTotal, isTaskItemActive, isTaskItemFinished, taskState } from '../pcl/composables/useTaskProgress';
+const props = defineProps<{ busy: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any>; title?: string; status?: string; snapshot?: any; open?: boolean }>();
+const { t } = useI18n();
+const emit = defineEmits<{ cancel: []; closed: []; updated: [task: any] }>();
+const shown = ref(false); const polled = ref<any>(null); let unlistenTaskEvents: (() => void) | undefined; let pollInFlight = false;
+const task = computed(() => props.snapshot || polled.value || null);
+const stepRows = computed(() => flattenTaskItems(task.value));
+const stats = computed(() => taskProgressStats(task.value));
+const activeRows = computed(() => stepRows.value.filter(isTaskItemActive).map(item => ({ item, id: item.id })));
+const effectiveRate = computed(() => isTaskItemFinished(task.value) ? 0 : Number(task.value?.transferRate || 0) || activeRows.value.reduce((sum, row) => sum + Number(row.item.transferRate || 0), 0));
+const done = computed(() => isFinished(task.value));
+const progress = computed(() => (stats.value.percent ?? 0) / 100);
+const progressLabel = computed(() => stats.value.percent === null ? t('xmcl.task.inProgress') : `${Math.round(stats.value.percent)}%`);
+const canBackground = computed(() => !props.busy || done.value);
+const taskCountLabel = computed(() => [stats.value.summary, stats.value.byteSummary].filter(Boolean).join(' · '));
+const eta = computed(() => stats.value.hasBytes && !stats.value.unknownByteTotals && effectiveRate.value > 0 && stats.value.totalBytes > stats.value.currentBytes
+  ? formatDuration((stats.value.totalBytes - stats.value.currentBytes) / effectiveRate.value) : '');
+const isFinished = isTaskItemFinished;
+const taskLabel = taskItemLabel;
+const childCurrent = taskItemCurrent;
+const childTotal = taskItemTotal;
+function ratio(current:any, total:any) { const c = Number(current), t = Number(total); return t > 0 ? Math.max(0, Math.min(1, c / t)) : 0; }
+function formatBytes(value:any) { const n = Number(value); if (!Number.isFinite(n) || n < 0) return ''; if (n < 1024) return `${Math.round(n)} B`; const units = ['KiB','MiB','GiB','TiB']; let size = n / 1024, index = 0; while (size >= 1024 && index < units.length - 1) { size /= 1024; index++; } return `${size.toFixed(2)} ${units[index]}`; }
+function formatDuration(value:any) { const seconds = Math.max(0, Math.round(Number(value))); if (seconds < 60) return `${seconds}s`; const minutes = Math.floor(seconds / 60); return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
+function formatRate(value: any) { const n = Number(value); if (!Number.isFinite(n) || n < 0) return ''; return n === 0 ? '0 B/s' : `${formatBytes(n)}/s`; }
+async function poll() { if ((!props.busy && !props.open && !props.snapshot) || pollInFlight) return; pollInFlight = true; try { const value = props.snapshot?.taskId ? await props.execute('neo.task.status', { taskId: props.snapshot.taskId }) : await props.execute('task.status'); if (value && !isFinished(value)) { polled.value = value; emit('updated', value); shown.value = true; } else { polled.value = null; shown.value = false; if (value) { emit('updated', value); } } } catch { /* Ordinary API calls can run without a tracked task. */ if (!props.snapshot) { polled.value = null; shown.value = false; } } finally { pollInFlight = false; } }
+watch(() => props.busy, (busy) => { if (busy) { void poll(); } else if (!props.snapshot) { polled.value = null; shown.value = false; } });
+watch(() => props.snapshot, (value) => { if (value && !isFinished(value)) { polled.value = value; shown.value = true; } else if (!value) { polled.value = null; shown.value = false; } else { polled.value = null; shown.value = false; } });
+watch(() => props.open, (value) => { if (value) { shown.value = true; void poll(); } });
+onMounted(async () => {
+  try {
+    unlistenTaskEvents = await launcher.onEvent((event: any) => {
+      if (event?.kind !== 'task' || (!event.task && !event.data)) return;
+      const value = event.task || event.data;
+      if (props.snapshot?.taskId && value.taskId !== props.snapshot.taskId) return;
+      if (!isFinished(value)) { polled.value = value; shown.value = true; emit('updated', value); }
+      else { polled.value = null; shown.value = false; emit('updated', value); }
+    });
+  } catch { /* Keep the initial snapshot polling fallback. */ }
+  void poll();
+});
+onUnmounted(() => { unlistenTaskEvents?.(); });
+</script>
+<style scoped>
+.task-card{width:760px;max-width:94vw;max-height:calc(100vh - 48px);min-width:0;display:flex;flex-direction:column;overflow:hidden;background:rgba(29,29,38,.96)!important;border:1px solid rgba(255,255,255,.12);border-radius:20px}.task-header{display:flex;align-items:flex-start;justify-content:space-between;min-width:0;flex:none}.task-body{min-width:0;max-width:100%;min-height:0;flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:auto;scrollbar-color:rgba(129,140,248,.85) rgba(255,255,255,.08);scrollbar-gutter:stable}.task-progress-row{display:flex;justify-content:space-between;gap:12px;min-width:0;margin:12px 0;color:rgba(255,255,255,.75)}.task-progress-row>*{min-width:0}.task-count{margin:-4px 0 10px;color:rgba(255,255,255,.52);font-size:12px}.task-details{max-width:100%;margin-bottom:10px;color:rgba(255,255,255,.55);font-size:12px;overflow-wrap:anywhere;word-break:break-word}.task-error{color:#fecaca;background:rgba(185,28,28,.22);overflow-wrap:anywhere}.task-section-label{margin:14px 0 6px;color:rgba(255,255,255,.5);font-size:11px;font-weight:700;letter-spacing:.08em}.task-steps,.task-children{min-width:0;overflow:visible;background:rgba(255,255,255,.035);border-radius:10px}.task-children{margin-top:8px;background:rgba(129,140,248,.06)}.task-body::-webkit-scrollbar{width:12px}.task-body::-webkit-scrollbar-track{background:rgba(255,255,255,.08);border-radius:10px}.task-body::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(129,140,248,.95),rgba(99,102,241,.8));border:2px solid rgba(29,29,38,.92);border-radius:10px}.task-body::-webkit-scrollbar-thumb:hover{background:#a5b4fc}.task-steps :deep(.q-item),.task-children :deep(.q-item){min-height:48px;min-width:0}.task-steps :deep(.q-item__section),.task-children :deep(.q-item__section){min-width:0;overflow:hidden}.task-steps :deep(.q-item__section--side),.task-children :deep(.q-item__section--side){max-width:28%;white-space:normal;text-align:right;overflow-wrap:anywhere}.task-steps :deep(.q-item__label),.task-children :deep(.q-item__label){overflow-wrap:anywhere;word-break:break-word;white-space:normal}.task-detail-line{overflow-wrap:anywhere;word-break:break-word;white-space:normal}.task-step-progress{margin-top:5px}.task-step-rate{display:block;color:rgba(255,255,255,.55);font-size:11px;margin-top:2px}.task-card :deep(.q-btn){text-transform:none}.task-card :deep(.q-card__actions){flex:none}
+</style>

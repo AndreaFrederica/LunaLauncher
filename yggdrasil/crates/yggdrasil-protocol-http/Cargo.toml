@@ -1,0 +1,17 @@
+[package]
+name = "yggdrasil-protocol-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+yggdrasil-core.workspace = true
+yggdrasil-service.workspace = true
+yggdrasil-federation.workspace = true
+yggdrasil-cache.workspace = true
+yggdrasil-upstream.workspace = true

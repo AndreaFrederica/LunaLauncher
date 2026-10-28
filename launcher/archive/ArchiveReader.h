@@ -20,6 +20,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QDir>
+#include <QIODevice>
 #include <QStringList>
 #include <memory>
 #include <optional>
@@ -31,7 +32,9 @@ namespace MMCZip {
 class ArchiveReader {
    public:
     using ArchivePtr = std::unique_ptr<struct archive, int (*)(struct archive*)>;
-    explicit ArchiveReader(QString fileName) : m_archivePath(std::move(fileName)) {}
+    explicit ArchiveReader(QString fileName, QString passphrase = {})
+        : m_archivePath(std::move(fileName)), m_passphrase(std::move(passphrase))
+    {}
     virtual ~ArchiveReader() = default;
 
     QStringList getFiles();
@@ -46,10 +49,16 @@ class ArchiveReader {
 
         QString filename();
         bool isFile();
+        bool isDirectory();
+        QString linkTarget();
+        bool isHardLink();
+        bool isEncrypted();
+        qint64 size();
         QDateTime dateTime();
         const char* error();
 
         QByteArray readAll(int* outStatus = nullptr);
+        bool copyTo(QIODevice& output, qint64 maximumBytes = -1);
         bool skip();
         bool writeFile(archive* out, const QString& targetFileName = "", bool notBlock = false);
         bool writeFile(archive* out, const QString& targetFileName, std::optional<QDir> root, bool notBlock = false);
@@ -69,6 +78,7 @@ class ArchiveReader {
 
    private:
     QString m_archivePath;
+    QString m_passphrase;
     size_t m_blockSize = 10240;
 
     QStringList m_fileNames;

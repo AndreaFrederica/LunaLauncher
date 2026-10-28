@@ -10,6 +10,8 @@
 #include "minecraft/launch/MinecraftTarget.h"
 #include "BaseInstance.h"
 
+class QVBoxLayout;
+
 class ServerEntryWidget : public QWidget
 {
     Q_OBJECT

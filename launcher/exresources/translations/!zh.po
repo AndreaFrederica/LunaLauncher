@@ -522,6 +522,26 @@ msgstr "YukariConnect 服务器关闭超时，假定已停止。"
 msgid "Stopped"
 msgstr "已停止"
 
+# ========================================================================
+# LaunchController.cpp
+# ========================================================================
+
+msgctxt "LaunchController"
+msgid "A Microsoft account that owns Minecraft: Java Edition is required to launch the full game.\nOpen Account Manager and sign in with Microsoft, then try again."
+msgstr "启动完整游戏需要拥有 Minecraft：Java 版的 Microsoft 账户。\n请打开账户管理，登录 Microsoft 账户后重试。"
+
+msgctxt "LaunchController"
+msgid "A Microsoft account that owns Minecraft: Java Edition is required to launch this instance. Open Account Manager and sign in with Microsoft, then try again."
+msgstr "启动此实例需要拥有 Minecraft：Java 版的 Microsoft 账户。请打开账户管理，登录 Microsoft 账户后重试。"
+
+msgctxt "LaunchController"
+msgid "This Microsoft account does not own Minecraft.\nYou need to purchase the game first to play the full version."
+msgstr "此 Microsoft 账户没有 Minecraft。\n请先购买游戏才能游玩完整版本。"
+
+msgctxt "LaunchController"
+msgid "A Microsoft account that owns Minecraft: Java Edition is required to launch the full game. Open Account Manager and sign in with Microsoft, then try again."
+msgstr "启动完整游戏需要拥有 Minecraft：Java 版的 Microsoft 账户。请打开账户管理，登录 Microsoft 账户后重试。"
+
 #: YukariConnectOnlinePanel.cpp:361
 msgid "Starting YukariConnect server..."
 msgstr "正在启动 YukariConnect 服务器..."

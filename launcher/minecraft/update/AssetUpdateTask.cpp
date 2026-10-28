@@ -1,6 +1,7 @@
 #include "AssetUpdateTask.h"
 
 #include "BuildConfig.h"
+#include "FileSystem.h"
 #include "launch/LaunchStep.h"
 #include "minecraft/AssetsUtils.h"
 #include "minecraft/MinecraftInstance.h"
@@ -12,9 +13,11 @@
 
 #include "net/ApiDownload.h"
 
-AssetUpdateTask::AssetUpdateTask(MinecraftInstance* inst)
+#include <QFileInfo>
+
+AssetUpdateTask::AssetUpdateTask(MinecraftInstance* inst, bool forceIntegrityCheck)
+    : m_inst(inst), m_forceIntegrityCheck(forceIntegrityCheck)
 {
-    m_inst = inst;
 }
 
 void AssetUpdateTask::executeTask()
@@ -23,46 +26,60 @@ void AssetUpdateTask::executeTask()
     auto components = m_inst->getPackProfile();
     auto profile = components->getProfile();
     auto assets = profile->getMinecraftAssets();
+    if (m_inst->usesLocalAssets()) {
+        const auto indexPath = FS::PathCombine(m_inst->assetsRoot(), "indexes", assets->id + ".json");
+        const auto virtualPath = FS::PathCombine(m_inst->assetsRoot(), "virtual", assets->id);
+        if (!QFileInfo::exists(indexPath) && !QFileInfo::exists(virtualPath)) {
+            emitFailed(tr("The PCL pack's instance-local assets are missing the %1 index and virtual directory.").arg(assets->id));
+            return;
+        }
+        setStatus(tr("Using assets bundled with the PCL pack"));
+        emitSucceeded();
+        return;
+    }
     QUrl indexUrl = assets->url;
 
-    // Rewrite URL for mirror support
-    int mirrorType = APPLICATION->settings()->get("DownloadMirrorType").toInt();
-    QString replacementUrl;
-
-    if (mirrorType == MirrorDownload::MirrorType::BMCLAPI) {
-        replacementUrl = "https://bmclapi2.bangbang93.com";
-    } else if (mirrorType == MirrorDownload::MirrorType::Custom) {
-        replacementUrl = APPLICATION->settings()->get("MojangDownloadsMirrorURL").toString();
-    }
-
-    if (!replacementUrl.isEmpty()) {
-        QString urlString = indexUrl.toString();
-        // Replace Mojang URLs with mirror URL using QString::replace
-        // Ensure replacementUrl ends with / to avoid issues when replacing URLs that include /
-        if (!replacementUrl.endsWith('/')) {
-            replacementUrl += '/';
-        }
-        urlString.replace("https://launchermeta.mojang.com/", replacementUrl);
-        urlString.replace("https://launcher.mojang.com/", replacementUrl);
-        urlString.replace("https://piston-meta.mojang.com/", replacementUrl);
-        urlString.replace("http://launchermeta.mojang.com/", replacementUrl);
-        urlString.replace("http://launcher.mojang.com/", replacementUrl);
-        urlString.replace("http://piston-meta.mojang.com/", replacementUrl);
-        urlString.replace("https://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
-        urlString.replace("http://s3.amazonaws.com/Minecraft.Download/", replacementUrl);
-        indexUrl = QUrl(urlString);
-    }
+    // Rewrite the asset index URL through the shared mirror implementation so
+    // both the BMCLAPI preset and custom mirrors use the same host mapping.
+    const QUrl officialIndexUrl = indexUrl;
+    indexUrl = QUrl(MirrorDownload::rewriteUrl(indexUrl.toString(), APPLICATION->settings()));
 
     QString localPath = assets->id + ".json";
     auto job = makeShared<NetJob>(tr("Asset index for %1").arg(m_inst->name()), APPLICATION->network());
 
+    m_verificationMode = m_inst->settings()->get("AssetVerificationMode").toInt();
+    if (m_verificationMode < AssetVerificationMode::AlwaysVerify || m_verificationMode > AssetVerificationMode::SkipVerification)
+        m_verificationMode = AssetVerificationMode::CheckExistence;
+    m_cacheExpiryDays = qBound(1, m_inst->settings()->get("AssetCacheExpiryDays").toInt(), 365);
+    if (!m_forceIntegrityCheck && m_inst->settings()->get("AssetIntegrityTrusted").toBool())
+        m_verificationMode = AssetVerificationMode::SkipVerification;
+
     auto metacache = APPLICATION->metacache();
+    if (m_verificationMode == AssetVerificationMode::CacheWithExpiry) {
+        // resolveEntry() checks age immediately; apply the policy first.
+        if (auto cachedEntry = metacache->getEntry("asset_indexes", localPath)) {
+            cachedEntry->setMaximumAge(static_cast<qint64>(m_cacheExpiryDays) * 86400LL);
+            metacache->updateEntry(cachedEntry);
+        }
+    }
     auto entry = metacache->resolveEntry("asset_indexes", localPath);
-    entry->setStale(true);
+
+    if (m_verificationMode == AssetVerificationMode::AlwaysVerify) {
+        entry->setStale(true);
+    } else if (m_verificationMode == AssetVerificationMode::SkipVerification && QFileInfo(entry->getFullPath()).isFile()) {
+        // Skip all asset checks when the local index is available.
+        emitSucceeded();
+        return;
+    } else if (m_verificationMode == AssetVerificationMode::SkipVerification) {
+        // Without an index there is nothing safe to skip; repair it normally.
+        m_verificationMode = AssetVerificationMode::CheckExistence;
+    }
     auto hexSha1 = assets->sha1.toLatin1();
     qDebug() << "Asset index SHA1:" << hexSha1;
     auto dl = Net::ApiDownload::makeCached(indexUrl, entry);
     dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, assets->sha1));
+    if (officialIndexUrl != indexUrl)
+        dl->setFallbackUrl(officialIndexUrl);
     job->addNetAction(dl);
 
     downloadJob.reset(job);
@@ -70,8 +87,9 @@ void AssetUpdateTask::executeTask()
     connect(downloadJob.get(), &NetJob::succeeded, this, &AssetUpdateTask::assetIndexFinished);
     connect(downloadJob.get(), &NetJob::failed, this, &AssetUpdateTask::assetIndexFailed);
     connect(downloadJob.get(), &NetJob::aborted, this, &AssetUpdateTask::emitAborted);
-    connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::progress);
+    connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::setProgress);
     connect(downloadJob.get(), &NetJob::stepProgress, this, &AssetUpdateTask::propagateStepProgress);
+    connect(downloadJob.get(), &NetJob::transferRate, this, &AssetUpdateTask::setTransferRate);
 
     qDebug() << "Starting asset index download for" << m_inst->name();
     downloadJob->start();
@@ -84,6 +102,16 @@ bool AssetUpdateTask::canAbort() const
 
 void AssetUpdateTask::assetIndexFinished()
 {
+    if (m_verificationMode == AssetVerificationMode::CacheWithExpiry) {
+        auto assets = m_inst->getPackProfile()->getProfile()->getMinecraftAssets();
+        if (auto entry = APPLICATION->metacache()->getEntry("asset_indexes", assets->id + ".json")) {
+            entry->setMaximumAge(static_cast<qint64>(m_cacheExpiryDays) * 86400LL);
+            entry->setCurrentAge(0);
+            entry->setStale(false);
+            APPLICATION->metacache()->updateEntry(entry);
+        }
+    }
+
     AssetsIndex index;
     qDebug() << "Finished asset index download for" << m_inst->name();
 
@@ -101,7 +129,7 @@ void AssetUpdateTask::assetIndexFinished()
         return;
     }
 
-    auto job = index.getDownloadJob();
+    auto job = index.getDownloadJob(m_forceIntegrityCheck || m_verificationMode == AssetVerificationMode::AlwaysVerify);
     if (job) {
         QString resourceURL = resourceUrl();
         QString source = tr("Mojang");
@@ -113,8 +141,9 @@ void AssetUpdateTask::assetIndexFinished()
         connect(downloadJob.get(), &NetJob::succeeded, this, &AssetUpdateTask::emitSucceeded);
         connect(downloadJob.get(), &NetJob::failed, this, &AssetUpdateTask::assetsFailed);
         connect(downloadJob.get(), &NetJob::aborted, this, &AssetUpdateTask::emitAborted);
-        connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::progress);
+        connect(downloadJob.get(), &NetJob::progress, this, &AssetUpdateTask::setProgress);
         connect(downloadJob.get(), &NetJob::stepProgress, this, &AssetUpdateTask::propagateStepProgress);
+        connect(downloadJob.get(), &NetJob::transferRate, this, &AssetUpdateTask::setTransferRate);
         downloadJob->start();
         return;
     }
@@ -144,9 +173,17 @@ bool AssetUpdateTask::abort()
 
 QString AssetUpdateTask::resourceUrl()
 {
-    if (const QString urlOverride = APPLICATION->settings()->get("ResourceURLOverride").toString(); !urlOverride.isEmpty()) {
+    auto settings = APPLICATION->settings();
+
+    // A manually configured assets base always wins.
+    if (const QString urlOverride = settings->get("ResourceURLOverride").toString(); !urlOverride.isEmpty()) {
         return urlOverride;
     }
+
+    // Otherwise let the mirror resolve it (BMCLAPI preset or a custom base).
+    const auto mirror = MirrorDownload::resolve(settings);
+    if (!mirror.assetsBase.isEmpty())
+        return mirror.assetsBase;
 
     return BuildConfig.DEFAULT_RESOURCE_BASE;
 }

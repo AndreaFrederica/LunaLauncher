@@ -1,0 +1,26 @@
+[General]
+Name=Breeze Light
+
+[Colors:Window]
+BackgroundNormal=239,240,241
+ForegroundNormal=35,38,41
+
+[Colors:View]
+BackgroundNormal=255,255,255
+BackgroundAlternate=247,247,247
+ForegroundNormal=35,38,41
+ForegroundLink=41,128,185
+ForegroundVisited=127,140,141
+
+[Colors:Button]
+BackgroundNormal=239,240,241
+ForegroundNormal=35,38,41
+
+[Colors:Selection]
+BackgroundNormal=61,174,233
+ForegroundNormal=255,255,255
+BackgroundInactive=189,195,199
+
+[Colors:Tooltip]
+BackgroundNormal=255,255,255
+ForegroundNormal=35,38,41

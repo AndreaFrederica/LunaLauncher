@@ -1,0 +1,541 @@
+// SPDX-License-Identifier: MPL-2.0
+
+#include "LauncherApiResources.h"
+
+#include <QDir>
+#include <QEventLoop>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QUrl>
+#include <QStandardPaths>
+#include <QProcess>
+#include <QRegularExpression>
+
+#include <memory>
+
+#include "Application.h"
+#include "BaseInstance.h"
+#include "FileSystem.h"
+#include "InstanceList.h"
+#include "api/ApiTypes.h"
+#include "api/LauncherApi.h"
+#include "api/LauncherApiObjects.h"
+#include "api/ResourceModelSupport.h"
+#include "cli/OperationService.h"
+#include "cli/UserInteraction.h"
+#include "java/JavaInstall.h"
+#include "java/JavaInstallList.h"
+#include "java/JavaMetadata.h"
+#include "java/JavaChecker.h"
+#include "java/JavaUtils.h"
+#include "minecraft/PackProfile.h"
+#include "java/download/ArchiveDownloadTask.h"
+#include "java/download/ManifestDownloadTask.h"
+#include "minecraft/MinecraftInstance.h"
+#include "server/ServerInstance.h"
+#include "minecraft/mod/PluginFolderModel.h"
+#include "minecraft/mod/ModFolderModel.h"
+#include "minecraft/mod/Resource.h"
+#include "minecraft/mod/ResourceFolderModel.h"
+#include "settings/SettingsObject.h"
+#include "tasks/Task.h"
+
+namespace {
+
+QJsonObject stringProperty(const QString& description)
+{
+    return { { "type", "string" }, { "description", description } };
+}
+
+QJsonObject boolProperty(const QString& description, bool defaultValue = false)
+{
+    return { { "type", "boolean" }, { "description", description }, { "default", defaultValue } };
+}
+
+QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
+{
+    QJsonObject schema{ { "type", "object" }, { "properties", properties }, { "additionalProperties", false } };
+    if (!required.isEmpty())
+        schema.insert("required", required);
+    return schema;
+}
+
+BaseInstance* findInstance(const QString& reference)
+{
+    auto list = APPLICATION->instances();
+    auto instance = list->getInstanceById(reference);
+    if (!instance)
+        instance = list->getInstanceByManagedName(reference);
+    if (!instance) {
+        for (int i = 0; i < list->count(); ++i) {
+            if (list->at(i)->name().compare(reference, Qt::CaseInsensitive) == 0) {
+                instance = list->at(i);
+                break;
+            }
+        }
+    }
+    return instance;
+}
+
+std::shared_ptr<ResourceFolderModel> findResourceModel(BaseInstance* instance, QString kind, const QString& world = {})
+{
+    kind = kind.toLower().remove('-').remove('_');
+    if (!world.isEmpty()) return ApiSupport::worldDataPacks(instance, kind, world);
+    if (auto server = dynamic_cast<ServerInstance*>(instance)) {
+        if (kind == "mods") return server->loaderModList();
+        if (kind == "plugins") return server->pluginList();
+        return nullptr;
+    }
+    static const QMap<QString, int> indexes{ { "mods", 0 },           { "coremods", 1 },           { "nilmods", 2 },
+                                             { "resourcepacks", 3 },  { "texturepacks", 4 },       { "shaderpacks", 5 },
+                                             { "yesstevemodels", 6 }, { "customplayermodels", 7 }, { "schematics", 8 },
+                                             { "datapacks", 9 } };
+    if (!indexes.contains(kind))
+        return nullptr;
+    const auto client = dynamic_cast<MinecraftInstance*>(instance);
+    if (!client) return nullptr;
+    const auto lists = client->resourceLists();
+    const auto index = indexes.value(kind);
+    return index < lists.size() ? lists.at(index) : nullptr;
+}
+
+std::unique_ptr<Resource> findResource(const std::shared_ptr<ResourceFolderModel>& model, const QString& reference)
+{
+    for (const auto& entry : model->dir().entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (entry.fileName() == ".index")
+            continue;
+        auto resource = std::make_unique<Resource>(entry);
+        if (resource->internal_id() == reference || resource->fileinfo().fileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->getOriginalFileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->name().compare(reference, Qt::CaseInsensitive) == 0)
+            return resource;
+    }
+    return {};
+}
+
+Resource* findLoadedResource(const std::shared_ptr<ResourceFolderModel>& model, const QString& reference)
+{
+    for (auto* resource : model->allResources()) {
+        if (resource->internal_id() == reference || resource->fileinfo().fileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->getOriginalFileName().compare(reference, Qt::CaseInsensitive) == 0 ||
+            resource->name().compare(reference, Qt::CaseInsensitive) == 0)
+            return resource;
+    }
+    return nullptr;
+}
+
+QString resourceTypeName(ResourceType type)
+{
+    switch (type) {
+        case ResourceType::ZIPFILE:
+            return "archive";
+        case ResourceType::SINGLEFILE:
+            return "file";
+        case ResourceType::FOLDER:
+            return "folder";
+        case ResourceType::LITEMOD:
+            return "litemod";
+        default:
+            return "unknown";
+    }
+}
+
+QString resourceStatusName(ResourceStatus status)
+{
+    switch (status) {
+        case ResourceStatus::INSTALLED:
+            return "installed";
+        case ResourceStatus::NOT_INSTALLED:
+            return "not-installed";
+        case ResourceStatus::NO_METADATA:
+            return "no-metadata";
+        default:
+            return "unknown";
+    }
+}
+
+QJsonObject resourceInfo(const Resource& resource)
+{
+    return ApiSupport::resourceSnapshot(resource);
+}
+
+bool waitForTask(Task* task, UserInteraction& interaction, QString* error, LauncherApi* api = nullptr)
+{
+    if (!task) {
+        if (error)
+            *error = QObject::tr("The operation did not create a task.");
+        return false;
+    }
+    QEventLoop loop;
+    if (api)
+        api->trackTask(task);
+    QObject::connect(task, &Task::status, &loop, [&interaction](const QString& status) { interaction.status(status); });
+    QObject::connect(task, &Task::finished, &loop, &QEventLoop::quit);
+    if (!task->isFinished()) {
+        if (!task->isRunning())
+            task->start();
+        if (!task->isFinished())
+            loop.exec();
+    }
+    if (api)
+        api->clearTrackedTask(task);
+    if (!task->wasSuccessful() && error)
+        *error = task->failReason().isEmpty() ? QObject::tr("The operation was aborted.") : task->failReason();
+    return task->wasSuccessful();
+}
+
+QJsonObject inspectResource(const QJsonObject& parameters)
+{
+    const auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
+    const auto model = findResourceModel(instance, parameters.value("kind").toString(), parameters.value("world").toString());
+    if (!model)
+        return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
+                                         2);
+    ApiSupport::ensureResourceModelReady(model);
+    const auto reference = parameters.value("resource").toString();
+    if (const auto* loaded = findLoadedResource(model, reference))
+        return OperationService::success(resourceInfo(*loaded));
+    const auto resource = findResource(model, reference);
+    if (!resource)
+        return OperationService::failure(QObject::tr("Resource not found: %1").arg(parameters.value("resource").toString()), 2);
+    return OperationService::success(resourceInfo(*resource));
+}
+
+QJsonObject resourceIcon(const QJsonObject& parameters)
+{
+    const auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
+    const auto model = findResourceModel(instance, parameters.value("kind").toString(), parameters.value("world").toString());
+    if (!model)
+        return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
+                                         2);
+
+    // The list endpoint deliberately skips archive parsing.  Resolve the model
+    // here, on demand, so the first icon request pays the parse cost while the
+    // list itself remains immediately available to the UI.
+    ApiSupport::ensureResourceModelReady(model, true);
+    const auto reference = parameters.value("resource").toString();
+    const auto* loaded = findLoadedResource(model, reference);
+    std::unique_ptr<Resource> fallback;
+    if (!loaded) {
+        fallback = findResource(model, reference);
+        loaded = fallback.get();
+    }
+    if (!loaded)
+        return OperationService::failure(QObject::tr("Resource not found: %1").arg(reference), 2);
+
+    QJsonObject result{ { "resource", reference }, { "pending", model->hasPendingParseTasks() } };
+    const auto icon = ApiSupport::resourceIconData(*loaded);
+    if (!icon.isEmpty()) result.insert("icon", icon);
+    return OperationService::success(result);
+}
+
+QJsonObject updateResources(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto instance = findInstance(parameters.value("instance").toString());
+    if (!instance)
+        return OperationService::failure(QObject::tr("Minecraft instance not found: %1").arg(parameters.value("instance").toString()), 2);
+    if (instance->isRunning())
+        return OperationService::failure(QObject::tr("Resources cannot be updated while the instance is running."), 2);
+    const auto model = findResourceModel(instance, parameters.value("kind").toString(), parameters.value("world").toString());
+    if (!model)
+        return OperationService::failure(QObject::tr("Unknown or unavailable resource kind: %1").arg(parameters.value("kind").toString()),
+                                         2);
+
+    QEventLoop loop;
+    QObject::connect(model.get(), &ResourceFolderModel::updateFinished, &loop, &QEventLoop::quit);
+    if (!model->update())
+        return OperationService::success(QJsonObject{ { "updated", false }, { "reason", "already-updating-or-unavailable" } });
+    loop.exec();
+    Q_UNUSED(interaction);
+    return OperationService::success(QJsonObject{ { "updated", true },
+                                                  { "instance", instance->id() },
+                                                  { "kind", parameters.value("kind").toString() },
+                                                  { "count", static_cast<int>(model->size()) } });
+}
+
+QString javaRoot()
+{
+    const auto configuredPath = APPLICATION->javaPath().trimmed();
+    return configuredPath.isEmpty() ? QString() : QDir(configuredPath).absolutePath();
+}
+
+bool validJavaName(const QString& name)
+{
+    return !name.isEmpty() && name != "." && name != ".." && !QDir::isAbsolutePath(name) && !name.contains('/') && !name.contains('\\') &&
+           !name.contains("..", Qt::CaseSensitive);
+}
+
+QJsonObject installJava(const QJsonObject& parameters, UserInteraction& interaction, LauncherApi& api)
+{
+    QJsonObject metadata = parameters.value("metadata").toObject();
+    const auto url = QUrl(parameters.value("url").toString(metadata.value("url").toString()));
+    const auto name = parameters.value("name").toString(metadata.value("name").toString());
+    const auto type = parameters.value("downloadType").toString(metadata.value("downloadType").toString());
+    const auto checksumType = parameters.value("checksumType").toString(metadata.value("checksumType").toString());
+    const auto checksumHash = parameters.value("checksumHash").toString(metadata.value("checksumHash").toString());
+    if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https"))
+        return OperationService::failure(QObject::tr("Java installation requires an HTTP(S) URL."), 2);
+    if (!validJavaName(name))
+        return OperationService::failure(QObject::tr("Java installation name is invalid."), 2);
+    const auto root = javaRoot();
+    if (root.isEmpty())
+        return OperationService::failure(QObject::tr("The managed Java directory is not configured."), 2);
+    const auto finalPath = QDir(root).filePath(name);
+    if (QFileInfo::exists(finalPath)) {
+        if (!parameters.value("replace").toBool())
+            return OperationService::failure(QObject::tr("Java installation already exists: %1").arg(name), 2);
+        if (!FS::deletePath(finalPath))
+            return OperationService::failure(QObject::tr("Could not replace existing Java installation: %1").arg(name));
+    }
+
+    Task::Ptr task;
+    if (type.compare("manifest", Qt::CaseInsensitive) == 0)
+        task = makeShared<Java::ManifestDownloadTask>(url, finalPath, checksumType, checksumHash);
+    else if (type.compare("archive", Qt::CaseInsensitive) == 0)
+        task = makeShared<Java::ArchiveDownloadTask>(url, finalPath, checksumType, checksumHash);
+    else
+        return OperationService::failure(QObject::tr("Unsupported Java download type: %1").arg(type), 2);
+
+    QString error;
+    if (!waitForTask(task.get(), interaction, &error, &api)) {
+        FS::deletePath(finalPath);
+        return OperationService::failure(error);
+    }
+    return OperationService::success(QJsonObject{ { "name", name }, { "path", finalPath }, { "downloadType", type } });
+}
+
+QJsonObject refreshJava(const QJsonObject& parameters, UserInteraction& interaction, LauncherApi& api)
+{
+    JavaInstallList list(nullptr, parameters.value("managedOnly").toBool(false));
+    const auto task = list.getLoadTask();
+    QString error;
+    if (task && !waitForTask(task.get(), interaction, &error, &api))
+        return OperationService::failure(error);
+
+    QJsonArray installations;
+    for (int i = 0; i < list.count(); ++i) {
+        const auto java = std::dynamic_pointer_cast<JavaInstall>(list.at(i));
+        if (!java)
+            continue;
+        installations.append(QJsonObject{
+            { "version", java->id.toString() }, { "architecture", java->arch }, { "path", java->path }, { "is64Bit", java->is_64bit } });
+    }
+    return OperationService::success(installations);
+}
+
+QString resolveManagedJavaPath(const QString& reference)
+{
+    const auto configuredRoot = javaRoot();
+    if (configuredRoot.isEmpty())
+        return {};
+    const auto root = QFileInfo(configuredRoot).canonicalFilePath();
+    if (root.isEmpty())
+        return {};
+    const auto requested = QFileInfo(reference);
+    const auto requestedCanonical =
+        QDir::fromNativeSeparators(requested.exists() ? requested.canonicalFilePath() : QDir(root).filePath(reference));
+    for (const auto& entry : QDir(root).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        const auto candidate = QDir::fromNativeSeparators(entry.canonicalFilePath());
+        if (candidate.isEmpty())
+            continue;
+        if (requestedCanonical == candidate || requestedCanonical.startsWith(candidate + QLatin1Char('/')))
+            return entry.absoluteFilePath();
+        if (entry.fileName().compare(reference, Qt::CaseInsensitive) == 0)
+            return entry.absoluteFilePath();
+    }
+    return {};
+}
+
+QJsonObject removeJava(const QJsonObject& parameters)
+{
+    if (!parameters.value("confirm").toBool())
+        return OperationService::failure(QObject::tr("Java removal requires confirm=true."), 2);
+    const auto reference = parameters.value("name").toString(parameters.value("path").toString());
+    const auto path = resolveManagedJavaPath(reference);
+    if (path.isEmpty())
+        return OperationService::failure(QObject::tr("Managed Java installation not found: %1").arg(reference), 2);
+    if (!FS::deletePath(path))
+        return OperationService::failure(QObject::tr("Could not remove Java installation: %1").arg(path));
+    return OperationService::success(QJsonObject{ { "name", QFileInfo(path).fileName() }, { "path", path }, { "removed", true } });
+}
+
+QJsonObject selectJava(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    auto path = parameters.value("path").toString(parameters.value("java").toString());
+    if (path.isEmpty())
+        return OperationService::failure(QObject::tr("A Java executable path is required."), 2);
+    auto info = QFileInfo(path);
+    if (!info.exists()) {
+        auto list = APPLICATION->javalist();
+        if (!list->isLoaded()) {
+            const auto task = list->getLoadTask();
+            QString error;
+            if (task && !waitForTask(task.get(), interaction, &error))
+                return OperationService::failure(error);
+        }
+        for (int i = 0; i < list->count(); ++i) {
+            const auto java = std::dynamic_pointer_cast<JavaInstall>(list->at(i));
+            if (java && (java->id.toString().compare(path, Qt::CaseInsensitive) == 0 ||
+                         QFileInfo(java->path).fileName().compare(path, Qt::CaseInsensitive) == 0)) {
+                path = java->path;
+                info = QFileInfo(path);
+                break;
+            }
+        }
+    }
+    const auto executable = info.exists() ? info.absoluteFilePath() : path;
+    if (info.exists() && !info.isFile())
+        return OperationService::failure(QObject::tr("The Java path is not a file: %1").arg(path), 2);
+
+    const auto scope = parameters.value("scope").toString("launcher").toLower();
+    SettingsObject* settings = nullptr;
+    BaseInstance* instance = nullptr;
+    if (scope == "launcher" || scope == "global") {
+        settings = APPLICATION->settings();
+    } else if (scope == "instance") {
+        instance = findInstance(parameters.value("instance").toString());
+        if (!instance)
+            return OperationService::failure(QObject::tr("Instance not found: %1").arg(parameters.value("instance").toString()), 2);
+        settings = instance->settings();
+    } else {
+        return OperationService::failure(QObject::tr("Unknown Java selection scope: %1").arg(scope), 2);
+    }
+    settings->set("JavaPath", executable);
+    if (settings->getSetting("OverrideJavaLocation"))
+        settings->set("OverrideJavaLocation", true);
+    if (settings->getSetting("AutomaticJava"))
+        settings->set("AutomaticJava", false);
+    if (instance)
+        instance->saveNow();
+    return OperationService::success(QJsonObject{ { "path", executable }, { "scope", scope } });
+}
+
+QJsonObject diagnoseJava(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    const auto scope = parameters.value("scope").toString("launcher").toLower();
+    SettingsObject* settings = APPLICATION->settings();
+    BaseInstance* instance = nullptr;
+    if (scope == "instance") {
+        instance = findInstance(parameters.value("instance").toString());
+        if (!instance) return OperationService::failure(QObject::tr("Instance not found."), 2);
+        settings = instance->settings();
+    } else if (scope != "launcher" && scope != "global") {
+        return OperationService::failure(QObject::tr("Unknown Java diagnostic scope."), 2);
+    }
+    const auto configured = parameters.value("path").toString(settings->get("JavaPath").toString());
+    const auto resolved = FS::ResolveExecutable(configured);
+    const QFileInfo file(resolved);
+    const auto found = QStandardPaths::findExecutable(resolved);
+    const auto executable = found.isEmpty() ? resolved : found;
+    if (JavaUtils::getJavaCheckPath().isEmpty()) return OperationService::failure("Installed JavaCheck.jar was not found.");
+    auto checker = makeShared<JavaChecker>(executable, parameters.value("arguments").toString(), 0, 0, 0);
+    JavaChecker::Result probe;
+    QObject::connect(checker.get(), &JavaChecker::checkFinished, checker.get(), [&probe](const JavaChecker::Result& value) { probe = value; });
+    QString error;
+    if (!waitForTask(checker.get(), interaction, &error, &api)) return OperationService::failure(error);
+    const auto usable = probe.validity == JavaChecker::Result::Validity::Valid;
+    QJsonObject result{ { "scope", scope }, { "configured", configured }, { "resolved", resolved },
+                        { "exists", file.exists() || !found.isEmpty() }, { "executable", executable },
+                        { "automatic", settings->get("AutomaticJava").toBool() }, { "override", settings->get("OverrideJavaLocation").toBool() },
+                        { "javaRoot", javaRoot() }, { "usable", usable }, { "probeOutput", probe.outLog }, { "probeError", probe.errorLog },
+                        { "version", probe.javaVersion.toString() }, { "major", probe.javaVersion.major() },
+                        { "vendor", probe.javaVendor }, { "architecture", probe.realPlatform }, { "is64Bit", probe.is_64bit } };
+    QJsonArray majors;
+    QJsonArray recommendations;
+    bool compatible = usable;
+    if (auto minecraft = dynamic_cast<MinecraftInstance*>(instance)) {
+        const auto profile = minecraft->getPackProfile()->getProfile();
+        if (profile) {
+            const auto allowed = profile->getCompatibleJavaMajors();
+            for (const auto major : allowed) majors.append(major);
+            compatible = usable && (allowed.isEmpty() || allowed.contains(probe.javaVersion.major()));
+        }
+    }
+    const bool memoryCompatible = usable && (probe.is_64bit || settings->get("MaxMemAlloc").toInt() <= 2048);
+    if (!usable) recommendations.append("Run java.refresh and select a working runtime, or install one with java.install.");
+    else if (!compatible) recommendations.append("Select a runtime whose major appears in compatibleMajors.");
+    if (usable && !memoryCompatible) recommendations.append("Select a 64-bit runtime or lower MaxMemAlloc to at most 2048 MiB.");
+    result.insert("compatibleMajors", majors);
+    result.insert("compatible", compatible && memoryCompatible);
+    result.insert("memoryCompatible", memoryCompatible);
+    result.insert("recommendations", recommendations);
+    return OperationService::success(result);
+}
+
+}  // namespace
+
+void registerLauncherApiResourceOperations(LauncherApi& api)
+{
+    api.registerOperation({ "java.repair", "Diagnose Java, scan installed runtimes, and select a compatible working runtime. Returns repaired=false if a download or manual memory change is required.",
+        objectSchema({ { "scope", stringProperty("launcher or instance.") }, { "instance", stringProperty("Instance ID for instance scope.") } }), "java", true },
+        [&api](const QJsonObject& p, UserInteraction& interaction) {
+            const auto initial = diagnoseJava(api, p, interaction);
+            if (!initial.value("ok").toBool()) return initial;
+            auto result = initial.value("data").toObject();
+            if (result.value("compatible").toBool()) { result.insert("repaired", true); result.insert("changed", false); return OperationService::success(result); }
+            const auto scan = refreshJava({}, interaction, api);
+            if (!scan.value("ok").toBool()) return scan;
+            for (const auto& candidate : scan.value("data").toArray()) {
+                if (api.isCancellationRequested()) return OperationService::failure("Java repair cancelled.");
+                auto probeRequest = p; probeRequest.insert("path", candidate.toObject().value("path"));
+                const auto probe = diagnoseJava(api, probeRequest, interaction);
+                if (!probe.value("data").toObject().value("compatible").toBool()) continue;
+                const auto selected = selectJava(probeRequest, interaction);
+                if (!selected.value("ok").toBool()) return selected;
+                result = probe.value("data").toObject(); result.insert("repaired", true); result.insert("changed", true);
+                return OperationService::success(result);
+            }
+            result.insert("repaired", false); result.insert("changed", false); result.insert("availableRuntimes", scan.value("data"));
+            return OperationService::success(result);
+        });
+    const auto resourceRef = QJsonObject{ { "instance", stringProperty("Instance ID, managed name, or display name.") },
+                                          { "world", stringProperty("Optional world folder for datapacks.") },
+                                          { "kind", stringProperty("Resource kind (mods, resourcepacks, shaderpacks, ...).") },
+                                          { "resource", stringProperty("Resource ID, name, or file name.") } };
+    api.registerOperation({ "resource.inspect", "Inspect an installed resource and its metadata.",
+                            objectSchema(resourceRef, { "instance", "kind", "resource" }), "resources" },
+                          [](const QJsonObject& parameters, UserInteraction&) { return inspectResource(parameters); });
+    api.registerOperation({ "resource.icon", "Read the icon for one installed resource.",
+                            objectSchema(resourceRef, { "instance", "kind", "resource" }), "resources" },
+                          [](const QJsonObject& parameters, UserInteraction&) { return resourceIcon(parameters); });
+    api.registerOperation(
+        { "resource.update", "Reload resource files and metadata for an instance.", objectSchema(resourceRef, { "instance", "kind" }),
+          "resources" },
+        [](const QJsonObject& parameters, UserInteraction& interaction) { return updateResources(parameters, interaction); });
+    api.registerOperation({ "java.install", "Install a managed Java runtime from launcher metadata.",
+                            objectSchema({ { "url", stringProperty("HTTP(S) manifest or archive URL.") },
+                                           { "name", stringProperty("Managed runtime directory name.") },
+                                           { "downloadType", stringProperty("manifest or archive.") },
+                                           { "checksumType", stringProperty("Optional checksum algorithm.") },
+                                           { "checksumHash", stringProperty("Optional checksum hash.") },
+                                           { "metadata", QJsonObject{ { "description", "Optional Java metadata object." } } },
+                                           { "replace", boolProperty("Replace an existing managed runtime.") } }),
+                            "java" },
+                          [&api](const QJsonObject& parameters, UserInteraction& interaction) { return installJava(parameters, interaction, api); });
+    api.registerOperation({ "java.refresh", "Rescan Java installations and return the current list.",
+                            objectSchema({ { "managedOnly", boolProperty("Only scan runtimes managed by the launcher.") } }), "java" },
+                          [&api](const QJsonObject& parameters, UserInteraction& interaction) { return refreshJava(parameters, interaction, api); });
+    api.registerOperation({ "java.remove", "Remove a managed Java runtime.",
+                            objectSchema({ { "name", stringProperty("Managed runtime directory name.") },
+                                           { "path", stringProperty("Managed runtime path or executable path.") },
+                                           { "confirm", boolProperty("Confirm removal.") } },
+                                         { "confirm" }),
+                            "java", true },
+                          [](const QJsonObject& parameters, UserInteraction&) { return removeJava(parameters); });
+    api.registerOperation({ "java.select", "Select a Java executable for launcher or instance settings.",
+                            objectSchema({ { "path", stringProperty("Java executable path.") },
+                                           { "java", stringProperty("Alias for path.") },
+                                           { "scope", stringProperty("launcher or instance.") },
+                                           { "instance", stringProperty("Instance ID when scope=instance.") } }),
+                            "java" },
+                          [](const QJsonObject& parameters, UserInteraction& interaction) { return selectJava(parameters, interaction); });
+    api.registerOperation({ "java.diagnose", "Inspect Java selection, resolution, and executable availability.",
+                            objectSchema({ { "scope", stringProperty("launcher or instance.") }, { "instance", stringProperty("Instance ID when scope=instance.") },
+                                { "path", stringProperty("Optional runtime to probe without changing settings.") }, { "arguments", stringProperty("Optional JVM arguments to test.") } }), "java" },
+                          [&api](const QJsonObject& parameters, UserInteraction& interaction) { return diagnoseJava(api, parameters, interaction); });
+}

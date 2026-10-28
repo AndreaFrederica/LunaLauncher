@@ -3,6 +3,7 @@
 #include <QNetworkRequest>
 
 #include "minecraft/auth/AccountData.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "minecraft/auth/steps/EntitlementsStep.h"
 #include "minecraft/auth/steps/GetSkinStep.h"
 #include "minecraft/auth/steps/LauncherLoginStep.h"
@@ -22,7 +23,7 @@
 
 #include <Application.h>
 
-AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
+AuthFlow::AuthFlow(AccountData* data, Action action, ProfileSelector selector) : Task(), m_data(data)
 {
     if (data->type == AccountType::MSA) {
         if (action == Action::DeviceCode) {
@@ -50,7 +51,9 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
             m_steps.append(makeShared<YggdrasilAuthStep>(m_data, YggdrasilAuthStep::RequestType::Authenticate));
         }
         // Profile selection step - it will auto-select if only one profile, show dialog if multiple
-        m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
+        auto profileSelectStep = makeShared<YggdrasilProfileSelectStep>(m_data);
+        profileSelectStep->setSelector(selector);
+        m_steps.append(profileSelectStep);
         m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
     } else if (data->type == AccountType::UnifiedPass) {
@@ -64,7 +67,9 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
             m_steps.append(makeShared<UnifiedPassAuthStep>(m_data, UnifiedPassAuthStep::RequestType::Authenticate));
         }
         // Reuse Yggdrasil profile steps (API compatible)
-        m_steps.append(makeShared<YggdrasilProfileSelectStep>(m_data));
+        auto profileSelectStep = makeShared<YggdrasilProfileSelectStep>(m_data);
+        profileSelectStep->setSelector(selector);
+        m_steps.append(profileSelectStep);
         m_steps.append(makeShared<YggdrasilProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
     }
@@ -74,14 +79,50 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
 
 void AuthFlow::succeed()
 {
+    if ((m_data->type == AccountType::MSA || m_data->type == AccountType::Yggdrasil) &&
+        m_data->minecraftProfile.validity == Validity::Certain &&
+        (m_data->type == AccountType::Yggdrasil || m_data->minecraftEntitlement.validity == Validity::Certain)) {
+        if (m_data->type == AccountType::MSA)
+            m_data->officialVerifiedAt = QDateTime::currentDateTimeUtc();
+        LocalYggdrasil::instance().saveAccountSnapshot(*m_data);
+    }
     m_data->validity_ = Validity::Certain;
     changeState(AccountTaskState::STATE_SUCCEEDED, tr("Finished all authentication steps"));
 }
 
 void AuthFlow::executeTask()
 {
+    if (m_data->type == AccountType::Yggdrasil && m_data->yggdrasilConfig.managedLocal) {
+        QString error;
+        auto& service = LocalYggdrasil::instance();
+        if (!service.ensureRunning(error)) {
+            changeState(AccountTaskState::STATE_FAILED_SOFT, error);
+            return;
+        }
+        m_data->yggdrasilConfig.authServerUrl = service.apiUrl();
+        m_data->yggdrasilConfig.sessionServerUrl = service.apiUrl();
+    }
     changeState(AccountTaskState::STATE_WORKING, tr("Initializing"));
     nextStep();
+}
+
+TaskStepProgressList AuthFlow::getStepProgress() const
+{
+    TaskStepProgressList result;
+    auto add = [&result](const QString& label, TaskStepState state) {
+        if (label.isEmpty()) return;
+        auto step = std::make_shared<TaskStepProgress>();
+        step->label = label;
+        step->state = state;
+        step->current = state == TaskStepState::Succeeded ? 1 : 0;
+        step->total = 1;
+        result.append(step);
+    };
+    for (const auto& label : m_finishedSteps) add(label, TaskStepState::Succeeded);
+    if (!m_failedStep.isEmpty()) add(m_failedStep, TaskStepState::Failed);
+    if (m_currentStep) add(m_currentStep->describe(), TaskStepState::Running);
+    for (const auto& step : m_steps) add(step->describe(), TaskStepState::Waiting);
+    return result;
 }
 
 void AuthFlow::nextStep()
@@ -106,6 +147,12 @@ void AuthFlow::nextStep()
 
 void AuthFlow::stepFinished(AccountTaskState resultingState, QString message)
 {
+    if (m_currentStep) {
+        if (resultingState == AccountTaskState::STATE_SUCCEEDED)
+            m_finishedSteps.append(m_currentStep->describe());
+        else if (resultingState != AccountTaskState::STATE_WORKING)
+            m_failedStep = m_currentStep->describe();
+    }
     if (changeState(resultingState, message))
         nextStep();
 }
@@ -134,6 +181,7 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return false;
         }
         case AccountTaskState::STATE_OFFLINE: {
+            LocalYggdrasil::instance().restoreAccountSnapshot(*m_data);
             setStatus(tr("Failed to contact the authentication server."));
             m_data->errorString = reason;
             m_data->accountState = AccountState::Offline;
@@ -155,6 +203,8 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return false;
         }
         case AccountTaskState::STATE_FAILED_HARD: {
+            if (m_data->type == AccountType::MSA)
+                LocalYggdrasil::instance().removeAccountSnapshot(m_data->profileId());
             setStatus(tr("Failed to authenticate. The session has expired."));
             m_data->errorString = reason;
             m_data->accountState = AccountState::Expired;
@@ -162,6 +212,8 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
             return false;
         }
         case AccountTaskState::STATE_FAILED_GONE: {
+            if (m_data->type == AccountType::MSA)
+                LocalYggdrasil::instance().removeAccountSnapshot(m_data->profileId());
             setStatus(tr("Failed to authenticate. The account no longer exists."));
             m_data->errorString = reason;
             m_data->accountState = AccountState::Gone;

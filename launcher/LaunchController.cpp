@@ -35,12 +35,17 @@
  */
 
 #include "LaunchController.h"
+#include <QRegularExpression>
+#include <QTimer>
+#include "cli/ScopedUserInteraction.h"
 #include "Application.h"
 #include "launch/steps/PrintServers.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/LocalYggdrasil.h"
 #include "server/ServerLaunchTask.h"
 
+#include "net/NetUtils.h"
 #include "ui/InstanceWindow.h"
 #include "ui/dialogs/CustomMessageBox.h"
 #include "ui/dialogs/MSALoginDialog.h"
@@ -68,7 +73,7 @@ void LaunchController::executeTask()
         return;
     }
 
-    if (!JavaCommon::checkJVMArgs(m_instance->settings()->get("JvmArgs").toString(), m_parentWidget)) {
+    if (!JavaCommon::checkJVMArgs(m_instance->settings()->get("JvmArgs").toString(), m_parentWidget, !m_headless)) {
         emitFailed(tr("Invalid Java arguments specified. Please fix this first."));
         return;
     }
@@ -100,7 +105,9 @@ void LaunchController::decideAccount()
         m_accountToUse = accounts->at(instanceAccountIndex);
     }
 
-    if (!accounts->anyAccountIsValid()) {
+    if (!m_forceLocalYggdrasil && !accounts->anyAccountIsValid()) {
+        if (m_headless)
+            return;
         // Tell the user they need to log in at least one account in order to play.
         auto reply = CustomMessageBox::selectable(m_parentWidget, tr("No Accounts"),
                                                   tr("In order to play Minecraft, you must have at least one Microsoft "
@@ -118,7 +125,9 @@ void LaunchController::decideAccount()
         }
     }
 
-    if (!m_accountToUse) {
+    if (!m_accountToUse && accounts->anyAccountIsValid()) {
+        if (m_headless)
+            return;
         // If no default account is set, ask the user which one to use.
         ProfileSelectDialog selectDialog(tr("Which account would you like to use?"), ProfileSelectDialog::GlobalDefaultCheckbox,
                                          m_parentWidget);
@@ -137,17 +146,13 @@ void LaunchController::decideAccount()
 
 LaunchDecision LaunchController::decideLaunchMode()
 {
+    if (m_wantedLaunchMode == LaunchMode::Offline && m_accountToUse) {
+        m_actualLaunchMode = LaunchMode::Offline;
+        return LaunchDecision::Continue;
+    }
     if (!m_accountToUse || m_wantedLaunchMode == LaunchMode::Demo) {
         m_actualLaunchMode = LaunchMode::Demo;
         return LaunchDecision::Continue;
-    }
-
-    if (m_wantedLaunchMode == LaunchMode::Normal) {
-        if (m_accountToUse->shouldRefresh() || m_accountToUse->accountState() == AccountState::Offline) {
-            // Force account refresh on the account used to launch the instance updating the AccountState
-            // only on first try and if it is not meant to be offline
-            m_accountToUse->refresh();
-        }
     }
 
     const auto* accounts = APPLICATION->accounts();
@@ -158,6 +163,9 @@ LaunchDecision LaunchController::decideLaunchMode()
 #else
     MinecraftAccountPtr accountToCheck;
     if (m_accountToUse->ownsMinecraft()) {
+        accountToCheck = m_accountToUse;
+    } else if (m_accountToUse->accountType() == AccountType::Yggdrasil &&
+               LocalYggdrasil::instance().hasAccountSnapshot(*m_accountToUse->accountData())) {
         accountToCheck = m_accountToUse;
     } else if (const auto defaultAccount = accounts->defaultAccount(); defaultAccount && defaultAccount->ownsMinecraft()) {
         accountToCheck = defaultAccount;
@@ -177,21 +185,56 @@ LaunchDecision LaunchController::decideLaunchMode()
     }
 
     auto state = accountToCheck->accountState();
-    if (state == AccountState::Unchecked || state == AccountState::Errored) {
+    const bool needsRefresh =
+        m_wantedLaunchMode == LaunchMode::Normal && (state == AccountState::Offline || accountToCheck->shouldRefresh());
+    if (state == AccountState::Unchecked || state == AccountState::Errored || needsRefresh) {
         accountToCheck->refresh();
         state = AccountState::Working;
     }
 
     if (state == AccountState::Working) {
         // refresh is in progress, we need to wait for it to finish to proceed.
-        ProgressDialog progDialog(m_parentWidget);
-        progDialog.setSkipButton(true, tr("Abort"));
-
-        // TODO: this relies on tasks' synchronous signal dispatching nature
-        // TODO: meaning currentTask can't complete and become null while this code is running
-        // TODO: this code will produce a race condition when tasks become fully async
         auto task = accountToCheck->currentTask();
-        progDialog.execWithTask(task.get());
+        if (m_headless) {
+            if (!task) {
+                setDetails(tr("Account refresh task is unavailable."));
+                return LaunchDecision::Abort;
+            }
+            QEventLoop loop;
+            QTimer cancellation;
+            bool cancelled = false;
+            m_authTask = task.get();
+            m_authCancelled = false;
+            emit abortStatusChanged(canAbort());
+            setStatus(tr("Refreshing account…"));
+            connect(task.get(), &Task::status, &loop, [this](const QString& status) { setStatus(status); });
+            connect(task.get(), &Task::details, &loop, [this](const QString& details) { setDetails(details); });
+            cancellation.setInterval(100);
+            connect(&cancellation, &QTimer::timeout, &loop, [&] {
+                if (m_authCancelled || (activeInteractionCancellation && activeInteractionCancellation())) {
+                    cancelled = true;
+                    // AuthFlow implements abort even though its generic Task
+                    // abortability flag is not set.
+                    if (!task->isFinished()) task->abort();
+                    loop.quit();
+                }
+            });
+            connect(task.get(), &Task::finished, &loop, &QEventLoop::quit);
+            cancellation.start();
+            // ProgressDialog starts pending tasks in the GUI path. The headless
+            // path must do the same before waiting for their completion.
+            if (!task->isFinished() && !task->isRunning())
+                task->start();
+            if (!task->isFinished())
+                loop.exec();
+            m_authTask = nullptr;
+            emit abortStatusChanged(canAbort());
+            if (cancelled || m_authCancelled) return LaunchDecision::Abort;
+        } else {
+            ProgressDialog progDialog(m_parentWidget);
+            progDialog.setSkipButton(true, tr("Abort"));
+            progDialog.execWithTask(task.get());
+        }
 
         if (task->getState() == State::AbortedByUser) {
             return LaunchDecision::Abort;
@@ -229,11 +272,18 @@ LaunchDecision LaunchController::decideLaunchMode()
 
 bool LaunchController::askPlayDemo() const
 {
+    if (m_headless)
+        return headlessConfirm(tr("This account cannot play the full game. Play the Minecraft demo?"));
     QMessageBox box(m_parentWidget);
     box.setWindowTitle(tr("Play demo?"));
-    QString text = m_accountToUse
-                       ? tr("This account does not own Minecraft.\nYou need to purchase the game first to play the full version.")
-                       : tr("No account was selected for launch.");
+    QString text;
+    if (!m_accountToUse || m_accountToUse->accountType() != AccountType::MSA) {
+        text = tr("A Microsoft account that owns Minecraft: Java Edition is required to launch the full game.\n"
+                  "Open Account Manager and sign in with Microsoft, then try again.");
+    } else {
+        text = tr("This Microsoft account does not own Minecraft.\n"
+                  "You need to purchase the game first to play the full version.");
+    }
     text += tr("\n\nDo you want to play the demo?");
     box.setText(text);
     box.setIcon(QMessageBox::Warning);
@@ -245,13 +295,14 @@ bool LaunchController::askPlayDemo() const
     return box.clickedButton() == demoButton;
 }
 
-QString LaunchController::askOfflineName(const QString& playerName, bool* ok) const
+QString LaunchController::askOfflineName(const QString& playerName, bool* ok)
 {
     if (ok != nullptr) {
         *ok = false;
     }
 
-    QString message;
+    QString title, message;
+    title = tr("Player name");
     switch (m_actualLaunchMode) {
         case LaunchMode::Normal:
             Q_ASSERT(false);
@@ -261,7 +312,14 @@ QString LaunchController::askOfflineName(const QString& playerName, bool* ok) co
             break;
         case LaunchMode::Offline:
             if (m_wantedLaunchMode == LaunchMode::Normal) {
-                message = tr("You are not connected to the Internet, launching in offline mode\n\n");
+                auto netErr = m_accountToUse->accountData()->networkError;
+                if (Net::isServerError(netErr)) {
+                    title = tr("Auth servers offline");
+                    message = tr("The Minecraft authentication servers are currently unavailable, launching in offline mode.\n\n");
+                } else {
+                    title = tr("No internet connection");
+                    message = tr("You are not connected to the Internet, launching in offline mode.\n\n");
+                }
             }
             message += tr("Choose your offline mode player name");
             break;
@@ -270,8 +328,25 @@ QString LaunchController::askOfflineName(const QString& playerName, bool* ok) co
     const QString lastOfflinePlayerName = APPLICATION->settings()->get("LastOfflinePlayerName").toString();
     QString usedname = lastOfflinePlayerName.isEmpty() ? playerName : lastOfflinePlayerName;
 
+    if (m_headless) {
+        if (!m_offlineName.isEmpty()) {
+            if (ok)
+                *ok = true;
+            return m_offlineName;
+        }
+        if (activeUserInteraction) {
+            const auto value = activeUserInteraction->input(message, false);
+            if (value && QRegularExpression("^[A-Za-z0-9_]{1,16}$").match(*value).hasMatch()) {
+                APPLICATION->settings()->set("LastOfflinePlayerName", *value);
+                if (ok) *ok = true;
+                return *value;
+            }
+        }
+        return {};
+    }
+
     ChooseOfflineNameDialog dialog(message, m_parentWidget);
-    dialog.setWindowTitle(tr("Player name"));
+    dialog.setWindowTitle(title);
     dialog.setUsername(usedname);
     if (dialog.exec() != QDialog::Accepted) {
         return {};
@@ -290,13 +365,29 @@ void LaunchController::login()
 {
     decideAccount();
 
-    LaunchDecision decision = decideLaunchMode();
-    while (decision == LaunchDecision::Undecided) {
-        decision = decideLaunchMode();
+    if (m_forceLocalYggdrasil) {
+        if (!m_accountToUse) {
+            emitFailed(tr("Select an account with a cached profile before using Enhanced Offline Mode."));
+            return;
+        }
+        m_actualLaunchMode = LaunchMode::Normal;
     }
-    if (decision == LaunchDecision::Abort) {
-        emitAborted();
+
+    if (!m_forceLocalYggdrasil && m_headless && !m_accountToUse && m_wantedLaunchMode != LaunchMode::Offline && m_wantedLaunchMode != LaunchMode::Demo) {
+        emitFailed(tr("A Microsoft account that owns Minecraft: Java Edition is required to launch this instance. "
+                      "Open Account Manager and sign in with Microsoft, then try again."));
         return;
+    }
+
+    if (!m_forceLocalYggdrasil) {
+        LaunchDecision decision = decideLaunchMode();
+        while (decision == LaunchDecision::Undecided) {
+            decision = decideLaunchMode();
+        }
+        if (decision == LaunchDecision::Abort) {
+            emitAborted();
+            return;
+        }
     }
 
     if (m_actualLaunchMode == LaunchMode::Demo) {
@@ -311,7 +402,12 @@ void LaunchController::login()
             }
         }
 
-        emitFailed(tr("No account selected for launch"));
+        if (m_wantedLaunchMode == LaunchMode::Normal) {
+            emitFailed(tr("A Microsoft account that owns Minecraft: Java Edition is required to launch the full game. "
+                          "Open Account Manager and sign in with Microsoft, then try again."));
+        } else {
+            emitFailed(tr("No account selected for launch"));
+        }
         return;
     }
 
@@ -319,8 +415,26 @@ void LaunchController::login()
     m_session->launchMode = m_actualLaunchMode;
     m_accountToUse->fillSession(m_session);
 
+    if (m_forceLocalYggdrasil) {
+        if (m_accountToUse->accountType() == AccountType::Offline) {
+            emitFailed(tr("Enhanced Offline Mode requires a cached Microsoft or Yggdrasil account."));
+            return;
+        }
+        QString error;
+        if (!LocalYggdrasil::instance().createAccountSession(*m_accountToUse->accountData(), m_session, error)) {
+            emitFailed(error);
+            return;
+        }
+        launchInstance();
+        return;
+    }
+
     if (m_accountToUse->accountType() != AccountType::Offline) {
         if (m_actualLaunchMode == LaunchMode::Normal && !m_accountToUse->hasProfile()) {
+            if (m_headless) {
+                emitFailed(tr("The account does not have a Minecraft profile. Set up the profile before launching."));
+                return;
+            }
             // Now handle setting up a profile name here...
             if (ProfileSetupDialog dialog(m_accountToUse, m_parentWidget); dialog.exec() != QDialog::Accepted) {
                 emitAborted();
@@ -329,6 +443,46 @@ void LaunchController::login()
         }
 
         if (m_actualLaunchMode == LaunchMode::Offline && m_accountToUse->accountType() != AccountType::Offline) {
+            auto& local = LocalYggdrasil::instance();
+            if (m_wantedLaunchMode == LaunchMode::Normal && local.hasAccountSnapshot(*m_accountToUse->accountData())) {
+                bool useLocal = false;
+                const auto message = tr("The official authentication service could not be reached.\n\n"
+                    "Local authentication keeps your Minecraft UUID, name and cached skin/cape. "
+                    "You can play locally or on servers configured to trust this service. "
+                    "Other online servers still require official authentication.\n\nLast verified: %1")
+                    .arg(m_accountToUse->accountData()->officialVerifiedAt.toLocalTime().toString(Qt::ISODate));
+                if (m_headless) {
+                    const auto choice = activeUserInteraction ? activeUserInteraction->select(message,
+                        QJsonArray{ tr("Use Local Authentication"), tr("Traditional Offline Mode"), tr("Cancel") }) : std::nullopt;
+                    if (!choice || *choice == 2) {
+                        emitAborted();
+                        return;
+                    }
+                    useLocal = *choice == 0;
+                } else {
+                    QMessageBox box(QMessageBox::Question, tr("Authentication service unavailable"), message, QMessageBox::NoButton, m_parentWidget);
+                    auto* localButton = box.addButton(tr("Use Local Authentication"), QMessageBox::AcceptRole);
+                    auto* offlineButton = box.addButton(tr("Traditional Offline Mode"), QMessageBox::ActionRole);
+                    box.addButton(QMessageBox::Cancel);
+                    box.setDefaultButton(localButton);
+                    box.exec();
+                    useLocal = box.clickedButton() == localButton;
+                    if (!useLocal && box.clickedButton() != offlineButton) {
+                        emitAborted();
+                        return;
+                    }
+                }
+                if (useLocal) {
+                    QString error;
+                    if (!local.createAccountSession(*m_accountToUse->accountData(), m_session, error)) {
+                        emitFailed(error);
+                        return;
+                    }
+                    m_actualLaunchMode = LaunchMode::Normal;
+                    launchInstance();
+                    return;
+                }
+            }
             bool ok = false;
             QString name = m_offlineName;
             if (name.isEmpty()) {
@@ -347,17 +501,29 @@ void LaunchController::login()
 
 bool LaunchController::reauthenticateAccount(const MinecraftAccountPtr& account, const QString& reason)
 {
+    if (m_headless) {
+        if (m_reauthenticateHandler) {
+            const auto replacement = m_reauthenticateHandler(account, reason);
+            if (replacement) {
+                if (account == m_accountToUse)
+                    m_accountToUse = replacement;
+                return true;
+            }
+        }
+        setDetails(reason);
+        return false;
+    }
     auto button = QMessageBox::warning(
         m_parentWidget, tr("Account refresh failed"), tr("%1. Do you want to reauthenticate this account?").arg(reason),
         QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No, QMessageBox::StandardButton::Yes);
     if (button == QMessageBox::StandardButton::Yes) {
         auto* accounts = APPLICATION->accounts();
         const bool isDefault = accounts->defaultAccount() == account;
-        accounts->removeAccount(accounts->index(accounts->findAccountByProfileId(account->profileId())));
         if (account->accountType() == AccountType::MSA) {
             auto newAccount = MSALoginDialog::newAccount(m_parentWidget);
 
             if (newAccount != nullptr) {
+                accounts->removeAccount(accounts->index(accounts->findAccountByProfileId(account->profileId())));
                 accounts->addAccount(newAccount);
 
                 if (isDefault) {
@@ -382,7 +548,8 @@ void LaunchController::launchInstance()
     Q_ASSERT(m_session.get() != nullptr);
 
     if (!m_instance->reloadSettings()) {
-        QMessageBox::critical(m_parentWidget, tr("Error!"), tr("Couldn't load the instance profile."));
+        if (!m_headless)
+            QMessageBox::critical(m_parentWidget, tr("Error!"), tr("Couldn't load the instance profile."));
         emitFailed(tr("Couldn't load the instance profile."));
         return;
     }
@@ -404,7 +571,7 @@ void LaunchController::launchInstance()
 
         const auto* console = qobject_cast<InstanceWindow*>(m_parentWidget);
         const auto showConsole = m_instance->settings()->get("ShowConsole").toBool();
-        if (!console && showConsole) {
+        if (!m_headless && !console && showConsole) {
             APPLICATION->showInstanceWindow(m_instance);
         }
 
@@ -420,9 +587,15 @@ void LaunchController::launchInstance()
         return;
     }
 
+    const auto logModel = m_launcher->getLogModel();
+    connect(logModel.get(), &QAbstractItemModel::rowsInserted, this, [this, logModel](const QModelIndex&, int first, int last) {
+        for (int row = first; row <= last; ++row)
+            emit logLine(logModel->data(logModel->index(row, 0), Qt::DisplayRole).toString());
+    });
+
     const auto* console = qobject_cast<InstanceWindow*>(m_parentWidget);
     const auto showConsole = m_instance->settings()->get("ShowConsole").toBool();
-    if (!console && showConsole) {
+    if (!m_headless && !console && showConsole) {
         APPLICATION->showInstanceWindow(m_instance);
     }
     connect(m_launcher, &LaunchTask::readyForLaunch, this, &LaunchController::readyForLaunch);
@@ -458,6 +631,22 @@ void LaunchController::readyForLaunch()
 {
     if (!m_profiler) {
         m_launcher->proceed();
+        emit gameStarted(m_launcher->pid());
+        return;
+    }
+
+    if (m_headless) {
+        QString error;
+        if (!m_profiler->check(&error)) { m_launcher->abort(); emitFailed(error); return; }
+        auto profiler = m_profiler->createProfiler(m_launcher->instance(), this);
+        connect(profiler, &BaseProfiler::readyToLaunch, this, [this, profiler](const QString& message) {
+            if (!headlessConfirm(tr("Profiler is ready. Configure it, then continue to launch.\n%1").arg(message))) {
+                profiler->abortProfiling(); m_launcher->abort(); emitAborted(); return;
+            }
+            m_launcher->proceed(); emit gameStarted(m_launcher->pid());
+        });
+        connect(profiler, &BaseProfiler::abortLaunch, this, [this](const QString& message) { m_launcher->abort(); emitFailed(message); });
+        profiler->beginProfiling(m_launcher);
         return;
     }
 
@@ -503,7 +692,7 @@ void LaunchController::onSucceeded()
 
 void LaunchController::onFailed(QString reason)
 {
-    if (m_instance->settings()->get("ShowConsoleOnError").toBool()) {
+    if (!m_headless && m_instance->settings()->get("ShowConsoleOnError").toBool()) {
         APPLICATION->showInstanceWindow(m_instance, "console");
     }
     emitFailed(std::move(reason));
@@ -511,20 +700,46 @@ void LaunchController::onFailed(QString reason)
 
 void LaunchController::onProgressRequested(Task* task) const
 {
+    if (m_headless) {
+        m_launcher->proceed();
+        return;
+    }
     ProgressDialog progDialog(m_parentWidget);
     progDialog.setSkipButton(true, tr("Abort"));
     m_launcher->proceed();
     progDialog.execWithTask(task);
 }
 
+bool LaunchController::canAbort() const
+{
+    if (m_headless)
+        return m_authTask || (m_launcher && m_launcher->canAbort());
+    return Task::canAbort();
+}
+
+QList<Task*> LaunchController::getSubTasks() const
+{
+    QList<Task*> tasks;
+    if (m_authTask) tasks.append(m_authTask);
+    if (m_launcher) tasks.append(m_launcher);
+    return tasks;
+}
+
 bool LaunchController::abort()
 {
+    if (m_headless && m_authTask) {
+        m_authCancelled = true;
+        if (!m_authTask->isFinished()) m_authTask->abort();
+        return true;
+    }
     if (!m_launcher) {
         return true;
     }
     if (!m_launcher->canAbort()) {
         return false;
     }
+    if (m_headless)
+        return m_launcher->abort();
     auto response = CustomMessageBox::selectable(m_parentWidget, tr("Kill Minecraft?"),
                                                  tr("This can cause the instance to get corrupted and should only be used if Minecraft "
                                                     "is frozen for some reason"),

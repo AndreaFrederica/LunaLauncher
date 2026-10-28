@@ -36,7 +36,27 @@
 #include "ConcurrentTask.h"
 
 #include <QDebug>
+#include <QFileInfo>
+#include <QUrl>
+#include <utility>
 #include "tasks/Task.h"
+
+namespace {
+QString childLabel(Task* task)
+{
+    if (!task) return {};
+    const auto name = task->objectName();
+    for (const auto& prefix : { QStringLiteral("FILE:"), QStringLiteral("CACHE:"), QStringLiteral("BYTES:"),
+                                QStringLiteral("ARIA2_FILE:"), QStringLiteral("ARIA2_CACHE:"),
+                                QStringLiteral("PCL_FILE:"), QStringLiteral("PCL_CACHE:") }) {
+        if (name.startsWith(prefix)) {
+            const auto fileName = QFileInfo(QUrl(name.mid(prefix.size())).path()).fileName();
+            if (!fileName.isEmpty()) return fileName;
+        }
+    }
+    return name;
+}
+}
 
 ConcurrentTask::ConcurrentTask(QString task_name, int max_concurrent) : Task(), m_total_max_size(max_concurrent)
 {
@@ -56,8 +76,28 @@ auto ConcurrentTask::getStepProgress() const -> TaskStepProgressList
     return m_task_progress.values();
 }
 
+QList<Task*> ConcurrentTask::getSubTasks() const
+{
+    QList<Task*> result;
+    result.reserve(m_queue.size() + m_doing.size() + m_done.size());
+    for (const auto& task : m_queue)
+        if (task) result.append(task.get());
+    for (const auto& task : m_doing)
+        if (task) result.append(task.get());
+    for (const auto& task : m_done)
+        if (task) result.append(task.get());
+    return result;
+}
+
 void ConcurrentTask::addTask(Task::Ptr task)
 {
+    if (task) {
+        auto progress = std::make_shared<TaskStepProgress>(task->getUid());
+        progress->label = childLabel(task.get());
+        if (task->objectName().contains(':') && progress->label != task->objectName())
+            progress->progressUnit = "bytes";
+        m_task_progress.insert(task->getUid(), progress);
+    }
     m_queue.append(task);
 }
 
@@ -104,8 +144,10 @@ void ConcurrentTask::clear()
     m_failed.clear();
     m_queue.clear();
     m_task_progress.clear();
+    m_task_transfer_rates.clear();
 
     m_progress = 0;
+    setTransferRate(0);
 }
 
 void ConcurrentTask::executeNextSubTask()
@@ -160,11 +202,19 @@ void ConcurrentTask::startSubTask(Task::Ptr next)
     connect(next.get(), &Task::stepProgress, this, &ConcurrentTask::stepProgress);
 
     connect(next.get(), &Task::progress, this, [this, next](qint64 current, qint64 total) { subTaskProgress(next, current, total); });
+    connect(next.get(), &Task::transferRate, this,
+            [this, next](qint64 bytesPerSecond) { subTaskTransferRate(next, bytesPerSecond); });
 
     m_doing.insert(next.get(), next);
 
-    auto task_progress = std::make_shared<TaskStepProgress>(next->getUid());
-    m_task_progress.insert(next->getUid(), task_progress);
+    auto task_progress = m_task_progress.value(next->getUid());
+    if (!task_progress) {
+        task_progress = std::make_shared<TaskStepProgress>(next->getUid());
+        m_task_progress.insert(next->getUid(), task_progress);
+    }
+    task_progress->label = childLabel(next.get());
+    task_progress->state = TaskStepState::Running;
+    emit stepProgress(*task_progress);
 
     updateState();
 
@@ -177,11 +227,12 @@ void ConcurrentTask::subTaskFinished(Task::Ptr task, TaskStepState state)
     (state == TaskStepState::Succeeded ? m_succeeded : m_failed).insert(task.get(), task);
 
     m_doing.remove(task.get());
+    m_task_transfer_rates.remove(task.get());
+    updateTransferRate();
 
-    auto task_progress = *m_task_progress.value(task->getUid());
+    auto& task_progress = *m_task_progress.value(task->getUid());
     task_progress.state = state;
-    m_task_progress.remove(task->getUid());
-
+    task_progress.transferRate = 0;
     disconnect(task.get(), 0, this, 0);
 
     emit stepProgress(task_progress);
@@ -237,6 +288,27 @@ void ConcurrentTask::subTaskProgress(Task::Ptr task, qint64 current, qint64 tota
     if (totalSize() == 1) {
         setProgress(task_progress->current, task_progress->total);
     }
+}
+
+void ConcurrentTask::subTaskTransferRate(Task::Ptr task, qint64 bytesPerSecond)
+{
+    m_task_transfer_rates.insert(task.get(), bytesPerSecond);
+    auto task_progress = m_task_progress.value(task->getUid());
+    if (task_progress) {
+        task_progress->transferRate = bytesPerSecond;
+        task_progress->state = TaskStepState::Running;
+        emit stepProgress(*task_progress);
+    }
+    updateTransferRate();
+}
+
+void ConcurrentTask::updateTransferRate()
+{
+    qint64 totalBytesPerSecond = 0;
+    for (const auto bytesPerSecond : std::as_const(m_task_transfer_rates)) {
+        totalBytesPerSecond += bytesPerSecond;
+    }
+    setTransferRate(totalBytesPerSecond);
 }
 
 void ConcurrentTask::updateState()

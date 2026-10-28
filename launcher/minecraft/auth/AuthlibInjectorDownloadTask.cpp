@@ -23,9 +23,12 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
+#include <QSaveFile>
 
 #include "Application.h"
 #include "FileSystem.h"
+#include "minecraft/MirrorDownload.h"
 #include "minecraft/auth/AuthlibInjector.h"
 
 AuthlibInjectorDownloadTask::AuthlibInjectorDownloadTask(LaunchTask* parent) : LaunchStep(parent)
@@ -60,10 +63,14 @@ void AuthlibInjectorDownloadTask::executeTask()
         return;
     }
 
-    // Need to download - first try BMCLAPI, then fall back to official
-    QString infoUrl = "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json";
+    // Prefer the selected mirror; the official source is still the fallback below.
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    QString infoUrl = mirror.authlibInjectorBase.isEmpty()
+                          ? QStringLiteral("https://authlib-injector.yushi.moe/artifact/latest.json")
+                          : mirror.authlibInjectorBase + QStringLiteral("artifact/latest.json");
 
     QNetworkRequest request((QUrl(infoUrl)));
+    request.setTransferTimeout(15000);
     request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
 
     m_infoReply = m_network->get(request);
@@ -78,10 +85,16 @@ void AuthlibInjectorDownloadTask::executeTask()
 void AuthlibInjectorDownloadTask::downloadInfoFinished()
 {
     if (m_infoReply->error() != QNetworkReply::NoError) {
+        if (m_triedOfficial) {
+            emitFailed(tr("Could not download authlib-injector metadata: %1").arg(m_infoReply->errorString()));
+            return;
+        }
+        m_triedOfficial = true;
         qWarning() << "Failed to fetch authlib-injector info from BMCLAPI:" << m_infoReply->errorString();
         // Try official source
         QString infoUrl = "https://authlib-injector.yushi.moe/artifact/latest.json";
         QNetworkRequest request((QUrl(infoUrl)));
+        request.setTransferTimeout(15000);
         request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
 
         m_infoReply->deleteLater();
@@ -122,12 +135,18 @@ void AuthlibInjectorDownloadTask::downloadInfoFinished()
 
 void AuthlibInjectorDownloadTask::startJarDownload(const QString& url, const QString& checksum)
 {
+    static const QRegularExpression sha256("^[0-9a-fA-F]{64}$");
+    if (QUrl(url).scheme() != "https" || !sha256.match(checksum).hasMatch()) {
+        emitFailed(tr("authlib-injector metadata must provide an HTTPS download and a SHA-256 checksum."));
+        return;
+    }
     setStatus(tr("Downloading authlib-injector..."));
 
     // Ensure parent directory exists
     QDir().mkpath(QFileInfo(m_jarPath).absolutePath());
 
     QNetworkRequest request((QUrl(url)));
+    request.setTransferTimeout(15000);
     request.setRawHeader("User-Agent", APPLICATION->getUserAgent().toUtf8());
 
     m_jarReply = m_network->get(request);
@@ -157,24 +176,23 @@ void AuthlibInjectorDownloadTask::downloadJarFinished()
     m_jarReply->deleteLater();
     m_jarReply = nullptr;
 
-    // Verify checksum if provided
-    if (!m_expectedChecksum.isEmpty()) {
-        QByteArray hash = QCryptographicHash::hash(jarData, QCryptographicHash::Sha256).toHex();
-        if (hash != m_expectedChecksum.toUtf8()) {
-            qWarning() << "Authlib-injector checksum mismatch! Expected:" << m_expectedChecksum << "Got:" << QString::fromUtf8(hash);
-            // Continue anyway as some mirrors may have wrong checksums
-        }
+    const auto hash = QCryptographicHash::hash(jarData, QCryptographicHash::Sha256).toHex();
+    if (hash != m_expectedChecksum.toLatin1().toLower() || jarData.size() < 100 * 1024) {
+        emitFailed(tr("authlib-injector download failed integrity verification."));
+        return;
     }
 
     // Write to file
-    QFile file(m_jarPath);
+    QSaveFile file(m_jarPath);
     if (!file.open(QIODevice::WriteOnly)) {
         emitFailed(tr("Failed to open authlib-injector.jar for writing: %1").arg(file.errorString()));
         return;
     }
 
-    file.write(jarData);
-    file.close();
+    if (file.write(jarData) != jarData.size() || !file.commit()) {
+        emitFailed(tr("Could not save authlib-injector: %1").arg(file.errorString()));
+        return;
+    }
 
     // Save metadata (version info)
     if (!m_version.isEmpty()) {

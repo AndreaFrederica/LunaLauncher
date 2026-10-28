@@ -83,25 +83,25 @@ void ArchiveDownloadTask::extractJava(QString input)
     auto progressStep = std::make_shared<TaskStepProgress>();
     connect(m_task.get(), &Task::finished, this, [this, progressStep] {
         progressStep->state = TaskStepState::Succeeded;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
 
     connect(m_task.get(), &Task::succeeded, this, &ArchiveDownloadTask::emitSucceeded);
     connect(m_task.get(), &Task::aborted, this, &ArchiveDownloadTask::emitAborted);
     connect(m_task.get(), &Task::failed, this, [this, progressStep](QString reason) {
         progressStep->state = TaskStepState::Failed;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
         emitFailed(reason);
     });
     connect(m_task.get(), &Task::stepProgress, this, &ArchiveDownloadTask::propagateStepProgress);
 
     connect(m_task.get(), &Task::progress, this, [this, progressStep](qint64 current, qint64 total) {
         progressStep->update(current, total);
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
     connect(m_task.get(), &Task::status, this, [this, progressStep](QString status) {
         progressStep->status = status;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
     m_task->start();
     return;

@@ -24,30 +24,36 @@ class ModrinthCreationTask final : public InstanceCreationTask {
     };
 
    public:
-    ModrinthCreationTask(QString staging_path,
-                         SettingsObject* global_settings,
+    ModrinthCreationTask(const QString& stagingPath,
+                         bool trustedSource,
+                         SettingsObject* globalSettings,
                          QWidget* parent,
                          QString id,
-                         QString version_id = {},
-                         QString original_instance_id = {})
-        : InstanceCreationTask(), m_parent(parent), m_managed_id(std::move(id)), m_managed_version_id(std::move(version_id))
+                         QString versionId = {},
+                         QString originalInstanceId = {})
+        : m_parent(parent), m_trustedSource(trustedSource), m_managed_id(std::move(id)), m_managed_version_id(std::move(versionId))
     {
-        setStagingPath(staging_path);
-        setParentSettings(global_settings);
+        setStagingPath(stagingPath);
+        setParentSettings(globalSettings);
 
-        m_original_instance_id = std::move(original_instance_id);
+        m_original_instance_id = std::move(originalInstanceId);
     }
 
     bool abort() override;
+    QList<Task*> getSubTasks() const override;
 
     bool updateInstance() override;
     std::unique_ptr<BaseInstance> createInstance() override;
+    bool isPclPack() const { return m_pclPackDetected; }
 
    private:
-    bool parseManifest(const QString&, std::vector<File>&, bool set_internal_data = true, bool show_optional_dialog = true);
+    bool parseManifest(const QString&, std::vector<File>&, bool setInternalData = true, bool showOptionalDialog = true);
+
+    [[nodiscard]] bool promptForUntrustedMods();
 
    private:
     QWidget* m_parent = nullptr;
+    bool m_trustedSource;
 
     QString m_minecraft_version, m_fabric_version, m_quilt_version, m_forge_version, m_neoForge_version;
     QString m_managed_id, m_managed_version_id, m_managed_name;
@@ -58,4 +64,5 @@ class ModrinthCreationTask final : public InstanceCreationTask {
     std::optional<BaseInstance*> m_instance;
 
     QString m_root_path = "minecraft";
+    bool m_pclPackDetected = false;
 };

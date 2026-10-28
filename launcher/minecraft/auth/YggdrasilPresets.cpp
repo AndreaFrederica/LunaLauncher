@@ -17,6 +17,8 @@
  */
 
 #include "YggdrasilPresets.h"
+#include "Application.h"
+#include <QSaveFile>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -35,6 +37,15 @@ void YggdrasilPresets::initDefaults()
         return;
     }
 
+    // Microsoft's official account service. It has no Yggdrasil URL; the UI
+    // uses this entry to expose the official login flow next to third-party
+    // authentication services.
+    YggdrasilPreset official;
+    official.name = QCoreApplication::translate("YggdrasilPresets", "Minecraft 官方服务器");
+    official.sourceName = QCoreApplication::translate("YggdrasilPresets", "Microsoft");
+    official.official = true;
+    s_defaults.append(official);
+
     // LittleSkin - 国内常用的 Yggdrasil 皮肤站
     // LittleSkin uses /authserver/ prefix for refresh/validate, not /sessionserver/
     YggdrasilPreset littleSkin;
@@ -46,6 +57,14 @@ void YggdrasilPresets::initDefaults()
     littleSkin.authenticateEndpoint = "/authserver/authenticate";
     littleSkin.profileEndpoint = "/sessionserver/session/minecraft/profile/{uuid}";
     s_defaults.append(littleSkin);
+
+    // Luna's bundled verification service. The service chooses an ephemeral
+    // loopback port at login time, so the account does not need a fixed URL.
+    YggdrasilPreset local;
+    local.name = QCoreApplication::translate("YggdrasilPresets", "Luna 本地验证服务器");
+    local.sourceName = QCoreApplication::translate("YggdrasilPresets", "Luna 本地验证服务器");
+    local.managedLocal = true;
+    s_defaults.append(local);
 
     // authlib-injector 官方示例服务器
     s_defaults.append({ QCoreApplication::translate("YggdrasilPresets", "authlib-injector Official Example"),
@@ -61,7 +80,7 @@ const QVector<YggdrasilPreset>& YggdrasilPresets::getDefaults()
 
 static QString getPresetsFilePath()
 {
-    auto dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    auto dir = APPLICATION ? APPLICATION->dataRoot() : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     return QDir(dir).absoluteFilePath(CUSTOM_PRESETS_FILE);
 }
 
@@ -94,25 +113,31 @@ static QJsonArray loadCustomPresets()
 
 static bool saveCustomPresets(const QJsonArray& array)
 {
-    QFile file(getPresetsFilePath());
+    const auto path = getPresetsFilePath();
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
+    QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         qWarning() << "Failed to open Yggdrasil presets file for writing:" << file.errorString();
         return false;
     }
 
     QJsonDocument doc(array);
-    file.write(doc.toJson());
-    return true;
+    const auto bytes = doc.toJson();
+    return file.write(bytes) == bytes.size() && file.commit();
 }
 
-bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset)
+bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset, const QString& replaceName)
 {
     auto array = loadCustomPresets();
+    int replaceIndex = -1;
+    for (int i = 0; i < array.size(); ++i)
+        if (!replaceName.isEmpty() && array[i].toObject().value("name").toString() == replaceName) replaceIndex = i;
+    if (!replaceName.isEmpty() && replaceIndex < 0) return false;
 
     // Check if a preset with the same name already exists
     for (const auto& value : array) {
         auto obj = value.toObject();
-        if (obj.value("name").toString() == preset.name) {
+        if (obj.value("name").toString() == preset.name && obj.value("name").toString() != replaceName) {
             return false;
         }
     }
@@ -136,13 +161,18 @@ bool YggdrasilPresets::addCustomPreset(const YggdrasilPreset& preset)
     if (!preset.oauthTokenEndpoint.isEmpty()) {
         obj["oauthTokenEndpoint"] = preset.oauthTokenEndpoint;
     }
+    if (!preset.sourceName.isEmpty()) {
+        obj["sourceName"] = preset.sourceName;
+    }
     // Store token type as string for JSON serialization
     if (preset.tokenType == YggdrasilTokenType::OAuth) {
         obj["tokenType"] = "OAuth";
     } else {
         obj["tokenType"] = "Standard";
     }
-    array.append(obj);
+    obj["managedLocal"] = preset.managedLocal;
+    if (replaceIndex >= 0) array[replaceIndex] = obj;
+    else array.append(obj);
 
     return saveCustomPresets(array);
 }
@@ -182,6 +212,7 @@ QVector<YggdrasilPreset> YggdrasilPresets::getCustomPresets()
         preset.validateEndpoint = obj.value("validateEndpoint").toString();
         preset.profileEndpoint = obj.value("profileEndpoint").toString();
         preset.oauthTokenEndpoint = obj.value("oauthTokenEndpoint").toString();
+        preset.sourceName = obj.value("sourceName").toString();
         // Parse token type from string
         QString tokenTypeStr = obj.value("tokenType").toString();
         if (tokenTypeStr == "OAuth") {
@@ -189,6 +220,7 @@ QVector<YggdrasilPreset> YggdrasilPresets::getCustomPresets()
         } else {
             preset.tokenType = YggdrasilTokenType::Standard;
         }
+        preset.managedLocal = obj.value("managedLocal").toBool(false);
         presets.append(preset);
     }
 

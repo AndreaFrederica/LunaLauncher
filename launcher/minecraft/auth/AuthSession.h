@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QJsonObject>
 #include <QString>
 #include <memory>
 
@@ -10,6 +11,7 @@ class MinecraftAccount;
 struct AuthSession {
     bool MakeOffline(QString offline_playername);
     void MakeDemo(QString name, QString uuid);
+    bool useLocalYggdrasil(const QJsonObject& response, const QString& expectedUuid, const QString& apiUrl);
 
     QString serializeUserProperties();
 
@@ -42,13 +44,14 @@ struct AuthSession {
     bool demo = false;
 
     // Yggdrasil / authlib-injector specific fields
-    bool yggdrasil = false;                   // Whether this is a Yggdrasil account
-    QString yggdrasilApiUrl;                  // Yggdrasil API URL
-    QString yggdrasilPrefetched;              // Base64-encoded prefetched metadata
+    bool yggdrasil = false;               // Whether this is a Yggdrasil account
+    bool localYggdrasilFallback = false;  // Authenticated locally; use installed game resources.
+    QString yggdrasilApiUrl;              // Yggdrasil API URL
+    QString yggdrasilPrefetched;          // Base64-encoded prefetched metadata
 
     // UnifiedPass / Nide8Auth specific fields
-    bool unifiedPass = false;                 // Whether this is a UnifiedPass account
-    QString unifiedPassServerId;              // 32-character server ID
+    bool unifiedPass = false;     // Whether this is a UnifiedPass account
+    QString unifiedPassServerId;  // 32-character server ID
 
     // the actual launch mode for this session
     LaunchMode launchMode = LaunchMode::Normal;

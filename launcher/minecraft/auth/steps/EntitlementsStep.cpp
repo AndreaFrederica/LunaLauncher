@@ -11,6 +11,7 @@
 #include "minecraft/auth/Parsers.h"
 #include "net/Download.h"
 #include "net/NetJob.h"
+#include "net/NetUtils.h"
 #include "net/RawHeaderProxy.h"
 #include "tasks/Task.h"
 
@@ -49,9 +50,21 @@ void EntitlementsStep::onRequestDone(QByteArray* response)
 {
     qCDebug(authCredentials()) << *response;
 
-    // TODO: check presence of same entitlementsRequestId?
-    // TODO: validate JWTs?
-    Parsers::parseMinecraftEntitlements(*response, m_data->minecraftEntitlement);
+    if (m_request->error() != QNetworkReply::NoError) {
+        const auto status = m_request->replyStatusCode();
+        auto state = status >= 500 || !Net::isApplicationError(m_request->error()) ? AccountTaskState::STATE_OFFLINE
+                                                                                   : AccountTaskState::STATE_FAILED_SOFT;
+        if (status == 401 || status == 403)
+            state = AccountTaskState::STATE_FAILED_HARD;
+        emit finished(state, tr("Could not verify game ownership: %1").arg(m_request->errorString()));
+        return;
+    }
+    MinecraftEntitlement entitlement;
+    if (!Parsers::parseMinecraftEntitlements(*response, entitlement)) {
+        emit finished(AccountTaskState::STATE_FAILED_SOFT, tr("Could not parse game ownership response."));
+        return;
+    }
+    m_data->minecraftEntitlement = entitlement;
 
     emit finished(AccountTaskState::STATE_WORKING, tr("Got entitlements"));
 }

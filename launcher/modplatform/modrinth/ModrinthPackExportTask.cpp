@@ -25,6 +25,7 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QtConcurrentRun>
+#include "BuildConfig.h"
 #include "FileSystem.h"
 #include "Json.h"
 #include "MMCZip.h"
@@ -254,25 +255,25 @@ void ModrinthPackExportTask::buildZip()
     auto progressStep = std::make_shared<TaskStepProgress>();
     connect(zipTask.get(), &Task::finished, this, [this, progressStep] {
         progressStep->state = TaskStepState::Succeeded;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
 
     connect(zipTask.get(), &Task::succeeded, this, &ModrinthPackExportTask::emitSucceeded);
     connect(zipTask.get(), &Task::aborted, this, &ModrinthPackExportTask::emitAborted);
     connect(zipTask.get(), &Task::failed, this, [this, progressStep](QString reason) {
         progressStep->state = TaskStepState::Failed;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
         emitFailed(reason);
     });
     connect(zipTask.get(), &Task::stepProgress, this, &ModrinthPackExportTask::propagateStepProgress);
 
     connect(zipTask.get(), &Task::progress, this, [this, progressStep](qint64 current, qint64 total) {
         progressStep->update(current, total);
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
     connect(zipTask.get(), &Task::status, this, [this, progressStep](QString status) {
         progressStep->status = status;
-        stepProgress(*progressStep);
+        propagateStepProgress(*progressStep);
     });
     task.reset(zipTask);
     zipTask->start();

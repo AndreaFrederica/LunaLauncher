@@ -112,6 +112,12 @@ class ResourceFolderModel : public QAbstractListModel {
     /** Creates a new update task and start it. Returns false if no update was done, like when an update is already underway. */
     virtual bool update();
 
+    /** Whether the model has completed at least one successful directory scan. */
+    [[nodiscard]] bool isLoaded() const { return m_loaded; }
+
+    /** Whether a directory scan is currently running. */
+    [[nodiscard]] bool isUpdating() const { return !m_current_update_task.isNull(); }
+
     /** Creates a new parse task, if needed, for 'res' and start it.*/
     virtual void resolveResource(Resource::Ptr res);
 
@@ -183,6 +189,7 @@ class ResourceFolderModel : public QAbstractListModel {
     };
 
     QString instDirPath() const;
+    BaseInstance* instance() const { return m_instance; }
 
    signals:
     void updateFinished();
@@ -253,6 +260,7 @@ class ResourceFolderModel : public QAbstractListModel {
 
     bool m_is_indexed;
     bool m_first_folder_load = true;
+    bool m_loaded = false;
 
     Task::Ptr m_current_update_task = nullptr;
     bool m_scheduled_update = false;

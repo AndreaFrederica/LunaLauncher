@@ -1,0 +1,98 @@
+import { clientModrinthV2 } from '@/util/clients'
+import { injection } from '@/util/inject'
+import { getModrinthProjectKey, getModrinthVersionKey } from '@/util/modrinth'
+import { SWRVModel, swrvGet } from '@/util/swrvGet'
+import { get } from '@vueuse/core'
+import { Project, ProjectVersion } from '@xmcl/modrinth'
+import { IConfig } from 'swrv'
+import { computed, markRaw, type MaybeRef, type Ref } from 'vue'
+import { kSWRVConfig } from './swrvConfig'
+
+type ResolvedDependency = {
+  project: Project
+  versions: ProjectVersion[]
+  recommendedVersion: ProjectVersion
+  /**
+   * The type of the dependency relative to the root mod
+   */
+  type: 'required' | 'optional' | 'incompatible' | 'embedded'
+  /**
+   * The type of the dependency relative to the parent mod
+   */
+  relativeType: 'required' | 'optional' | 'incompatible' | 'embedded'
+
+  parent: Project
+}
+
+type ModrinthDependenciesConfig = Pick<IConfig, 'cache' | 'dedupingInterval'>
+
+const visit = async (current: ResolvedDependency, visited: Set<string>, config: ModrinthDependenciesConfig, modLoader?: MaybeRef<string | undefined>): Promise<ResolvedDependency[]> => {
+  const { recommendedVersion: version } = current
+  if (current.relativeType === 'incompatible' || current.type === 'embedded') {
+    return []
+  }
+  if (visited.has(version.project_id)) {
+    return []
+  }
+  visited.add(version.project_id)
+  const deps = current.type === 'optional' ? [] : await Promise.all(version.dependencies
+    .filter(child => child.dependency_type !== 'incompatible')
+    .map(async (child) => {
+    try {
+      const loaders = version.loaders
+      const project = await swrvGet(getModrinthProjectKey(child.project_id), () => clientModrinthV2.getProject(child.project_id), config.cache!, config.dedupingInterval!)
+      const versions = await swrvGet(getModrinthVersionKey(child.project_id, undefined, loaders, version.game_versions),
+        () => clientModrinthV2.getProjectVersions(child.project_id, { loaders, gameVersions: version.game_versions }),
+        config.cache!, config.dedupingInterval!)
+      const recommendedVersion = child.version_id ? versions.find(v => v.id === child.version_id) ?? versions[0] : versions[0]
+      if (!recommendedVersion) {
+        // Issue #1444: Modrinth allows `version_id: null` on a dependency
+        // ("any compatible version"); if our compatibility filter
+        // (loader + game version) returns nothing, we have no concrete
+        // version to install. For non-required deps this is benign --
+        // skip silently. For required deps, log a single warn so the UI
+        // can still surface the parent project; don't throw, otherwise
+        // one missing edge fails the entire dependency tree fetch.
+        if (child.dependency_type !== 'required') {
+          return []
+        }
+        console.warn(`[modrinth deps] No compatible version of ${child.project_id} (requested ${child.version_id ?? 'any'}) for ${version.project_id}:${version.id} on loaders=${JSON.stringify(loaders)} mc=${JSON.stringify(version.game_versions)} -- skipping`)
+        return []
+      }
+      const result = await visit(markRaw({
+        project,
+        versions,
+        recommendedVersion,
+        parent: current.project,
+        type: child.dependency_type === 'required'
+          ? current.type === 'required' ? 'required' : current.type || child.dependency_type
+          : child.dependency_type,
+        relativeType: child.dependency_type,
+      }), visited, config)
+      return result
+    } catch (e) {
+      if (child.dependency_type === 'optional') {
+        return []
+      }
+      throw e
+    }
+    }))
+
+  return [current, ...deps.reduce((a, b) => [...a, ...b], [])]
+}
+
+export function getModrinthDependenciesModel(version: Ref<ProjectVersion | undefined>, modLoader?: MaybeRef<string | undefined>, config: ModrinthDependenciesConfig = injection(kSWRVConfig)): SWRVModel<ResolvedDependency[]> {
+  const model = {
+    key: computed(() => version.value && `/modrinth/version/${version.value.id}/dependencies?${get(modLoader)}`),
+    fetcher: async () => {
+      const visited = new Set<string>()
+      if (!version.value) {
+        throw new TypeError('Require version to getModrinthDependenciesModel')
+      }
+      const tuples = await visit({ recommendedVersion: version.value } as any, visited, config, modLoader)
+      tuples.shift()
+      return tuples
+    },
+  }
+  return model
+}

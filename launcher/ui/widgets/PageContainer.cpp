@@ -49,6 +49,7 @@
 #include <QStackedLayout>
 #include <QStyledItemDelegate>
 #include <QUrl>
+#include <utility>
 
 #include "settings/SettingsObject.h"
 
@@ -59,40 +60,43 @@
 
 class PageEntryFilterModel : public QSortFilterProxyModel {
    public:
-    explicit PageEntryFilterModel(QObject* parent = 0) : QSortFilterProxyModel(parent) {}
+    explicit PageEntryFilterModel(QObject* parent = nullptr) : QSortFilterProxyModel(parent) {}
 
    protected:
-    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const
+    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override
     {
         const QString pattern = filterRegularExpression().pattern();
-        const auto model = static_cast<PageModel*>(sourceModel());
-        const auto page = model->pages().at(sourceRow);
-        if (!page->shouldDisplay())
+        auto* const model = static_cast<PageModel*>(sourceModel());
+        auto* const page = model->pages().at(sourceRow);
+        if (!page->shouldDisplay()) {
             return false;
+        }
         // Regular contents check, then check page-filter.
         return QSortFilterProxyModel::filterAcceptsRow(sourceRow, sourceParent);
     }
 };
 
-PageContainer::PageContainer(BasePageProvider* pageProvider, QString defaultId, QWidget* parent) : QWidget(parent)
+PageContainer::PageContainer(BasePageProvider* pageProvider, QString defaultId, QWidget* parent)
+    : QWidget(parent)
+    , m_proxyModel(new PageEntryFilterModel(this))
+    , m_model(new PageModel(this))
 {
     createUI();
     useSidebarStyle(true);
 
-    m_model = new PageModel(this);
-    m_proxyModel = new PageEntryFilterModel(this);
     int counter = 0;
     auto pages = pageProvider->getPages();
-    for (auto page : pages) {
-        auto widget = dynamic_cast<QWidget*>(page);
+    for (auto* page : pages) {
+        auto* widget = dynamic_cast<QWidget*>(page);
         widget->setParent(this);
         page->stackIndex = m_pageStack->addWidget(widget);
         page->listIndex = counter;
         page->setParentContainer(this);
         counter++;
-        page->updateExtraInfo = [this](QString id, QString info) {
-            if (m_currentPage && id == m_currentPage->id())
+        page->updateExtraInfo = [this](const QString& id, const QString& info) {
+            if (m_currentPage && id == m_currentPage->id()) {
                 m_header->setText(m_currentPage->displayName() + info);
+            }
         };
     }
     m_model->setPages(pages);
@@ -108,13 +112,13 @@ PageContainer::PageContainer(BasePageProvider* pageProvider, QString defaultId, 
     connect(m_pageList->selectionModel(), &QItemSelectionModel::currentRowChanged, this, &PageContainer::currentChanged);
     m_pageStack->setStackingMode(QStackedLayout::StackOne);
     m_pageList->setFocus();
-    selectPage(defaultId);
+    selectPage(std::move(defaultId));
 }
 
 bool PageContainer::selectPage(QString pageId)
 {
     // now find what we want to have selected...
-    auto page = m_model->findPageEntryById(pageId);
+    auto* page = m_model->findPageEntryById(pageId);
     QModelIndex index;
     if (page) {
         index = m_proxyModel->mapFromSource(m_model->index(page->listIndex));
@@ -147,7 +151,7 @@ const QList<BasePage*>& PageContainer::getPages() const
 void PageContainer::refreshContainer()
 {
     m_proxyModel->invalidate();
-    if (!m_currentPage->shouldDisplay()) {
+    if (!m_currentPage || !m_currentPage->shouldDisplay()) {
         auto index = m_proxyModel->index(0, 0);
         if (index.isValid()) {
             m_pageList->setCurrentIndex(index);
@@ -155,6 +159,7 @@ void PageContainer::refreshContainer()
             // FIXME: unhandled corner case: what to do when there's no page to select?
         }
     }
+    synchronizePageVisibility();
 }
 
 void PageContainer::createUI()
@@ -166,11 +171,12 @@ void PageContainer::createUI()
     QFont headerLabelFont = m_header->font();
     headerLabelFont.setBold(true);
     const int pointSize = headerLabelFont.pointSize();
-    if (pointSize > 0)
+    if (pointSize > 0) {
         headerLabelFont.setPointSize(pointSize + 2);
+    }
     m_header->setFont(headerLabelFont);
 
-    QHBoxLayout* headerHLayout = new QHBoxLayout;
+    auto* headerHLayout = new QHBoxLayout;
     const int leftMargin = APPLICATION->style()->pixelMetric(QStyle::PM_LayoutLeftMargin);
     headerHLayout->addSpacerItem(new QSpacerItem(leftMargin, 0, QSizePolicy::Fixed, QSizePolicy::Ignored));
     headerHLayout->addWidget(m_header);
@@ -178,23 +184,30 @@ void PageContainer::createUI()
 
     m_pageStack->setContentsMargins(0, 0, 0, 0);
     m_pageStack->addWidget(new QWidget(this));
+    // Page widgets commonly use transparent stylesheet backgrounds. Keep a
+    // stable palette backdrop behind the stack so a translucent top-level
+    // window cannot retain pixels from the page that was just hidden.
+    setAutoFillBackground(true);
 
     m_layout = new QGridLayout;
     m_layout->addLayout(headerHLayout, 0, 1, 1, 1);
     m_layout->addWidget(m_pageList, 0, 0, 3, 1);
     m_layout->addLayout(m_pageStack, 1, 1, 1, 1);
     m_layout->setColumnStretch(1, 4);
+    m_layout->setRowStretch(1, 1);
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);
 }
 
 void PageContainer::retranslate()
 {
-    if (m_currentPage)
+    if (m_currentPage) {
         m_header->setText(m_currentPage->displayName());
+    }
 
-    for (auto page : m_model->pages())
+    for (auto* page : m_model->pages()) {
         page->retranslate();
+    }
 }
 
 void PageContainer::addButtons(QWidget* buttons)
@@ -223,35 +236,85 @@ void PageContainer::showPage(int row)
         m_currentPage = nullptr;
     }
     if (m_currentPage) {
+        // Keep the stacked layout in its single-page mode even when a style
+        // or native window frame update has caused a layout request while a
+        // selection change is being processed.
+        m_pageStack->setStackingMode(QStackedLayout::StackOne);
         m_pageStack->setCurrentIndex(m_currentPage->stackIndex);
         m_header->setText(m_currentPage->displayName());
         m_currentPage->opened();
     } else {
+        m_pageStack->setStackingMode(QStackedLayout::StackOne);
         m_pageStack->setCurrentIndex(0);
         m_header->setText(QString());
     }
+    synchronizePageVisibility();
+}
+
+void PageContainer::synchronizePageVisibility()
+{
+    if (!m_pageStack || m_synchronizingPageVisibility)
+        return;
+
+    m_synchronizingPageVisibility = true;
+
+    const int activeIndex = m_currentPage ? m_currentPage->stackIndex : -1;
+    if (activeIndex >= 0 && activeIndex < m_pageStack->count() && m_pageStack->currentIndex() != activeIndex)
+        m_pageStack->setCurrentIndex(activeIndex);
+
+    // QStackedLayout normally manages this visibility itself. Explicitly
+    // enforce it as well because stylesheet/native-frame changes can issue
+    // visibility and layout requests while a page switch is in flight. The
+    // old page must never remain visible underneath the newly selected page.
+    for (int index = 0; index < m_pageStack->count(); ++index) {
+        auto* item = m_pageStack->itemAt(index);
+        auto* widget = item ? item->widget() : nullptr;
+        if (!widget)
+            continue;
+
+        const bool visible = index == activeIndex;
+        if (widget->isVisible() != visible)
+            widget->setVisible(visible);
+        if (visible)
+            widget->raise();
+    }
+
+    m_pageStack->invalidate();
+    m_pageStack->activate();
+    // A translucent top-level window does not always erase the region that
+    // belonged to a hidden child. Queue a repaint of the container backdrop
+    // so the next page cannot be composited over stale pixels.
+    update();
+    m_synchronizingPageVisibility = false;
 }
 
 void PageContainer::help()
 {
     if (m_currentPage) {
         QString pageId = m_currentPage->helpPage();
-        if (pageId.isEmpty())
+        if (pageId.isEmpty()) {
             return;
+        }
         DesktopServices::openUrl(QUrl(BuildConfig.HELP_URL.arg(pageId)));
     }
 }
 
 void PageContainer::currentChanged(const QModelIndex& current)
 {
-    int selected_index = current.isValid() ? m_proxyModel->mapToSource(current).row() : -1;
-
-    auto* selected = m_model->pages().at(selected_index);
+    int selectedIndex = current.isValid() ? m_proxyModel->mapToSource(current).row() : -1;
     auto* previous = m_currentPage;
+
+    // Selection can briefly become invalid while the proxy model is reset or
+    // filtered. Do not index the page list with -1 during dialog startup.
+    if (selectedIndex < 0 || selectedIndex >= m_model->pages().size()) {
+        showPage(-1);
+        return;
+    }
+    auto* selected = m_model->pages().at(selectedIndex);
 
     emit selectedPageChanged(previous, selected);
 
-    showPage(selected_index);
+    showPage(selectedIndex);
 }
 
 bool PageContainer::prepareToClose()
@@ -267,9 +330,10 @@ bool PageContainer::prepareToClose()
 
 bool PageContainer::saveAll()
 {
-    for (auto page : m_model->pages()) {
-        if (!page->apply())
+    for (auto* page : m_model->pages()) {
+        if (!page->apply()) {
             return false;
+        }
     }
     return true;
 }
@@ -280,4 +344,57 @@ void PageContainer::changeEvent(QEvent* event)
         retranslate();
     }
     QWidget::changeEvent(event);
+}
+
+bool PageContainer::event(QEvent* event)
+{
+    const bool handled = QWidget::event(event);
+    switch (event->type()) {
+        case QEvent::Show:
+        case QEvent::LayoutRequest:
+        case QEvent::StyleChange:
+        case QEvent::FontChange:
+            synchronizePageVisibility();
+            break;
+        default:
+            break;
+    }
+    return handled;
+}
+
+QSize PageContainer::sizeHint() const
+{
+    // Use the current page's size hint instead of the maximum of all pages.
+    // This allows the dialog to shrink when switching to a smaller page.
+    if (m_currentPage) {
+        auto* pageWidget = dynamic_cast<QWidget*>(m_currentPage);
+        if (pageWidget) {
+            QSize pageHint = pageWidget->sizeHint();
+            QSize listHint = m_pageList->sizeHint();
+            int headerHeight = m_header->sizeHint().height();
+            return QSize(
+                listHint.width() + pageHint.width(),
+                headerHeight + pageHint.height()
+            );
+        }
+    }
+    return QWidget::sizeHint();
+}
+
+QSize PageContainer::minimumSizeHint() const
+{
+    // Use the current page's minimum size hint instead of the maximum of all pages.
+    if (m_currentPage) {
+        auto* pageWidget = dynamic_cast<QWidget*>(m_currentPage);
+        if (pageWidget) {
+            QSize pageMin = pageWidget->minimumSizeHint();
+            QSize listMin = m_pageList->minimumSizeHint();
+            int headerHeight = m_header->minimumSizeHint().height();
+            return QSize(
+                listMin.width() + pageMin.width(),
+                headerHeight + pageMin.height()
+            );
+        }
+    }
+    return QWidget::minimumSizeHint();
 }

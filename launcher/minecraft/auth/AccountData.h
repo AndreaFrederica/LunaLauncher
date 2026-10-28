@@ -41,6 +41,7 @@
 
 #include <QDateTime>
 #include <QMap>
+#include <QNetworkReply>
 #include <QVariantMap>
 
 enum class Validity { None, Assumed, Certain };
@@ -92,6 +93,7 @@ enum class AccountType { MSA, Offline, Yggdrasil, UnifiedPass };
 enum class YggdrasilTokenType { Standard, OAuth };
 
 enum class AccountState { Unchecked, Offline, Working, Online, Disabled, Errored, Expired, Gone };
+enum class CacheState { Unknown, Cached, NotCached };
 
 struct UnifiedPassServerConfig {
     QString serverId;    // 32-character server ID
@@ -102,6 +104,7 @@ struct UnifiedPassServerConfig {
 };
 
 struct YggdrasilServerConfig {
+    bool managedLocal = false;  // Launcher-owned Rust service, restarted before authentication.
     QString authServerUrl;
     QString sessionServerUrl;
     QString sourceName;  // e.g., "LittleSkin", "Custom Server", etc.
@@ -119,6 +122,10 @@ struct YggdrasilServerConfig {
 struct AccountData {
     QJsonObject saveState() const;
     bool resumeStateFromV3(QJsonObject data);
+    QJsonObject officialSnapshot() const;
+    QJsonObject cachedSnapshot() const;
+    void restoreOfficialSnapshot(const QJsonObject& snapshot);
+    void restoreCachedSnapshot(const QJsonObject& snapshot);
 
     //! Yggdrasil access token, as passed to the game.
     QString accessToken() const;
@@ -150,10 +157,13 @@ struct AccountData {
 
     MinecraftProfile minecraftProfile;
     MinecraftEntitlement minecraftEntitlement;
+    QDateTime officialVerifiedAt;
     Validity validity_ = Validity::None;
 
     // runtime only information (not saved with the account)
     QString internalId;
     QString errorString;
+    QNetworkReply::NetworkError networkError = QNetworkReply::NoError;
     AccountState accountState = AccountState::Unchecked;
+    CacheState cacheState = CacheState::Unknown;
 };

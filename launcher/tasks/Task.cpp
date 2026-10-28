@@ -37,6 +37,7 @@
 #include "Task.h"
 
 #include <QDebug>
+#include <algorithm>
 
 #include "AssertHelpers.h"
 
@@ -46,6 +47,13 @@ Task::Task(bool show_debug) : m_show_debug(show_debug)
 {
     m_uid = QUuid::createUuid();
     setAutoDelete(false);
+}
+
+Task::~Task()
+{
+    if (isRunning()) {
+        qCWarning(taskLogC) << "Task" << describe() << "disposed while running!";
+    }
 }
 
 void Task::setStatus(const QString& new_status)
@@ -74,6 +82,15 @@ void Task::setProgress(qint64 current, qint64 total)
     }
 }
 
+void Task::setTransferRate(qint64 bytesPerSecond)
+{
+    bytesPerSecond = std::max<qint64>(0, bytesPerSecond);
+    if (m_transferRate != bytesPerSecond) {
+        m_transferRate = bytesPerSecond;
+        emit transferRate(m_transferRate);
+    }
+}
+
 void Task::start()
 {
     switch (m_state) {
@@ -98,7 +115,7 @@ void Task::start()
             break;
         }
         case State::Running: {
-            if (ASSERT_NEVER(isRunning()) && m_show_debug)
+            if (m_show_debug)
                 qCWarning(taskLogC) << "The launcher tried to start task" << describe() << "while it was already running!";
             return;
         }
@@ -112,10 +129,11 @@ void Task::start()
 void Task::emitFailed(QString reason)
 {
     // Don't fail twice.
-    if (ASSERT_NEVER(!isRunning())) {
+    if (!isRunning()) {
         qCCritical(taskLogC) << "Task" << describe() << "failed while not running!!!!:" << reason;
         return;
     }
+    setTransferRate(0);
     m_state = State::Failed;
     m_failReason = reason;
     qCCritical(taskLogC) << "Task" << describe() << "failed:" << reason;
@@ -126,10 +144,11 @@ void Task::emitFailed(QString reason)
 void Task::emitAborted()
 {
     // Don't abort twice.
-    if (ASSERT_NEVER(!isRunning())) {
+    if (!isRunning()) {
         qCCritical(taskLogC) << "Task" << describe() << "aborted while not running!!!!";
         return;
     }
+    setTransferRate(0);
     m_state = State::AbortedByUser;
     m_failReason = tr("Aborted");
     if (m_show_debug)
@@ -141,10 +160,11 @@ void Task::emitAborted()
 void Task::emitSucceeded()
 {
     // Don't succeed twice.
-    if (ASSERT_NEVER(!isRunning())) {
+    if (!isRunning()) {
         qCCritical(taskLogC) << "Task" << describe() << "succeeded while not running!!!!";
         return;
     }
+    setTransferRate(0);
     m_state = State::Succeeded;
     if (m_show_debug)
         qCDebug(taskLogC) << "Task" << describe() << "succeeded";
@@ -154,7 +174,30 @@ void Task::emitSucceeded()
 
 void Task::propagateStepProgress(TaskStepProgress const& task_progress)
 {
+    bool updated = false;
+    for (const auto& progress : m_step_progress) {
+        if (progress && progress->uid == task_progress.uid) {
+            const auto label = progress->label;
+            const auto transferRate = progress->transferRate;
+            *progress = task_progress;
+            if (progress->label.isEmpty())
+                progress->label = label;
+            // Progress updates and transfer-rate updates are separate signals.
+            // Keep the last sampled rate when a progress-only update arrives.
+            if (progress->transferRate == 0 && !progress->isDone())
+                progress->transferRate = transferRate;
+            updated = true;
+            break;
+        }
+    }
+    if (!updated)
+        m_step_progress.append(std::make_shared<TaskStepProgress>(task_progress));
     emit stepProgress(task_progress);
+}
+
+TaskStepProgressList Task::getStepProgress() const
+{
+    return m_step_progress;
 }
 
 QString Task::describe()
@@ -200,11 +243,13 @@ void Task::propagateFromOther(Task* other)
     connect(other, &Task::status, this, &Task::setStatus);
     connect(other, &Task::details, this, &Task::setDetails);
     connect(other, &Task::progress, this, &Task::setProgress);
+    connect(other, &Task::transferRate, this, &Task::setTransferRate);
     connect(other, &Task::stepProgress, this, &Task::propagateStepProgress);
 
     setStatus(other->getStatus());
     setDetails(other->getDetails());
     setProgress(other->getProgress(), other->getTotalProgress());
+    setTransferRate(other->getTransferRate());
     for (const auto& progress : other->getStepProgress()) {
         propagateStepProgress(*progress);
     }

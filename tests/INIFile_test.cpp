@@ -1,8 +1,12 @@
 #include <QTest>
+#include <QSignalSpy>
 
 #include <settings/INIFile.h>
+#include <settings/INISettingsObject.h>
+#include <settings/Setting.h>
 #include <QList>
 #include <QSettings>
+#include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QVariant>
 #include "FileSystem.h"
@@ -14,6 +18,45 @@ class IniFileTest : public QObject {
    private slots:
     void initTestCase() {}
     void cleanupTestCase() {}
+
+    void test_OverrideFreezesInheritedValue()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        INISettingsObject global(dir.filePath("global.cfg"));
+        auto globalMemory = global.registerSetting("MaxMemAlloc", 4096);
+        const auto instancePath = dir.filePath("instance.cfg");
+        {
+            INISettingsObject instance(instancePath);
+            auto gate = instance.registerSetting("OverrideMemory", false);
+            instance.registerOverride(globalMemory, gate);
+            instance.set("OverrideMemory", true);
+            instance.set("MaxMemAlloc", 4096);
+            global.set("MaxMemAlloc", 8192);
+            QCOMPARE(instance.get("MaxMemAlloc").toInt(), 4096);
+        }
+        INISettingsObject restored(instancePath);
+        auto gate = restored.registerSetting("OverrideMemory", false);
+        restored.registerOverride(globalMemory, gate);
+        QCOMPARE(restored.get("MaxMemAlloc").toInt(), 4096);
+        restored.set("OverrideMemory", false);
+        QCOMPARE(restored.get("MaxMemAlloc").toInt(), 8192);
+    }
+
+    void test_UnchangedPlainSettingDoesNotEmit()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        INISettingsObject settings(dir.filePath("global.cfg"));
+        auto setting = settings.registerSetting("MaxMemAlloc", 4096);
+        QSignalSpy changed(setting.get(), &Setting::SettingChanged);
+        settings.set("MaxMemAlloc", 4096);
+        QCOMPARE(changed.count(), 0);
+        settings.set("MaxMemAlloc", 8192);
+        QCOMPARE(changed.count(), 1);
+        settings.set("MaxMemAlloc", 8192);
+        QCOMPARE(changed.count(), 1);
+    }
 
     void test_Escape_data()
     {
@@ -189,6 +232,74 @@ PreLaunchCommand=)";
 #if defined(Q_OS_WIN)
         FS::deletePath(fileName);
 #endif
+    }
+
+    void test_ImportRegisteredSettings()
+    {
+        QTemporaryDir destinationDir;
+        QVERIFY(destinationDir.isValid());
+        const auto destination = destinationDir.filePath("lunalauncher.cfg");
+
+        INISettingsObject settings(destination);
+        settings.registerSetting({ "ResourceURLOverride", "ResourceURL" }, "");
+        settings.registerSetting("LunaOnly", "kept");
+
+        INIFile prismSettings;
+        prismSettings.set("ResourceURL", "https://resources.example.test/");
+        prismSettings.set("UnknownPrismSetting", "ignored");
+
+        QCOMPARE(settings.importSettings(prismSettings), 1);
+        QCOMPARE(settings.get("ResourceURLOverride").toString(), "https://resources.example.test/");
+        QCOMPARE(settings.get("LunaOnly").toString(), "kept");
+
+        INIFile saved;
+        QCOMPARE(saved.loadFile(destination), true);
+        QCOMPARE(saved.get("ResourceURLOverride", QString()).toString(), "https://resources.example.test/");
+        QCOMPARE(saved.contains("ResourceURL"), false);
+        QCOMPARE(saved.contains("UnknownPrismSetting"), false);
+    }
+
+    void test_DeferredBootstrapDoesNotBlockMigration()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("launcher.cfg");
+        INISettingsObject settings(path);
+        settings.suspendSave();
+        settings.registerSetting("Bootstrap", "default");
+        settings.registerSetting("MaxMemAlloc", 1024);
+        settings.set("Bootstrap", "initialized");
+        settings.resumeSaveWithoutFlush();
+        QVERIFY(!QFileInfo::exists(path));
+        QCOMPARE(settings.get("Bootstrap").toString(), "initialized");
+
+        // Explicit API changes still save normally after initialization.
+        settings.set("MaxMemAlloc", 8192);
+        INIFile saved;
+        QVERIFY(saved.loadFile(path));
+        QCOMPARE(saved.get("MaxMemAlloc", 0).toInt(), 8192);
+        QCOMPARE(saved.get("Bootstrap", QString()).toString(), "initialized");
+    }
+
+    void test_ReloadReplacesBootstrapSettings()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("launcher.cfg");
+        INISettingsObject settings(path);
+        settings.registerSetting("Bootstrap", "default");
+        settings.registerSetting("MaxMemAlloc", 1024);
+        settings.suspendSave();
+        settings.set("Bootstrap", "temporary");
+        settings.set("MaxMemAlloc", 2048);
+        settings.resumeSaveWithoutFlush();
+
+        INIFile migrated;
+        migrated.set("MaxMemAlloc", 8192);
+        QVERIFY(migrated.saveFile(path));
+        QVERIFY(settings.reload());
+        QCOMPARE(settings.get("MaxMemAlloc").toInt(), 8192);
+        QCOMPARE(settings.get("Bootstrap").toString(), "default");
     }
 };
 

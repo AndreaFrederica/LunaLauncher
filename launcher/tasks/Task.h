@@ -50,8 +50,15 @@ Q_DECLARE_METATYPE(TaskStepState)
 
 struct TaskStepProgress {
     QUuid uid;
+    // Human-readable child label preserved across queued, running and
+    // completed snapshots. Download tasks use this for the file name.
+    QString label = "";
+    // Explicit units for API clients; unknown progress must not be called bytes.
+    QString progressUnit = "progress";
     qint64 current = 0;
     qint64 total = -1;
+    // Instantaneous transfer speed in bytes per second for download steps.
+    qint64 transferRate = 0;
 
     qint64 old_current = 0;
     qint64 old_total = -1;
@@ -94,7 +101,7 @@ class Task : public QObject, public QRunnable {
 
    public:
     explicit Task(bool show_debug_log = true);
-    virtual ~Task() = default;
+    ~Task() override;
 
     bool isRunning() const;
     bool isFinished() const;
@@ -123,7 +130,9 @@ class Task : public QObject, public QRunnable {
 
     qint64 getProgress() { return m_progress; }
     qint64 getTotalProgress() { return m_progressTotal; }
-    virtual auto getStepProgress() const -> TaskStepProgressList { return {}; }
+    qint64 getTransferRate() const { return m_transferRate; }
+    virtual auto getStepProgress() const -> TaskStepProgressList;
+    virtual QList<Task*> getSubTasks() const { return {}; }
 
     QUuid getUid() { return m_uid; }
 
@@ -139,6 +148,7 @@ class Task : public QObject, public QRunnable {
    signals:
     void started();
     void progress(qint64 current, qint64 total);
+    void transferRate(qint64 bytesPerSecond);
     //! called when a task has either succeeded, aborted or failed.
     void finished();
     //! called when a task has succeeded
@@ -165,7 +175,7 @@ class Task : public QObject, public QRunnable {
     //! used by external code to ask the task to abort
     virtual bool abort()
     {
-        if (canAbort())
+        if (canAbort() && isRunning())
             emitAborted();
         return canAbort();
     }
@@ -200,6 +210,7 @@ class Task : public QObject, public QRunnable {
     void setStatus(const QString& status);
     void setDetails(const QString& details);
     void setProgress(qint64 current, qint64 total);
+    void setTransferRate(qint64 bytesPerSecond);
 
    protected:
     State m_state = State::Inactive;
@@ -207,8 +218,13 @@ class Task : public QObject, public QRunnable {
     QString m_failReason = "";
     QString m_status;
     QString m_details;
-    int m_progress = 0;
-    int m_progressTotal = 100;
+    qint64 m_progress = 0;
+    qint64 m_progressTotal = 100;
+    qint64 m_transferRate = 0;
+
+    // Proxy tasks forward stepProgress signals from their active child. Keep
+    // the latest values so API clients can display per-file download details.
+    TaskStepProgressList m_step_progress;
 
     // TODO: Nuke in favor of QLoggingCategory
     bool m_show_debug = true;

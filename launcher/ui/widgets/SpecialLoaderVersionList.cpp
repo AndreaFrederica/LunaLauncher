@@ -77,9 +77,8 @@ SpecialLoaderVersionList::SpecialLoaderVersionList(QString loader, QString minec
     : BaseVersionList(parent), m_loader(std::move(loader)), m_minecraftVersion(std::move(minecraftVersion))
 {}
 
-Task::Ptr SpecialLoaderVersionList::getLoadTask(bool forceReload)
+Task::Ptr SpecialLoaderVersionList::getLoadTask()
 {
-    Q_UNUSED(forceReload);
     return makeShared<SpecialLoaderListTask>(this);
 }
 

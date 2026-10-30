@@ -55,7 +55,7 @@
 
 #include "Application.h"
 
-AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new Ui::AccountListPage)
+AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), m_accounts(APPLICATION->accounts()), ui(new Ui::AccountListPage)
 {
     ui->setupUi(this);
     ui->listView->setEmptyString(
@@ -67,8 +67,6 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
             "</body></html>"));
     ui->listView->setEmptyMode(VersionListView::String);
     ui->listView->setContextMenuPolicy(Qt::CustomContextMenu);
-
-    m_accounts = APPLICATION->accounts();
 
     ui->listView->setModel(m_accounts);
     ui->listView->header()->setSectionResizeMode(AccountList::VListColumns::ProfileNameColumn, QHeaderView::Stretch);
@@ -96,7 +94,7 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
     QTimer::singleShot(0, this, [this] { m_accounts->refreshCacheStatuses(); });
 
     // Xbox authentication won't work without a client identifier, so disable the button if it is missing
-    if (~APPLICATION->capabilities() & Application::SupportsMSA) {
+    if (!(APPLICATION->capabilities() & Application::SupportsMSA)) {
         ui->actionAddMicrosoft->setVisible(false);
         ui->actionAddMicrosoft->setToolTip(tr("No Microsoft Authentication client ID was set."));
     }
@@ -105,7 +103,8 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
         // Show developer mode warning at the top of the list
         ui->listView->setEmptyString(
             tr("<html><head/><body>"
-                "<h2 style='color: red;'>⚠️ DEVELOPER BUILD - FOR TESTING ONLY</h2>"
+                "<h2 style='color: red;'>⚠️ DEVELOPER MODE BUILD ⚠️</h2>"
+                "<h2 style='color: red;'>THIS FOR TESTING ONLY</h2>"
                 "<p style='color: red;'><b>You are using a developer version with ownership checks disabled.</b></p>"
                 "<p style='color: red;'>Please ensure you are a developer and have already purchased the game.</p>"
                 "<p style='color: red;'>If you have not purchased Minecraft, please delete this launcher immediately.</p>"
@@ -125,7 +124,7 @@ void AccountListPage::retranslate()
 
 void AccountListPage::ShowContextMenu(const QPoint& pos)
 {
-    auto menu = ui->toolBar->createContextMenu(this, tr("Context menu"));
+    auto *menu = ui->toolBar->createContextMenu(this, tr("Context menu"));
     menu->exec(ui->listView->mapToGlobal(pos));
     delete menu;
 }
@@ -169,19 +168,22 @@ void AccountListPage::on_actionAddOffline_triggered()
             this,
             tr("Developer Mode Warning"),
             tr("<html><head/><body>"
-               "<h2 style='color: red;'>⚠️ DEVELOPER MODE</h2>"
-               "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
-               "<p><b>You are about to add an offline account without verification.</b></p>"
-               "<p>By proceeding, you confirm that:</p>"
-               "<ul>"
-               "<li>You are a developer testing this launcher</li>"
-               "<li>You have already purchased a legitimate copy of Minecraft</li>"
-               "<li>This build is for testing purposes only</li>"
-               "</ul>"
-               "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher.</p>"
-               "</body></html>"
-               "<br><br>"
-               "Do you wish to proceed?"),
+                        "<h2 style='color: red;'>⚠️ DEVELOPER MODE ⚠️</h2>"
+                        "<p>You are about to add an offline account. Normally, an offline account can only be added "
+                        "after a Microsoft account that owns Minecraft has been added.</p>"
+                        "<p><b>Offline accounts are not verified with Microsoft and cannot prove Minecraft ownership.</b></p>"
+                        "<p>By proceeding, you confirm that:</p>"
+                        "<ul>"
+                        "<li>You are a developer testing this launcher;</li>"
+                        "<li>You own a legitimate, purchased copy of Minecraft;</li>"
+                        "<li>This offline account is for local development and testing only;</li>"
+                        "<li>You understand that this account cannot join servers that require authentication.</li>"
+                        "</ul>"
+                        "<p style='color: red;'><b>If you do not own a legitimate copy of Minecraft, do not proceed. "
+                        "Cancel this dialog and delete this developer build of the launcher.</b></p>"
+                        "</body></html>"
+                        "<br><br>"
+                        "Do you wish to proceed?"),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -240,19 +242,22 @@ void AccountListPage::on_actionAddYggdrasil_triggered()
             this,
             tr("Developer Mode Warning"),
             tr("<html><head/><body>"
-               "<h2 style='color: red;'>⚠️ DEVELOPER MODE</h2>"
-               "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
-               "<p><b>You are about to add an offline account without verification.</b></p>"
-               "<p>By proceeding, you confirm that:</p>"
-               "<ul>"
-               "<li>You are a developer testing this launcher</li>"
-               "<li>You have already purchased a legitimate copy of Minecraft</li>"
-               "<li>This build is for testing purposes only</li>"
-               "</ul>"
-               "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher.</p>"
-               "</body></html>"
-               "<br><br>"
-               "Do you wish to proceed?"),
+                        "<h2 style='color: red;'>⚠️ DEVELOPER MODE ⚠️</h2>"
+                        "<p>You are about to add an Yggdrasil account. Normally, an Yggdrasil account can only be added "
+                        "after a Microsoft account that owns Minecraft has been added.</p>"
+                        "<p><b>Yggdrasil accounts are not verified with Microsoft and cannot prove Minecraft ownership.</b></p>"
+                        "<p>By proceeding, you confirm that:</p>"
+                        "<ul>"
+                        "<li>You are a developer testing this launcher;</li>"
+                        "<li>You own a legitimate, purchased copy of Minecraft;</li>"
+                        "<li>This Yggdrasil account is for local development and testing only;</li>"
+                        "<li>You understand that this account cannot join servers that require authentication.</li>"
+                        "</ul>"
+                        "<p style='color: red;'><b>If you do not own a legitimate copy of Minecraft, do not proceed. "
+                        "Cancel this dialog and delete this developer build of the launcher.</b></p>"
+                        "</body></html>"
+                        "<br><br>"
+                        "Do you wish to proceed?"),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -294,19 +299,22 @@ void AccountListPage::on_actionAddEnhancedOffline_triggered()
             this,
             tr("Developer Mode Warning"),
             tr("<html><head/><body>"
-               "<h2 style='color: red;'>⚠️ DEVELOPER MODE</h2>"
-               "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
-               "<p><b>You are about to add an offline account without verification.</b></p>"
-               "<p>By proceeding, you confirm that:</p>"
-               "<ul>"
-               "<li>You are a developer testing this launcher</li>"
-               "<li>You have already purchased a legitimate copy of Minecraft</li>"
-               "<li>This build is for testing purposes only</li>"
-               "</ul>"
-               "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher.</p>"
-               "</body></html>"
-               "<br><br>"
-               "Do you wish to proceed?"),
+                        "<h2 style='color: red;'>⚠️ DEVELOPER MODE ⚠️</h2>"
+                        "<p>You are about to add an offline account. Normally, an offline account can only be added "
+                        "after a Microsoft account that owns Minecraft has been added.</p>"
+                        "<p><b>Offline accounts are not verified with Microsoft and cannot prove Minecraft ownership.</b></p>"
+                        "<p>By proceeding, you confirm that:</p>"
+                        "<ul>"
+                        "<li>You are a developer testing this launcher;</li>"
+                        "<li>You own a legitimate, purchased copy of Minecraft;</li>"
+                        "<li>This offline account is for local development and testing only;</li>"
+                        "<li>You understand that this account cannot join servers that require authentication.</li>"
+                        "</ul>"
+                        "<p style='color: red;'><b>If you do not own a legitimate copy of Minecraft, do not proceed. "
+                        "Cancel this dialog and delete this developer build of the launcher.</b></p>"
+                        "</body></html>"
+                        "<br><br>"
+                        "Do you wish to proceed?"),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -328,7 +336,9 @@ void AccountListPage::on_actionAddEnhancedOffline_triggered()
     auto account = createEnhancedOfflineAccount(this);
     if (account) {
         m_accounts->addAccount(account);
-        if (m_accounts->count() == 1) m_accounts->setDefaultAccount(account);
+        if (m_accounts->count() == 1) {
+            m_accounts->setDefaultAccount(account);
+        }
     }
 }
 
@@ -346,19 +356,22 @@ void AccountListPage::on_actionAddUnifiedPass_triggered()
             this,
             tr("Developer Mode Warning"),
             tr("<html><head/><body>"
-               "<h2 style='color: red;'>⚠️ DEVELOPER MODE</h2>"
-               "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
-               "<p><b>You are about to add an offline account without verification.</b></p>"
-               "<p>By proceeding, you confirm that:</p>"
-               "<ul>"
-               "<li>You are a developer testing this launcher</li>"
-               "<li>You have already purchased a legitimate copy of Minecraft</li>"
-               "<li>This build is for testing purposes only</li>"
-               "</ul>"
-               "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher.</p>"
-               "</body></html>"
-               "<br><br>"
-               "Do you wish to proceed?"),
+                        "<h2 style='color: red;'>⚠️ DEVELOPER MODE ⚠️</h2>"
+                        "<p>You are about to add an UnifiedPass account. Normally, an UnifiedPass account can only be added "
+                        "after a Microsoft account that owns Minecraft has been added.</p>"
+                        "<p><b>UnifiedPass accounts are not verified with Microsoft and cannot prove Minecraft ownership.</b></p>"
+                        "<p>By proceeding, you confirm that:</p>"
+                        "<ul>"
+                        "<li>You are a developer testing this launcher;</li>"
+                        "<li>You own a legitimate, purchased copy of Minecraft;</li>"
+                        "<li>This UnifiedPass account is for local development and testing only;</li>"
+                        "<li>You understand that this account cannot join servers that require authentication.</li>"
+                        "</ul>"
+                        "<p style='color: red;'><b>If you do not own a legitimate copy of Minecraft, do not proceed. "
+                        "Cancel this dialog and delete this developer build of the launcher.</b></p>"
+                        "</body></html>"
+                        "<br><br>"
+                        "Do you wish to proceed?"),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -406,7 +419,7 @@ void AccountListPage::on_actionRefresh_triggered()
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         m_accounts->requestRefresh(account->internalId());
     }
 }
@@ -416,7 +429,7 @@ void AccountListPage::on_actionSetDefault_triggered()
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         m_accounts->setDefaultAccount(account);
     }
 }
@@ -437,7 +450,7 @@ void AccountListPage::updateButtonStates()
     bool accountCanMoveDown = false;
     if (hasSelection) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         accountIsReady = !account->isActive();
         accountIsOnline = account->accountType() != AccountType::Offline;
 
@@ -468,7 +481,7 @@ void AccountListPage::on_actionManageSkins_triggered()
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.size() > 0) {
         QModelIndex selected = selection.first();
-        MinecraftAccountPtr account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
+        auto account = selected.data(AccountList::PointerRole).value<MinecraftAccountPtr>();
         SkinManageDialog dialog(this, account);
         dialog.exec();
     }

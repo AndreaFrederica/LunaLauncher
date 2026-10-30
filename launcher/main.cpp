@@ -33,30 +33,49 @@
  *      limitations under the License.
  */
 
-#include <iostream>
+#include <cstddef>
+#include <iterator>
+#include <span>
+
 #include <QWidget>
 
 #include <QMessageBox>
+
+#if defined(Q_OS_WIN32) || defined(LAUNCHER_HEADLESS_ENTRYPOINT)
+#include <iostream>
+#endif
 
 #include "Application.h"
 #include "DeveloperMode.h"
 
 int runThemePreview(int argc, char** argv, const QString& path);
 
-#if defined Q_OS_WIN32
+#ifdef Q_OS_WIN32
 #include "console/WindowsConsole.h"
 #endif
 
 int main(int argc, char* argv[])
 {
-    for (int i=1; i+1<argc; ++i)
-        if (QByteArray(argv[i]) == "--theme-preview") return runThemePreview(argc, argv, QString::fromLocal8Bit(argv[i+1]));
-    for(int i=1;i<argc;++i) if(QByteArray(argv[i])=="--safe-theme") {
-        qputenv("LUNA_SAFE_THEME","1");
-        for(int j=i;j<argc;++j)argv[j]=argv[j+1];
-        --argc; --i;
+    const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
+    const auto argumentAt = [&arguments](int index) -> char*& { return *std::next(arguments.begin(), index); };
+
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (QByteArray(argumentAt(i)) == "--theme-preview") {
+            return runThemePreview(argc, argv, QString::fromLocal8Bit(argumentAt(i + 1)));
+        }
     }
-#if defined Q_OS_WIN32
+    for (int i = 1; i < argc; ++i) {
+        if (QByteArray(argumentAt(i)) == "--safe-theme") {
+            qputenv("LUNA_SAFE_THEME", "1");
+            for (int j = i; j + 1 < argc; ++j) {
+                argumentAt(j) = argumentAt(j + 1);
+            }
+            argumentAt(argc - 1) = nullptr;
+            --argc;
+            --i;
+        }
+    }
+#ifdef Q_OS_WIN32
     // Attach before validating the entry point so Windows GUI builds can report
     // an actionable error to the terminal that launched them.
     console::WindowsConsoleGuard _consoleGuard;
@@ -64,7 +83,7 @@ int main(int argc, char* argv[])
 
     bool headless = false;
     for (int i = 1; i < argc; ++i) {
-        const QByteArray argument(argv[i]);
+        const QByteArray argument(argumentAt(i));
         if (argument == "--cli" || argument == "--mcp" || argument == "--tui") {
             headless = true;
             break;
@@ -81,8 +100,9 @@ int main(int argc, char* argv[])
         return 2;
     }
 #endif
-    if (headless && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+    if (headless && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
+    }
 
     // Register resources before constructing Application. ThemeManager is
     // created from Application's constructor and scans the built-in icon
@@ -90,6 +110,7 @@ int main(int argc, char* argv[])
     // the scan see empty paths, so Prism icons disappear until a later
     // refresh (and the missing built-in themes can never become valid for
     // that process).
+    // NOLINTBEGIN(cppcoreguidelines-avoid-do-while): Qt expands these macros to do-while loops.
     Q_INIT_RESOURCE(multimc);
     Q_INIT_RESOURCE(lucide);
     Q_INIT_RESOURCE(backgrounds);
@@ -107,6 +128,7 @@ int main(int argc, char* argv[])
     Q_INIT_RESOURCE(flat);
     Q_INIT_RESOURCE(flat_white);
     Q_INIT_RESOURCE(shaders);
+    // NOLINTEND(cppcoreguidelines-avoid-do-while)
 
     // initialize Qt
     Application app(argc, argv);
@@ -117,31 +139,37 @@ int main(int argc, char* argv[])
             // fallback for dialogs that do not provide a window-specific
             // icon. Set it after the launcher resources are registered so
             // the Luna title bar follows the same behavior.
-            if (app.windowIcon().isNull())
-                app.setWindowIcon(app.logo());
+            if (Application::windowIcon().isNull()) {
+                Application::setWindowIcon(app.logo());
+            }
             // Setup dialogs may already exist by this point. Give every
             // existing top-level window the same fallback icon used by the
             // native frame.
-            if (!app.windowIcon().isNull())
-                for (auto* window : QApplication::topLevelWidgets())
-                    if (window->windowIcon().isNull())
-                        window->setWindowIcon(app.windowIcon());
+            if (!Application::windowIcon().isNull()) {
+                for (auto* window : QApplication::topLevelWidgets()) {
+                    if (window->windowIcon().isNull()) {
+                        window->setWindowIcon(Application::windowIcon());
+                    }
+                }
+            }
             if (DeveloperMode::isEnabled() && !DeveloperMode::hasDebugMarker(DeveloperMode::Marker0)) {
                 // Show developer warning dialog before allowing to proceed
                 auto result = QMessageBox::warning(
                     nullptr,
                     "Developer Mode Warning",
                     "<html><head/><body>"
-                       "<h2 style='color: red;'>⚠️ DEVELOPER MODE ⚠️</h2>"
-                       "<p>Normally, you must add a Microsoft account that owns Minecraft before you can add an offline account.</p>"
-                       "<p><b>You are about to use this launcher in developer mode without ownership verification.</b></p>"
-                       "<p>By proceeding, you confirm that:</p>"
+                       "<h2 style='color: red;'>⚠️ DEVELOPER MODE BUILD ⚠️</h2>"
+                       "<p><b>This build is running in developer mode.</b></p>"
+                       "<p>Developer mode disables the ownership checks that normally apply to this launcher. "
+                       "It is intended only for development and testing by the person who built it.</p>"
+                       "<p>Continue only if:</p>"
                        "<ul>"
-                       "<li>You are a developer testing this launcher</li>"
-                       "<li>You have already purchased a legitimate copy of Minecraft</li>"
-                       "<li>This build is for testing purposes only</li>"
+                       "<li>You built or are deliberately testing this build as a developer</li>"
+                       "<li>You own a legitimate, purchased copy of Minecraft</li>"
+                       "<li>You understand this build may be unstable and is not intended for normal use</li>"
                        "</ul>"
-                       "<p style='color: red;'>If you have not purchased Minecraft, please cancel and delete this launcher immediately.</p>"
+                       "<p style='color: red;'><b>If you did not build this launcher, or you do not own Minecraft, "
+                       "cancel now and delete this build immediately.</b></p>"
                        "</body></html>"
                        "<br><br>"
                        "Do you wish to proceed?",
@@ -154,7 +182,7 @@ int main(int argc, char* argv[])
                 }
             }
 
-            return app.exec();
+            return Application::exec();
         }
         case Application::Failed:
             return 1;

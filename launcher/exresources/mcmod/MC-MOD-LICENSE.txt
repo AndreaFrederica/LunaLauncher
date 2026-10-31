@@ -1,0 +1,25 @@
+MCMod data notice
+=================
+
+The index in mcmod.csv is sourced from the HMCL project file:
+
+https://github.com/HMCL-dev/HMCL/blob/bdbf5773a85718cfdbfc40cbed5ff6c92bf69cbc/HMCL/src/main/resources/assets/addon/mod.csv
+
+The source file carries these attributions:
+
+Hello Minecraft! Launcher
+Copyright (C) 2026 The HMCL Authors
+
+mcmod.cn
+Copyright (C) 2026. All Rights Reserved.
+
+This notice applies only to the MCMod index data and its CSV file. It does not
+change the GPL-3.0-only license of Luna Launcher source code or the licenses of
+other resources. The MCMod data is provided under the copyright, permission and
+redistribution conditions applicable to the source data; it must not be treated
+as Luna source code or as an unrestricted public-domain dataset.
+
+The file was imported from the pinned HMCL revision above on 2026-10-31.
+SHA-256: e3a03ba1a7f35c8d8035e99c380a68c9bff6bdf1d252f583506514f268a7396f
+For permission or attribution questions concerning the index, contact the
+MCMod.cn rights holder and the HMCL project.

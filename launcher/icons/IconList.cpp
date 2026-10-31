@@ -35,10 +35,9 @@
  */
 
 #include "IconList.h"
-#include "BuildConfig.h"
+#include "LauncherResources.h"
 #include <FileSystem.h>
 #include <QDebug>
-#include <QCoreApplication>
 #include <QFileSystemWatcher>
 #include <QMap>
 #include <QMimeData>
@@ -64,17 +63,9 @@ IconList::IconList(const QStringList& builtinPaths, const QString& path, QObject
         addThemeIcon(builtinName);
     }
 
-    // Initialize install directory path
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString installIconPath;
-#ifdef Q_OS_MACOS
-    installIconPath = FS::PathCombine(appDir, "..", "Resources", "icons");
-#elif defined(Q_OS_WIN32)
-    installIconPath = FS::PathCombine(appDir, "resource", "icons");
-#else
-    installIconPath = FS::PathCombine(FS::PathCombine(appDir, "..", "share"), BuildConfig.LAUNCHER_NAME, "resources", "icons");
-#endif
-    m_install_dir.setPath(installIconPath);
+    // Initialize the installed icon directory through the shared resource
+    // resolver so the same layout works on all platforms.
+    m_install_dir.setPath(LauncherResources::installPath(QStringLiteral("icons")));
 
     m_watcher.reset(new QFileSystemWatcher());
     m_isWatching = false;

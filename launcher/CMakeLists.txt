@@ -73,6 +73,8 @@ set(CORE_SOURCES
 
     FileSystem.h
     FileSystem.cpp
+    LauncherResources.h
+    LauncherResources.cpp
 
     Exception.h
 
@@ -525,6 +527,8 @@ set(META_SOURCES
 set(API_SOURCES
     modplatform/ModIndex.h
     modplatform/ModIndex.cpp
+    mcmod/McModIndex.h
+    mcmod/McModIndex.cpp
     modplatform/ModApiMirror.h
     modplatform/ModApiMirror.cpp
     modplatform/ResourceType.h
@@ -1988,21 +1992,10 @@ install(
         exresources/catpacks
         exresources/icons
         exresources/fonts
+        exresources/mcmod
+        exresources/jsapi
     DESTINATION ${EXRESOURCE_DEST_DIR}
     USE_SOURCE_PERMISSIONS
-    COMPONENT Runtime
-)
-
-# Install JavaScript API files for dynamic loading
-install(
-    FILES
-        modplatform/jsapi/modrinth_plugin_api.js
-        modplatform/jsapi/mcim_modrinth_api.js
-        modplatform/jsapi/mcim_curseforge_api.js
-        modplatform/jsapi/resource-api.d.ts
-        modplatform/jsapi/README.md
-        modplatform/jsapi/DEPLOYMENT.md
-    DESTINATION ${EXRESOURCE_DEST_DIR}/jsapi
     COMPONENT Runtime
 )
 

@@ -126,9 +126,10 @@ console.log("[ExampleAPI] Initialized");
 ```cpp
 #include "modplatform/jsapi/JSResourceAPI.h"
 
-// 从文件加载
+// 从统一运行时资源目录加载
+#include "LauncherResources.h"
 auto api = JSResourceAPI::fromFile(
-    ":/jsapi/modrinth_plugin_api.js",
+    LauncherResources::locateFile(QStringLiteral("jsapi/modrinth_plugin_api.js")),
     "ModrinthPluginAPI"
 );
 
@@ -169,7 +170,7 @@ auto apis = JSAPIManager::instance().getAPIsByProvider("MODRINTH");
 ```cpp
 // 在 ResourceDownloadDialog 或 PluginPage 中
 auto modrinthAPI = JSResourceAPI::fromFile(
-    ":/jsapi/modrinth_plugin_api.js",
+    LauncherResources::locateFile(QStringLiteral("jsapi/modrinth_plugin_api.js")),
     "ModrinthPluginAPI"
 );
 

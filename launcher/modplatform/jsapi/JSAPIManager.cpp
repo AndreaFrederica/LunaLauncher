@@ -14,10 +14,9 @@
 
 #include "net/HttpMetaCache.h"
 #include "Application.h"
-#include "BuildConfig.h"
+#include "LauncherResources.h"
 #include <QDir>
 #include <QDirIterator>
-#include <QStandardPaths>
 
 JSAPIManager& JSAPIManager::instance()
 {
@@ -187,38 +186,7 @@ QStringList JSAPIManager::getDefaultAPIDirectories()
 {
     QStringList dirs;
 
-    // 1. 内置 API 目录（Qt 资源文件，编译进程序）
-    //    优先级最高，始终可用
-    dirs << ":/jsapi";
-
-    // 2. 安装目录（随程序一起分发）
-    //    Windows: <exe_dir>/resource/jsapi
-    //    Linux: /usr/share/lunalauncher/resources/jsapi
-    //    macOS: LunaLauncher.app/Contents/Resources/jsapi
-#ifdef Q_OS_WIN
-    dirs << APPLICATION->applicationDirPath() + "/resource/jsapi";
-#elif defined(Q_OS_MAC)
-    dirs << APPLICATION->applicationDirPath() + "/../Resources/jsapi";
-#else
-    // Linux/Unix
-    dirs << APPLICATION->applicationDirPath() + "/../share/" + BuildConfig.LAUNCHER_NAME + "/resources/jsapi";
-    dirs << APPLICATION->applicationDirPath() + "/../share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/jsapi";
-    dirs << "/usr/share/" + BuildConfig.LAUNCHER_NAME + "/resources/jsapi";
-    dirs << "/usr/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/jsapi";
-    dirs << "/usr/local/share/" + BuildConfig.LAUNCHER_NAME + "/resources/jsapi";
-    dirs << "/usr/local/share/" + BuildConfig.LAUNCHER_APP_BINARY_NAME + "/resources/jsapi";
-#endif
-
-    // 3. 用户数据目录（用户自定义 API，可热更新）
-    //    Windows: %APPDATA%/LunaLauncher/jsapi
-    //    Linux: ~/.local/share/lunalauncher/jsapi
-    //    macOS: ~/Library/Application Support/LunaLauncher/jsapi
-    QString userDataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    dirs << userDataDir + "/jsapi";
-
-    // 4. 开发目录（开发时使用）
-    dirs << APPLICATION->applicationDirPath() + "/jsapi";
-    dirs << QDir::currentPath() + "/jsapi";
+    dirs.append(LauncherResources::searchPaths(QStringLiteral("jsapi")));
 
     qDebug() << "[JSAPIManager] API search paths:" << dirs;
 

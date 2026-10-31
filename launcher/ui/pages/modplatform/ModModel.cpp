@@ -7,6 +7,7 @@
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/mod/ModFolderModel.h"
+#include "mcmod/McModIndex.h"
 #include "modplatform/ModIndex.h"
 
 #include <QMessageBox>
@@ -43,8 +44,9 @@ ResourceAPI::SearchArgs ModModel::createSearchArguments()
 
     auto sort = getCurrentSortingMethodByIndex();
 
+    const auto searchTerm = McMod::Index::instance().translateSearchTerm(m_search_term);
     return {
-        ModPlatform::ResourceType::Mod, m_next_search_offset, m_search_term, sort, loaders, versions, side, categories, m_filter->openSource
+        ModPlatform::ResourceType::Mod, m_next_search_offset, searchTerm, sort, loaders, versions, side, categories, m_filter->openSource
     };
 }
 

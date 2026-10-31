@@ -47,7 +47,7 @@ global.http = {
 };
 
 // 加载 API 文件
-const apiPath = path.join(__dirname, '../launcher/modplatform/jsapi/modrinth_plugin_api.js');
+const apiPath = path.join(__dirname, '../launcher/exresources/jsapi/modrinth_plugin_api.js');
 print.log(`\n[Test] Loading API from: ${apiPath}`);
 
 if (!fs.existsSync(apiPath)) {

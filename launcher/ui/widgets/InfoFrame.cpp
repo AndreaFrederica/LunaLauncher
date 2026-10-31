@@ -47,6 +47,7 @@
 #include "ui/dialogs/CustomMessageBox.h"
 #include "minecraft/mod/SchematicResource.h"
 #include "minecraft/mod/Plugin.h"
+#include "mcmod/McModIndex.h"
 
 void setupLinkToolTip(QLabel* label)
 {
@@ -142,6 +143,19 @@ void InfoFrame::updateWithMod(const Mod& m)
     if (!m.issueTracker().isEmpty()) {
         issueTracker += tr("Report issues to: ");
         issueTracker += "<a href=\"" + m.issueTracker() + "\">" + m.issueTracker() + "</a>";
+    }
+
+    if (const auto match = McMod::Index::instance().find(m.mod_id(), m.name())) {
+        if (!issueTracker.isEmpty())
+            issueTracker += "<br>";
+        issueTracker += QStringLiteral("<a href=\"%1\">%2</a>")
+                            .arg(McMod::Index::pageUrl(match->project.id).toHtmlEscaped(), tr("MC百科"));
+    } else if (!m.name().trimmed().isEmpty() || !m.mod_id().trimmed().isEmpty()) {
+        if (!issueTracker.isEmpty())
+            issueTracker += "<br>";
+        issueTracker += QStringLiteral("<a href=\"%1\">%2</a>")
+                            .arg(McMod::Index::searchUrl(m.name().trimmed().isEmpty() ? m.mod_id() : m.name()).toHtmlEscaped(),
+                                 tr("在 MC百科中搜索"));
     }
     setIssueTracker(issueTracker);
 }

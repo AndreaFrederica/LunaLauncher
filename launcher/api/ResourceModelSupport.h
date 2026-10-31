@@ -4,6 +4,7 @@
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/mod/DataPackFolderModel.h"
 #include "minecraft/mod/Mod.h"
+#include "mcmod/McModIndex.h"
 #include "api/LauncherApiObjects.h"
 #include <QBuffer>
 #include <QEventLoop>
@@ -86,6 +87,7 @@ inline QJsonObject resourceSnapshot(const Resource& resource, bool includeIcon =
     }
 
     if (const auto* mod = dynamic_cast<const Mod*>(&resource)) {
+        const auto mcmodQuery = mod->name().trimmed().isEmpty() ? mod->mod_id() : mod->name();
         result.insert("modId", mod->mod_id());
         result.insert("version", mod->version());
         result.insert("description", mod->description());
@@ -99,6 +101,25 @@ inline QJsonObject resourceSnapshot(const Resource& resource, bool includeIcon =
         result.insert("dependencies", QJsonArray::fromStringList(mod->dependencies()));
         result.insert("resolved", mod->isResolved());
         result.insert("resolving", mod->isResolving());
+        if (const auto match = McMod::Index::instance().find(mod->mod_id(), mod->name())) {
+            const auto& project = match->project;
+            result.insert("mcmod", QJsonObject{
+                { "id", project.id },
+                { "url", McMod::Index::pageUrl(project.id) },
+                { "searchUrl", McMod::Index::searchUrl(mcmodQuery) },
+                { "name", project.mainName },
+                { "secondaryName", project.secondaryName },
+                { "abbreviation", project.abbreviation },
+                { "matchedBy", match->matchedBy },
+                { "curseForgeId", project.curseForgeId },
+                { "modrinthId", project.modrinthId },
+            });
+        } else if (!mcmodQuery.trimmed().isEmpty()) {
+            result.insert("mcmod", QJsonObject{
+                { "searchUrl", McMod::Index::searchUrl(mcmodQuery) },
+                { "matchedBy", "search" },
+            });
+        }
         if (includeIcon) {
             const auto icon = resourceIconData(resource);
             if (!icon.isEmpty()) result.insert("icon", icon);

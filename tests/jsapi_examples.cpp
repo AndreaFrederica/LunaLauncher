@@ -11,6 +11,7 @@
  */
 
 #include "JSResourceAPI.h"
+#include "LauncherResources.h"
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
@@ -21,7 +22,7 @@ void testModrinthAPI()
     
     // 从文件加载 Modrinth API
     auto api = JSResourceAPI::fromFile(
-        ":/jsapi/modrinth_plugin_api.js",
+        LauncherResources::locateFile(QStringLiteral("jsapi/modrinth_plugin_api.js")),
         "ModrinthPluginAPI"
     );
     

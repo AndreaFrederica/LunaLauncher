@@ -3,6 +3,8 @@
 launcher_logic_sources = [
   'Application.cpp',
   'Application.h',
+  'LauncherResources.cpp',
+  'LauncherResources.h',
   'ApplicationMessage.cpp',
   'ApplicationMessage.h',
   'api/ApiTypes.cpp',
@@ -52,6 +54,8 @@ launcher_logic_sources = [
   'api/LauncherApiPacks.cpp',
   'api/LauncherApiPacks.h',
   'api/ResourceModelSupport.h',
+  'mcmod/McModIndex.cpp',
+  'mcmod/McModIndex.h',
   'cli/HeadlessBlockedMods.h',
   'api/LauncherApiStreams.cpp',
   'api/LauncherApiStreams.h',
@@ -1141,7 +1145,6 @@ launcher_ui_sources = [
 ]
 
 launcher_qrc_sources = [
-  'modplatform/jsapi/jsapi.qrc',
   'resources/backgrounds/backgrounds.qrc',
   'resources/breeze_dark/breeze_dark.qrc',
   'resources/breeze_light/breeze_light.qrc',

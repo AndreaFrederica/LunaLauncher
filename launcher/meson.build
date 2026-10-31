@@ -391,15 +391,5 @@ install_subdir('exresources/translations', install_dir: exresource_dest_dir)
 install_subdir('exresources/catpacks', install_dir: exresource_dest_dir)
 install_subdir('exresources/icons', install_dir: exresource_dest_dir)
 install_subdir('exresources/fonts', install_dir: exresource_dest_dir)
-
-install_data(
-  [
-    'modplatform/jsapi/modrinth_plugin_api.js',
-    'modplatform/jsapi/mcim_modrinth_api.js',
-    'modplatform/jsapi/mcim_curseforge_api.js',
-    'modplatform/jsapi/resource-api.d.ts',
-    'modplatform/jsapi/README.md',
-    'modplatform/jsapi/DEPLOYMENT.md',
-  ],
-  install_dir: join_paths(exresource_dest_dir, 'jsapi'),
-)
+install_subdir('exresources/mcmod', install_dir: exresource_dest_dir)
+install_subdir('exresources/jsapi', install_dir: exresource_dest_dir)

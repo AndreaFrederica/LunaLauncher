@@ -157,6 +157,7 @@ unsigned char qResourceFeatureZstd()
 
 #include "meta/Index.h"
 #include "translations/TranslationsModel.h"
+#include "LauncherResources.h"
 
 #include <DesktopServices.h>
 #include <FileSystem.h>
@@ -495,19 +496,9 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 #endif
     }
 
-    // Load custom fonts from exresources
+    // Load custom fonts from the unified runtime resource search path.
     {
-        QStringList potentialFontPaths;
-#if defined(Q_OS_WIN32)
-        potentialFontPaths << FS::PathCombine(binPath, "resource", "fonts");
-#elif defined(Q_OS_MAC)
-        potentialFontPaths << FS::PathCombine(binPath, "../Resources", "fonts");
-#else
-        potentialFontPaths << FS::PathCombine(FS::PathCombine(m_rootPath, "share", BuildConfig.LAUNCHER_NAME), "resources", "fonts");
-        potentialFontPaths << FS::PathCombine(m_rootPath, "resources", "fonts");
-#endif
-
-        for (const QString& path : potentialFontPaths) {
+        for (const QString& path : LauncherResources::searchPaths(QStringLiteral("fonts"))) {
             QDir fontDir(path);
             if (fontDir.exists()) {
                 qInfo() << "Loading fonts from" << path;

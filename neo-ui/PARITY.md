@@ -34,7 +34,7 @@ Implemented in the Neo UI:
 - XMCL UI shell port now supplies the sidebar, instance icons and status
   overlays, sticky home header, add-instance dialog, home card workspace,
   settings navigation, account workspace, and market-style resource workspace.
-  The source snapshot and MIT notice are kept under `src/xmcl-port`.
+  The source snapshot and MIT notice are kept under `src/themes/xmcl-port`.
 
 Still needed for equivalent workflows:
 

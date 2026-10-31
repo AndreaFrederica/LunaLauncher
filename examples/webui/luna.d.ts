@@ -59,8 +59,34 @@ interface WebUiSettings {
   showManagerOnStart: boolean;
 }
 
+interface LauncherRuntimeSnapshot {
+  instances: Array<Record<string, unknown>>;
+  accounts: Array<Record<string, unknown>>;
+  icons: Record<string, string>;
+  selectedInstanceId: string;
+  selectedAccountId: string;
+  selected: Record<string, unknown> | null;
+  selectedAccount: Record<string, unknown> | null;
+  loading: boolean;
+  error: string;
+  ready: boolean;
+}
+
+interface LauncherRuntime {
+  getSnapshot(): LauncherRuntimeSnapshot;
+  subscribe(listener: (snapshot: LauncherRuntimeSnapshot) => void): () => void;
+  start(): Promise<void>;
+  refresh(): Promise<void>;
+  refreshIcons(): Promise<Record<string, string>>;
+  selectInstance(value: string | Record<string, unknown> | null): void;
+  selectAccount(value: string | Record<string, unknown> | null): void;
+  updateInstance(id: string, patch: Record<string, unknown>): void;
+  dispose(): void;
+}
+
 interface LunaBridge {
   readonly apiVersion: 1;
+  readonly runtime: LauncherRuntime;
   execute<T = unknown>(operation: string, parameters?: Parameters): Promise<ApiResult<T>>;
   catalog(): Promise<{ apiVersion: number; operations: Operation[] }>;
   respond(parameters: { interactionId: string; value: string | number; cancel?: false } |

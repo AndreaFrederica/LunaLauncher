@@ -246,6 +246,25 @@ const discovered = await luna.webUis();
 | `switchWebUi(id)` | 导航到所选 UI；有未完成请求时拒绝 |
 | `openWebUiManager()` | 打开独立管理窗口 |
 
+### 4.1 共享 runtime 层
+
+外部 WebUI 也可以使用统一的运行时会话模型，不需要在每个主题里重新维护实例和账户列表。宿主桥接提供 `window.luna.runtime`，它负责读取
+`instance.list` / `account.list`、按 ID 复用已有对象、维护当前实例和账户、接收
+`launcher-event` 并在实例或账户变化时刷新。
+
+```ts
+import { useLauncherSessionStore } from './luna-runtime';
+
+const session = useLauncherSessionStore();
+await session.start();
+// session.instances、session.selected、session.icons 都来自同一套 runtime。
+```
+
+适配器示例位于 [examples/webui/luna-runtime.ts](../examples/webui/luna-runtime.ts)，只需复制到
+Vue + Pinia 外部 WebUI。浏览器预览时 `window.luna` 不存在，适配器应显示预览状态并跳过真实后端请求；进入 Tauri WebUI 宿主后调用同一套 `start()` 即可恢复真实数据。
+
+runtime 的 `subscribe()` 返回取消函数；页面销毁时调用 `dispose()` 或取消订阅。主题只负责展示和交互，实例刷新、对象复用、选中项以及事件同步由 runtime 统一处理。
+
 `luna.apiVersion` 为桥接版本。`catalog().apiVersion` 和业务响应里的 `apiVersion`
 描述后端协议；不要以启动器版本号或固定接口数量替代能力查询。
 

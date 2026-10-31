@@ -355,7 +355,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri::plugin::Builder::<_, ()>::new("webui")
-                .js_init_script(include_str!("../../public/webui-bridge.js").to_string())
+                .js_init_script(include_str!("../generated/webui-bridge.js").to_string())
                 .build(),
         )
         .register_uri_scheme_protocol("webui", |context, request| {

@@ -11,11 +11,13 @@
     ]
   },
   "scripts": {
-    "build": "quasar build",
+    "build": "quasar build && pnpm build:bridge",
+    "build:bridge": "node scripts/build-bridge.mjs",
     "dev": "quasar dev",
     "typecheck": "vue-tsc --noEmit",
     "typecheck:strict": "python scripts/vue_typecheck_warnings.py --project tsconfig.strict.json",
-    "typecheck:strict:fail": "pnpm typecheck:strict"
+    "typecheck:strict:fail": "pnpm typecheck:strict",
+    "test:client": "node --test tests/client-contract.test.mjs"
   },
   "dependencies": {
     "@quasar/extras": "^1.16.15",
@@ -30,6 +32,7 @@
   },
   "devDependencies": {
     "@quasar/app-vite": "^2.2.0",
+    "esbuild": "^0.27.7",
     "typescript": "^5.9.2",
     "vue-tsc": "^3.0.6"
   }

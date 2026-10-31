@@ -392,6 +392,7 @@ subscriptionId、events、nextCursor、dropped；按 subscriptionId 分发到各
 
 ```powershell
 pixi run webui-check
+pnpm --dir neo-ui test:client
 pixi run test-webui
 ```
 
@@ -425,10 +426,19 @@ pixi run cargo test --offline --release --features custom-protocol --manifest-pa
 | `scripts/pixi_webui.py` | 前端依赖、静态包、运行和窗口测试入口 |
 | `neo-ui/meson.build` / `scripts/build_neo_ui.py` | 将 pnpm + Cargo 纳入可选 Meson target |
 | `neo-ui/src-tauri/src/webui.rs` | 目录扫描、本地协议、选择持久化和切换 |
-| `neo-ui/public/webui-bridge.js` | 对外 window.luna 协议 |
+| `neo-ui/src/client/core.ts` | 请求队列、优先级、缓存、控制操作旁路和事件归一化 |
+| `neo-ui/src/client/session.ts` | 实例、账户、图标和选中项的共享 runtime |
+| `neo-ui/src/client/bridge.ts` | `window.luna` 入口，由 `build-bridge.mjs` 打包为注入脚本 |
+| `neo-ui/scripts/build-bridge.mjs` | 从共享 TypeScript 生成 `src-tauri/generated/webui-bridge.js` |
 | `neo-ui/src-tauri/src/main.rs` | 后端常驻进程与 IPC 分发 |
-| `neo-ui/src/boot/launcher-api.ts` | 内置 Vue 界面的客户端 |
+| `neo-ui/src/boot/launcher-api.ts` | 内置 Vue 界面的传输适配和平台窗口方法 |
 | `launcher/api` | 领域 API 和对象快照，复用 C++ 核心实现 |
+
+`src-tauri/generated/webui-bridge.js` 是构建产物，不提交到仓库；`pnpm build` 会在
+Quasar 构建后自动生成它，`pnpm build:bridge` 可以单独重新生成。`src-tauri/build.rs`
+在缺少该文件时会写入一个仅用于 `cargo check`/`cargo test` 的占位脚本；正式发布必须
+经过 `pnpm build`，`scripts/build_neo_ui.py` 也会检查产物存在且非空。不要手改这个
+文件，桥接逻辑应修改 `neo-ui/src/client/` 下的 TypeScript。
 
 新增前端源码/资源文件时，同步登记 `neo-ui/meson.build` 的 `neo_ui_sources`，让
 Meson 增量构建追踪它。只新增页面通常无需更改 C++；领域功能应通过 API 扩展，

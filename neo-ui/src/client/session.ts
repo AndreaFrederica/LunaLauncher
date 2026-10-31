@@ -225,8 +225,8 @@ export function createLunaSession(client: Pick<LunaClient, 'execute' | 'onEvent'
           client.execute<LauncherAccount[]>('account.list'),
         ]);
         if (!instanceResult.ok) throw new Error(instanceResult.error || 'instance.list');
-        replaceInstances((instanceResult.data || []) as LauncherInstance[]);
         if (!accountResult.ok) throw new Error(accountResult.error || 'account.list');
+        replaceInstances((instanceResult.data || []) as LauncherInstance[]);
         replaceAccounts((accountResult.data || []) as LauncherAccount[]);
         state.error = '';
         state.ready = true;

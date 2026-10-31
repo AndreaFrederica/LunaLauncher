@@ -1,0 +1,58 @@
+{
+  "launcher": {
+    "title": "MineCraft Launcher 5.31",
+    "width": 720,
+    "height": 450
+  },
+  "settings": {
+    "title": "设置",
+    "width": 1030,
+    "height": 380
+  },
+  "manager": {
+    "title": "版本管理",
+    "width": 1060,
+    "height": 655
+  },
+  "message": {
+    "title": "提示:",
+    "width": 460,
+    "height": 200,
+    "maxWidth": 900
+  },
+  "download": {
+    "title": "下载",
+    "width": 430,
+    "height": 205
+  },
+  "setup": {
+    "title": "第一次运行",
+    "width": 580,
+    "height": 250
+  },
+  "components": {
+    "title": "忘却的旋律 · 基础组件",
+    "width": 740,
+    "height": 540
+  },
+  "preferences": {
+    "title": "启动器设置",
+    "width": 1030,
+    "height": 655
+  },
+  "games": {
+    "title": "下载游戏",
+    "width": 1060,
+    "height": 655
+  },
+  "clients": {
+    "title": "客户端管理",
+    "width": 900,
+    "height": 600
+  },
+  "client": {
+    "title": "客户端设置",
+    "width": 1060,
+    "height": 655
+  }
+}

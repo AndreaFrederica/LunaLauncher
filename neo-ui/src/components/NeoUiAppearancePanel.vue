@@ -35,7 +35,7 @@ async function openWebUiManager() {
 }
 const preferences = neoUiPreferences;
 const accents = ['#818cf8', '#38bdf8', '#34d399', '#f59e0b', '#f472b6', '#fb7185'];
-const shellOptions = computed(() => [{ label: 'PCL Style', value: 'pcl' }, { label: t('appearance.native'), value: 'neo' }]);
+const shellOptions = computed(() => [{ label: 'PCL Style', value: 'pcl' }, { label: '忘却的旋律', value: 'melody' }, { label: t('appearance.native'), value: 'neo' }]);
 const themeOptions = computed(() => [{ label: t('appearance.dark'), value: 'dark' }, { label: t('appearance.light'), value: 'light' }, { label: t('appearance.system'), value: 'system' }]);
 const densityOptions = computed(() => [{ label: t('appearance.comfortable'), value: 'comfortable' }, { label: t('appearance.compact'), value: 'compact' }]);
 const backgroundOptions = computed(() => [{ label: t('appearance.gradient'), value: 'gradient' }, { label: t('appearance.solid'), value: 'solid' }]);

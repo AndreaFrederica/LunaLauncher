@@ -38,7 +38,7 @@ const { t } = useI18n();
 import { ref } from 'vue';
 import { copyToClipboard } from 'quasar';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import PclButton from '../pcl/components/PclButton.vue';
+import PclButton from '../themes/pcl/components/PclButton.vue';
 
 const props = defineProps<{
   instance: string; name: string; file?: string; content?: string; disabled?: boolean; pcl?: boolean;

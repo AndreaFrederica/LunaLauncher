@@ -79,17 +79,17 @@ type Execute = (operation: string, parameters?: Record<string, unknown>) => Prom
 const props = defineProps<{ instance: string; busy: boolean; execute: Execute }>();
 const emit = defineEmits<{ changed: [] }>();
 
-const tab = ref('worlds');
+const tab = ref<any>('worlds');
 const loading = ref(false);
-const worldError = ref('');
-const screenshotError = ref('');
+const worldError = ref<any>('');
+const screenshotError = ref<any>('');
 const worlds = ref<any[]>([]);
 const screenshots = ref<any[]>([]);
-const worldSource = ref('');
-const worldName = ref('');
-const screenshotSource = ref('');
-const screenshotName = ref('');
-const preview = ref('');
+const worldSource = ref<any>('');
+const worldName = ref<any>('');
+const screenshotSource = ref<any>('');
+const screenshotName = ref<any>('');
+const preview = ref<any>('');
 
 function formatSize(value: unknown) {
   const size = Number(value || 0);

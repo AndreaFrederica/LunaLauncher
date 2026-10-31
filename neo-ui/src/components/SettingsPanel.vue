@@ -34,7 +34,7 @@ type ApiSetting = { key: string; type?: string; value: unknown; default?: unknow
 const props = defineProps<{ settings: ApiSetting[]; busy: boolean; scope?: string; category?: string }>();
 const { t } = useI18n();
 const emit = defineEmits<{ save: [key: string, value: unknown]; reset: [key: string]; 'update:category': [category: string] }>();
-const search = ref(''), category = ref('all'), validation = ref('');
+const search = ref<any>(''), category = ref<any>('all'), validation = ref<any>('');
 const draft = ref<Record<string, any>>({});
 const legacyGroups: Record<string, string> = { Proxy: 'network', Launcher: 'qt-ui', ExternalTools: 'advanced', API: 'advanced' };
 function metadata(setting: ApiSetting) { const fallback = settingMetadata[setting.key]; const group = setting.category || legacyGroups[fallback?.group || ''] || fallback?.group || 'advanced'; return { label: fallback?.label ? t(fallback.label) : setting.key, group }; }

@@ -1,8 +1,15 @@
 <template>
   <q-dialog :model-value="!!current" persistent>
-    <q-card class="task-interaction" :class="{ 'task-interaction--pcl': pcl }">
+    <q-card
+      class="task-interaction"
+      :class="{
+        'task-interaction--pcl': pcl,
+        'task-interaction--restricted': restricted,
+        'pcl-dialog': pcl,
+      }"
+    >
       <q-card-section>
-        <h2>{{ restricted ? t('neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h2>
+        <h3>{{ restricted ? t('neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h3>
         <p v-if="restricted">{{ t('neo.auto2.k7c306073f8') }}</p>
         <p v-else>{{ current?.request.prompt }}</p>
         <p v-if="error || current?.request.error" class="task-interaction__error" role="alert">{{ error || current?.request.error }}</p>
@@ -33,7 +40,7 @@
         <PclInput v-else v-model="answer" :type="current?.request.secret ? 'password' : 'text'" />
       </q-card-section>
       <q-card-actions align="right">
-        <PclButton :disabled="submitting" @click="submit(null)">{{ restricted ? t('neo.auto2.kaa385c0338') : t('neo.auto2.k4d0b4688c7') }}</PclButton>
+        <PclButton :variant="pcl ? 'ghost' : 'normal'" :disabled="submitting" @click="submit(null)">{{ restricted ? t('neo.auto2.kaa385c0338') : t('neo.auto2.k4d0b4688c7') }}</PclButton>
         <PclButton variant="highlight" :disabled="submitting || (restricted && !current?.request.complete)"
           @click="submit(restricted ? 'continue' : answer)">{{ restricted ? t('neo.auto2.k4523bfbe2f') : current?.request.choices ? t('neo.auto2.k1fc1afc5c5') : t('neo.auto2.kb56d9ac6c5') }}</PclButton>
       </q-card-actions>
@@ -47,10 +54,10 @@ const { t } = useI18n();
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { launcher } from '../boot/launcher-api';
-import PclButton from '../pcl/components/PclButton.vue';
-import PclInput from '../pcl/components/PclInput.vue';
-import PclSelect from '../pcl/components/PclSelect.vue';
-import { pickPclDirectory, pickPclFile } from '../pcl/composables/usePclFileDialog';
+import PclButton from '../themes/pcl/components/PclButton.vue';
+import PclInput from '../themes/pcl/components/PclInput.vue';
+import PclSelect from '../themes/pcl/components/PclSelect.vue';
+import { pickPclDirectory, pickPclFile } from '../themes/pcl/composables/usePclFileDialog';
 
 type Request = {
   interactionId: string; type?: string; prompt?: string; secret?: boolean; choices?: any[];
@@ -131,11 +138,12 @@ async function openDownload(url: string) {
 
 <style scoped>
 .task-interaction { width: 780px; max-width: 94vw; background: var(--neo-panel, #202733); color: var(--neo-text, #eef4ff); }
-.task-interaction--pcl { background: var(--pcl-c7); color: var(--pcl-text); border-radius: var(--pcl-radius); }
+.task-interaction--pcl { color: var(--pcl-text); }
+.task-interaction--pcl:not(.task-interaction--restricted) { width: 520px; }
 .task-interaction:not(.task-interaction--pcl) :deep(.pcl-btn) { padding: 7px 12px; border: 1px solid #64748b; border-radius: 6px; background: #283549; color: #eef4ff; cursor: pointer; }
 .task-interaction:not(.task-interaction--pcl) :deep(.pcl-btn:disabled) { opacity: .45; cursor: default; }
 .task-interaction:not(.task-interaction--pcl) :deep(.pcl-btn--highlight) { background: #246bd4; }
-.task-interaction h2 { margin: 0 0 10px; font-size: 19px; }
+.task-interaction h3 { margin: 0 0 10px; font-size: 19px; }
 .task-interaction p { margin: 6px 0; line-height: 1.6; }
 .task-interaction__body { max-height: 58vh; overflow: auto; }
 .task-interaction__tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }

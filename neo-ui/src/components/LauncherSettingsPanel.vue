@@ -69,7 +69,7 @@ import JavaPanel from './JavaPanel.vue';
 import LauncherControlPanel from './LauncherControlPanel.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
-const tab=ref('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref('authlib-injector'),externalTool=ref('jprofiler'),externalPath=ref('');
+const tab=ref<any>('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref<any>('authlib-injector'),externalTool=ref<any>('jprofiler'),externalPath=ref<any>('');
 const backends=[{label:t('neo.auto2.ka626fe7700'),value:0},{label:'Aria2',value:1},{label:t('neo.auto2.k6a21c71e5f'),value:2}];
 const mirrorTypes=[{label:t('neo.auto2.k212e81e6d0'),value:0},{label:t('neo.auto2.kf0aba8a42d'),value:1},{label:t('neo.auto2.kfe7276cd17'),value:2}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);
@@ -78,7 +78,7 @@ const mirrorControlKeys=new Set(['DownloadMirrorType','MojangDownloadsMirrorURL'
 const downloadSettings=computed(()=>props.settings.filter(x=>x.category==='downloads'));
 const mirrorSettings=computed(()=>downloadSettings.value.filter(x=>mirrorKeys.has(x.key)));
 const mirrorOtherSettings=computed(()=>mirrorSettings.value.filter(x=>!mirrorControlKeys.has(x.key)));
-const mirrorDraft=reactive({ MojangDownloadsMirrorURL:'', LibrariesURL:'', ResourceURLOverride:'', LegacyFMLLibsURLOverride:'' });
+const mirrorDraft=reactive<any>({ MojangDownloadsMirrorURL:'', LibrariesURL:'', ResourceURLOverride:'', LegacyFMLLibsURLOverride:'' });
 watch(()=>props.settings, items=>{ for(const key of Object.keys(mirrorDraft)) mirrorDraft[key as keyof typeof mirrorDraft]=text(key); }, { immediate:true });
 async function save(key:string,value:any){await props.execute('settings.set',{...props.scope,key,value});emit('changed');}
 function saveKey(key:string,value:any){void save(key,value);}

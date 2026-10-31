@@ -64,6 +64,7 @@ const readOnlyTtl: Record<string, number> = {
   'instance.list': 2_000,
   'instance.info': 2_000,
   'instance.icons': 5_000,
+  'instance.icon-library': 30_000,
   'account.list': 2_000,
   'settings.list': 1_000,
   'language.list': 30_000,
@@ -74,7 +75,7 @@ const readOnlyTtl: Record<string, number> = {
 };
 
 const highPriority = new Set([
-  'runtime.info', 'startup.status', 'runtime.memory', 'instance.list', 'instance.info', 'instance.icons', 'account.list',
+  'runtime.info', 'startup.status', 'runtime.memory', 'instance.list', 'instance.info', 'instance.icons', 'instance.icon-library', 'account.list',
   'settings.list', 'task.list', 'api.describe', 'component.catalog', 'component.versions',
   'language.list', 'launcher.update.status', 'authentication.helper.status',
 ]);
@@ -87,6 +88,11 @@ export class LauncherApiClient {
   private cache = new Map<string, { expires: number; value: ApiResult<any> }>();
   private inflight = new Map<string, Promise<ApiResult<any>>>();
   private stats = new Map<string, { calls: number; totalMs: number; maxMs: number; slow: number; cacheHits: number }>();
+
+  /** Other native windows can mutate data without passing through this client. */
+  invalidate(operation: string): void {
+    for (const key of this.cache.keys()) if (key.startsWith(`${operation}:`)) this.cache.delete(key);
+  }
 
   private isTaskControl(operation: string): boolean {
     return new Set([

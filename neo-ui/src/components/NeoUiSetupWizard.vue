@@ -50,6 +50,9 @@
           <p class="muted">{{ t('neo.auto2.k77b8fc36ba') }}</p>
           <fieldset class="setup-group">
             <legend>{{ t('neo.auto2.kdeb52f209a') }}</legend>
+            <component :is="controls.hint" v-if="status?.appearanceRequired" v-bind="hintProps('red')" class="setup-banner setup-appearance-warning">
+              当前保存的 Qt 外观主题或图标主题已失效，请在下面重新选择有效的主题后再完成设置。
+            </component>
             <div class="setup-grid">
               <div class="setup-field">
                 <span>{{ t('neo.auto2.kd5d8edd12c') }}</span>
@@ -166,13 +169,13 @@ import { QBanner, QBtn, QInput, QSelect, QToggle } from 'quasar';
 import { open } from '@tauri-apps/plugin-dialog';
 import { applyPclStylePreset, neoUiIsDark, neoUiPreferences } from '../neo-ui-preferences';
 import launcherLogo from '../assets/luna-launcher.png';
-import PclButton from '../pcl/components/PclButton.vue';
-import PclCheckbox from '../pcl/components/PclCheckbox.vue';
-import PclHint from '../pcl/components/PclHint.vue';
-import PclIcon from '../pcl/components/PclIcon.vue';
-import PclInput from '../pcl/components/PclInput.vue';
-import PclLoading from '../pcl/components/PclLoading.vue';
-import PclSelect from '../pcl/components/PclSelect.vue';
+import PclButton from '../themes/pcl/components/PclButton.vue';
+import PclCheckbox from '../themes/pcl/components/PclCheckbox.vue';
+import PclHint from '../themes/pcl/components/PclHint.vue';
+import PclIcon from '../themes/pcl/components/PclIcon.vue';
+import PclInput from '../themes/pcl/components/PclInput.vue';
+import PclLoading from '../themes/pcl/components/PclLoading.vue';
+import PclSelect from '../themes/pcl/components/PclSelect.vue';
 import { setNeoLocale } from '../i18n';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
@@ -406,7 +409,8 @@ async function login() {
   try {
     loginTask.value = await props.execute('neo.task.start', { operation: 'account.login', priority: 'high', parameters: { type: 'microsoft', useDeviceCode: true } });
     if (disposed) { await cancelLogin(); return; }
-    while (!disposed && loginTask.value && !loginTask.value.finished) {
+    const isFinished = (value: any) => Boolean(value?.finished) || ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted'].includes(String(value?.state || '').toLowerCase());
+    while (!disposed && loginTask.value && !isFinished(loginTask.value)) {
       await new Promise(resolve => setTimeout(resolve, 400));
       if (!disposed) loginTask.value = await props.execute('neo.task.status', { taskId: loginTask.value.taskId });
     }

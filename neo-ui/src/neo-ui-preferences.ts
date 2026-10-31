@@ -1,10 +1,14 @@
 import { computed, reactive, watch } from 'vue';
+import { defineStore } from 'pinia';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { i18n } from './i18n';
+import { recordRuntimeDebug } from './common/runtime/runtime-debug';
 
 export type NeoTheme = 'dark' | 'light' | 'system';
 export type NeoDensity = 'comfortable' | 'compact';
 export type NeoBackground = 'solid' | 'gradient';
-export type NeoShell = 'neo' | 'pcl';
+export type NeoShell = 'neo' | 'pcl' | 'melody';
 export type PclFont = 'system' | 'yahei' | 'dengxian' | 'simsun';
 export type PclStylePreset = 'luna-neo' | 'pcl';
 export type PclLoadingAnimation = 'luna-spinner' | 'pcl-pickaxe' | 'pcl-bar';
@@ -34,6 +38,8 @@ export interface NeoUiPreferences {
   /** Refresh remote resource catalogs when their page is opened. */
   pclAutoRefreshOnPageOpen: boolean;
   /** PCL launch-page navigation layout. */
+  /** Shared width of PCL page navigation columns, in CSS pixels. */
+  pclPageNavWidth: number;
   pclNavLayout: 'pcl' | 'mmc-classic';
   pclClassicSide: 'left' | 'right';
   pclClassicIconSize: number;
@@ -52,6 +58,8 @@ export interface NeoUiPreferences {
   pclLaunchLogAutoScroll: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
+  /** Show the Luna mark before the PCL title-bar brand. */
+  pclTitleIcon: boolean;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
   pclAccentColor: string;
   /** Data URL for the PCL page background; empty means no image. */
@@ -78,6 +86,8 @@ export interface NeoUiPreferences {
   pclHomeInstanceGrouping: 'flat' | 'grouped';
   pclHomeInstanceSort: 'manual' | 'name' | 'version';
   pclHomeInstanceOrder: string[];
+  /** Group identifiers collapsed in the PCL instance lists. */
+  pclHomeInstanceCollapsedGroups: string[];
   pclHomeCardOrder: string[];
   /** The last instance selected in the classic launcher shell. */
   selectedInstanceId: string;
@@ -99,6 +109,7 @@ const defaults: NeoUiPreferences = {
   pclLoadingAnimation: 'luna-spinner',
   pclAutoRefreshOnPageOpen: true,
   pclBaseFontSize: 14,
+  pclPageNavWidth: 220,
   pclNavLayout: 'mmc-classic',
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
@@ -112,6 +123,7 @@ const defaults: NeoUiPreferences = {
   pclLaunchLogAutoScroll: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
+  pclTitleIcon: true,
   pclAccentColor: '#d65c9a',
   pclBackgroundImage: '',
   pclBackgroundImageName: '',
@@ -134,6 +146,7 @@ const defaults: NeoUiPreferences = {
   pclHomeInstanceGrouping: 'grouped',
   pclHomeInstanceSort: 'name',
   pclHomeInstanceOrder: [],
+  pclHomeInstanceCollapsedGroups: [],
   pclHomeCardOrder: ['instances', 'log', 'hint', 'custom:welcome', 'servers'],
   selectedInstanceId: '',
 };
@@ -160,6 +173,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFloatMusic: false,
     pclTitleLogo: true,
     pclTitleBadge: true,
+    pclTitleIcon: true,
     pclAccentColor: '#d65c9a',
     pclHomeShowInstances: true,
     pclHomeShowServers: true,
@@ -190,6 +204,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFloatMusic: true,
     pclTitleLogo: true,
     pclTitleBadge: true,
+    pclTitleIcon: true,
     pclAccentColor: '#2a80e3',
     pclHomeShowInstances: false,
     pclHomeShowServers: false,
@@ -220,11 +235,12 @@ const pclFontStacks: Record<PclFont, string> = {
   simsun: 'SimSun, "Songti SC", "Microsoft YaHei", serif',
 };
 
-function load(): NeoUiPreferences {
-  if (typeof localStorage === 'undefined') return { ...defaults };
-  try {
-    const value = JSON.parse(localStorage.getItem(storageKey) || '{}');
-    const merged = { ...defaults, ...value };
+function normalizeLoaded(value: any): NeoUiPreferences {
+    const merged = { ...defaults, ...(value && typeof value === 'object' ? value : {}) };
+    const pageNavWidth = Number(merged.pclPageNavWidth);
+    merged.pclPageNavWidth = Number.isFinite(pageNavWidth)
+      ? Math.max(140, Math.min(360, Math.round(pageNavWidth)))
+      : defaults.pclPageNavWidth;
     if (!['luna-spinner', 'pcl-pickaxe', 'pcl-bar'].includes(merged.pclLoadingAnimation)) {
       merged.pclLoadingAnimation = defaults.pclLoadingAnimation;
     }
@@ -234,12 +250,18 @@ function load(): NeoUiPreferences {
     if (typeof merged.pclLaunchLogAutoScroll !== 'boolean') {
       merged.pclLaunchLogAutoScroll = defaults.pclLaunchLogAutoScroll;
     }
+    if (typeof merged.pclTitleIcon !== 'boolean') {
+      merged.pclTitleIcon = defaults.pclTitleIcon;
+    }
 
     merged.pclHomeCardOrder = Array.isArray(merged.pclHomeCardOrder)
       ? merged.pclHomeCardOrder.map(String).filter(Boolean)
       : ['hint', 'log', 'instances', 'servers'];
     merged.pclHomeInstanceOrder = Array.isArray(merged.pclHomeInstanceOrder)
       ? merged.pclHomeInstanceOrder.map(String).filter(Boolean)
+      : [];
+    merged.pclHomeInstanceCollapsedGroups = Array.isArray(merged.pclHomeInstanceCollapsedGroups)
+      ? [...new Set(merged.pclHomeInstanceCollapsedGroups.map(String).filter(Boolean))]
       : [];
     merged.pclHomeCards = Array.isArray(merged.pclHomeCards)
       ? merged.pclHomeCards.filter((card: any) => card && typeof card === 'object').map((card: any) => ({
@@ -249,12 +271,80 @@ function load(): NeoUiPreferences {
       }))
       : [];
     return merged;
-  } catch {
-    return { ...defaults };
+}
+
+function samePreferenceValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return false;
+  try { return JSON.stringify(left) === JSON.stringify(right); } catch { return false; }
+}
+
+/** Apply a cross-window snapshot without writing unchanged fields into Vue's
+ * reactive graph. Components that do not use a changed preference therefore
+ * receive no update at all. */
+function patchPreferences(value: Partial<NeoUiPreferences>) {
+  const next = normalizeLoaded(value);
+  const changed: string[] = [];
+  for (const key of Object.keys(next) as (keyof NeoUiPreferences)[]) {
+    if (samePreferenceValue(neoUiPreferences[key], next[key])) continue;
+    (neoUiPreferences[key] as any) = next[key] as any;
+    changed.push(key);
   }
+  if (changed.length) recordRuntimeDebug('store', 'neo-ui-preferences', 'preference snapshot patched', { fields: changed });
+  return changed.length > 0;
+}
+
+function load(): NeoUiPreferences {
+  if (isTauri() || typeof localStorage === 'undefined') return { ...defaults };
+  try { return normalizeLoaded(JSON.parse(localStorage.getItem(storageKey) || '{}')); }
+  catch { return { ...defaults }; }
 }
 
 export const neoUiPreferences = reactive<NeoUiPreferences>(load());
+let hydrated = !isTauri();
+let applyingRemote = false;
+let bridgePromise: Promise<void> | undefined;
+let bridgeUnlisten: UnlistenFn | undefined;
+
+function startNeoPreferencesBridge() {
+  if (bridgePromise) return bridgePromise;
+  if (!isTauri()) {
+    window.addEventListener('storage', event => {
+      if (event.key !== storageKey || !event.newValue) return;
+      applyingRemote = true;
+      try { patchPreferences(JSON.parse(event.newValue)); }
+      catch { /* Ignore malformed browser preview state. */ }
+      finally { queueMicrotask(() => { applyingRemote = false; }); }
+    });
+    bridgePromise = Promise.resolve();
+    return bridgePromise;
+  }
+  bridgePromise = listen<Partial<NeoUiPreferences>>('neo-ui-preferences-changed', event => {
+    applyingRemote = true;
+    patchPreferences(event.payload);
+    queueMicrotask(() => { applyingRemote = false; });
+  }).then(unlisten => { bridgeUnlisten = unlisten; }).catch(error => { console.error('Unable to bridge Neo UI preferences', error); });
+  return bridgePromise;
+}
+
+export async function hydrateNeoUiPreferences() {
+  if (hydrated) { startNeoPreferencesBridge(); return; }
+  try {
+    const stored = await invoke<Partial<NeoUiPreferences> | null>('get_neo_ui_preferences');
+    if (stored) patchPreferences(stored);
+  } catch (error) { console.error('Unable to load Neo UI preferences', error); }
+  hydrated = true;
+  startNeoPreferencesBridge();
+  applyNeoUiPreferences();
+}
+
+export const useNeoUiPreferencesStore = defineStore('neo-ui-preferences', {
+  state: () => ({ preferences: neoUiPreferences }),
+  actions: {
+    hydrate: hydrateNeoUiPreferences,
+    persist: persistNeoUiPreferences,
+  },
+});
 export const neoUiIsDark = computed(() => {
   if (neoUiPreferences.theme === 'dark') return true;
   if (neoUiPreferences.theme === 'light') return false;
@@ -263,11 +353,13 @@ export const neoUiIsDark = computed(() => {
 
 /** Persist immediately when a preference changes at an interaction boundary. */
 export function persistNeoUiPreferences() {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(neoUiPreferences));
-  } catch {
-    // Storage may be unavailable in a restricted webview.
+  if (!hydrated) return;
+  const value = JSON.parse(JSON.stringify(neoUiPreferences));
+  if (isTauri()) {
+    void invoke('set_neo_ui_preferences', { preferences: value }).then(() => emit('neo-ui-preferences-changed', value)).catch(error => console.error('Unable to persist Neo UI preferences', error));
+  } else if (typeof localStorage !== 'undefined') {
+    try { localStorage.setItem(storageKey, JSON.stringify(value)); }
+    catch { /* Browser preview storage may be unavailable. */ }
   }
 }
 
@@ -309,6 +401,7 @@ export function applyNeoUiPreferences() {
   root.dataset.neoAnimations = neoUiPreferences.animations ? 'on' : 'off';
   root.dataset.pclTitleLogo = neoUiPreferences.pclTitleLogo ? 'on' : 'off';
   root.dataset.pclTitleBadge = neoUiPreferences.pclTitleBadge ? 'on' : 'off';
+  root.dataset.pclTitleIcon = neoUiPreferences.pclTitleIcon ? 'on' : 'off';
   root.style.setProperty('--neo-primary', neoUiPreferences.accent);
   const pclAccent = normalizePclAccent(neoUiPreferences.pclAccentColor);
   root.style.setProperty('--pcl-c3', pclAccent);
@@ -317,6 +410,7 @@ export function applyNeoUiPreferences() {
   root.style.setProperty('--pcl-c5', isDark ? mixHex(pclAccent, '#000000', 0.32) : mixHex(pclAccent, '#ffffff', 0.6));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
   root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
+  root.style.setProperty('--pcl-page-nav-width', `${Math.max(140, Math.min(360, Number(neoUiPreferences.pclPageNavWidth) || defaults.pclPageNavWidth))}px`);
   root.dataset.pclLaunchAnimation = neoUiPreferences.pclLaunchAnimation ? 'on' : 'off';
   root.dataset.pclBackground = neoUiPreferences.pclBackgroundImage ? 'on' : 'off';
   root.style.setProperty('--pcl-bg-image', neoUiPreferences.pclBackgroundImage ? `url("${neoUiPreferences.pclBackgroundImage}")` : 'none');
@@ -324,7 +418,7 @@ export function applyNeoUiPreferences() {
 }
 
 watch(neoUiPreferences, () => {
-  persistNeoUiPreferences();
+  if (!applyingRemote) persistNeoUiPreferences();
   applyNeoUiPreferences();
 }, { deep: true, immediate: true });
 

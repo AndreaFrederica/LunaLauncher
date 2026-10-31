@@ -21,10 +21,12 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { useLauncherSessionStore } from '../common/launcher-session';
 const props=defineProps<{accounts:any[];busy:boolean;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
-const selected=ref(''),selectedAccount=ref<any>(null),profile=ref<any>(null),skins=ref<any[]>([]),skinPath=ref(''),skinName=ref(''),variant=ref('classic'),error=ref('');
+const launcherSession = useLauncherSessionStore();
+const selected=ref<any>(''),selectedAccount=ref<any>(null),profile=ref<any>(null),skins=ref<any[]>([]),skinPath=ref<any>(''),skinName=ref<any>(''),variant=ref<any>('classic'),error=ref<any>('');
 const config=ref<any>({authUrl:'',sessionUrl:'',sourceName:'',tokenType:'Standard',authenticateEndpoint:'',refreshEndpoint:'',validateEndpoint:'',profileEndpoint:'',oauthTokenEndpoint:'',serverId:'',baseUrl:''});
 const skinNames=ref<any[]>([]);
 function accountRef(account:any){return String(account?.internalId || account?.id || account?.profileName || '');}
@@ -33,7 +35,8 @@ function accountStateLabel(account:any){const state=String(account?.stateName||'
 function cacheStateLabel(account:any){const state=String(account?.cacheState||'unknown');return ({cached:t('neo.auto2.kd59b2c34aa'),'not-cached':t('neo.auto2.k2f52e78e73'),unknown:t('neo.auto2.k9908c922f2')} as any)[state] || t('neo.auto2.kd9c32a4c3d');}
 function skinFaceStyle(url:string){return {backgroundImage:`url("${String(url).replace(/"/g,'%22')}")`};}
 async function attempt(action:()=>Promise<any>){error.value='';try{return await action();}catch(e){error.value=String(e);}}
-async function select(account:any){const reference=accountRef(account);selected.value=reference;selectedAccount.value=account;config.value={authUrl:account.yggdrasil?.authUrl||'',sessionUrl:account.yggdrasil?.sessionUrl||'',sourceName:account.yggdrasil?.sourceName||'',tokenType:account.yggdrasil?.tokenType||'Standard',authenticateEndpoint:account.yggdrasil?.authenticateEndpoint||'',refreshEndpoint:account.yggdrasil?.refreshEndpoint||'',validateEndpoint:account.yggdrasil?.validateEndpoint||'',profileEndpoint:account.yggdrasil?.profileEndpoint||'',oauthTokenEndpoint:account.yggdrasil?.oauthTokenEndpoint||'',serverId:account.unifiedPass?.serverId||'',baseUrl:account.unifiedPass?.baseUrl||''};await attempt(async()=>{profile.value=await props.execute('account.profile',{account:reference});skins.value=await props.execute('account.skin.list',{account:reference});skinNames.value=skins.value.map((s:any)=>s.name||s.path);});}
+async function select(account:any){const reference=accountRef(account);selected.value=reference;launcherSession.selectAccount(reference);selectedAccount.value=account;config.value={authUrl:account.yggdrasil?.authUrl||'',sessionUrl:account.yggdrasil?.sessionUrl||'',sourceName:account.yggdrasil?.sourceName||'',tokenType:account.yggdrasil?.tokenType||'Standard',authenticateEndpoint:account.yggdrasil?.authenticateEndpoint||'',refreshEndpoint:account.yggdrasil?.refreshEndpoint||'',validateEndpoint:account.yggdrasil?.validateEndpoint||'',profileEndpoint:account.yggdrasil?.profileEndpoint||'',oauthTokenEndpoint:account.yggdrasil?.oauthTokenEndpoint||'',serverId:account.unifiedPass?.serverId||'',baseUrl:account.unifiedPass?.baseUrl||''};await attempt(async()=>{profile.value=await props.execute('account.profile',{account:reference});skins.value=await props.execute('account.skin.list',{account:reference});skinNames.value=skins.value.map((s:any)=>s.name||s.path);});}
+watch(()=>`${launcherSession.selectedAccountId}|${props.accounts.map(accountRef).join('|')}`,()=>{const preferred=props.accounts.find((account:any)=>accountRef(account)===launcherSession.selectedAccountId)||props.accounts.find((account:any)=>account.default)||props.accounts[0];if(preferred&&selected.value!==accountRef(preferred))void select(preferred);else if(!preferred){selected.value='';selectedAccount.value=null;profile.value=null;}},{immediate:true});
 async function move(a:any,delta:number){await attempt(async()=>{await props.execute('account.move',{account:accountRef(a),delta});emit('changed');});}
 async function remove(a:any){await attempt(async()=>{await props.execute('account.remove',{account:accountRef(a),confirm:true});profile.value=null;selected.value='';emit('changed');});}
 async function installSkin(){await attempt(async()=>{await props.execute('account.skin.install',{account:selected.value,path:skinPath.value});skinPath.value='';await select({id:selected.value});});}

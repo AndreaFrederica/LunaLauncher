@@ -1,0 +1,9 @@
+<template>
+<template><q-card class="workspace-card console-card"><q-card-section><div class="console-toolbar"><div><strong>{{ t('xmcl.instance.liveConsole') }}</strong><small>{{ consoleState }}</small></div><q-space/><q-btn flat :label="t('xmcl.instance.connect')" icon="link" :disable="busy" @click="emit('connect-console')" /><q-btn flat :label="t('xmcl.instance.clear')" icon="clear_all" @click="emit('clear-console')" /><LogUploadButton :instance="instance.id" :name="t('xmcl.instance.liveConsoleLog')" :content="consoleLines.join('\n')" :execute="execute" :disabled="!consoleLines.length" /><q-checkbox v-model="follow" dark :label="t('xmcl.instance.autoScroll')" /></div><pre class="console">{{ consoleLines.join('\n') || t('xmcl.instance.consoleHint') }}</pre><InstanceLogViewer :instance="instance.id" :log-files="logFiles" :execute="execute" /></q-card-section></q-card></template>
+</template>
+<script setup lang="ts">
+import { inject } from 'vue'; import { XmclInstanceContextKey } from './XmclInstanceContext';
+import XmclHomeGrid from './XmclHomeGrid.vue'; import XmclResourceWorkspace from './XmclResourceWorkspace.vue'; import ResourceUpdatesPanel from '../../../components/ResourceUpdatesPanel.vue'; import InstanceExtras from '../../../components/InstanceExtras.vue'; import InstanceLogViewer from '../../../components/InstanceLogViewer.vue'; import LogUploadButton from '../../../components/LogUploadButton.vue';
+const context = inject(XmclInstanceContextKey); if (!context) throw new Error('XmclInstanceContext is missing');
+const { t, props, emit, instance, details, icon, fallback, components, componentError, notes, busy, execute, consoleLines, consoleState, logFiles, fileLog, initialSection, initialResourceKind, hideToolbar, section, resourceKind, localNotes, follow, moreShown, versionShown, editing, version, resourceKinds, actions, goResource, action, editComponent, saveVersion } = context;
+</script>

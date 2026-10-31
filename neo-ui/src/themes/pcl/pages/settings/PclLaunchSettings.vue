@@ -1,0 +1,19 @@
+<template>
+  <div v-show="active" class="pcl-settings-section">
+    <PclCard :title="t('pcl.auto2.k6c4942326d')">
+      <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k2badbf857a') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="'isolated'" :options="[{ label: t('pcl.auto2.ka16174eb79'), value: 'isolated' }]" disabled /></div><span class="pcl-form-row__hint">{{ t('pcl.auto2.k8235323562') }}</span></div>
+      <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k4ebf21d7b3') }}</span><div class="pcl-form-row__control"><PclInput :model-value="String(val('WindowTitle', t('pcl.auto2.k8be3944d58')))" disabled /></div><span class="pcl-form-row__hint">{{ t('pcl.auto2.k1c6d2e1081') }}</span></div>
+      <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k95b22c4d07') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="bool('CloseAfterLaunch') ? 'close' : 'keep'" :options="[{ label: t('pcl.auto2.k46f719b4c5'), value: 'keep' }, { label: t('pcl.auto2.k80c80f7e28'), value: 'close' }]" @update:model-value="save('CloseAfterLaunch', $event === 'close')" /></div><span class="pcl-form-row__hint">{{ t('pcl.auto2.k387efacc97') }}</span></div>
+      <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k86a6775402') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="bool('QuitAfterGameStop') ? 'quit' : 'keep'" :options="[{ label: t('pcl.auto2.k5b096363ee'), value: 'keep' }, { label: t('pcl.auto2.kf7e6a52e54'), value: 'quit' }]" @update:model-value="save('QuitAfterGameStop', $event === 'quit')" /></div><span class="pcl-form-row__hint">{{ t('pcl.auto2.k4f1fb55573') }}</span></div>
+      <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.ka599946fe1') }}</span><div class="pcl-form-row__control"><PclSelect :model-value="windowMode" :options="windowOptions" @update:model-value="setWindowMode" style="width: 150px" /><template v-if="windowMode === 'custom'"><PclInput type="number" :model-value="num('MinecraftWinWidth', 854)" style="width: 70px" @update:model-value="drafts.MinecraftWinWidth = $event" @blur="save('MinecraftWinWidth', Number(drafts.MinecraftWinWidth || 854))" /><span class="pcl-form-row__hint">×</span><PclInput type="number" :model-value="num('MinecraftWinHeight', 480)" style="width: 70px" @update:model-value="drafts.MinecraftWinHeight = $event" @blur="save('MinecraftWinHeight', Number(drafts.MinecraftWinHeight || 480))" /></template></div><span class="pcl-form-row__hint">{{ windowMode === 'maximized' ? t('pcl.auto2.k84e78ef1da') : t('pcl.auto2.k3edaf9c3ff') }}</span></div>
+      <div class="pcl-form-row"><span class="pcl-form-row__label">{{ t('pcl.auto2.k77926b126a') }}</span><div class="pcl-form-row__control pcl-check-row"><PclCheckbox :model-value="bool('ShowConsole')" :label="t('pcl.auto2.kd6dca20f52')" @update:model-value="save('ShowConsole', $event)" /><PclCheckbox :model-value="bool('AutoCloseConsole')" :label="t('pcl.auto2.kf7ef0f5cdc')" @update:model-value="save('AutoCloseConsole', $event)" /><PclCheckbox :model-value="bool('ShowConsoleOnError')" :label="t('pcl.auto2.k522faf5a0b')" @update:model-value="save('ShowConsoleOnError', $event)" /></div></div>
+    </PclCard>
+  </div>
+</template>
+<script setup lang="ts">
+import PclCard from '../../components/PclCard.vue';
+import PclSelect from '../../components/PclSelect.vue';
+import PclInput from '../../components/PclInput.vue';
+import PclCheckbox from '../../components/PclCheckbox.vue';
+defineProps<{ active: boolean; t: (key: string) => string; windowMode: string; windowOptions: any[]; drafts: Record<string, any>; val: (key: string, fallback: any) => any; bool: (key: string) => boolean; num: (key: string, fallback: number) => number; setWindowMode: (value: any) => void; save: (key: string, value: any) => void }>();
+</script>

@@ -1,0 +1,13 @@
+<template>
+  <div class="pcl-settings-section">
+    <PclCard :title="t('pcl.auto2.k45f9954c5b')"><div class="pcl-check-grid"><PclCheckbox :model-value="updateState.automatic" :label="t('pcl.auto2.kf54e16b861')" @update:model-value="configureUpdate({ automatic: $event })" /><PclCheckbox :model-value="updateState.beta" :label="t('pcl.auto2.k6d2e57a86f')" @update:model-value="configureUpdate({ beta: $event })" /></div><div class="pcl-actions"><PclButton variant="highlight" icon="refresh-cw" :disabled="busy || updateChecking" @click="checkUpdate">{{ updateChecking ? t('pcl.auto2.k8872ba182f') : t('pcl.auto2.ka6df38586d') }}</PclButton><PclButton icon="folder-open" @click="openUpdateLog">{{ t('pcl.auto2.ka040e64bcf') }}</PclButton></div><PclLoading v-if="updateChecking" :text="t('pcl.auto2.kec43764508')" inline /></PclCard>
+    <PclCard v-if="updateCheck.available" :title="t('pcl.auto2.k01047404ef')"><div class="pcl-update-head"><div class="pcl-update-icon">↑</div><div><div class="pcl-update-name">{{ updateCheck.versionName }} <span>{{ updateCheck.versionTag }}</span></div><div class="pcl-muted">{{ updateCheck.releaseTime }}</div></div><PclButton variant="accent" icon="download" :disabled="busy" @click="applyUpdate">{{ t('pcl.auto2.k087db63ab1') }}</PclButton></div><pre v-if="updateCheck.releaseNotes" class="pcl-release-notes">{{ updateCheck.releaseNotes }}</pre></PclCard>
+    <PclCard v-else-if="updateChecked" :title="t('pcl.auto2.k46e66f6321')"><p>{{ t('pcl.setup.upToDate', { time: updateState.lastCheck || t('pcl.auto2.k9e636642d6') }) }}</p></PclCard>
+    <PclCard v-else :title="t('pcl.auto2.k69d14924ff')"><div class="pcl-about-grid"><span>{{ t('pcl.auto2.k2f344bbb90') }}</span><code>{{ updateState.automatic ? t('pcl.auto2.k256783b7d4') : t('pcl.auto2.k6c14bd7f6f') }}</code><span>{{ t('pcl.auto2.k21c42fae0b') }}</span><code>{{ updateState.beta ? t('pcl.auto2.k256783b7d4') : t('pcl.auto2.k6c14bd7f6f') }}</code><span>{{ t('pcl.auto2.k6e85a9405c') }}</span><code>{{ updateState.lastCheck || '—' }}</code></div></PclCard>
+  </div>
+</template>
+<script setup lang="ts">
+import PclCard from '../../components/PclCard.vue'; import PclCheckbox from '../../components/PclCheckbox.vue'; import PclButton from '../../components/PclButton.vue'; import PclLoading from '../../components/PclLoading.vue';
+type Translator = (key: string, params?: Record<string, unknown>) => string;
+defineProps<{ t: Translator; updateState: any; updateCheck: any; updateChecked: boolean; updateChecking: boolean; busy: boolean; configureUpdate: (values: Record<string, unknown>) => void | Promise<void>; checkUpdate: () => void | Promise<void>; applyUpdate: () => void | Promise<void>; openUpdateLog: () => void | Promise<void> }>();
+</script>

@@ -1,0 +1,826 @@
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+p {
+    margin-bottom: 0px !important;
+}
+
+.moveable {
+    -webkit-app-region: drag;
+    user-select: none;
+}
+
+.non-moveable {
+    -webkit-app-region: no-drag;
+}
+
+.absolute-centered {
+    position: absolute;
+    margin-left: auto;
+    margin-right: auto;
+    left: 0;
+    right: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.01s;
+}
+
+.fade-enter,
+.fade-leave-to {
+    opacity: 0;
+    transition: all 0.01s;
+}
+
+.transition-list-move,
+.transition-list-enter-active,
+.transition-list-leave-active {
+    transition: all 0.5s cubic-bezier(0.55, 0, 0.1, 1);
+    /* transition: all 0.7s !important; */
+}
+
+.transition-list-enter,
+.transition-list-leave-to {
+    opacity: 0 !important;
+    transition: all 0.5s cubic-bezier(0.55, 0, 0.1, 1);
+    transform: scaleY(0.01) translate(30px, 0);
+    /* transition: all 0.7s !important; */
+    /* transform: translateY(30px); */
+}
+
+.transition-list-leave-active {
+    position: absolute;
+}
+
+.dark {
+  --icon-color: #cacaca;
+  --icon-color-hovered: #fff;
+}
+
+html {
+    --highlight-color: #fbc02d;
+
+    /* ── Shared surface tokens (dialogs, menus, popovers) ──
+       These are the FALLBACKS. The real source of truth lives in
+       `src/composables/surfaceTokens.ts` — `useSurfaceTokens()` is
+       provided at the app root (windows/app/Context.ts) and pushes
+       its reactive refs onto <html> as `--surface-*` properties.
+       Override them programmatically by injecting `kSurfaceTokens`
+       and writing to the refs (a future settings UI will wire here). */
+    --surface-radius: 16px;                                              /* matches Vuetify `rounded="xl"` */
+    --surface-border: 1px solid rgba(var(--v-theme-on-surface), 0.10);
+    --surface-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.35);
+
+    /* Frosted-glass background shared by dialogs, menus and popovers. */
+    --surface-bg: rgba(var(--v-theme-surface), 0.82);
+    --surface-blur: 48px;
+
+    /* Menu-only: inner padding + list-item radius (dialogs don't share). */
+    --surface-menu-padding: 6px;
+    --surface-menu-item-radius: 10px;
+    --surface-dialog-radius: 32px;
+    --surface-tooltip-radius: 10px;
+    --surface-pill-radius: 9999px;
+
+    /* Cards — three intentional tiers. Apply with the `.surface-card`,
+       `.surface-card-subsection`, `.surface-card-item` utility classes. */
+    --card-radius: 16px;
+    --card-subsection-radius: 12px;
+    --card-item-radius: 10px;
+    --card-subsection-elevation: 0;  /* Vuetify elevation prop number (read via JS, not CSS) */
+    --card-subsection-bg: rgb(var(--v-theme-surface));
+    --card-subsection-border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+
+    /* Row card — list rows (`.surface-card-row`). Same border-swap
+       interaction as `.surface-card-clickable` but with the small
+       item radius and no lift / shadow. */
+    --card-row-bg: rgb(var(--v-theme-surface));
+    --card-row-border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    --card-row-border-hover: 1px solid rgba(var(--v-theme-primary), 0.45);
+    --card-row-active-scale: 0.98;
+    --card-row-transition: border-color 0.2s ease, background-color 0.15s ease, transform 0.1s ease;
+    --card-bg: transparent;          /* let Vuetify's surface color show through */
+    --card-border: none;             /* most cards have no border */
+
+    /* Frosted info panels — the `.surface-panel` utility class.
+       Padding is left to callsites (some panels host lists w/ their own). */
+    --panel-radius: 24px;
+    --panel-bg: rgba(var(--v-theme-on-surface), 0.04);
+    --panel-border: 1px solid rgba(var(--v-theme-on-surface), 0.10);
+
+    /* Prominent cards (store detail / large feature). */
+    --card-prominent-radius: 24px;
+
+    /* Clickable card interaction (lift + shadow + primary-tinted border on
+       hover). Apply via the `.surface-card-clickable` utility — it ships
+       a solid surface bg and the prominent 24px radius by default so the
+       Store-style tile language is the default. Pair with inner UnoCSS
+       atomics if a specific tile needs a different padding / layout. */
+    --card-clickable-radius: 24px;
+    --card-clickable-bg: rgb(var(--v-theme-surface));
+    --card-clickable-border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+    --card-clickable-border-hover: 1px solid rgba(var(--v-theme-primary), 0.35);
+    --card-clickable-shadow-hover: 0 12px 24px -8px rgba(0, 0, 0, 0.25),
+                                    0 4px 12px -4px rgba(0, 0, 0, 0.15);
+    --card-clickable-lift: -4px;
+    --card-clickable-active-scale: 0.98;
+    --card-clickable-transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                                 box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                                 border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.v-list-item,
+.v-list-item:hover:before,
+.v-list-item:focus:before {
+    border-radius: var(--card-item-radius);
+}
+
+html ::-webkit-scrollbar {
+    display: none;
+    z-index: 1000;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    cursor: pointer;
+    background: transparent;
+    z-index: 1000;
+}
+
+::-webkit-resizer,
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    width: 8px;
+    height: 8px;
+    cursor: pointer;
+    background: rgba(155, 155, 155, 0.5);
+    transition: all 1s;
+    border-radius: 2px;
+    z-index: 1000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    width: 8px;
+    background: rgba(192, 192, 192, 0.8);
+    transition: all 1s;
+}
+
+.visible-scroll ::-webkit-scrollbar,
+.visible-scroll::-webkit-scrollbar {
+    display: unset;
+    /* width: 0px; */
+    /* height: 0px; */
+    /* background: transparent; */
+}
+
+.vue-grid-item.vue-grid-placeholder {
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .vue-grid-item.vue-grid-placeholder {
+    background: rgba(255, 255, 255, 0.5) !important;
+}
+
+.invisible-scroll ::-webkit-scrollbar,
+.invisible-scroll::-webkit-scrollbar {
+    display: none;
+    /* width: 0px; */
+    /* height: 0px; */
+    /* background: transparent; */
+}
+
+
+:not(.dark) .v-dialog .v-card {
+    /* background-color: unset;
+    border-color: unset; */
+}
+
+.v-tooltip__content {
+    background-color: #000 !important;
+}
+
+.v-list-item {
+    justify-content: center;
+}
+
+/* ── Default surface for every v-card / v-sheet ──
+   Routes the unstyled defaults through `--card-radius`. Specificity is
+   forced to 0 via `:where()` so any explicit `rounded-*` / `bg-*` class
+   on the callsite (single-class specificity) still wins via source
+   order. Cards inside dialogs/menus already have dedicated, higher-
+   specificity rules below and remain unaffected. v-system-bar opts
+   out — it must stay flat against the window chrome. */
+:where(.v-card, .v-sheet:not(.v-system-bar)) {
+    border-radius: var(--card-radius);
+}
+
+/* ── Modern frosted-glass menus ── */
+.v-menu > .v-overlay__content {
+    border-radius: var(--surface-radius) !important;
+}
+
+.v-menu > .v-overlay__content > .v-list,
+.v-menu > .v-overlay__content > .v-card,
+.v-menu > .v-overlay__content > .v-sheet {
+    -webkit-backdrop-filter: blur(var(--surface-blur));
+    backdrop-filter: blur(var(--surface-blur));
+    background: var(--surface-bg) !important;
+    color: rgb(var(--v-theme-on-surface));
+    border: var(--surface-border);
+    border-radius: var(--surface-radius) !important;
+    box-shadow: var(--surface-shadow);
+    padding: var(--surface-menu-padding) !important;
+}
+
+.v-menu > .v-overlay__content > .v-list .v-list-item {
+    border-radius: var(--surface-menu-item-radius);
+    margin: 1px 0;
+    min-height: 40px;
+    transition: background-color 0.15s ease;
+}
+
+.v-menu > .v-overlay__content > .v-list .v-list-item:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* ── Dialogs share the menu/popover language ──
+   Same radius, border, frosted-glass bg, blur and shadow as menus.
+   Callsites that override via `rounded-*` / `color` props win
+   through normal cascade ordering. */
+.v-dialog > .v-overlay__content > .v-card,
+.v-dialog > .v-overlay__content > .v-sheet {
+    -webkit-backdrop-filter: blur(var(--surface-blur));
+    backdrop-filter: blur(var(--surface-blur));
+    background: var(--surface-bg) !important;
+    border-radius: var(--surface-dialog-radius);
+    border: var(--surface-border);
+    box-shadow: var(--surface-shadow);
+}
+
+.surface-dialog-shell {
+    -webkit-backdrop-filter: blur(var(--surface-blur));
+    backdrop-filter: blur(var(--surface-blur));
+    background: var(--surface-bg);
+    border-radius: var(--surface-dialog-radius);
+    border: var(--surface-border);
+    box-shadow: var(--surface-shadow);
+}
+
+.surface-rounded-item {
+    border-radius: var(--card-item-radius) !important;
+}
+
+.v-btn.rounded-pill {
+    border-radius: var(--surface-pill-radius) !important;
+}
+
+/* ── Card / panel utility classes ──
+   Opt-in. Apply on `<v-card class="surface-card">` or a plain `<div>` to
+   inherit the shared shape/colour tokens. Existing components that
+   deliberately pick a different radius/border keep working unchanged. */
+.surface-card {
+    border-radius: var(--card-radius);
+    background: var(--card-bg);
+    border: var(--card-border);
+}
+
+/* Subsection card — Setting blocks, HomeFooterCard, any panel that
+   wants the tighter 12px radius + forced surface bg + 1px border.
+   Works on v-card and plain divs alike. Padding / elevation stay
+   with the callsite. */
+.surface-card-subsection {
+    border-radius: var(--card-subsection-radius);
+    background: var(--card-subsection-bg);
+    border: var(--card-subsection-border);
+}
+
+.surface-card-item {
+    border-radius: var(--card-item-radius);
+    background: var(--card-bg);
+    border: var(--card-border);
+}
+
+/* Row card — Me instance items, Friends rows, anywhere a tight list
+   row needs a clickable affordance. Same border-swap idiom as the
+   clickable feature tile but smaller radius and no lift / shadow.
+   Padding stays with the callsite. */
+.surface-card-row {
+    border-radius: var(--card-item-radius);
+    background: var(--card-row-bg);
+    border: var(--card-row-border);
+    cursor: pointer;
+    transition: var(--card-row-transition);
+}
+
+.surface-card-row:hover {
+    border: var(--card-row-border-hover);
+}
+
+.surface-card-row:active {
+    transform: scale(var(--card-row-active-scale));
+}
+
+.surface-card-row:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 2px;
+}
+
+/* Info / detail panel — the recurring rounded-2xl + subtle bg + 1px
+   border pattern used in Feedback / Export / Friends dialogs. Padding
+   is intentionally NOT included: callsites add `p-4` / `px-4 py-3` /
+   `p-0` themselves so list containers don't fight a default. */
+.surface-panel {
+    border-radius: var(--panel-radius);
+    background: var(--panel-bg);
+    border: var(--panel-border);
+}
+
+/* Full-height route side panel shared by workspace-style pages such as
+   the profile and Together views. Content spacing remains page-owned. */
+.workspace-side-panel {
+    width: var(--workspace-side-panel-width, 280px);
+    min-width: var(--workspace-side-panel-width, 280px);
+    height: 100%;
+    overflow: hidden;
+    border-left: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    background-color: var(--color-sidebar-bg);
+    backdrop-filter: blur(var(--blur-sidebar, 4px));
+}
+
+/* Prominent card — large feature cards (store project detail, modern
+   tiles). Only sets radius; pair with `.surface-card-clickable` for
+   the interactive variant. */
+.surface-card-prominent {
+    border-radius: var(--card-prominent-radius);
+}
+
+/* Clickable card — Store / market / Me instance language. Solid surface
+   bg, prominent 24px radius, lift + shadow + primary-tinted border on
+   hover. Padding/layout stays with the callsite. */
+.surface-card-clickable {
+    cursor: pointer;
+    background: var(--card-clickable-bg);
+    border-radius: var(--card-clickable-radius);
+    border: var(--card-clickable-border);
+    transition: var(--card-clickable-transition);
+}
+
+.surface-card-clickable:hover {
+    transform: translateY(var(--card-clickable-lift));
+    box-shadow: var(--card-clickable-shadow-hover);
+    border: var(--card-clickable-border-hover);
+}
+
+.surface-card-clickable:active {
+    transform: translateY(var(--card-clickable-lift)) scale(var(--card-clickable-active-scale));
+}
+
+.surface-card-clickable:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 2px;
+}
+
+.main-body .container h1.flex {
+    margin-bottom: 10px;
+    padding: 6px 8px !important;
+}
+
+.main-body .container {
+    padding-left: 30px;
+    padding-right: 30px;
+}
+
+.main-body .v-form .container {
+    padding-left: 30px;
+    padding-right: 30px;
+}
+
+.sidebar.v-navigation-drawer .v-list {
+    background: unset;
+}
+
+/* Platform specific css */
+
+.darwin .theme--dark.v-navigation-drawer {
+    background-color: rgba(66, 66, 66, 0.4);
+}
+
+.darwin .main-body {
+    background-color: unset;
+    border-color: unset;
+}
+
+.win32 .loading-background {
+    background-color: unset;
+}
+
+.win32 .theme--dark.v-navigation-drawer {
+    background-color: rgba(66, 66, 66, 0.8);
+    /* background-color: rgba(33, 33, 33, 0.85); */
+}
+
+.win32 .main-body {
+    /* background-color: rgba(66, 66, 66, 0.68); */
+    background-color: rgba(33, 33, 33, 0.78);
+    /* background-color: rgba(33, 33, 33, 0.7); */
+    /* border-color: rgba(33, 33, 33, 0.7); */
+}
+
+.win32 .loading-background {
+    background-color: rgba(33, 33, 33, 0.78);
+}
+
+.main-body.solid {
+    background-color: #212121 !important;
+    border-color: #212121 !important;
+}
+
+/* Draggable card */
+
+.draggable-card {
+    /* transition: all !important; */
+    /* transition-duration: 0.2s !important; */
+}
+
+.draggable-card.dragged {
+    transform: scale(0.8);
+}
+
+.v-dialog {
+    overflow: hidden;
+}
+
+a {
+    -webkit-user-drag: none;
+}
+
+@media only screen and (min-width: 1264px) {
+    .container {
+        max-width: unset;
+    }
+}
+
+@media only screen and (min-width: 960px) {
+    .container {
+        max-width: unset;
+    }
+}
+
+.v-btn--floating .v-icon {
+    height: unset;
+}
+
+.header-bar {
+    @apply lg: px-15 lg:pt-5 flex flex-row md:px-9 md:pt-2;
+}
+
+.header-bar * {
+    align-self: center;
+}
+
+.v-text-field input {
+    @apply z-7;
+}
+
+.theme--dark.v-card .v-card__subtitle,
+.theme--dark.v-card .v-card__text {
+    color: hsla(0, 0%, 100%, .7);
+}
+
+.theme--dark .secondary-text {
+    color: hsla(0, 0%, 100%, .7);
+}
+
+.menuable__content__active ::-webkit-scrollbar {
+    display: unset;
+}
+
+.v-menu__content::-webkit-scrollbar {
+    display: unset;
+}
+
+.card>:last-child,
+.universal-body>:last-child {
+    -webkit-margin-after: 0;
+    margin-block-end: 0;
+}
+
+.markdown-body li,
+.markdown-body p {
+    padding: 0 !important;
+    line-height: 1.5 !important;
+    word-wrap: break-word !important;
+    word-wrap: anywhere !important;
+}
+
+.markdown-body blockquote,
+.markdown-body code,
+.markdown-body details,
+.markdown-body dl,
+.markdown-body ol,
+.markdown-body p,
+.markdown-body pre,
+.markdown-body table,
+.markdown-body ul {
+    margin-top: 0 !important;
+    margin-bottom: 16px !important;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+    padding: 10px 0 5px;
+    border-bottom: 1px solid #646c75;
+}
+
+.markdown-body details {
+    border: 0.15rem solid #434956;
+    border: 0.15rem solid #434956;
+    border-radius: .75rem;
+    padding: 0.5rem 0.5rem 0;
+}
+
+.markdown-body details ul {
+    margin-top: 0.5rem;
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+}
+
+.markdown-body details[open]>:last-child:not(summary),
+.markdown-body>:last-child {
+    margin-bottom: 0 !important;
+}
+
+.markdown-body details[open] {
+    padding: 0.5rem;
+    border-radius: .5rem;
+}
+
+.markdown-body details summary {
+    background-color: rgba(55, 65, 81, 1);
+    border-radius: .5rem;
+    cursor: pointer;
+    font-weight: 700;
+    margin: -0.5rem -0.5rem 0;
+    padding: 0.5rem 0.8rem;
+}
+
+.markdown-body details[open] summary {
+    border-radius: .5rem .5rem 0 0;
+    margin-bottom: 0.5rem;
+}
+
+.markdown-body details summary:hover {
+    background-color: #494f58;
+}
+
+.markdown-body details summary:hover {
+    filter: brightness(.85);
+}
+
+.markdown-body h1 {
+    @apply text-2xl font-bold;
+    margin: 0.67em 0;
+}
+
+.markdown-body h2 {
+    @apply text-xl font-bold;
+    margin: 0.67em 0;
+}
+
+.markdown-body h3 {
+    @apply text-lg font-bold;
+}
+
+.markdown-body ul {
+    display: block;
+    list-style-type: disc;
+    margin-block-start: 1em;
+    margin-block-end: 1em;
+    margin-inline-start: 0px;
+    margin-inline-end: 0px;
+    padding-inline-start: 40px;
+}
+
+.markdown-body p {
+    /* margin: 10px 0; */
+}
+
+.markdown-body pre code {
+    border-radius: 0;
+    font-size: 80%;
+    padding: 0;
+}
+
+.markdown-body pre code {
+    border-radius: 0;
+    font-size: 80%;
+    padding: 0;
+}
+
+.markdown-body code {
+    background-color: unset !important;
+    border-radius: .75rem;
+    color: #ecf9fb;
+    font-size: 80%;
+    padding: 0.2em 0.4em;
+}
+
+.markdown-body pre {
+    background-color: hsla(0, 0%, 100%, .1);
+    border-radius: .75rem;
+    margin-top: 1rem;
+    overflow-x: auto;
+    padding: 14px;
+}
+
+.markdown-body img,
+.markdown-body video {
+    display: inline;
+}
+
+.markdown-body img {
+    height: auto;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+/* Badge rows: wrap consecutive link-wrapped image badge paragraphs (e.g.
+   shields.io / download.fo / "How to install / Discord / Rate" buttons) into
+   a single horizontal flex row, mirroring how Modrinth and GitHub READMEs
+   display them. The wrapping <div class="md-badge-row"> is generated by
+   useMarkdown(); plain screenshots (bare <img>) are left untouched. */
+.markdown-body .md-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.markdown-body .md-badge-row a {
+    display: inline-flex;
+    margin: 0 !important;
+}
+
+.markdown-body .md-badge-row a img {
+    display: block;
+    margin: 0 !important;
+    border-radius: 4px;
+}
+
+
+.markdown-body iframe,
+.markdown-body video {
+    aspect-ratio: 16/9;
+    height: auto;
+    width: 100%;
+}
+
+
+/* Curseforge */
+
+.project-description {
+    position: relative;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.project-description h1,
+.project-description h2,
+.project-description h3,
+.project-description h4,
+.project-description h5,
+.project-description h6 {
+    display: block;
+    line-height: 145%;
+    margin-bottom: 24px;
+    font-size: medium
+}
+
+.project-description h1 {
+    font-size: 28px
+}
+
+.project-description h2 {
+    font-size: 22px
+}
+
+.project-description pre {
+    white-space: pre-wrap;
+    margin-bottom: 1rem
+}
+
+.project-description a {
+    text-decoration: underline
+}
+
+.project-description p {
+    margin-bottom: 1rem
+}
+
+.project-description img {
+    height: auto;
+    display: inline;
+    vertical-align: top
+}
+
+.project-description iframe,
+.project-description img {
+    max-width: 100%;
+    margin-bottom: 1rem
+}
+
+.project-description ul {
+    list-style: unset;
+    padding-left: 18px;
+    list-style-position: inside;
+    margin-bottom: 2rem
+}
+
+.project-description ol {
+    list-style: decimal;
+    margin-left: 1em
+}
+
+.project-description .codeStyle,
+.project-description code {
+    background-color: #262626;
+    display: inline-block;
+    vertical-align: middle;
+    white-space: pre-wrap;
+    overflow: auto;
+    padding: 2px 4px;
+    border: 1px solid #4d4d4d
+}
+
+.project-description hr {
+    margin-bottom: 12px
+}
+
+/* Curseforge end */
+
+
+.dragover {
+    @apply border-2 border-dashed border-yellow-400 !;
+}
+
+
+.hide-underline .theme--.v-text-field>.v-input__control>.v-input__slot:before {
+    border: none;
+}
+
+.hide-underline .v-text-field>.v-input__control>.v-input__slot:before {
+    border: none;
+    border-width: 0px;
+}
+
+.v-dialog {
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.v-dialog > .v-overlay__content > *:first-child {
+    -webkit-backdrop-filter: blur(var(--surface-blur));
+    backdrop-filter: blur(var(--surface-blur));
+    background: var(--surface-bg) !important;
+    color: rgb(var(--v-theme-on-surface));
+    border: var(--surface-border);
+    border-radius: var(--surface-dialog-radius) !important;
+    box-shadow: var(--surface-shadow);
+}
+
+.v-dialog > .v-overlay__content {
+    border-radius: var(--surface-dialog-radius) !important;
+}
+/* Slim section header used inside filter dropdowns / option panes.
+   Mirrors v2's medium-emphasis v-list-subheader without dragging in
+   v-list-subheader's surface background and large min-height. */
+.filter-subheader {
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.0892857143em;
+  opacity: var(--v-medium-emphasis-opacity, 0.7);
+  display: flex;
+  align-items: center;
+}
+
+/* Vuetify 4's `.v-chip--variant-outlined` uses `border: thin solid currentColor`.
+   For chips inside dark surfaces this paints a stark white border that does not
+   match the muted divider look v2 provided. Use border-color tied to the
+   theme's surface contrast like other Vuetify dividers. */
+.v-chip--variant-outlined {
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity)) !important;
+}

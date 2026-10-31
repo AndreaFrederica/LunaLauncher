@@ -421,7 +421,14 @@ pub fn webui_select(
     }
     let window = app.get_webview_window("main").ok_or("webui.error.main_window")?;
     let url = if entry.path.is_none() {
-        app_url("index.html")
+        // The test launcher can request a deterministic shell without
+        // modifying the user's persisted localStorage. Normal launches keep
+        // the user's selected shell and use the plain built-in URL.
+        if std::env::var("LUNA_NEO_THEME").ok().as_deref() == Some("melody") {
+            app_url("index.html?theme=melody")
+        } else {
+            app_url("index.html")
+        }
     } else {
         tauri::Url::parse(if cfg!(any(windows, target_os = "android")) {
             "http://webui.localhost/"
@@ -593,8 +600,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let submenu = tauri::menu::Submenu::with_items(app, "Web UI", true, &[&manage])?;
     let menu = tauri::menu::Menu::with_items(app, &[&submenu])?;
     app.set_menu(menu)?;
-    #[cfg(not(target_os = "macos"))]
     if let Some(window) = app.get_webview_window("main") {
+        let _ = crate::window_geometry::restore_main(&window);
+        #[cfg(not(target_os = "macos"))]
         window.hide_menu()?;
     }
     app.on_menu_event(|app, event| {

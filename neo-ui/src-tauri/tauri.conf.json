@@ -28,11 +28,15 @@
             "main",
             "webui-manager",
             "instance-editor-*",
-            "resource-download-*"
+            "resource-download-*",
+            "runtime-debug",
+            "melody-*"
           ],
           "permissions": [
             "core:event:allow-listen",
+            "core:event:allow-emit",
             "core:event:allow-unlisten",
+            "core:webview:allow-internal-toggle-devtools",
             "core:window:allow-close",
             "core:window:allow-minimize",
             "core:window:allow-maximize",

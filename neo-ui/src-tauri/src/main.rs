@@ -13,6 +13,8 @@ use std::{
 use tauri::{Emitter, Manager, State};
 mod startup;
 mod webui;
+mod melody;
+mod window_geometry;
 
 #[derive(Default)]
 struct Connection {
@@ -283,6 +285,35 @@ async fn open_resource_download(app: tauri::AppHandle, instance: String, kind: S
 }
 
 #[tauri::command]
+async fn open_runtime_debug(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "runtime-debug";
+    if let Some(window) = app.get_webview_window(label) {
+        window.show().map_err(|e| e.to_string())?;
+        return window.set_focus().map_err(|e| e.to_string());
+    }
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::External(webui::app_url("index.html?runtimeDebug=1")),
+    )
+    .title("NeoUI Runtime Debugger")
+    .decorations(true)
+    .inner_size(1180.0, 760.0)
+    .min_inner_size(760.0, 420.0);
+    if let Some(path) = &app.state::<startup::Startup>().webview_data_dir {
+        builder = builder.data_directory(path.clone());
+    }
+    builder.build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.open_devtools();
+    Ok(())
+}
+
+#[tauri::command]
 async fn open_instance_editor(app: tauri::AppHandle, id: String, name: String) -> Result<(), String> {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -318,6 +349,7 @@ fn main() {
         }))
         .manage(startup)
         .manage(AppState(Mutex::new(None)))
+        .manage(melody::HostState::default())
         .manage(webui::WebUiState(Mutex::new(webui::Registry::default())))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -342,10 +374,23 @@ fn main() {
             }
         })
         .on_window_event(|window, event| {
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
-                // The recovery window must not keep a closed launcher alive.
-                if let Some(manager) = window.get_webview_window("webui-manager") {
-                    let _ = manager.close();
+            if window.label() == "main" {
+                match event {
+                    tauri::WindowEvent::CloseRequested { .. }
+                    | tauri::WindowEvent::Destroyed => {
+                        // CloseRequested is the last reliable point at which
+                        // the native client size is available. Destroyed is
+                        // retained as a fallback for platform shutdown.
+                        let _ = window_geometry::save_main(window);
+                    }
+                    _ => {}
+                }
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    melody::close_children(window.app_handle());
+                    // The recovery window must not keep a closed launcher alive.
+                    if let Some(manager) = window.get_webview_window("webui-manager") {
+                        let _ = manager.close();
+                    }
                 }
             }
         })
@@ -353,6 +398,19 @@ fn main() {
             launcher_request,
             open_instance_editor,
             open_resource_download,
+            open_runtime_debug,
+            open_devtools,
+            melody::open_melody_window,
+            melody::configure_melody_host,
+            melody::exit_melody_theme,
+            melody::list_melody_backgrounds,
+            melody::read_melody_background,
+            melody::get_melody_appearance,
+            melody::set_melody_appearance,
+            melody::get_melody_settings,
+            melody::set_melody_settings,
+            melody::get_neo_ui_preferences,
+            melody::set_neo_ui_preferences,
             webui::webui_list,
             webui::webui_settings_get,
             webui::webui_settings_update,

@@ -1,9 +1,35 @@
 // SPDX-License-Identifier: MPL-2.0
+import 'vue';
 declare module '*.vue';
-interface ImportMeta {
-  glob: (pattern: string, options?: Record<string, unknown>) => Record<string, any>;
+
+// Vue's template compiler treats accessibility/data attributes and native
+// event modifiers as part of a component's public surface.  Quasar's generated
+// prop declarations intentionally omit those fall-through attributes, which
+// made strict template checking report false positives for every wrapper
+// component.  Keep the check strict for actual script/type errors while
+// allowing Vue's standard fall-through attributes.
+declare module 'vue' {
+  interface ComponentCustomProps {
+    [key: string]: unknown;
+  }
+  interface GlobalDirectives {
+    vClosePopup: unknown;
+  }
+  interface HTMLAttributes {
+    'data-setup-field'?: string;
+    'data-window'?: string;
+    'data-tauri-drag-region'?: boolean | string;
+    'data-testid'?: string;
+  }
+  interface InputHTMLAttributes { webkitdirectory?: boolean | string; }
 }
-declare module '*.webp' { const source: string; export default source; }
-declare module '*.png' { const source: string; export default source; }
-declare module '*.svg' { const source: string; export default source; }
-declare module '*.svg?raw' { const source: string; export default source; }
+
+declare module '@vue/runtime-dom' {
+  interface HTMLAttributes {
+    'data-setup-field'?: string;
+    'data-window'?: string;
+    'data-tauri-drag-region'?: boolean | string;
+    'data-testid'?: string;
+  }
+  interface InputHTMLAttributes { webkitdirectory?: boolean | string; }
+}

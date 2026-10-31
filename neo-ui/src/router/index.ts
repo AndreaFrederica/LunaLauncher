@@ -2,5 +2,5 @@
 import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router';
 import IndexPage from '../pages/IndexPage.vue';
 
-const routes: RouteRecordRaw[] = [{ path: '/', component: IndexPage }];
+const routes: RouteRecordRaw[] = [{ path: '/', component: IndexPage }, { path: '/melody/:pathMatch(.*)*', component: IndexPage }];
 export default createRouter({ history: createWebHashHistory(), routes });

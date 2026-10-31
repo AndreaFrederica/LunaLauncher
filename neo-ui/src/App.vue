@@ -5,60 +5,11 @@
 <div v-else class="xmcl-app text-white">
 <NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
- <div class="pcl-route-shell" v-show="isPclShell">
- <PclLaunchPage v-show="page==='instances'" :instances="instances" :icons="icons" :selected="selected" :icon="selected ? icons[selected.id] : undefined" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed"
- :launch-details="launchDetails"
- :launch-children="launchChildren" :launch-error="launchError" :log-lines="consoleLines" :execute="catalogExecute" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" />
-
- <PclDownloadPage v-show="page==='pcl-download'" :selected="selected" :busy="busy" :execute="catalogExecute" :instances="instances" :initial-component-uid="downloadComponentUid" @refresh="refresh" @launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" />
- <PclToolsPage v-show="page==='pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="catalogExecute" @refresh="refresh" @open-instance="openInstance" />
- <PclSetupPage v-show="page==='pcl-settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" :accounts="accounts" @changed="refresh" />
- <PclAccountPage v-show="page==='accounts'" :accounts="accounts" :busy="busy" :execute="catalogExecute" @changed="refresh" @cancel-login="cancelDeviceLogin" />
- <PclInstancePage v-if="selected" v-show="page==='manage'" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='pcl-settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="installComponentVersion" @browse="openComponentDownload" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @action="workspaceAction" />
-  </div>
- <XmclDashboard v-if="!isPclShell && page==='instances'" :instances="instances" :icons="icons" :busy="busy" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" />
- <q-banner v-if="launchQueue.length" class="bg-grey-9 q-mb-md">{{ t('app.queueWaiting', { names: launchQueue.map(i=>i.name).join('、') }) }}<template #action><q-btn flat :label="t('app.clearQueue')" @click="launchQueue=[]"/></template></q-banner>
- <XmclInstanceWorkspace v-if="page==='manage' && selected && !isPclShell" :instance="selected" :details="instanceDetails" :icon="icons[selected.id]" :components="components" :component-error="componentError" :notes="notes" :busy="busy" :execute="catalogExecute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="launch(selected)" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @refresh="refresh" @connect-console="connectConsole(selected)" @clear-console="consoleLines=[]" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(c,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:c.id,enabled})" @component-version="(c,version)=>run('instance.component.set-version',{instance:selected.id,component:c.id,version})" @action="workspaceAction" />
- <div v-if="page==='create'" class="form"><h5>{{ t('app.addInstance') }}</h5>
-  <q-tabs v-model="createMode"><q-tab name="vanilla" label="Minecraft"/><q-tab name="server" :label="t('app.server')"/><q-tab name="import" :label="t('app.importPack')"/><q-tab name="catalog" :label="t('app.downloadPack')"/></q-tabs>
-  <CatalogBrowser v-if="createMode==='catalog'" packs :busy="busy" :execute="catalogExecute" @installed="navigate('instances')"/>
-  <template v-else>
-  <q-input dark outlined v-model="creation.name" :label="t('app.instanceName')" class="q-my-md"/><q-input dark outlined v-model="creation.group" :label="t('app.groupOptional')" class="q-mb-md"/>
-  <template v-if="createMode==='vanilla'">
-   <div class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.version" :options="minecraftVersions" use-input input-debounce="0" @filter="filterMinecraft" :label="t('app.minecraftVersion')" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/><q-btn :label="t('app.loadVersions')" :disable="busy" @click="loadVersions(false)"/></div>
-   <q-select dark outlined v-model="creation.loader" :options="['','fabric','forge','neoforge','quilt']" :label="t('app.loaderOptional')" class="q-mb-md" @update:model-value="creation.loaderVersion='';loaderVersions=[]"/>
-   <div v-if="creation.loader" class="row q-gutter-sm q-mb-md"><q-select class="col" dark outlined v-model="creation.loaderVersion" :options="loaderVersions" :label="t('app.loaderVersion')"/><q-btn :label="t('app.loadCompatible')" :disable="busy || !creation.version" @click="loadVersions(true)"/></div>
-  </template>
-  <template v-else-if="createMode==='server'"><q-input dark outlined v-model="creation.version" :label="t('app.serverVersion')" class="q-mb-md"/><q-input dark outlined v-model="creation.source" :label="t('app.serverSource')" class="q-mb-md"/></template>
-  <q-input v-else dark outlined v-model="creation.source" :label="t('app.packSource')" class="q-mb-md"/>
-  <q-btn color="primary" :label="t('app.createInstance')" :disable="busy || !creation.name || (createMode==='vanilla' ? (!creation.version || (!!creation.loader && !creation.loaderVersion)) : (createMode==='import' && !creation.source))" @click="create"/></template>
- </div>
-  <XmclAccountWorkspace v-if="page==='accounts' && !isPclShell" :accounts="accounts" :busy="busy" :execute="catalogExecute" :pcl="false" @changed="refresh" />
- <XmclStoreWorkspace v-if="page==='store'" :busy="busy" :execute="catalogExecute" @installed="refresh" />
- <XmclMultiplayerWorkspace v-if="page==='multiplayer'" :instance="selected" :busy="busy" :execute="catalogExecute" />
- <XmclSettingsShell v-if="page==='settings'" :settings="settings" :busy="busy" :scope="settingScope()" :execute="catalogExecute" @changed="refresh" />
- <ServerPanel v-if="selected && page==='manage' && (selected.type==='server' || selected.managedType==='server')" :instance="selected.id" :busy="busy" :execute="catalogExecute" />
+ <NeoPclPageHost v-show="isPclShell" :page="page" :route-animation="pclRouteAnimation" :instances="instances" :icons="icons" :selected="selected" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-details="launchDetails" :launch-children="launchChildren" :launch-error="launchError" :log-lines="consoleLines" :console-monitor-id="consoleMonitorId" :console-monitor-options="consoleMonitorOptions" :execute="catalogExecute" :settings="settings" :scope="settingScope()" :details="instanceDetails" :icon="selected ? icons[selected.id] : undefined" :components="components" :component-error="componentError" :notes="notes" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" :download-component-uid="downloadComponentUid" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" @select-console-instance="selectConsoleInstance" @download-launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @open-instance="openInstance" @changed="refresh" @cancel-login="cancelDeviceLogin" @manage-launch="selected && launch(selected)" @manage-open-folder="openFolder" @manage-settings="scope='instance';page='pcl-settings';refresh()" @delete="selected && askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @connect-console="selected && connectConsole(selected)" @clear-console="clearConsole" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(component,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:component.id,enabled})" @component-version="(component,version)=>installComponentVersion(component,version)" @browse="openComponentDownload" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @action="workspaceAction" />
+ <NeoXmclPageHost v-if="!isPclShell" :page="page" :instances="instances" :icons="icons" :selected="selected" :busy="busy" :execute="catalogExecute" :launch-queue="launchQueue" :details="instanceDetails" :icon="selected ? icons[selected.id] : undefined" :components="components" :component-error="componentError" :notes="notes" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" :creation="creation" :create-mode="createMode" :accounts="accounts" :settings="settings" :scope="settingScope()" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" @clear-queue="launchQueue=[]" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="selected && askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @connect-console="selected && connectConsole(selected)" @clear-console="clearConsole" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(component,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:component.id,enabled})" @component-version="(component,version)=>run('instance.component.set-version',{instance:selected.id,component:component.id,version})" @action="workspaceAction" @create="create" @installed="refresh" @changed="refresh" />
  </div>
 </NeoUiChrome>
-<q-dialog v-model="deviceShown" persistent>
- <q-card :class="isPclShell ? 'pcl-dialog pcl-device-dialog' : 'device-card'">
-  <q-card-section>
-   <div class="pcl-kicker">{{ t('app.microsoftLogin') }}</div>
-   <h3>{{ t('app.browserLogin') }}</h3>
-   <p class="pcl-muted">{{ t('app.deviceHint') }}</p>
-  </q-card-section>
-  <q-card-section v-if="device?.code" class="pcl-device-code">{{ device.code }}</q-card-section>
-  <q-card-section>
-   <code class="pcl-device-url">{{ device?.url || t('app.loadingLoginUrl') }}</code>
-   <p v-if="device?.expiresIn" class="pcl-muted">{{ t('app.codeExpires', { minutes: Math.ceil(Number(device.expiresIn) / 60) }) }}</p>
-  </q-card-section>
-  <q-card-actions align="right">
-   <PclButton icon="external-link" :disabled="!device?.url" @click="openDeviceBrowser">{{ t('app.openBrowser') }}</PclButton>
-   <PclButton icon="copy" :disabled="!device?.code" @click="copyDeviceCode">{{ t('app.copyCode') }}</PclButton>
-   <PclButton variant="ghost" @click="cancelDeviceLogin">{{ t('app.closeCancel') }}</PclButton>
-  </q-card-actions>
- </q-card>
-</q-dialog>
+<NeoDeviceLoginDialog v-model="deviceShown" :is-pcl-shell="isPclShell" :device="device" @open-browser="openDeviceBrowser" @copy-code="copyDeviceCode" @cancel="cancelDeviceLogin" />
 <PclInstanceEditWindow
  v-for="(editWindow, index) in editWindows"
  :key="editWindow.key"
@@ -71,7 +22,7 @@
  @changed="refresh"
 />
 <PclTaskCenter v-if="isPclShell" v-model="taskCenterOpen" :execute="call" />
-<PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" />
+<PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" @close="closeInstallProgress" />
 <PclToastHost />
 <TaskInteractionDialog v-if="!editorInstanceId && !resourceDownloadInstance" :execute="call" :pcl="isPclShell" :legacy="legacyTaskInteraction" @legacy-finished="legacyTaskInteraction = null" />
 <NeoUiSetupWizard v-if="startupState?.needsSetup && !editorInstanceId && !resourceDownloadInstance" :status="startupState" :execute="call" @changed="refresh" @complete="finishStartupSetup" />
@@ -80,46 +31,32 @@
 </template>
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
-import CatalogBrowser from './components/CatalogBrowser.vue';
-import InstanceExtras from './components/InstanceExtras.vue';
-import ServerPanel from './components/ServerPanel.vue';
-import ResourceUpdatesPanel from './components/ResourceUpdatesPanel.vue';
-import XmclSidebar from './xmcl-port/XmclSidebar.vue';
-import XmclDashboard from './xmcl-port/XmclDashboard.vue';
-import XmclInstanceWorkspace from './xmcl-port/XmclInstanceWorkspace.vue';
-import XmclAddInstanceDialog from './xmcl-port/XmclAddInstanceDialog.vue';
-import XmclTaskCenter from './xmcl-port/XmclTaskCenter.vue';
-import XmclSettingsShell from './xmcl-port/XmclSettingsShell.vue';
-import XmclResourceWorkspace from './xmcl-port/XmclResourceWorkspace.vue';
-import XmclAccountWorkspace from './xmcl-port/XmclAccountWorkspace.vue';
-import XmclStoreWorkspace from './xmcl-port/XmclStoreWorkspace.vue';
-import XmclMultiplayerWorkspace from './xmcl-port/XmclMultiplayerWorkspace.vue';
-import XmclSystemBar from './xmcl-port/XmclSystemBar.vue';
-import PclDownloadPage from './pcl/pages/download/PclDownloadPage.vue';
-import PclInstallProgressDialog from './pcl/pages/download/PclInstallProgressDialog.vue';
-import PclTaskCenter from './pcl/components/PclTaskCenter.vue';
-import PclInstanceEditWindow from './pcl/components/PclInstanceEditWindow.vue';
-import PclStandaloneInstanceEditor from './pcl/pages/settings/PclStandaloneInstanceEditor.vue';
-import PclResourceDownloadWindow from './pcl/pages/download/PclResourceDownloadWindow.vue';
-import PclToolsPage from './pcl/pages/tools/PclToolsPage.vue';
-import PclSetupPage from './pcl/pages/settings/PclSetupPage.vue';
-import PclInstancePage from './pcl/pages/instance/PclInstancePage.vue';
-import PclLaunchPage from './pcl/pages/launch/PclLaunchPage.vue';
-import PclAccountPage from './pcl/pages/accounts/PclAccountPage.vue';
-import PclButton from './pcl/components/PclButton.vue';
-import PclToastHost from './pcl/components/PclToastHost.vue';
-import { showPclToast } from './pcl/composables/usePclToast';
-import { initPclMusic } from './pcl/composables/usePclMusic';
-import NeoUiChrome from './xmcl-port/NeoUiChrome.vue';
+import NeoCreateInstancePage, { type NeoCreationDraft } from './components/NeoCreateInstancePage.vue';
+import NeoPclPageHost from './components/NeoPclPageHost.vue';
+import NeoDeviceLoginDialog from './components/NeoDeviceLoginDialog.vue';
+import NeoXmclPageHost from './components/NeoXmclPageHost.vue';
+import PclInstallProgressDialog from './themes/pcl/pages/download/PclInstallProgressDialog.vue';
+import PclTaskCenter from './themes/pcl/components/PclTaskCenter.vue';
+import PclInstanceEditWindow from './themes/pcl/components/PclInstanceEditWindow.vue';
+import PclStandaloneInstanceEditor from './themes/pcl/pages/settings/PclStandaloneInstanceEditor.vue';
+import PclResourceDownloadWindow from './themes/pcl/pages/download/PclResourceDownloadWindow.vue';
+import PclToastHost from './themes/pcl/components/PclToastHost.vue';
+import { showPclToast } from './themes/pcl/composables/usePclToast';
+import { initPclMusic } from './themes/pcl/composables/usePclMusic';
+import NeoUiChrome from './themes/xmcl-port/components/NeoUiChrome.vue';
 import TaskInteractionDialog from './components/TaskInteractionDialog.vue';
 import NeoUiSetupWizard from './components/NeoUiSetupWizard.vue';
-import NeoUiOverlays from './xmcl-port/NeoUiOverlays.vue';
+import NeoUiOverlays from './themes/xmcl-port/components/NeoUiOverlays.vue';
 import { useQuasar } from 'quasar';
 import { launcher } from './boot/launcher-api';
 import { neoUiPreferences, persistNeoUiPreferences } from './neo-ui-preferences';
 import { useNeoDialogs } from './composables/useNeoDialogs';
-import { flattenTaskItems, taskActiveItems, taskProgressStats } from './pcl/composables/useTaskProgress';
+import { flattenTaskItems, taskActiveItems, taskProgressStats, taskRowsEqual } from './themes/pcl/composables/useTaskProgress';
+import { useLauncherSessionStore } from './common/launcher-session';
+import { recordRuntimeDebug } from './common/runtime/runtime-debug';
+import { useThemeRuntime } from './common/runtime/theme-runtime';
 const { t } = useI18n();
 const buildLabel = '2026-09-20.1';
 const launchQuery = new URLSearchParams(window.location.search);
@@ -128,8 +65,12 @@ const resourceDownloadInstance = launchQuery.get('resourceDownload') || '';
 const resourceDownloadKind = launchQuery.get('kind') || 'mods';
 const resourceDownloadName = launchQuery.get('name') || '';
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
+useThemeRuntime('pcl', isPclShell);
+useThemeRuntime('xmcl', () => !isPclShell.value);
 const downloadComponentUid = ref('');
-const quasar=useQuasar(),connected=ref(false),icons=ref<Record<string,string>>({});
+const quasar=useQuasar(),connected=ref(false);
+const launcherSession = useLauncherSessionStore();
+const { instances, accounts, selected, icons, selectedAccountId } = storeToRefs(launcherSession);
 const startupState=ref<any>(null);
 function closeMobileNav(){if(quasar.screen.lt.md)drawerOpen.value=false;}
 async function loadIcons(refreshToken = refreshGeneration){
@@ -137,11 +78,17 @@ async function loadIcons(refreshToken = refreshGeneration){
  for(const id of Object.keys(icons.value))if(!currentIds.has(id))delete icons.value[id];
  // instance.icon is read-only and must also run immediately after an import or
  // pack install, while the parent operation is still settling its busy flag.
- try{const result=await call('instance.icons');if(refreshToken!==refreshGeneration)return;for(const icon of result?.icons||[]){if(refreshToken!==refreshGeneration)return;if(icon?.id&&icon?.dataUrl)icons.value[icon.id]=icon.dataUrl;}}
+try{const result=await call('instance.icons');if(refreshToken!==refreshGeneration)return;for(const icon of result?.icons||[]){if(refreshToken!==refreshGeneration)return;if(icon?.id&&icon?.dataUrl)icons.value[icon.id]=icon.dataUrl;}}
  catch{await Promise.all(instances.value.map(async(i:any)=>{try{const result=await call('instance.icon',{instance:i.id});if(refreshToken===refreshGeneration&&result?.dataUrl)icons.value[i.id]=result.dataUrl;}catch{ /* Keep the dashboard fallback when an old backend has no icon API. */ }}));}
 }
 const components=ref<any[]>([]),componentError=ref('');
-async function loadComponents(refreshToken = refreshGeneration){componentError.value='';components.value=[];try{const r=await call('instance.components.list',{instance:selected.value.id});if(refreshToken===refreshGeneration)components.value=r.components;}catch(e){if(refreshToken===refreshGeneration)componentError.value=message(e);}}
+function sameSnapshot(left: unknown, right: unknown) { try { return JSON.stringify(left) === JSON.stringify(right); } catch { return Object.is(left, right); } }
+function replaceArrayIfChanged<T>(target: { value: T[] }, next: T[]) {
+  if (sameSnapshot(target.value, next)) return false;
+  target.value.splice(0, target.value.length, ...next);
+  return true;
+}
+async function loadComponents(refreshToken = refreshGeneration){componentError.value='';try{const r=await call('instance.components.list',{instance:selected.value.id});if(refreshToken===refreshGeneration){const next=Array.isArray(r?.components)?r.components:[];if(replaceArrayIfChanged(components,next))recordRuntimeDebug('store','app.components','component list patched',{count:next.length});}}catch(e){if(refreshToken===refreshGeneration)componentError.value=message(e);}}
 async function changeComponentVersion(c:any){const v=await ask(t('app.changeVersion', { name: c.name || c.id }),c.version);if(v!==null && v.trim())await run('instance.component.set-version',{instance:selected.value.id,component:c.id,version:v.trim()});}
 const editWindows=ref<any[]>([]), instanceDetails=ref<any>(null),resourcesLoading=ref(false),resourceError=ref(''),taskSnapshot=ref<any>(null),taskCenterOpen=ref(false),searchShown=ref(false),globalSearch=ref('');
 const installProgressOpen=ref(false),installProgressTitle=ref(t('app.installingPack')),installTask=ref<any>(null),installCancelling=ref(false);
@@ -150,21 +97,24 @@ const consoleLines=ref<string[]>([]),consoleState=ref(t('app.disconnected')),fol
 const launchQueue=ref<any[]>([])
 const launchTaskId=ref('');
 type LaunchUiState = 'loading' | 'disabled' | 'download' | 'launch' | 'launching' | 'launched' | 'failed' | 'cancelled';
-const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref(t('app.initializing')), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchDetails=ref(''), launchChildren=ref<any[]>([]), launchAccountId=ref('');
-const selectedAccountStorageKey='luna-neo-selected-account';
-function rememberedAccountId(){try{return localStorage.getItem(selectedAccountStorageKey)||'';}catch{return '';}}
-function selectLaunchAccount(id:string){launchAccountId.value=id;try{localStorage.setItem(selectedAccountStorageKey,id);}catch{/* Storage may be unavailable in a restricted webview. */}}
+const launchUiState=ref<LaunchUiState>('loading'), launchProgress=ref(0), launchTargetProgress=ref(0), launchStage=ref(t('app.initializing')), launchLoginMethod=ref(''), launchSpeed=ref(0), launchError=ref(''), launchDetails=ref(''), launchChildren=ref<any[]>([]);
+// The selected account is runtime state shared by every shell. Keep the
+// launch page bound to Pinia so changing a theme never resets the selection.
+const launchAccountId = selectedAccountId;
+function selectLaunchAccount(id:string){launcherSession.selectAccount(id);}
 let launchUiResetTimer: ReturnType<typeof setTimeout> | undefined;
 const detailCache=new Map<string,any>();
 let launchingId='',preparingLaunch=false;
 const sessions=new Map<string,{subscription:string;lines:string[];state:string}>();
 let consoleSubscription='',consoleInstance='',launchInFlight=false;
+const consoleMonitorId = ref('');
+const consoleMonitorOptions = computed(() => instances.value.filter((item: any) => Boolean(item?.running) || String(item?.id) === consoleMonitorId.value));
 function clearConsole(){
  consoleLines.value=[];
  if(consoleInstance){const saved=sessions.get(consoleInstance);if(saved)saved.lines=[];}
 }
 async function appendConsole(text:string,instanceId=selected.value?.id){
- if(instanceId!==selected.value?.id){const saved=sessions.get(instanceId);if(saved){saved.lines.push(text);saved.lines.splice(0,Math.max(0,saved.lines.length-3000));}return;}
+ if(instanceId!==consoleInstance){const saved=sessions.get(instanceId);if(saved){saved.lines.push(text);saved.lines.splice(0,Math.max(0,saved.lines.length-3000));}return;}
  consoleLines.value.push(text);
  if(consoleLines.value.length>3000)consoleLines.value.splice(0,consoleLines.value.length-3000);
  await nextTick();if(followLog.value && consoleElement.value)consoleElement.value.scrollTop=consoleElement.value.scrollHeight;
@@ -173,8 +123,13 @@ function receiveStream(batch:any){
  const entry=[...sessions.entries()].find(([,v])=>v.subscription===batch.subscriptionId);
  if(!entry)return;
  const instanceId=entry[0];
- const updateRunning=(running:boolean)=>{instances.value=instances.value.map((item:any)=>item.id===instanceId?{...item,running}:item);if(selected.value?.id===instanceId)selected.value={...selected.value,running};};
- if(entry[0]!==selected.value?.id){for(const event of batch.events||[]){if(event.kind==='console.line')entry[1].lines.push(event.text);if(event.kind==='instance.state'){entry[1].state=event.running?t('app.clientRunning'):t('app.clientStopped');updateRunning(Boolean(event.running));}}entry[1].lines.splice(0,Math.max(0,entry[1].lines.length-3000));return;}
+  const updateRunning=(running:boolean)=>{
+   // Keep the reactive objects stable. Replacing the whole array and selected
+   // object makes the PCL layout re-evaluate when only `running` changed.
+   const item=instances.value.find((entry:any)=>entry.id===instanceId);
+   if(item && item.running!==running)launcherSession.updateInstance(instanceId, { running });
+  };
+ if(entry[0]!==consoleInstance){for(const event of batch.events||[]){if(event.kind==='console.line')entry[1].lines.push(event.text);if(event.kind==='console.data')entry[1].lines.push(new TextDecoder().decode(Uint8Array.from(atob(event.data),c=>c.charCodeAt(0))));if(event.kind==='instance.state'){entry[1].state=event.running?t('app.clientRunning'):t('app.clientStopped');updateRunning(Boolean(event.running));}}entry[1].lines.splice(0,Math.max(0,entry[1].lines.length-3000));return;}
  if(batch.dropped)void appendConsole(t('app.droppedLogs', { count: batch.dropped }));
  for(const event of batch.events || []){
   if(event.kind==='console.line')void appendConsole(event.text);
@@ -189,11 +144,15 @@ function receiveStream(batch:any){
 async function connectConsole(i:any){
  if(consoleSubscription && consoleInstance===i.id)return;
  try{
-  const existing=sessions.get(i.id);if(existing?.subscription){consoleSubscription=existing.subscription;consoleInstance=i.id;consoleLines.value=existing.lines;consoleState.value=existing.state;return;}
-  consoleSubscription='';consoleInstance=i.id;consoleLines.value=[];
+  const existing=sessions.get(i.id);if(existing?.subscription){consoleSubscription=existing.subscription;consoleInstance=i.id;consoleMonitorId.value=i.id;consoleLines.value=existing.lines;consoleState.value=existing.state;return;}
+  consoleSubscription='';consoleInstance=i.id;consoleMonitorId.value=i.id;consoleLines.value=[];
   const sub=await call('instance.console.subscribe',{instance:i.id});consoleSubscription=sub.subscriptionId;sessions.set(i.id,{subscription:consoleSubscription,lines:consoleLines.value,state:t('app.consoleConnected')});
   consoleState.value=t('app.consoleConnected');
  }catch(e){error.value=message(e);consoleState.value=t('app.connectionFailed');}
+}
+async function selectConsoleInstance(id: string) {
+ const target = instances.value.find((item: any) => String(item?.id) === String(id));
+ if (target) await connectConsole(target);
 }
 let launchProgressTimer: ReturnType<typeof setInterval> | undefined;
 function startLaunchProgressAnimation(){
@@ -220,7 +179,7 @@ function updateLaunchProgress(value:any){
  const activeStep=taskActiveItems(rows, 1)[0];
  launchStage.value=activeStep?.label || activeStep?.status || value.details || value.status || launchStage.value || t('app.executing');
  launchDetails.value=[value.details, stats.itemCount ? stats.summary : '', stats.byteSummary].filter(Boolean).join(' · ');
- launchChildren.value=rows;
+ if(!taskRowsEqual(launchChildren.value, rows))launchChildren.value=rows;
  launchSpeed.value=Number(value.transferRate || 0);
  if(value.failReason || String(value.state || value.status || '').toLowerCase()==='failed'){launchError.value=value.failReason || value.details || t('app.launchTaskFailed');setLaunchState('failed');}
  else if(!isTaskFinished(value) && (launchInFlight || preparingLaunch))setLaunchState('launching');
@@ -303,52 +262,42 @@ const resources=ref<any[]>([]),resourceKind=ref('mods'),resourceSource=ref('');
 const resourceKinds=[{label:t('resource.kinds.mods'),value:'mods'},{label:t('resource.kinds.resourcepacks'),value:'resourcepacks'},{label:t('resource.kinds.shaderpacks'),value:'shaderpacks'},{label:t('resource.kinds.texturepacks'),value:'texturepacks'},{label:t('resource.kinds.datapacks'),value:'datapacks'},{label:t('resource.kinds.schematics'),value:'schematics'},{label:'Yes Steve Model',value:'yesstevemodels'},{label:'Customizable Player Models',value:'customplayermodels'}];
 const pages=[{id:'instances',label:t('app.instances'),icon:'apps'},{id:'create',label:t('app.addInstance'),icon:'add_box'},{id:'accounts',label:t('nav.accounts'),icon:'person'},{id:'settings',label:t('nav.settings'),icon:'settings'}];
 const drawerOpen=ref(true), addDialog=ref(false), page=ref('instances'), busy=ref(false), error=ref(''), notice=ref(''), status=ref(''), search=ref(''), username=ref(''), notes=ref('');
+const pclRouteAnimation=ref('');
+let pclRouteAnimationTimer: ReturnType<typeof setTimeout> | undefined;
+const pclRouteOrder=['instances','pcl-download','pcl-settings','pcl-tools','accounts','manage'];
+watch(page,(next,previous)=>{
+ if(next===previous || !isPclShell.value || !neoUiPreferences.animations)return;
+ const nextIndex=pclRouteOrder.indexOf(next),previousIndex=pclRouteOrder.indexOf(previous);
+ const direction=nextIndex>=0 && previousIndex>=0 && nextIndex<previousIndex?'backward':'forward';
+ pclRouteAnimation.value=`pcl-route-slide-${direction}`;
+ if(pclRouteAnimationTimer)clearTimeout(pclRouteAnimationTimer);
+ pclRouteAnimationTimer=setTimeout(()=>{pclRouteAnimation.value='';pclRouteAnimationTimer=undefined;},420);
+});
 let lastErrorNotification='';
 watch(error,(value)=>{if(value && value!==lastErrorNotification){lastErrorNotification=value;if(isPclShell.value){showPclToast({type:'error',title:t('app.operationFailed'),message:value,timeout:6000});}else{quasar.notify({type:'negative',message:value,timeout:6000,position:'top',progress:true,actions:[{icon:'close',color:'white'}]});}}});
 watch(notice,(value)=>{if(!value)return;if(isPclShell.value){showPclToast({type:'success',title:t('app.operationDone'),message:value,timeout:3500});}else{quasar.notify({type:'positive',message:value,timeout:3500,position:'top',progress:true});}});
 watch(busy,async value=>{if(!value && launchQueue.value.length){await nextTick();if(!busy.value){const next=launchQueue.value.shift();if(next)void launch(next);}}});
 watch(isPclShell,(value)=>{scope.value='launcher';if(value && page.value==='settings')page.value='pcl-settings';else if(!value && page.value==='pcl-settings')page.value='settings';void refresh();});
-const instances=ref<any[]>([]),accounts=ref<any[]>([]),settings=ref<any[]>([]),selected=ref<any>(null),device=ref<any>(null),deviceShown=ref(false);
-const selectedInstanceStorageKey='luna-neo-selected-instance';
+const settings=ref<any[]>([]),device=ref<any>(null),deviceShown=ref(false);
 function rememberedInstanceId(){
- const preferred=String(neoUiPreferences.selectedInstanceId || '').trim();
- if(preferred)return preferred;
- try{return localStorage.getItem(selectedInstanceStorageKey)||'';}catch{return '';}
+ return String(launcherSession.selectedInstanceId || neoUiPreferences.selectedInstanceId || '').trim();
 }
 function rememberInstance(instance:any){
  if(!instance?.id)return;
- const id=String(instance.id);
- neoUiPreferences.selectedInstanceId=id;
- persistNeoUiPreferences();
- try{localStorage.setItem(selectedInstanceStorageKey,id);}catch{/* Storage may be unavailable in a restricted webview. */}
+ launcherSession.selectInstance(instance);
 }
 function clearRememberedInstance(){
- neoUiPreferences.selectedInstanceId='';
- persistNeoUiPreferences();
- try{localStorage.removeItem(selectedInstanceStorageKey);}catch{/* Storage may be unavailable in a restricted webview. */}
+ launcherSession.selectInstance(null);
 }
 const searchResults=computed(()=>{const q=globalSearch.value.trim().toLowerCase();if(!q)return instances.value.slice(0,12);return instances.value.filter((i:any)=>`${i.name} ${i.id} ${i.group||''} ${i.type||''} ${i.runtime?.minecraft||i.minecraftVersion||''}`.toLowerCase().includes(q)).slice(0,20);});
 const scope=ref('launcher'),settingSearch=ref(''),createMode=ref('vanilla');
-const creation=ref({name:'',group:'',version:'',loader:'',loaderVersion:'',source:''});
-const minecraftVersions=ref<string[]>([]),loaderVersions=ref<string[]>([]);
-let allMinecraftVersions:string[]=[];
-function filterMinecraft(value:string,update:(callback:()=>void)=>void){update(()=>{minecraftVersions.value=allMinecraftVersions.filter(v=>v.toLowerCase().includes(value.toLowerCase()));});}
-async function loadVersions(loader:boolean){
- if(busy.value)return;
- busy.value=true;error.value='';
- try{
-  const uids:Record<string,string>={fabric:'net.fabricmc.fabric-loader',forge:'net.minecraftforge',neoforge:'net.neoforged',quilt:'org.quiltmc.quilt-loader'};
-  const result=await call('component.versions',loader?{uid:uids[creation.value.loader],minecraftVersion:creation.value.version}:{uid:'net.minecraft'});
-  const versions=result.versions.map((v:any)=>v.version);
-  if(loader)loaderVersions.value=versions;else {allMinecraftVersions=versions;minecraftVersions.value=versions;}
- }catch(e){error.value=message(e);}finally{busy.value=false;}
-}
+const creation=ref<NeoCreationDraft>({name:'',group:'',version:'',loader:'',loaderVersion:'',source:''});
 const actions=[{op:'rename',field:'name',label:t('xmcl.instance.rename')},{op:'copy',field:'name',label:t('xmcl.instance.copy')},{op:'group',field:'group',label:t('xmcl.instance.group')},{op:'update',label:t('xmcl.instance.update')},{op:'verify',label:t('xmcl.instance.verify')},{op:'stop',label:t('xmcl.instance.stop')}];
 const { dialog, prompt, answer, choices, secret, confirmation, ask, finishDialog, message } = useNeoDialogs();
 const legacyTaskInteraction = ref<any>(null);
 const readOnlyOperations=new Set([
  'task.status','task.list','task.cancel','neo.task.status','neo.task.list','neo.task.cancel','api.describe','scheduler.status','aria2.downloads','aria2.cancel','aria2.clear-finished','instance.open-folder','instance.folder-path',
- 'settings.list','resource.icon','runtime.info','runtime.memory','account.preset.list','authentication.helper.status',
+  'settings.list','resource.icon','runtime.info','runtime.memory','instance.icon-library','account.preset.list','authentication.helper.status',
    'language.list','launcher.update.status','component.catalog','component.versions','special.loader.versions'
 ]);
 async function catalogExecute(op:string,p:Record<string,unknown>){
@@ -364,9 +313,9 @@ async function finishStartupSetup(){
 function settingScope(){return scope.value==='instance' ? {scope:'instance',instance:selected.value.id} : {scope:'launcher'};}
 let resourceRequest=0;
 let refreshGeneration=0;
-async function loadResources(refreshToken = refreshGeneration){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resources.value=[];resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind,includeIcons:false});if(request===resourceRequest&&refreshToken===refreshGeneration){if(!Array.isArray(data))throw new Error(t('app.resourceFormatError'));resources.value=data;}}catch(e){if(request===resourceRequest&&refreshToken===refreshGeneration)resourceError.value=message(e);}finally{if(request===resourceRequest&&refreshToken===refreshGeneration)resourcesLoading.value=false;}}
-async function loadLogFiles(refreshToken = refreshGeneration){try{const files=await call('instance.log.list',{instance:selected.value.id});if(refreshToken===refreshGeneration)logFiles.value=files;}catch(e){if(refreshToken===refreshGeneration)error.value=message(e);}}
-async function refresh(){const refreshToken=++refreshGeneration;error.value='';try{if(page.value==='accounts'){const value=await call('account.list');if(refreshToken===refreshGeneration)accounts.value=value;}else if(page.value==='settings' || page.value==='pcl-settings'){const value=await call('settings.list',settingScope());if(refreshToken===refreshGeneration)settings.value=value;}else if(page.value==='manage'){await loadResources(refreshToken);await loadComponents(refreshToken);await loadLogFiles(refreshToken);if(selected.value){const value=await call('settings.list',{scope:'instance',instance:selected.value.id});if(refreshToken===refreshGeneration)settings.value=value;}}else {const value=await call('instance.list');if(refreshToken!==refreshGeneration)return;instances.value=value;await loadIcons(refreshToken);if(refreshToken!==refreshGeneration)return;if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value || !instances.value.some((item:any)=>item.id===selected.value.id))selected.value=rememberedInstance || instances.value[0] || null;if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();const accountValue=await call('account.list');if(refreshToken!==refreshGeneration)return;accounts.value=accountValue;const rememberedAccount=rememberedAccountId();const defaultAccount=accounts.value.find((account:any)=>account.default);const accountKeyOf=(account:any)=>String(account?.internalId || account?.id || account?.profileName || '');const currentAccountExists=accounts.value.some((account:any)=>accountKeyOf(account)===launchAccountId.value);if(!launchAccountId.value || !currentAccountExists){const saved=accounts.value.find((account:any)=>accountKeyOf(account)===rememberedAccount);launchAccountId.value=accountKeyOf(saved) || accountKeyOf(defaultAccount) || accountKeyOf(accounts.value[0]);}}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}}catch(e){if(refreshToken===refreshGeneration)error.value=message(e);}}
+async function loadResources(refreshToken = refreshGeneration){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind,includeIcons:false});if(request===resourceRequest&&refreshToken===refreshGeneration){if(!Array.isArray(data))throw new Error(t('app.resourceFormatError'));if(replaceArrayIfChanged(resources,data))recordRuntimeDebug('store','app.resources','resource list patched',{instance:id,kind,count:data.length});}}catch(e){if(request===resourceRequest&&refreshToken===refreshGeneration)resourceError.value=message(e);}finally{if(request===resourceRequest&&refreshToken===refreshGeneration)resourcesLoading.value=false;}}
+async function loadLogFiles(refreshToken = refreshGeneration){try{const files=await call('instance.log.list',{instance:selected.value.id});if(refreshToken===refreshGeneration&&replaceArrayIfChanged(logFiles,Array.isArray(files)?files:[]))recordRuntimeDebug('store','app.logs','log file list patched',{count:files?.length||0});}catch(e){if(refreshToken===refreshGeneration)error.value=message(e);}}
+async function refresh(){const refreshToken=++refreshGeneration;recordRuntimeDebug('refresh','App','refresh requested',{page:page.value,token:refreshToken});error.value='';try{if(page.value==='accounts'){const value=await call('account.list');if(refreshToken===refreshGeneration)launcherSession.replaceAccounts(value);}else if(page.value==='settings' || page.value==='pcl-settings'){const value=await call('settings.list',settingScope());if(refreshToken===refreshGeneration&&Array.isArray(value)&&!sameSnapshot(settings.value,value))replaceArrayIfChanged(settings,value);}else if(page.value==='manage'){await loadResources(refreshToken);await loadComponents(refreshToken);await loadLogFiles(refreshToken);if(selected.value){const value=await call('settings.list',{scope:'instance',instance:selected.value.id});if(refreshToken===refreshGeneration&&Array.isArray(value)&&!sameSnapshot(settings.value,value))replaceArrayIfChanged(settings,value);}}else {const value=await call('instance.list');if(refreshToken!==refreshGeneration)return;launcherSession.replaceInstances(value);await loadIcons(refreshToken);if(refreshToken!==refreshGeneration)return;const accountValue=await call('account.list');if(refreshToken!==refreshGeneration)return;launcherSession.replaceAccounts(accountValue);if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value)launcherSession.selectInstance(rememberedInstance || instances.value[0] || null);if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}recordRuntimeDebug('refresh','App','refresh completed',{page:page.value,token:refreshToken});}catch(e){if(refreshToken===refreshGeneration){error.value=message(e);recordRuntimeDebug('error','App','refresh failed',message(e));}}}
 async function navigate(id:string){
  if(preparingLaunch)return;
  if(id==='pcl-download')downloadComponentUid.value='';
@@ -396,7 +345,7 @@ function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
 function openSearchResult(instance:any){searchShown.value=false;void openInstance(instance);}
 function xmclTab(tab:string){if(busy.value)return;if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value=t('app.operationDone');await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
-async function create(){const p:any={...creation.value};for(const k of Object.keys(p))if(!p[k])delete p[k];if(createMode.value==='import'){p.type='import';}else if(createMode.value==='server'){p.type='server';}await run(createMode.value==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
+async function create(value: NeoCreationDraft & { type?: string }){const p:any={...value};for(const k of Object.keys(p))if(!p[k])delete p[k];await run(value.type==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
 async function onPclInstalled(result:any){
  await refresh();
  const created=instances.value.find((item:any)=>String(item.id)===String(result?.id || '')) || instances.value.find((item:any)=>item.name===result?.name);
@@ -426,14 +375,23 @@ async function openInstance(i:any,forceRead=false,forLaunch=false){
  if(selected.value)detailCache.set(selected.value.id,{info:instanceDetails.value,notes:notes.value,components:components.value,resources:resources.value,kind:resourceKind.value,logFiles:logFiles.value});
  if(selected.value?.id!==i.id){
   const old=sessions.get(selected.value?.id);if(old){old.lines=consoleLines.value;old.state=consoleState.value;}
-  const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||t('app.disconnected');logFile.value='';fileLog.value='';logFiles.value=[];
+  const saved=sessions.get(i.id);consoleSubscription=saved?.subscription||'';consoleInstance=i.id;consoleMonitorId.value=i.id;consoleLines.value=saved?.lines||[];consoleState.value=saved?.state||t('app.disconnected');logFile.value='';fileLog.value='';logFiles.value=[];
  }
 selected.value=i;rememberInstance(i);if(!forLaunch){page.value='manage';if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState('launch');}notes.value='';error.value='';instanceDetails.value=null;
  try{const info=await call('instance.info',{instance:i.id});instanceDetails.value=info;notes.value=info.notes || '';}catch(e){error.value=message(e);}
  try{settings.value=await call('settings.list',{scope:'instance',instance:i.id});}catch{/* Older backends may not expose instance settings yet. */}
- if(!forLaunch){await loadResources();await loadComponents();await loadLogFiles();}
+ if(!forLaunch){await loadResources();await loadComponents();await loadLogFiles();void connectConsole(i);}
 }
-async function changeIcon(){const path=await ask(t('app.iconPath'));if(path===null||!path.trim())return;await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});icons.value[selected.value.id]=icon.dataUrl;}}
+async function changeIcon(iconKey?: string){
+ if(!selected.value)return;
+ if(iconKey?.trim()){
+  await run('instance.set-icon',{instance:selected.value.id,icon:iconKey.trim()});
+ }else{
+  const path=await ask(t('app.iconPath'));if(path===null||!path.trim())return;
+  await run('instance.set-icon',{instance:selected.value.id,path:path.trim()});
+ }
+ if(!error.value){const icon=await call('instance.icon',{instance:selected.value.id});if(icon?.dataUrl)icons.value[selected.value.id]=icon.dataUrl;}
+}
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}
 async function workspaceAction(op:string){const labels:Record<string,string>={rename:t('xmcl.instance.rename'),copy:t('xmcl.instance.copy'),group:t('xmcl.instance.group')};if(labels[op]){await instanceAction(op,op==='group'?'group':'name',labels[op]);return;}await instanceAction(op,undefined,op);}
 async function instanceSelectionAction(instance:any,op:string){
@@ -475,13 +433,27 @@ async function installComponentVersion(component:any,version:string){
  finally { endInstallProgress(); }
 }
 function beginInstallProgress(info:any){installProgressTitle.value=info?.title || t('app.installingPack');installTask.value=null;installCancelling.value=false;installProgressOpen.value=true;}
-function endInstallProgress(){
+function endInstallProgress(info?:any){
  const task=installTask.value,title=installProgressTitle.value;
  const state=String(task?.state||'').toLowerCase();
+ const failed=task?.successful===false || ['failed','error'].includes(state) || Boolean(task?.failReason || task?.error || info?.error);
+ if(failed){
+  // Keep the terminal task in the dialog so the user can read the backend
+  // failure instead of losing the only useful diagnostic when the child
+  // installer emits its final event.
+  if(info?.error){
+   installTask.value={ ...(task || {}), operation: info.operation || task?.operation, name: info.name || task?.name, state: 'failed', successful: false, status: t('tasks.states.failed'), error: info.error, details: info.error };
+  }
+  installCancelling.value=false;
+  return;
+ }
  if(state==='succeeded' && isPclShell.value){
   const completed=title;
   showPclToast({type:'success',title:t('app.operationDone'),message:t('app.completed', { name: completed }),timeout:3500});
  }
+ installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;
+}
+function closeInstallProgress(){
  installProgressOpen.value=false;installCancelling.value=false;installTask.value=null;
 }
 
@@ -520,8 +492,8 @@ async function cancelDeviceLogin(){
 async function openDeviceBrowser(){const url=String(device.value?.url || '');if(!url)return;try{await call('desktop.open-url',{url});}catch(e){error.value=message(e);}}
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
-onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleState.value=t('app.backendExited');instances.value=instances.value.map((item:any)=>({...item,running:false}));if(selected.value)selected.value={...selected.value,running:false};error.value=reason.message || t('app.backendDisconnected');});unlisten=await launcher.onEvent(async(raw:any)=>{if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:t('app.executing'));if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole(`[${t('app.launchPrefix')}] ${messageText}`,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
-onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();unlistenExit?.();});
+ onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleMonitorId.value='';consoleState.value=t('app.backendExited');for(const item of instances.value)item.running=false;if(selected.value)selected.value.running=false;error.value=reason.message || t('app.backendDisconnected');});unlisten=await launcher.onEvent(async(raw:any)=>{recordRuntimeDebug('event','launcher-event','event received',{kind:raw?.kind,operation:raw?.operation});if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:t('app.executing'));if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole(`[${t('app.launchPrefix')}] ${messageText}`,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
+ onUnmounted(()=>{stopLaunchProgressAnimation();if(pclRouteAnimationTimer)clearTimeout(pclRouteAnimationTimer);unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>
 .pcl-device-dialog{width:520px;max-width:94vw;background:var(--pcl-c6)!important}
@@ -538,4 +510,17 @@ onUnmounted(()=>{stopLaunchProgressAnimation();unlisten?.();unlistenStream?.();u
   overflow: hidden;
   background: var(--pcl-page-bg);
 }
+
+@keyframes pcl-route-slide-forward {
+  from { opacity: .72; transform: translateX(34px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pcl-route-slide-backward {
+  from { opacity: .72; transform: translateX(-34px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.pcl-route-slide-forward { animation: pcl-route-slide-forward .34s cubic-bezier(.16, 1, .3, 1); }
+.pcl-route-slide-backward { animation: pcl-route-slide-backward .34s cubic-bezier(.16, 1, .3, 1); }
 </style>

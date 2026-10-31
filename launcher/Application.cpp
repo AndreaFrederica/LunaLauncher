@@ -1009,6 +1009,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // Minecraft mods
         m_settings->registerSetting("ModMetadataDisabled", false);
         m_settings->registerSetting("ModDependenciesDisabled", false);
+        m_settings->registerSetting("McModSearchEnabled", true);
         m_settings->registerSetting("SkipModpackUpdatePrompt", false);
         m_settings->registerSetting("ShowModIncompat", false);
 

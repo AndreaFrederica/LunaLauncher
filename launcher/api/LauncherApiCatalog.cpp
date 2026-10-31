@@ -40,6 +40,7 @@
 #include "java/JavaMetadata.h"
 #include "modplatform/jsapi/JSAPIManager.h"
 #include "minecraft/VersionFile.h"
+#include "mcmod/McModIndex.h"
 
 namespace {
 using namespace ApiSupport;
@@ -208,7 +209,12 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
         args.type = kinds.value(kind);
         args.offset = p.value("offset").toInt(0);
         if (args.offset < 0 || args.offset > 100000) return OperationService::failure("offset must be between 0 and 100000.", 2);
-        if (p.contains("query")) args.search = QString::fromLatin1(QUrl::toPercentEncoding(p.value("query").toString()));
+        if (p.contains("query")) {
+            auto query = p.value("query").toString();
+            if (kind == "mods" && APPLICATION->settings()->get("McModSearchEnabled").toBool())
+                query = McMod::Index::instance().translateSearchTerm(query);
+            args.search = QString::fromLatin1(QUrl::toPercentEncoding(query));
+        }
         args.versions = filters.versions;
         args.loaders = filters.loaders;
         args.pluginLoaders = filters.plugins;

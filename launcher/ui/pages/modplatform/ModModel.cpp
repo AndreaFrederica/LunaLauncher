@@ -4,6 +4,7 @@
 
 #include "ModModel.h"
 
+#include "Application.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/mod/ModFolderModel.h"
@@ -44,7 +45,9 @@ ResourceAPI::SearchArgs ModModel::createSearchArguments()
 
     auto sort = getCurrentSortingMethodByIndex();
 
-    const auto searchTerm = McMod::Index::instance().translateSearchTerm(m_search_term);
+    const auto searchTerm = APPLICATION->settings()->get("McModSearchEnabled").toBool()
+                                ? McMod::Index::instance().translateSearchTerm(m_search_term)
+                                : m_search_term;
     return {
         ModPlatform::ResourceType::Mod, m_next_search_offset, searchTerm, sort, loaders, versions, side, categories, m_filter->openSource
     };

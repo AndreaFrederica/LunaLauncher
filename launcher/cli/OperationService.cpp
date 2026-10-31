@@ -271,7 +271,7 @@ QString settingCategory(const QString& id)
     };
     static const QSet<QString> downloads{
         "NumberOfConcurrentTasks", "NumberOfConcurrentDownloads", "NumberOfManualRetries", "AssetCacheExpiryDays",
-        "DownloadsDirWatchRecursive", "MoveModsFromDownloadsDir", "ModMetadataDisabled", "ModDependenciesDisabled",
+        "DownloadsDirWatchRecursive", "MoveModsFromDownloadsDir", "ModMetadataDisabled", "ModDependenciesDisabled", "McModSearchEnabled",
         "SkipModpackUpdatePrompt", "GlobalDataPacksEnabled", "ModDownloadLoaders", "OverrideModDownloadLoaders",
         "AssetVerificationMode", "DownloadBackend", "PclDownloadFallbackToQt", "PclDownloadThreadLimit",
         "PclDownloadSpeedLimitKBps", "Aria2Enabled", "Aria2AutoInstall", "Aria2FallbackToQt",

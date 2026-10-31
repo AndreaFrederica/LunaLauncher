@@ -179,6 +179,18 @@ QString Index::translateSearchTerm(const QString& query) const
     if (const auto it = m_nameIndex.constFind(normalized); it != m_nameIndex.constEnd())
         matched = &m_projects.at(it.value());
 
+    // Preserve provider-friendly suffixes such as a Minecraft version while
+    // translating a Chinese title embedded in a longer search expression.
+    if (!matched) {
+        for (const auto& project : m_projects) {
+            const auto title = project.mainName.trimmed();
+            if (!title.isEmpty() && original.contains(title, Qt::CaseInsensitive)) {
+                matched = &project;
+                break;
+            }
+        }
+    }
+
     // Also support a Chinese query containing only part of the MCMod title,
     // which is useful for names such as "机械动力" followed by a version tag.
     if (!matched) {
@@ -199,8 +211,13 @@ QString Index::translateSearchTerm(const QString& query) const
     // original query when no useful translation was exported.
     for (const auto& candidate : { matched->secondaryName, matched->abbreviation }) {
         const auto value = candidate.trimmed();
-        if (!value.isEmpty() && normalizeName(value) != normalized)
+        if (!value.isEmpty() && normalizeName(value) != normalized) {
+            const auto title = matched->mainName.trimmed();
+            const auto position = title.isEmpty() ? -1 : original.indexOf(title, 0, Qt::CaseInsensitive);
+            if (position >= 0)
+                return original.left(position) + value + original.mid(position + title.size());
             return value;
+        }
     }
     return query;
 }

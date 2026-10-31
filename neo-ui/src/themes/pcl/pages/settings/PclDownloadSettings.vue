@@ -151,6 +151,8 @@
               </div>
 
               <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" :label="t('pcl.auto2.k9d5b1f1173')" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
+              <PclCheckbox :model-value="bool('McModSearchEnabled')" :label="t('resource.mcmodSearchEnabled')" @update:model-value="save('McModSearchEnabled', $event)" />
+              <PclHint theme="blue">{{ t('resource.mcmodSearchHint') }}</PclHint>
             </PclCard>
             <PclCard :title="t('pcl.auto2.k1ed8c078d6')">
               <div class="pcl-form-row">

@@ -3,8 +3,8 @@ import shutil
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+import re
 
 
 def run(command, cwd):
@@ -15,45 +15,95 @@ def run(command, cwd):
 
 
 def prepare_frontend(pnpm, source, build):
+    # Keep the pnpm store in the Meson build directory so package archives are
+    # reused between builds.  The staging checkout below also keeps its
+    # node_modules directory; pnpm can then verify the lockfile without
+    # materialising a fresh dependency tree on every native rebuild.
     run([pnpm, "install", "--frozen-lockfile", "--store-dir", build / "pnpm-store"], source)
+
+
+def sync_frontend(source: Path, build: Path) -> tuple[Path, Path]:
+    """Synchronize source files into a persistent, writable staging checkout.
+
+    The source checkout can be protected by a Windows ACL that prevents the
+    temporary files created by esbuild from being removed.  A persistent
+    staging checkout preserves pnpm's node_modules while still allowing the
+    source tree to be refreshed for each Meson invocation.
+    """
+    stage_root = build / "frontend-stage"
+    frontend = stage_root / "neo-ui"
+    stage_root.mkdir(parents=True, exist_ok=True)
+
+    ignored = shutil.ignore_patterns(
+        "node_modules", "dist", ".quasar", ".melody-preview", "*.temporary.*"
+    )
+    if frontend.exists():
+        for child in frontend.iterdir():
+            if child.name == "node_modules":
+                continue
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    shutil.copytree(source, frontend, ignore=ignored, dirs_exist_ok=True)
+
+    program_info = source.parent / "program_info"
+    staged_program_info = stage_root / "program_info"
+    if program_info.is_dir():
+        shutil.copytree(program_info, staged_program_info, dirs_exist_ok=True)
+    return frontend, stage_root
+
+
+def check_local_vue_components(source: Path) -> None:
+    """Reject local Vue tags that are present in a template but not imported.
+
+    Vue's production compiler intentionally leaves an unresolved PascalCase
+    tag as a custom element. That makes a missing import compile successfully
+    while rendering an empty element at runtime. The source tree has no
+    global registration for theme components, so a component file is a useful
+    and conservative signal for this class of error.
+    """
+    vue_files = list((source / "src").rglob("*.vue"))
+    component_names = {path.stem for path in vue_files}
+    tag_pattern = re.compile(r"<([A-Z][A-Za-z0-9]*)\b")
+    import_pattern = re.compile(r"import\s+([A-Za-z_$][\w$]*)\s+from\s+[\"'][^\"']+\.vue")
+    local_pattern = re.compile(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=")
+    errors: list[str] = []
+    for path in vue_files:
+        text = path.read_text(encoding="utf-8")
+        used = {name for name in tag_pattern.findall(text) if name in component_names}
+        imported = set(import_pattern.findall(text)) | set(local_pattern.findall(text))
+        missing = sorted(used - imported)
+        if missing:
+            errors.append(f"{path}: {', '.join(missing)}")
+    if errors:
+        raise SystemExit("Unresolved local Vue components:\n" + "\n".join(errors))
 
 
 def main():
     pnpm, cargo, source, build, output = map(Path, sys.argv[1:])
     source = source.resolve()
     build = build.resolve()
-    # The source checkout is often hosted below the Codex workspace ACL.  That
-    # ACL permits normal writes but denies delete-child, while Quasar/esbuild
-    # creates an adjacent temporary .mjs file with delete sharing enabled. On
-    # Windows this is reported as ERROR_ACCESS_DENIED even though a shell can
-    # create ordinary files in the same directory. Build the Web UI from a
-    # disposable copy in the user's temp directory so the native MSVC build
-    # remains reproducible under both protected and normal checkouts.
-    with tempfile.TemporaryDirectory(prefix="luna-neo-ui-") as temporary:
-        frontend = Path(temporary) / "neo-ui"
-        shutil.copytree(
-            source,
-            frontend,
-            ignore=shutil.ignore_patterns("node_modules", "dist", ".quasar", "*.temporary.*"),
-        )
-        # tauri.conf.json keeps the shared launcher icon outside neo-ui. Keep
-        # the same relative layout in the staging copy for Windows resource
-        # generation.
-        program_info = source.parent / "program_info"
-        if program_info.is_dir():
-            shutil.copytree(program_info, Path(temporary) / "program_info")
-        prepare_frontend(pnpm, frontend, build)
-        run([pnpm, "build"], frontend)
-        cargo_target = build / "cargo-target"
-        run(
-            [cargo, "build", "--locked", "--release", "--features", "custom-protocol", "--target-dir", cargo_target],
-            frontend / "src-tauri",
-        )
-        binary = cargo_target / "release" / ("luna-neo-ui.exe" if sys.platform == "win32" else "luna-neo-ui")
-        if not binary.is_file():
-            raise SystemExit(f"Neo UI build did not produce {binary}")
-        output.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(binary, output)
+    check_local_vue_components(source)
+    frontend, _stage_root = sync_frontend(source, build)
+    prepare_frontend(pnpm, frontend, build)
+    # .quasar/tsconfig.json is generated and intentionally excluded from the
+    # source sync. Generate it in the staging checkout before strict checking.
+    run([pnpm, "exec", "quasar", "prepare"], frontend)
+    # Strict template/type diagnostics are build blockers now that the
+    # existing warning backlog has been cleared.
+    run([pnpm, "typecheck:strict"], frontend)
+    run([pnpm, "build"], frontend)
+    cargo_target = build / "cargo-target"
+    run(
+        [cargo, "build", "--locked", "--release", "--features", "custom-protocol", "--target-dir", cargo_target],
+        frontend / "src-tauri",
+    )
+    binary = cargo_target / "release" / ("luna-neo-ui.exe" if sys.platform == "win32" else "luna-neo-ui")
+    if not binary.is_file():
+        raise SystemExit(f"Neo UI build did not produce {binary}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(binary, output)
 
 
 if __name__ == "__main__":

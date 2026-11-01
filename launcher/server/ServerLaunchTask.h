@@ -7,6 +7,7 @@
 #include <ptyqt/ptyqt.h>
 #include <memory>
 #include <QTimer>
+#include <QElapsedTimer>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -23,7 +24,7 @@ public:
 
     // Core API: start/stop the server
     void executeTask() override;
-    void stop();
+    bool stop(bool force = false);
     void cleanup();
 
     // Override to match LaunchTask behavior
@@ -36,7 +37,7 @@ public:
 
     // Status queries
     bool canStop() const;
-    bool stopServer();  // Returns true if stopped successfully
+    bool stopServer(bool force = false);  // Returns true if stopped successfully
 
 signals:
     void readyRead(const QByteArray &data);
@@ -48,6 +49,9 @@ private slots:
 
 private:
     bool isProcessRunning(qint64 pid);
+    bool waitForProcessExit(qint64 pid, int timeoutMs);
+    bool terminateProcessTree();
+    void collectProcessTree(const IPtyProcess::pidTree_t &tree, QList<qint64> &pids);
     void parseCommandLine(const QString &fullCmd, const QString &workDir, QString &cmd, QStringList &args);
     void wrapBatchFile(QString &cmd, QStringList &args);
 
@@ -56,4 +60,5 @@ private:
     std::unique_ptr<IPtyProcess> m_ptyProcess;
     std::unique_ptr<QTimer> m_exitCheckTimer;
     bool m_finished = false;
+    bool m_stopping = false;
 };

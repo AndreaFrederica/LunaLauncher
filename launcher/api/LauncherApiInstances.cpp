@@ -210,8 +210,9 @@ QJsonObject stopInstance(const QJsonObject& parameters, bool force)
 
     bool stopped = false;
     if (auto server = dynamic_cast<ServerInstance*>(instance)) {
-        server->stopServer();
-        stopped = !server->isRunning();
+        // Server instances have a real graceful path (the configured console
+        // command) and a separate process-tree kill path for instance.kill.
+        stopped = server->stopServer(force);
     } else {
         // Use the controller when present, or the instance's launch task for
         // detached API launches.

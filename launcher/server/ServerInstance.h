@@ -42,14 +42,20 @@ public:
     QString executablePath() const;
     QStringList arguments() const;
     QString workingDir() const;
+    QString stopCommand() const;
+    bool authlibInjectorEnabled() const;
+    QString authlibInjectorApiUrl() const;
 
     void setExecutablePath(const QString &path);
     void setArguments(const QStringList &args);
     void setWorkingDir(const QString &dir);
+    void setStopCommand(const QString &command);
+    void setAuthlibInjectorEnabled(bool enabled);
+    void setAuthlibInjectorApiUrl(const QString &url);
 
     // Server lifecycle management
     bool startServer();
-    void stopServer();
+    bool stopServer(bool force = false);
 
     LaunchTask* launchTask() { return getLaunchTask(); }
 

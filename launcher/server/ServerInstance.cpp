@@ -18,6 +18,13 @@ ServerInstance::ServerInstance(SettingsObject* globalSettings, std::unique_ptr<S
     m_settings->registerSetting("ExecutablePath", "");
     m_settings->registerSetting("Arguments", QStringList());
     m_settings->registerSetting("WorkingDir", "");
+    // A newline-terminated command sent to the server console for graceful
+    // shutdown. An empty value disables graceful shutdown.
+    m_settings->registerSetting("StopCommand", "stop");
+    // Server-side authlib-injector configuration. The jar is shared with the
+    // normal Minecraft launcher cache, while the API URL is per server.
+    m_settings->registerSetting("AuthlibInjectorEnabled", false);
+    m_settings->registerSetting("AuthlibInjectorApiUrl", "");
 
     // Java Settings
     auto locationOverride = m_settings->registerSetting("OverrideJavaLocation", false);
@@ -46,7 +53,8 @@ ServerInstance::~ServerInstance()
 {
     qDebug() << "ServerInstance::~ServerInstance() - Destroying instance";
     // Ensure server is stopped and task is released
-    stopServer();
+    if (!stopServer(false))
+        stopServer(true);
 }
 
 void ServerInstance::saveNow()
@@ -84,6 +92,21 @@ QString ServerInstance::workingDir() const
     return m_settings->get("WorkingDir").toString();
 }
 
+QString ServerInstance::stopCommand() const
+{
+    return m_settings->get("StopCommand").toString();
+}
+
+bool ServerInstance::authlibInjectorEnabled() const
+{
+    return m_settings->get("AuthlibInjectorEnabled").toBool();
+}
+
+QString ServerInstance::authlibInjectorApiUrl() const
+{
+    return m_settings->get("AuthlibInjectorApiUrl").toString();
+}
+
 void ServerInstance::setExecutablePath(const QString &path)
 {
     m_settings->set("ExecutablePath", path);
@@ -99,12 +122,30 @@ void ServerInstance::setWorkingDir(const QString &dir)
     m_settings->set("WorkingDir", dir);
 }
 
+void ServerInstance::setStopCommand(const QString &command)
+{
+    m_settings->set("StopCommand", command);
+}
+
+void ServerInstance::setAuthlibInjectorEnabled(bool enabled)
+{
+    m_settings->set("AuthlibInjectorEnabled", enabled);
+}
+
+void ServerInstance::setAuthlibInjectorApiUrl(const QString &url)
+{
+    m_settings->set("AuthlibInjectorApiUrl", url);
+}
+
 bool ServerInstance::startServer()
 {
     qDebug() << "ServerInstance::startServer() - Creating new task";
 
-    // Clean up any existing task first
-    stopServer();
+    // A second start must never leave the previous process behind. Use the
+    // explicit force path here after any configured graceful stop has had a
+    // chance to run through stopServer(false).
+    if (isRunning() && !stopServer(false) && !stopServer(true))
+        return false;
 
     // Create and start new task
     auto task = createLaunchTask({}, {});
@@ -121,19 +162,18 @@ bool ServerInstance::startServer()
     return isRunning();
 }
 
-void ServerInstance::stopServer()
+bool ServerInstance::stopServer(bool force)
 {
     qDebug() << "ServerInstance::stopServer() - Stopping server";
 
-    // Stop the current task if running
-    if (m_launchProcess) {
-        auto serverTask = dynamic_cast<ServerLaunchTask*>(m_launchProcess.get());
-        if (serverTask && serverTask->canStop()) {
-            serverTask->stop();
-        }
-    }
+    if (!isRunning())
+        return true;
+
+    auto serverTask = dynamic_cast<ServerLaunchTask*>(m_launchProcess.get());
+    const bool stopped = serverTask && serverTask->stopServer(force) && !isRunning();
 
     qDebug() << "ServerInstance::stopServer() - Server stopped";
+    return stopped;
 }
 
 

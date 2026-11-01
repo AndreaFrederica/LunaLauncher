@@ -1371,7 +1371,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                     // Try to stop the server if it's a ServerInstance
                     auto serverInstance = dynamic_cast<ServerInstance*>(instance);
                     if (serverInstance) {
-                        serverInstance->stopServer();
+                        if (!serverInstance->stopServer(false))
+                            serverInstance->stopServer(true);
                     }
                 }
             }

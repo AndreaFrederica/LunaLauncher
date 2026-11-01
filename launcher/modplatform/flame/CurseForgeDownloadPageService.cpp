@@ -17,6 +17,7 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "modplatform/flame/CurseForgeExternalTool.h"
+#include "net/Download.h"
 #include "settings/SettingsObject.h"
 
 CurseForgeDownloadPageService::CurseForgeDownloadPageService(Provider provider, QObject* parent)
@@ -79,6 +80,7 @@ CurseForgeDownloadPageService::CurseForgeDownloadPageService(Provider provider, 
 
 CurseForgeDownloadPageService::~CurseForgeDownloadPageService()
 {
+    stopLauncherDownload();
     if (m_process.state() == QProcess::NotRunning)
         return;
 
@@ -211,10 +213,13 @@ bool CurseForgeDownloadPageService::writeRequest(const QVector<CurseForgeDownloa
     auto settings = APPLICATION->settings();
     const QJsonObject proxy{ { "type", settings->get("ProxyType").toString() },
                              { "host", settings->get("ProxyAddr").toString() },
-                             { "port", settings->get("ProxyPort").toInt() } };
+                             { "port", settings->get("ProxyPort").toInt() },
+                             { "user", settings->get("ProxyUser").toString() },
+                             { "password", settings->get("ProxyPass").toString() } };
     const QJsonObject request{ { "protocolVersion", ProtocolVersion },
                                { "requestId", m_requestId },
                                { "mode", m_clientMode },
+                               { "downloadWithLauncher", m_provider == Provider::Embedded },
                                { "downloadDirectory", QDir::toNativeSeparators(m_downloadDirectory.path()) },
                                { "items", items },
                                { "startIndex", startIndex },
@@ -226,6 +231,74 @@ bool CurseForgeDownloadPageService::writeRequest(const QVector<CurseForgeDownloa
     }
 
     return true;
+}
+
+bool CurseForgeDownloadPageService::startLauncherDownload(const QString& rawUrl, const QString& fileName, int fileIndex, int fileCount)
+{
+    const QUrl url(rawUrl);
+    if (!url.isValid() || url.scheme() != QStringLiteral("https")) {
+        reportFailure(tr("The CurseForge page returned an invalid download URL: %1").arg(rawUrl));
+        return false;
+    }
+    if (fileIndex < 1 || fileIndex > m_pages.size() || fileCount != m_pages.size() ||
+        fileName.compare(m_pages.at(fileIndex - 1).fileName, Qt::CaseInsensitive) != 0) {
+        reportFailure(tr("The CurseForge download tool returned an invalid download request."));
+        return false;
+    }
+    if (m_activeDownload && m_activeDownload->isRunning()) {
+        reportFailure(tr("The CurseForge download tool requested more than one file at a time."));
+        return false;
+    }
+    m_activeDownload.reset();
+    m_downloadJob.reset();
+
+    const auto outputPath = QDir(m_downloadDirectory.path()).filePath(fileName);
+    QFile::remove(outputPath);
+
+    auto download = Net::Download::makeFile(url, outputPath);
+    const auto& page = m_pages.at(fileIndex - 1);
+    download->setExpectedIntegrity(page.hashAlgorithm, page.hash);
+    m_activeDownload = download;
+    m_downloadJob = makeShared<NetJob>(tr("CurseForge download"), APPLICATION->network(), 1);
+
+    connect(download.get(), &Task::progress, this,
+            [this, fileName, fileIndex, fileCount](qint64 received, qint64 total) {
+                emit downloadProgress(fileName, fileIndex, fileCount, received,
+                                      m_activeDownload ? m_activeDownload->getTransferRate() : 0);
+            });
+    connect(download.get(), &Task::transferRate, this,
+            [this, fileName, fileIndex, fileCount](qint64 rate) {
+                if (m_activeDownload)
+                    emit downloadProgress(fileName, fileIndex, fileCount, m_activeDownload->getProgress(), rate);
+            });
+    connect(download.get(), &Task::succeeded, this, [this, fileName, fileIndex, fileCount] {
+        emit fileReady(fileName, fileIndex, fileCount);
+    });
+    connect(download.get(), &Task::failed, this, [this](const QString& reason) {
+        reportFailure(tr("The launcher download core failed: %1").arg(reason));
+        if (m_process.state() != QProcess::NotRunning)
+            m_process.terminate();
+    });
+    connect(download.get(), &Task::aborted, this, [this] {
+        if (!m_failureReported)
+            reportFailure(tr("The launcher download core was aborted."));
+    });
+
+    m_currentIndex = fileIndex;
+    emit downloadStarted(fileName, fileIndex, fileCount);
+    m_downloadJob->addNetAction(download);
+    m_downloadJob->start();
+    return true;
+}
+
+void CurseForgeDownloadPageService::stopLauncherDownload()
+{
+    if (m_activeDownload)
+        m_activeDownload->disconnect(this);
+    if (m_downloadJob && m_downloadJob->isRunning())
+        m_downloadJob->abort();
+    m_activeDownload.reset();
+    m_downloadJob.reset();
 }
 
 bool CurseForgeDownloadPageService::startHelper()
@@ -346,8 +419,8 @@ void CurseForgeDownloadPageService::handleOutputLine(const QByteArray& line)
         m_process.terminate();
         return;
     }
-    if (event != "downloadProgress" && event != "downloadStarted" && event != "downloadFailed" && event != "fileComplete" &&
-        event != "retryRequested" && event != "downloadFinished") {
+    if (event != "downloadProgress" && event != "downloadStarted" && event != "downloadRequested" && event != "downloadFailed" &&
+        event != "fileComplete" && event != "retryRequested" && event != "downloadFinished") {
         return;
     }
     if (fileIndex < 1 || fileIndex > m_pages.size() || fileCount != m_pages.size() ||
@@ -359,6 +432,18 @@ void CurseForgeDownloadPageService::handleOutputLine(const QByteArray& line)
     if (event == "downloadStarted") {
         m_currentIndex = fileIndex;
         emit downloadStarted(fileName, fileIndex, fileCount);
+    } else if (event == "downloadRequested") {
+        const auto downloadUrl = object.value("url").toString();
+        const bool accepted = m_provider == Provider::Embedded && !downloadUrl.isEmpty() &&
+                              startLauncherDownload(downloadUrl, fileName, fileIndex, fileCount);
+        if (!accepted) {
+            if (m_provider != Provider::Embedded) {
+                reportFailure(tr("The external CurseForge download tool requested launcher-managed downloading."));
+            } else if (downloadUrl.isEmpty()) {
+                reportFailure(tr("The CurseForge page did not provide a download URL."));
+            }
+            m_process.terminate();
+        }
     } else if (event == "downloadProgress") {
         emit downloadProgress(fileName, fileIndex, fileCount, object.value("bytesReceived").toVariant().toLongLong(),
                               object.value("bytesPerSecond").toVariant().toLongLong());

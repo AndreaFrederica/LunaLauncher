@@ -8,7 +8,7 @@
         <q-card-section class="pcl-resource-confirm__body">
           <PclHint theme="blue">{{ t('pcl.resourceDownload.confirmHint') }}</PclHint>
           <div class="pcl-resource-confirm__list">
-            <label v-for="entry in confirmEntries" :key="entry.projectId" class="pcl-resource-confirm__row">
+            <label v-for="entry in confirmEntries" :key="`${entry.provider || provider}:${entry.projectId}`" class="pcl-resource-confirm__row">
               <PclCheckbox v-model="entry.checked" />
               <span><strong>{{ entry.name }}</strong><small>{{ entry.dependency ? t(entry.dependencyType === 'optional' ? 'pcl.resourceDownload.optionalBy' : 'pcl.resourceDownload.requiredBy', { name: entry.requiredBy || t('pcl.resourceDownload.selectedResource') }) : t('pcl.resourceDownload.selected') }}</small></span>
             </label>

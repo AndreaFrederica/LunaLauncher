@@ -34,6 +34,8 @@ struct DownloadItem {
 struct DownloadRequest {
     download_directory: PathBuf,
     items: Vec<DownloadItem>,
+    #[serde(default)]
+    download_with_launcher: bool,
     #[serde(default = "default_start_index")]
     start_index: usize,
     total_items: Option<usize>,
@@ -53,6 +55,10 @@ struct ProxySettings {
     host: String,
     #[serde(default)]
     port: u16,
+    #[serde(default)]
+    user: String,
+    #[serde(default)]
+    password: String,
 }
 
 impl Default for ProxySettings {
@@ -61,6 +67,8 @@ impl Default for ProxySettings {
             proxy_type: "Default".into(),
             host: String::new(),
             port: 0,
+            user: String::new(),
+            password: String::new(),
         }
     }
 }
@@ -70,6 +78,8 @@ impl Default for ProxySettings {
 struct HelperEvent<'a> {
     event: &'a str,
     file_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<&'a str>,
     message: Option<&'a str>,
     file_index: Option<usize>,
     file_count: Option<usize>,
@@ -99,6 +109,8 @@ struct QueueState {
     current: DownloadItem,
     remaining: VecDeque<DownloadItem>,
     download_in_progress: bool,
+    webview_download_in_progress: bool,
+    download_with_launcher: bool,
     retry_requested: bool,
     ignored_finished_events: usize,
     current_index: usize,
@@ -210,6 +222,7 @@ fn monitor_download(
             emit_event(HelperEvent {
                 event: "downloadProgress",
                 file_name: Some(&file_name),
+                url: None,
                 message: if stalled {
                     Some("No download activity has been detected for 15 seconds")
                 } else {
@@ -256,6 +269,14 @@ fn proxy_url(proxy: &ProxySettings) -> Result<Option<Url>, String> {
         .map_err(|_| "the proxy host is invalid")?;
     url.set_port(Some(proxy.port))
         .map_err(|_| "the proxy port is invalid")?;
+    if !proxy.user.is_empty() {
+        url.set_username(&proxy.user)
+            .map_err(|_| "the proxy username is invalid")?;
+    }
+    if !proxy.password.is_empty() {
+        url.set_password(Some(&proxy.password))
+            .map_err(|_| "the proxy password is invalid")?;
+    }
     Ok(Some(url))
 }
 
@@ -319,6 +340,7 @@ fn fail(app: &AppHandle, message: &str) {
     emit_event(HelperEvent {
         event: "error",
         file_name: None,
+        url: None,
         message: Some(message),
         file_index: None,
         file_count: None,
@@ -337,6 +359,7 @@ fn request_retry(app: &AppHandle, queue: &Arc<Mutex<QueueState>>) {
     emit_event(HelperEvent {
         event: "retryRequested",
         file_name: Some(&state.current.file_name),
+        url: None,
         message: None,
         file_index: Some(state.current_index),
         file_count: Some(state.total_items),
@@ -354,6 +377,7 @@ fn finish_current(webview: &Webview, toolbar: &Webview, queue: &Arc<Mutex<QueueS
             return;
         }
         state.download_in_progress = false;
+        state.webview_download_in_progress = false;
         let completed_name = state.current.file_name.clone();
         let completed_index = state.current_index;
         let total_items = state.total_items;
@@ -367,6 +391,7 @@ fn finish_current(webview: &Webview, toolbar: &Webview, queue: &Arc<Mutex<QueueS
     emit_event(HelperEvent {
         event: "downloadFinished",
         file_name: Some(&completed_name),
+        url: None,
         message: None,
         file_index: Some(completed_index),
         file_count: Some(total_items),
@@ -442,7 +467,7 @@ fn listen_for_commands(app: AppHandle, queue: Arc<Mutex<QueueState>>) {
                 if state.retry_requested || state.current.file_name != command.file_name {
                     false
                 } else {
-                    if state.download_in_progress {
+                    if state.download_in_progress && state.webview_download_in_progress {
                         state.ignored_finished_events += 1;
                     }
                     true
@@ -471,24 +496,34 @@ fn handle_download(
     download_directory: &Path,
 ) -> bool {
     match event {
-        DownloadEvent::Requested {
-            url: _,
-            destination,
-        } => {
+        DownloadEvent::Requested { url, destination } => {
             let mut state = queue.lock().expect("download queue mutex poisoned");
             if state.download_in_progress || state.retry_requested {
                 return false;
             }
 
             let download_path = download_directory.join(&state.current.file_name);
-            *destination = download_path.clone();
+            let download_with_launcher = state.download_with_launcher;
+            if !download_with_launcher {
+                *destination = download_path.clone();
+            }
             state.download_in_progress = true;
+            state.webview_download_in_progress = !download_with_launcher;
             let file_name = state.current.file_name.clone();
             let file_index = state.current_index;
             let file_count = state.total_items;
             emit_event(HelperEvent {
-                event: "downloadStarted",
+                event: if download_with_launcher {
+                    "downloadRequested"
+                } else {
+                    "downloadStarted"
+                },
                 file_name: Some(&file_name),
+                url: if download_with_launcher {
+                    Some(url.as_str())
+                } else {
+                    None
+                },
                 message: None,
                 file_index: Some(file_index),
                 file_count: Some(file_count),
@@ -525,13 +560,21 @@ fn handle_download(
                 file_index,
                 file_count,
             );
-            true
+            !download_with_launcher
         }
         DownloadEvent::Finished { path, success, .. } => {
             let mut state = queue.lock().expect("download queue mutex poisoned");
             if state.retry_requested {
                 return true;
             }
+            if state.download_with_launcher {
+                // The launcher owns the transfer in this mode. WebView may
+                // still report the cancellation caused by returning false
+                // from Requested; it must not mark the launcher transfer as
+                // failed or delete its output file.
+                return true;
+            }
+            state.webview_download_in_progress = false;
             if state.ignored_finished_events > 0 {
                 state.ignored_finished_events -= 1;
                 return true;
@@ -562,6 +605,7 @@ fn handle_download(
                 emit_event(HelperEvent {
                     event: "downloadFailed",
                     file_name: Some(&completed_name),
+                    url: None,
                     message: Some("The download failed; use CurseForge Try Again or Luna restart"),
                     file_index: Some(file_index),
                     file_count: Some(file_count),
@@ -594,6 +638,7 @@ fn handle_download(
             emit_event(HelperEvent {
                 event: "fileComplete",
                 file_name: Some(&completed_name),
+                url: None,
                 message: None,
                 file_index: Some(file_index),
                 file_count: Some(file_count),
@@ -627,6 +672,8 @@ fn run(request: DownloadRequest) -> tauri::Result<i32> {
         current: first,
         remaining: items,
         download_in_progress: false,
+        webview_download_in_progress: false,
+        download_with_launcher: request.download_with_launcher,
         retry_requested: false,
         ignored_finished_events: 0,
         current_index: request.start_index,
@@ -754,6 +801,7 @@ fn main() {
             emit_event(HelperEvent {
                 event: "error",
                 file_name: None,
+                url: None,
                 message: Some(&message),
                 file_index: None,
                 file_count: None,
@@ -770,6 +818,7 @@ fn main() {
             emit_event(HelperEvent {
                 event: "error",
                 file_name: None,
+                url: None,
                 message: Some(&error.to_string()),
                 file_index: None,
                 file_count: None,
@@ -813,6 +862,8 @@ mod tests {
             proxy_type: "SOCKS5".into(),
             host: "127.0.0.1".into(),
             port: 1080,
+            user: String::new(),
+            password: String::new(),
         };
         assert_eq!(
             proxy_url(&proxy).unwrap().unwrap().as_str(),

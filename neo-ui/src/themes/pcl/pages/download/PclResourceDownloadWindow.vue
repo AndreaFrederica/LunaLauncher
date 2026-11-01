@@ -28,26 +28,32 @@
       </div>
 
       <div ref="resultsList" class="pcl-resource-download-window__list" :class="`is-${viewMode}`">
-        <article v-for="project in projects" :key="project.projectId" class="pcl-resource-download-card" :class="{ selected: selected[project.projectId] }">
-          <PclCheckbox :model-value="Boolean(selected[project.projectId])" @update:model-value="toggleProject(project, $event)" />
+        <article v-for="project in projects" :key="projectKey(project)" class="pcl-resource-download-card" :class="{ selected: selected[projectKey(project)] }">
+          <PclCheckbox :model-value="Boolean(selected[projectKey(project)])" @update:model-value="toggleProject(project, $event)" />
           <img v-if="project.iconUrl" :src="project.iconUrl" alt="" @click="openDetails(project)" />
           <span v-else class="pcl-resource-download-card__fallback"><PclIcon name="box" :size="20" /></span>
           <div class="pcl-resource-download-card__copy" @click="openDetails(project)">
-            <strong>{{ project.name }}</strong>
-            <div v-if="project.mcmod?.name || project.mcmod?.url || project.mcmod?.searchUrl" class="pcl-resource-download-card__mcmod">
-              <span v-if="project.mcmod?.name">{{ project.mcmod.name }}</span>
-              <a v-if="project.mcmod?.url || project.mcmod?.searchUrl" :href="project.mcmod.url || project.mcmod.searchUrl" target="_blank" rel="noreferrer" @click.stop="openExternal(project.mcmod.url || project.mcmod.searchUrl)">{{ t('resource.mcmodLink') }}</a>
-            </div>
+            <strong>{{ project.name }}<span v-if="project.mcmod?.name" class="pcl-resource-download-card__localized-name"> · {{ project.mcmod.name }}</span></strong>
+            <small class="pcl-resource-download-card__provider">
+              <template v-for="link in platformLinks(project)" :key="`${link.label}:${link.url}`">
+                <a class="pcl-resource-download-link" :href="link.url" target="_blank" rel="noreferrer" @click.stop.prevent="openExternal(link.url)">{{ link.label }}</a>
+              </template>
+              <span v-if="!platformLinks(project).length">{{ providerLabel(project.provider || provider) }}</span>
+              <span v-if="project.projectId"> · {{ project.projectId }}</span>
+              <a v-if="project.mcmod?.url || project.mcmod?.searchUrl" class="pcl-resource-download-link" :href="project.mcmod.url || project.mcmod.searchUrl" target="_blank" rel="noreferrer" @click.stop.prevent="openExternal(project.mcmod.url || project.mcmod.searchUrl)">{{ t('resource.mcmodLink') }}</a>
+              <a v-if="project.sourceUrl" class="pcl-resource-download-link" :href="project.sourceUrl" target="_blank" rel="noreferrer" @click.stop.prevent="openExternal(project.sourceUrl)">{{ t('resource.sourceCode') }}</a>
+              <a v-if="project.websiteUrl && project.websiteUrl !== (project.providerUrl || providerUrl(project))" class="pcl-resource-download-link" :href="project.websiteUrl" target="_blank" rel="noreferrer" @click.stop.prevent="openExternal(project.websiteUrl)">{{ t('resource.projectPage') }}</a>
+            </small>
             <small>{{ project.description }}</small>
             <PclSelect
-              v-if="selected[project.projectId]"
-              v-model="selected[project.projectId].versionId"
-              :options="selected[project.projectId].versionOptions"
-              :disabled="selected[project.projectId].loadingVersions"
+              v-if="selected[projectKey(project)]"
+              v-model="selected[projectKey(project)].versionId"
+              :options="selected[projectKey(project)].versionOptions"
+              :disabled="selected[projectKey(project)].loadingVersions"
             />
           </div>
-          <span v-if="selected[project.projectId]?.state" class="pcl-resource-download-card__state" :class="selected[project.projectId].state">
-            {{ selected[project.projectId].status || selected[project.projectId].state }}
+          <span v-if="selected[projectKey(project)]?.state" class="pcl-resource-download-card__state" :class="selected[projectKey(project)].state">
+            {{ selected[projectKey(project)].status || selected[projectKey(project)].state }}
           </span>
         </article>
       </div>
@@ -166,7 +172,10 @@ const instanceLoaderLabel = ref<any>('');
 
 const kindLabel = computed(() => t(`resource.kinds.${props.kind}`, props.kind));
 const selectedList = computed(() => Object.values(selected));
-const canPrepareDownload = computed(() => selectedList.value.length > 0 && selectedList.value.every(entry => !entry.loadingVersions && entry.versionId && entry.state !== 'failed'));
+// Version resolution can still be in flight when the user clicks the batch
+// action. prepareDownload waits for those requests instead of leaving the
+// action permanently disabled.
+const canPrepareDownload = computed(() => selectedList.value.length > 0 && !downloading.value);
 const downloadEntries = computed(() => confirmEntries.value.filter(entry => entry.checked && entry.versionId));
 const downloadCompleted = computed(() => downloadEntries.value.filter(isEntryFinished).length);
 const downloadPercent = computed(() => {
@@ -218,28 +227,69 @@ function providerLabel(id: string) {
   if (id.startsWith('js:')) return `JS · ${id.slice(3)}`;
   return id;
 }
-function providerMeta() {
-  return providerCatalog.value.find((entry: any) => String(entry.id) === provider.value) || null;
+function providerUrl(project: any) {
+  if (project?.providerUrl) return String(project.providerUrl);
+  const source = String(project?.provider || provider.value);
+  const id = String(project?.projectId || project?.slug || '').trim();
+  if (!id) return '';
+  if (source === 'modrinth') return `https://modrinth.com/mod/${project?.slug || id}`;
+  if (source === 'curseforge') return `https://www.curseforge.com/projects/${id}`;
+  return '';
 }
-function providerSupportsMinecraftFilter() {
-  return providerMeta()?.minecraftSearchFilter !== false;
+function platformLinks(project: any) {
+  const links: Array<{ label: string; url: string }> = [];
+  const add = (label: string, url: unknown) => {
+    const value = String(url || '').trim();
+    if (value && !links.some(link => link.url === value)) links.push({ label, url: value });
+  };
+  const isOfficialProjectUrl = (source: string, url: string) => {
+    const value = url.toLowerCase();
+    return (source === 'modrinth' && value.includes('modrinth.com/')) || (source === 'curseforge' && value.includes('curseforge.com/'));
+  };
+  const metadata = project?.providerMeta || {};
+  for (const [source, raw] of Object.entries(metadata)) {
+    const data: any = typeof raw === 'string' ? { providerUrl: raw } : raw || {};
+    const ownProjectUrl = String(data.projectUrl || '').trim();
+    const canonicalUrl = String(data.providerUrl || '').trim();
+    const platform = ownProjectUrl && isOfficialProjectUrl(source, ownProjectUrl) ? ownProjectUrl : (canonicalUrl || ownProjectUrl);
+    add(providerLabel(source), platform);
+    add(t('resource.sourceCode'), data.sourceUrl);
+    if (ownProjectUrl && ownProjectUrl !== platform) add(t('resource.projectPage'), ownProjectUrl);
+  }
+  const source = String(project?.provider || provider.value);
+  add(providerLabel(source), project?.providerUrl || providerUrl(project));
+  const providerLinks = project?.providerLinks || {};
+  add('Modrinth', typeof providerLinks.modrinth === 'string' ? providerLinks.modrinth : providerLinks.modrinth?.url);
+  add('CurseForge', typeof providerLinks.curseforge === 'string' ? providerLinks.curseforge : providerLinks.curseforge?.url);
+  add('Modrinth', project?.mcmod?.modrinthId && `https://modrinth.com/mod/${project.mcmod.modrinthId}`);
+  add('CurseForge', project?.mcmod?.curseForgeId && `https://www.curseforge.com/projects/${project.mcmod.curseForgeId}`);
+  return links;
 }
-function providerLoaderFilters() {
+function projectKey(project: any) {
+  return `${String(project?.provider || provider.value)}:${String(project?.projectId || '')}`;
+}
+function providerMeta(source = provider.value) {
+  return providerCatalog.value.find((entry: any) => String(entry.id) === source) || null;
+}
+function providerSupportsMinecraftFilter(source = provider.value) {
+  return providerMeta(source)?.minecraftSearchFilter !== false;
+}
+function providerLoaderFilters(source = provider.value) {
   const loaders = [...instanceLoaders.value];
   // Cleanroom is a Forge 1.12 fork. Modrinth and CurseForge expose Forge
   // filters only, while the UI should continue showing the real Cleanroom
   // instance label to the user.
-  if ((provider.value === 'modrinth' || provider.value === 'curseforge') && loaders.includes('cleanroom')) {
+  if ((source === 'modrinth' || source === 'curseforge') && loaders.includes('cleanroom')) {
     if (!loaders.includes('forge')) loaders.push('forge');
     return loaders.filter(loader => loader !== 'cleanroom');
   }
   return loaders;
 }
-function requestParams() {
-  const params: Record<string, unknown> = { provider: provider.value, kind: props.kind };
-  if (instanceVersion.value && providerSupportsMinecraftFilter()) params.minecraftVersion = instanceVersion.value;
-  const loaders = providerLoaderFilters();
-  if (props.kind === 'mods' && loaders.length && providerSupportsMinecraftFilter()) params.loaders = loaders;
+function requestParams(source = provider.value) {
+  const params: Record<string, unknown> = { provider: source, kind: props.kind };
+  if (instanceVersion.value && providerSupportsMinecraftFilter(source)) params.minecraftVersion = instanceVersion.value;
+  const loaders = providerLoaderFilters(source);
+  if (props.kind === 'mods' && loaders.length && providerSupportsMinecraftFilter(source)) params.loaders = loaders;
   return params;
 }
 
@@ -304,13 +354,31 @@ async function search(reset = true) {
   searching.value = true;
   error.value = '';
   try {
-    const result: any = await execute('resource.search', { ...requestParams(), query: query.value.trim(), offset: offset.value });
+    const aggregateMods = props.kind === 'mods';
+    const searchParams: Record<string, unknown> = aggregateMods
+      ? { kind: props.kind, providers: ['modrinth', 'curseforge'], query: query.value.trim(), offset: offset.value }
+      : { ...requestParams(), query: query.value.trim(), offset: offset.value };
+    if (aggregateMods && instanceVersion.value) searchParams.minecraftVersion = instanceVersion.value;
+    if (aggregateMods) {
+      const loaders = providerLoaderFilters('modrinth');
+      if (loaders.length) searchParams.loaders = loaders;
+    }
+    const result: any = await execute(aggregateMods ? 'resource.search.v2' : 'resource.search', searchParams);
     const list = Array.isArray(result) ? result : result?.results || result?.projects || [];
     projects.value = list.map((project: any) => ({
       projectId: String(project.projectId || project.id || project.slug || ''),
       name: String(project.name || project.title || project.projectId || ''),
       description: String(project.description || project.synopsis || ''),
       iconUrl: String(project.iconUrl || project.icon || project.logoUrl || ''),
+      provider: String(project.provider || provider.value),
+      providerUrl: String(project.providerUrl || ''),
+      providerLinks: project.providerLinks || {},
+      providerMeta: project.providerMeta || {},
+      slug: String(project.slug || ''),
+      websiteUrl: String(project.websiteUrl || ''),
+      sourceUrl: String(project.sourceUrl || ''),
+      issuesUrl: String(project.issuesUrl || ''),
+      wikiUrl: String(project.wikiUrl || ''),
       mcmod: project.mcmod || null,
     })).filter((project: any) => project.projectId);
     nextOffset.value = Number(result?.nextOffset ?? (offset.value + projects.value.length)) || 0;
@@ -333,14 +401,46 @@ async function previousPage() {
   offset.value = Math.max(0, offset.value - 25);
   await search(false);
 }
+
+async function loadVersionsForEntry(entry: any) {
+  if (entry.versionId && Array.isArray(entry.rawVersions) && entry.rawVersions.length) return;
+  if (entry.versionRequest) return entry.versionRequest;
+  entry.loadingVersions = true;
+  entry.state = '';
+  entry.status = '';
+  const source = String(entry.provider || provider.value);
+  entry.versionRequest = (async () => {
+    try {
+      const result: any = await execute('resource.versions', { ...requestParams(source), projectId: entry.projectId });
+      const versions = Array.isArray(result) ? result : result?.versions || [];
+      entry.versionOptions = versions.map((version: any) => ({
+        label: `${version.versionNumber || version.name || version.versionId || t('resource.version')} ${version.releaseType ? `· ${version.releaseType}` : ''}`,
+        value: String(version.versionId || version.id || ''),
+      })).filter((version: any) => version.value);
+      entry.rawVersions = versions;
+      entry.versionId = String(versions[0]?.versionId || versions[0]?.id || '');
+      if (!entry.versionId) entry.status = t('pcl.resourceDownload.noVersions');
+    } catch (exception) {
+      entry.state = 'failed';
+      entry.status = exception instanceof Error ? exception.message : String(exception);
+    } finally {
+      entry.loadingVersions = false;
+      delete entry.versionRequest;
+    }
+  })();
+  return entry.versionRequest;
+}
+
 async function toggleProject(project: any, enabled: boolean) {
+  const key = projectKey(project);
   if (!enabled) {
-    delete selected[project.projectId];
+    delete selected[key];
     return;
   }
-  selected[project.projectId] = {
+  const entry = selected[key] = {
     projectId: project.projectId,
     name: project.name,
+    provider: project.provider || provider.value,
     versionId: '',
     versionOptions: [],
     loadingVersions: true,
@@ -349,30 +449,19 @@ async function toggleProject(project: any, enabled: boolean) {
     taskId: '',
     progress: 0,
   };
-  try {
-    const result: any = await execute('resource.versions', { ...requestParams(), projectId: project.projectId });
-    const versions = Array.isArray(result) ? result : result?.versions || [];
-    const entry = selected[project.projectId];
-    if (!entry) return;
-    entry.versionOptions = versions.map((version: any) => ({
-      label: `${version.versionNumber || version.name || version.versionId || t('resource.version')} ${version.releaseType ? `· ${version.releaseType}` : ''}`,
-      value: String(version.versionId || version.id || ''),
-    }));
-    entry.rawVersions = versions;
-    entry.versionId = String(versions[0]?.versionId || versions[0]?.id || '');
-  } catch (exception) {
-    const entry = selected[project.projectId];
-    if (entry) { entry.state = 'failed'; entry.status = exception instanceof Error ? exception.message : String(exception); }
-  } finally {
-    const entry = selected[project.projectId];
-    if (entry) entry.loadingVersions = false;
-  }
+  await loadVersionsForEntry(entry);
 }
 
 async function prepareDownload() {
   if (!selectedList.value.length) return;
   error.value = '';
   try {
+    await Promise.all(selectedList.value.map(entry => loadVersionsForEntry(entry)));
+    const unresolved = selectedList.value.filter(entry => entry.state === 'failed' || !entry.versionId);
+    if (unresolved.length) {
+      error.value = unresolved.map(entry => entry.status || entry.name).join('；');
+      return;
+    }
     const entries = selectedList.value.map(entry => ({ ...entry, dependency: false, requiredBy: '', checked: true }));
     const seen = new Set(entries.map(entry => entry.projectId));
     if (props.kind !== 'worlds') {
@@ -386,13 +475,14 @@ async function prepareDownload() {
           const projectId = String(dependency.projectId || dependency.addonId || dependency.id || '');
           if (!projectId || seen.has(projectId)) continue;
           try {
-            const versions: any = await execute('resource.versions', { ...requestParams(), projectId });
+            const source = String(entry.provider || provider.value);
+            const versions: any = await execute('resource.versions', { ...requestParams(source), projectId });
             const list = Array.isArray(versions) ? versions : versions?.versions || [];
             const wanted = String(dependency.versionId || '');
             let depVersion = wanted ? list.find((version: any) => String(version.versionId || version.id) === wanted) : undefined;
             if (!depVersion && !wanted && instanceVersion.value) {
               const resolved: any = await execute('resource.resolve-dependency', {
-                ...requestParams(),
+                ...requestParams(source),
                 projectId,
                 minecraftVersion: instanceVersion.value,
               });
@@ -402,15 +492,18 @@ async function prepareDownload() {
             if (!depVersion) continue;
             let name = projectId;
             try {
-              const project: any = await execute('resource.project', { ...requestParams(), projectId });
+              const project: any = await execute('resource.project', { ...requestParams(source), projectId });
               name = String(project?.name || projectId);
             } catch { /* Keep project ID as the dependency name. */ }
             entries.push({
               projectId,
+              provider: source,
               name,
               versionId: String(depVersion.versionId || depVersion.id || ''),
               versionOptions: [],
-              rawVersions: list,
+              rawVersions: list.some((version: any) => String(version.versionId || version.id || '') === String(depVersion.versionId || depVersion.id || ''))
+                ? list
+                : [depVersion, ...list],
               dependency: true,
               requiredBy: entry.name,
               dependencyType: type,
@@ -452,16 +545,16 @@ async function confirmDownload() {
         parameters: {
           instance: props.instanceId,
           kind: props.kind,
-          provider: provider.value,
+          provider: entry.provider || provider.value,
           projectId: entry.projectId,
           versionId: entry.versionId,
           minecraftVersion: instanceVersion.value,
-          loaders: props.kind === 'mods' ? providerLoaderFilters() : [],
+          loaders: props.kind === 'mods' ? providerLoaderFilters(String(entry.provider || provider.value)) : [],
         },
       });
       entry.taskId = String(task?.taskId || '');
       entry.state = task?.state || 'running';
-      const selectedEntry = selected[entry.projectId];
+      const selectedEntry = selected[projectKey(entry)];
       if (selectedEntry) { selectedEntry.taskId = entry.taskId; selectedEntry.state = entry.state; }
       if (entry.taskId) {
         waits.push(waitForTask(entry.taskId, snapshot => {
@@ -509,7 +602,7 @@ async function openDetails(project: any) {
   detailOpen.value = true;
   detailLoading.value = true;
   try {
-    const result: any = await execute('resource.project', { ...requestParams(), projectId: project.projectId });
+    const result: any = await execute('resource.project', { ...requestParams(String(project.provider || provider.value)), projectId: project.projectId });
     detail.value = { ...detail.value, ...result };
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
@@ -533,8 +626,14 @@ const detailBody = computed(() => {
     .join('');
 });
 
-function openExternal(url: string) {
-  window.open(url, '_blank', 'noopener,noreferrer');
+async function openExternal(url: string) {
+  const value = String(url || '').trim();
+  if (!value) return;
+  try {
+    await launcher.execute('desktop.open-url', { url: value });
+  } catch {
+    window.open(value, '_blank', 'noopener,noreferrer');
+  }
 }
 
 async function closeWindow() {
@@ -569,9 +668,13 @@ provide(PclResourceDownloadContextKey, { t, props, provider, providerLabel, deta
 .pcl-resource-download-card__fallback { display: flex; align-items: center; justify-content: center; color: var(--pcl-muted); background: var(--pcl-c7); }
 .pcl-resource-download-card__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .pcl-resource-download-card__copy strong { overflow: hidden; font-size: calc(11px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-resource-download-card__localized-name { color: var(--pcl-muted); font-size: .9em; font-weight: 400; }
 .pcl-resource-download-card__copy small { display: -webkit-box; overflow: hidden; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .pcl-resource-download-card__mcmod { display: flex; align-items: center; gap: 7px; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
 .pcl-resource-download-card__mcmod a { color: var(--pcl-c3); }
+.pcl-resource-download-card__provider { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--pcl-c3); }
+.pcl-resource-download-link { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px; color: inherit; text-decoration: none; line-height: 1.2; }
+.pcl-resource-download-link:hover { background: color-mix(in srgb, currentColor 12%, transparent); text-decoration: none; }
 .pcl-resource-download-card__state { flex: 0 0 auto; max-width: 110px; overflow: hidden; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); text-overflow: ellipsis; white-space: nowrap; }
 .pcl-resource-download-card__state.succeeded { color: #34d399; }
 .pcl-resource-download-card__state.failed { color: #fb7185; }

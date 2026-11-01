@@ -196,6 +196,7 @@ class MainWindow : public QMainWindow {
     void showInstanceContextMenu(const QPoint&);
 
     void updateMainToolBar();
+    void updateInstanceToolbarWidth();
 
     void updateLaunchButton();
 
@@ -281,6 +282,7 @@ class MainWindow : public QMainWindow {
     // managed by the application object
     Task* m_versionLoadTask = nullptr;
     bool m_newLayoutActive = false;
+    bool m_instanceToolbarFixedWidth = false;
     QWidget* m_accountsSpacer = nullptr;
     UserHeaderWidget* m_userHeaderWidget = nullptr;
     QAction* m_userHeaderAction = nullptr;

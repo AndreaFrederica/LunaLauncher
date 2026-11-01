@@ -196,6 +196,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         instanceToolbarSetting = APPLICATION->settings()->getOrRegisterSetting(setting_name);
 
         ui->instanceToolBar->setVisibilityState(QByteArray::fromBase64(instanceToolbarSetting->get().toString().toUtf8()));
+        updateInstanceToolbarWidth();
 
         ui->instanceToolBar->addContextMenuAction(ui->newsToolBar->toggleViewAction());
         ui->instanceToolBar->addContextMenuAction(ui->instanceToolBar->toggleViewAction());
@@ -685,6 +686,26 @@ void MainWindow::updateMainToolBar()
 {
     ui->menuBar->setVisible(APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
     ui->mainToolBar->setVisible(ui->menuBar->isNativeMenuBar() || !APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
+}
+
+void MainWindow::updateInstanceToolbarWidth()
+{
+    const bool fixedWidth = APPLICATION->settings()->get("InstanceToolbarFixedWidth").toBool();
+    if (fixedWidth == m_instanceToolbarFixedWidth)
+        return;
+
+    // Do not let the currently selected instance name determine the width we
+    // are trying to lock. It is restored after the fixed width is calculated
+    // and will wrap inside the button when it is longer than the toolbar.
+    const auto currentName = renameButton->text();
+    if (fixedWidth && !currentName.isEmpty())
+        renameButton->setText(ui->actionRenameInstance->text());
+
+    ui->instanceToolBar->setUniformWidths(fixedWidth);
+
+    if (fixedWidth && !currentName.isEmpty())
+        renameButton->setText(currentName);
+    m_instanceToolbarFixedWidth = fixedWidth;
 }
 
 void MainWindow::updateLaunchButton()
@@ -1396,6 +1417,8 @@ void MainWindow::globalSettingsClosed()
     updateThemeMenu();
     updateStatusCenter();
     updateMultiplayerFeatureVisibility();
+
+    updateInstanceToolbarWidth();
 
     ui->actionToggleStatusBar->setChecked(APPLICATION->settings()->get("StatusBarVisible").toBool());
     ui->newsToolBar->setVisible(APPLICATION->settings()->get("ShowNewsBar").toBool());

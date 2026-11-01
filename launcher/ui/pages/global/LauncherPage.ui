@@ -173,6 +173,16 @@
              </widget>
              </item>
           <item>
+           <widget class="QCheckBox" name="fixedInstanceToolbarWidthCheckBox">
+            <property name="toolTip">
+             <string>Keep the instance sidebar at a fixed width. Long instance names will wrap instead of changing the sidebar width.</string>
+            </property>
+            <property name="text">
+             <string>Use fixed width for instance sidebar</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QCheckBox" name="showNewsBarCheckBox">
             <property name="text">
              <string>Show News Bar</string>

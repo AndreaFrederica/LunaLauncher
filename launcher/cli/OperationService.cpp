@@ -250,7 +250,7 @@ QString settingCategory(const QString& id)
     // them through the API.
     static const QSet<QString> qtOnly{
         "IconTheme", "ApplicationTheme", "BackgroundCat", "ThemeDownloadSources", "ThemeDownloadSource",
-        "LastUsedGroupForNewInstance", "MenuBarInsteadOfToolBar", "UseNewUI", "ShowNewsBar", "StatusBarVisible",
+        "LastUsedGroupForNewInstance", "MenuBarInsteadOfToolBar", "UseNewUI", "InstanceToolbarFixedWidth", "ShowNewsBar", "StatusBarVisible",
         "ShowServerPreview",
         "ServerPreviewDynamicWidth", "ShowTerracottaToolBar", "ShowYukariConnectToolBar", "ShowTerracottaStatusBar",
         "ShowYukariConnectStatusBar", "ConsoleFont", "ConsoleFontSize", "ConsoleColorScheme", "JsonEditor",

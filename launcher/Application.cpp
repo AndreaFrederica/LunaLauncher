@@ -845,6 +845,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
         m_settings->registerSetting("MenuBarInsteadOfToolBar", false);
         m_settings->registerSetting("UseNewUI", false);
+        m_settings->registerSetting("InstanceToolbarFixedWidth", false);
         // Alternate UIs persist their first-run wizard completion in the
         // launcher settings so switching between Classic UI and NeoUI does not
         // restart the wizard or depend on WebView localStorage.

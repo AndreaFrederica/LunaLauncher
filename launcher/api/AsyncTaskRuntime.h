@@ -54,6 +54,7 @@ class AsyncTaskRuntime final : public QObject {
         QSet<QString> writes;
         QString conflictKey;
         QString idempotencyKey;
+        bool allowEmbeddedDownloadPage = false;
         QString state = "queued";
         QString status;
         QString error;

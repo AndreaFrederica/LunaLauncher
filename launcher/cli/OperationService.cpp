@@ -43,6 +43,7 @@
 #include "minecraft/mod/Resource.h"
 #include "minecraft/mod/ResourceFolderModel.h"
 #include "modplatform/ModApiMirror.h"
+#include "ui/themes/ThemeManager.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "net/ApiDownload.h"
 #include "net/Download.h"
@@ -539,6 +540,10 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         return importSettings(parameters);
     if (operation == "startup.status")
         return success(APPLICATION->startupStatus());
+    if (operation == "startup.data-location")
+        return success(APPLICATION->dataLocationStatus());
+    if (operation == "startup.set-data-location")
+        return setDataLocation(parameters, interaction);
     if (operation == "startup.migrate")
         return migrateStartupData(parameters, interaction);
     if (operation == "startup.dismiss-migration")
@@ -557,6 +562,23 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
 QJsonObject OperationService::startupStatus() const
 {
     return OperationService::success(APPLICATION->startupStatus());
+}
+
+QJsonObject OperationService::dataLocationStatus() const
+{
+    return success(APPLICATION->dataLocationStatus());
+}
+
+QJsonObject OperationService::setDataLocation(const QJsonObject& parameters, UserInteraction& interaction)
+{
+    if (!parameters.contains("portable")) return failure(tr("portable is required."), 2);
+    const bool portable = parameters.value("portable").toBool();
+    QString error;
+    auto task = APPLICATION->createDataLocationTask(portable, &error);
+    if (!task) return failure(error, 2);
+    if (!waitForTask(task.get(), interaction, &error)) return failure(error);
+    if (!APPLICATION->finishDataLocationSwitch(portable, &error)) return failure(error);
+    return success(QJsonObject{ { "status", APPLICATION->dataLocationStatus() }, { "restartRequired", true } });
 }
 
 QJsonObject OperationService::migrateStartupData(const QJsonObject& parameters, UserInteraction& interaction)
@@ -584,6 +606,14 @@ QJsonObject OperationService::completeStartupSetup()
 {
     if (!APPLICATION->dataMigrationCandidates().isEmpty())
         return failure(tr("Complete or skip all pending data migrations first."), 2);
+    // Do not mark setup complete while the stored Qt appearance points to a
+    // removed managed package. The next launch must keep the wizard available
+    // so the user can choose a valid Qt theme and icon theme here.
+    auto* themeManager = APPLICATION->themeManager();
+    if (!themeManager ||
+        !themeManager->isValidApplicationTheme(APPLICATION->settings()->get("ApplicationTheme").toString()) ||
+        !themeManager->isValidIconTheme(APPLICATION->settings()->get("IconTheme").toString()))
+        return failure("Please choose a valid Qt application theme and icon theme before completing setup.", 2);
     APPLICATION->settings()->set("NeoUISetupComplete", true);
     return success(QJsonObject{ { "status", APPLICATION->startupStatus() } });
 }

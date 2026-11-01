@@ -390,6 +390,33 @@ QJsonObject iconPayload(BaseInstance* inst)
         { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) } });
 }
 
+QJsonObject iconLibraryPayload()
+{
+    // Keep the browser and Qt clients on the same source of truth.  IconList
+    // contains both the bundled launcher icons and user-installed icons, with
+    // user files already taking precedence through its normal directory scan.
+    APPLICATION->icons()->directoryChanged(APPLICATION->icons()->getDirectory());
+    QJsonArray icons;
+    const auto list = APPLICATION->icons();
+    for (int row = 0; row < list->rowCount(); ++row) {
+        const auto modelIndex = list->index(row, 0);
+        const auto key = list->data(modelIndex, Qt::UserRole).toString();
+        if (key.isEmpty()) continue;
+        const auto icon = list->getIcon(key);
+        const auto pixmap = icon.pixmap(64, 64);
+        QByteArray bytes;
+        QBuffer buffer(&bytes);
+        buffer.open(QIODevice::WriteOnly);
+        if (pixmap.isNull() || !pixmap.save(&buffer, "PNG")) continue;
+        icons.append(QJsonObject{
+            { "key", key },
+            { "name", list->data(modelIndex, Qt::DisplayRole).toString() },
+            { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) },
+        });
+    }
+    return OperationService::success(QJsonObject{ { "icons", icons } });
+}
+
 }  // namespace
 
 void registerInstanceApiOperations(LauncherApi& api)
@@ -527,6 +554,9 @@ void registerInstanceApiOperations(LauncherApi& api)
                                }
                                return OperationService::success(QJsonObject{ { "icons", icons } });
                            });
+     api.registerOperation({ "instance.icon-library", "Read the launcher icon library, including bundled and installed icons.",
+                             objectSchema({}) },
+                            [](const QJsonObject&, UserInteraction&) { return iconLibraryPayload(); });
     api.registerOperation({ "instance.set-icon", "Assign a built-in or imported icon to an instance.",
                             objectSchema({ { "instance", instance }, { "icon", stringProperty("Icon key.") },
                                            { "path", stringProperty("Icon file to import.") },

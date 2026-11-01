@@ -12,7 +12,17 @@
     </q-tabs>
 
     <div v-if="tab==='general'" class="q-mt-md">
-      <SettingsPanel :settings="settings" category="paths" :busy="busy" @save="save" @reset="reset" />
+      <section class="settings-card">
+        <h6>{{ t('neo.dataLocation.title') }}</h6>
+        <div class="data-location-path"><code>{{ dataLocation?.current || '—' }}</code><q-btn flat dense icon="folder_open" :disable="!dataLocation?.current" @click="openDataPath(dataLocation?.current)" /></div>
+        <q-select dark outlined emit-value map-options v-model="dataLocationMode" :options="dataLocationOptions" :label="t('neo.dataLocation.mode')" :disable="busy || dataLocationBusy" />
+        <div class="data-location-path q-mt-sm"><span>{{ t('neo.dataLocation.target') }}</span><code>{{ dataLocationTarget }}</code><q-btn flat dense icon="folder_open" :disable="!dataLocationTarget" @click="openDataPath(dataLocationTarget)" /></div>
+        <div class="row q-gutter-sm q-mt-md"><q-btn color="primary" :label="t('neo.dataLocation.apply')" :disable="busy || dataLocationBusy || !dataLocation || dataLocationMode === dataLocationCurrentMode" @click="applyDataLocation" /><q-btn flat :label="t('neo.dataLocation.refresh')" :disable="dataLocationBusy" @click="loadDataLocation" /></div>
+        <q-banner v-if="dataLocationError" class="bg-red-9 q-mt-md">{{ dataLocationError }}</q-banner>
+        <q-banner v-if="dataLocationNotice" class="bg-blue-grey-9 q-mt-md">{{ dataLocationNotice }}</q-banner>
+        <p class="data-location-hint">{{ t('neo.dataLocation.hint') }}</p>
+      </section>
+      <SettingsPanel class="q-mt-lg" :settings="settings" category="paths" :busy="busy" @save="save" @reset="reset" />
       <SettingsPanel class="q-mt-lg" :settings="settings" category="console" :busy="busy" @save="save" @reset="reset" />
     </div>
     <div v-else-if="tab==='java'" class="q-mt-md">
@@ -63,13 +73,21 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import SettingsPanel from './SettingsPanel.vue';
 import JavaPanel from './JavaPanel.vue';
 import LauncherControlPanel from './LauncherControlPanel.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref<any>('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref<any>('authlib-injector'),externalTool=ref<any>('jprofiler'),externalPath=ref<any>('');
+const dataLocation=ref<any>(null),dataLocationMode=ref<'portable'|'user'>('user'),dataLocationBusy=ref(false),dataLocationError=ref(''),dataLocationNotice=ref('');
+const dataLocationOptions=computed(()=>[{label:t('neo.dataLocation.portable'),value:'portable'},{label:t('neo.dataLocation.userData'),value:'user'}]);
+const dataLocationCurrentMode=computed<'portable'|'user'>(()=>dataLocation.value?.portable?'portable':'user');
+const dataLocationTarget=computed(()=>dataLocationMode.value==='portable'?dataLocation.value?.portablePath:dataLocation.value?.systemPath);
+async function loadDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';try{dataLocation.value=await props.execute('startup.data-location');dataLocationMode.value=dataLocationCurrentMode.value;}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
+async function openDataPath(path:string|undefined){if(!path)return;try{await props.execute('desktop.open-path',{path});}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}}
+async function applyDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';dataLocationNotice.value='';try{const result=await props.execute('startup.set-data-location',{portable:dataLocationMode.value==='portable'});dataLocation.value=result?.status||dataLocation.value;dataLocationNotice.value=t('neo.dataLocation.applied');}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
+onMounted(loadDataLocation);
 const backends=[{label:t('neo.auto2.ka626fe7700'),value:0},{label:'Aria2',value:1},{label:t('neo.auto2.k6a21c71e5f'),value:2}];
 const mirrorTypes=[{label:t('neo.auto2.k212e81e6d0'),value:0},{label:t('neo.auto2.kf0aba8a42d'),value:1},{label:t('neo.auto2.kfe7276cd17'),value:2}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);
@@ -91,5 +109,6 @@ async function externalCheck(){integrationResult.value=await props.execute('exte
 </script>
 
 <style scoped>
-.launcher-settings-panel{max-width:1120px}.settings-card{padding:20px;border:1px solid var(--neo-border);border-radius:16px;background:var(--neo-panel)}.settings-card h6{margin:0 0 14px;font-size:18px}.settings-card .q-toggle{display:block;margin:7px 0}.settings-card .q-input,.settings-card .q-select{margin-top:10px}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.launcher-settings-panel{max-width:1120px}.settings-card{padding:20px;border:1px solid var(--neo-border);border-radius:16px;background:var(--neo-panel)}.settings-card h6{margin:0 0 14px;font-size:18px}.settings-card .q-toggle{display:block;margin:7px 0}.settings-card .q-input,.settings-card .q-select{margin-top:10px}pre{white-space:pre-wrap;overflow-wrap:anywhere}.data-location-path{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.data-location-path code{word-break:break-all}.data-location-hint{margin:12px 0 0;color:var(--neo-muted);font-size:12px;line-height:1.6}
 </style>
+

@@ -131,7 +131,8 @@ MinecraftAccountPtr findAccount(const QString& reference)
  */
 class ApiOperationTask final : public Task {
    public:
-    ApiOperationTask(QString operation, QJsonObject parameters) : m_operation(std::move(operation)), m_parameters(std::move(parameters))
+    ApiOperationTask(QString operation, QJsonObject parameters, bool allowEmbeddedDownloadPage)
+        : m_operation(std::move(operation)), m_parameters(std::move(parameters)), m_allowEmbeddedDownloadPage(allowEmbeddedDownloadPage)
     {
         setAbortable(true);
     }
@@ -192,6 +193,7 @@ class ApiOperationTask final : public Task {
         class Interaction final : public UserInteraction {
            public:
             explicit Interaction(ApiOperationTask* owner) : m_owner(owner) {}
+            bool supportsEmbeddedDownloadPage() const override { return m_owner->m_allowEmbeddedDownloadPage; }
             void status(const QString& message) override { m_owner->setStatus(message); }
             void deviceCode(const QString& url, const QString& code, int expiresIn) override
             {
@@ -266,6 +268,7 @@ class ApiOperationTask final : public Task {
     QJsonObject m_pendingInput;
     QJsonValue m_answer;
     bool m_cancelled = false;
+    bool m_allowEmbeddedDownloadPage = false;
 };
 
 }  // namespace
@@ -345,7 +348,11 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "java.install") return 15 * 60 * 1000;
     if (operation == "resource.install-with-dependencies") return 20 * 60 * 1000;
     if (operation == "account.refresh") return 5 * 60 * 1000;
-    if (operation == "account.login") return 10 * 60 * 1000;
+    // Device-code authentication can legitimately wait for an arbitrary
+    // amount of time.  Do not impose a hidden ten-minute cancellation on the
+    // normal login path; callers that need a deadline can opt in explicitly
+    // through `timeoutMs` in the task parameters.
+    if (operation == "account.login") return 0;
     if (operation == "instance.launch") return 10 * 60 * 1000;
     if (operation == "instance.export") return 30 * 60 * 1000;
     if (operation == "server.start") return 5 * 60 * 1000;
@@ -355,7 +362,6 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
-    Q_UNUSED(interaction);
     if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "server.start" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
@@ -375,9 +381,14 @@ QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject&
     record.operation = operation;
     record.parameters = parameters;
     record.idempotencyKey = idempotencyKey;
+    record.allowEmbeddedDownloadPage = interaction.supportsEmbeddedDownloadPage();
     record.priority = parameters.value("priority").toString() == "high" ? 1 : 0;
     record.queuedAt = QDateTime::currentMSecsSinceEpoch();
     record.deadlineMs = deadlineFor(operation);
+    if (operation == "account.login") {
+        const auto requestedTimeout = parameters.value("timeoutMs").toInt();
+        if (requestedTimeout > 0) record.deadlineMs = qBound(1000, requestedTimeout, 24 * 60 * 60 * 1000);
+    }
     addResourceKeys(record);
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install") {
         for (int i = 0; i < APPLICATION->instances()->count(); ++i)
@@ -825,7 +836,7 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             for (const auto key : { "instance", "loader", "minecraftVersion", "loaderVersion", "commitRef" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         }
-        auto task = makeShared<ApiOperationTask>(record.operation, parameters);
+        auto task = makeShared<ApiOperationTask>(record.operation, parameters, record.allowEmbeddedDownloadPage);
         auto& stored = m_records[id];
         stored.task = task.get();
         stored.holder = task;

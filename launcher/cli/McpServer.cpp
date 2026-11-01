@@ -37,10 +37,11 @@ namespace {
 class McpInteraction final : public UserInteraction {
    public:
     using Ask = std::function<QJsonValue(const QString&, bool, const QJsonArray*, const QJsonObject&)>;
-    McpInteraction(QJsonObject parameters, std::function<void(const QJsonObject&)> notify, Ask ask = {})
-        : m_parameters(std::move(parameters)), m_notify(std::move(notify)), m_ask(std::move(ask))
+    McpInteraction(QJsonObject parameters, std::function<void(const QJsonObject&)> notify, Ask ask = {}, bool allowEmbeddedDownloadPage = false)
+        : m_parameters(std::move(parameters)), m_notify(std::move(notify)), m_ask(std::move(ask)), m_allowEmbeddedDownloadPage(allowEmbeddedDownloadPage)
     {}
 
+    bool supportsEmbeddedDownloadPage() const override { return m_allowEmbeddedDownloadPage; }
     void status(const QString& message) override { send("status", QJsonObject{ { "message", message } }); }
     void deviceCode(const QString& url, const QString& code, int expiresIn) override
     {
@@ -75,6 +76,7 @@ class McpInteraction final : public UserInteraction {
     QJsonObject m_parameters;
     std::function<void(const QJsonObject&)> m_notify;
     Ask m_ask;
+    bool m_allowEmbeddedDownloadPage = false;
 };
 
 QJsonObject objectSchema(QJsonObject properties, QJsonArray required = {})
@@ -409,7 +411,7 @@ void McpServer::runWrite(const QJsonValue& id, const QString& operation, const Q
     McpInteraction::Ask ask;
     if (native)
         ask = [this](const QString& prompt, bool secret, const QJsonArray* choices, const QJsonObject& context) { return requestInteraction(prompt, secret, choices, context); };
-    McpInteraction interaction(arguments, notify, ask);
+    McpInteraction interaction(arguments, notify, ask, native);
     const bool ownsRequest = !m_activeService;
     if (ownsRequest) {
         m_activeService = &m_service;

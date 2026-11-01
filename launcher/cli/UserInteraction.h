@@ -12,6 +12,11 @@ class UserInteraction {
    public:
     virtual ~UserInteraction() = default;
 
+    // Alternate desktop frontends may allow the launcher to open an embedded
+    // provider window while resolving downloads that have no direct URL.
+    // Other interaction channels keep this disabled by default.
+    virtual bool supportsEmbeddedDownloadPage() const { return false; }
+
     virtual void status(const QString& message) = 0;
     virtual void deviceCode(const QString& url, const QString& code, int expiresIn) = 0;
     virtual std::optional<QString> input(const QString& prompt, bool secret) = 0;

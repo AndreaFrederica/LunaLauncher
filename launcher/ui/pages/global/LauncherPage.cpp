@@ -49,6 +49,7 @@
 #include <FileSystem.h>
 #include "Application.h"
 #include "BuildConfig.h"
+#include "DataMigrationTask.h"
 #include "DesktopServices.h"
 #include "settings/SettingsObject.h"
 #include "ui/themes/ITheme.h"
@@ -56,8 +57,16 @@
 #include "updater/ExternalUpdater.h"
 
 #include <QApplication>
+#include <QButtonGroup>
+#include <QGroupBox>
+#include <QLabel>
 #include <QProcess>
+#include <QPushButton>
+#include <QRadioButton>
 #include <QStyle>
+#include <QVBoxLayout>
+
+#include "ui/dialogs/ProgressDialog.h"
 
 // FIXME: possibly move elsewhere
 enum InstSortMode {
@@ -74,6 +83,31 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
 
     ui->sortingModeGroup->setId(ui->sortByNameBtn, Sort_Name);
     ui->sortingModeGroup->setId(ui->sortLastLaunchedBtn, Sort_LastLaunch);
+
+    m_dataLocationBox = new QGroupBox(tr("Data Location"), ui->scrollAreaWidgetContents);
+    auto* dataLocationLayout = new QVBoxLayout(m_dataLocationBox);
+    m_dataLocationPath = new QLabel(m_dataLocationBox);
+    m_dataLocationPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_dataLocationPath->setWordWrap(true);
+    m_dataLocationHint = new QLabel(m_dataLocationBox);
+    m_dataLocationHint->setWordWrap(true);
+    m_portableRadio = new QRadioButton(tr("Portable (UserData next to the launcher)"), m_dataLocationBox);
+    m_userDataRadio = new QRadioButton(tr("User data directory"), m_dataLocationBox);
+    auto* dataLocationGroup = new QButtonGroup(m_dataLocationBox);
+    dataLocationGroup->addButton(m_portableRadio);
+    dataLocationGroup->addButton(m_userDataRadio);
+    m_switchDataLocationButton = new QPushButton(tr("Copy data and switch"), m_dataLocationBox);
+    dataLocationLayout->addWidget(m_dataLocationPath);
+    dataLocationLayout->addWidget(m_portableRadio);
+    dataLocationLayout->addWidget(m_userDataRadio);
+    dataLocationLayout->addWidget(m_dataLocationHint);
+    dataLocationLayout->addWidget(m_switchDataLocationButton);
+    if (auto* layout = qobject_cast<QVBoxLayout*>(ui->scrollAreaWidgetContents->layout()))
+        layout->insertWidget(0, m_dataLocationBox);
+    connect(m_switchDataLocationButton, &QPushButton::clicked, this, [this] {
+        switchDataLocation(m_portableRadio->isChecked());
+    });
+    refreshDataLocation();
 
     loadSettings();
 
@@ -222,6 +256,68 @@ void LauncherPage::on_metadataEnableBtn_clicked()
     ui->metadataWarningLabel->setHidden(ui->metadataEnableBtn->isChecked());
 }
 
+void LauncherPage::refreshDataLocation()
+{
+    if (!m_dataLocationBox) return;
+    const auto status = APPLICATION->dataLocationStatus();
+    const bool portable = status.value("portable").toBool();
+    m_portableRadio->setChecked(portable);
+    m_userDataRadio->setChecked(!portable);
+    const auto target = portable ? status.value("systemPath").toString() : status.value("portablePath").toString();
+    m_dataLocationPath->setText(tr("Current: %1").arg(QDir::toNativeSeparators(status.value("current").toString())));
+    m_dataLocationHint->setText(tr("Switching copies launcher data to:\n%1\nA restart is required. Files are copied, not moved; the old directory is kept for safety.")
+                                    .arg(QDir::toNativeSeparators(target)));
+    m_switchDataLocationButton->setEnabled(true);
+}
+
+void LauncherPage::switchDataLocation(bool portable)
+{
+    const auto status = APPLICATION->dataLocationStatus();
+    if (status.value("portable").toBool() == portable) {
+        QMessageBox::information(this, tr("Data Location"), tr("The launcher is already using this data location."));
+        return;
+    }
+    if (QCoreApplication::arguments().contains("--dir")) {
+        QMessageBox::warning(this, tr("Data Location"),
+                             tr("The launcher was started with --dir, which overrides this setting. Restart without --dir to use the selected data location."));
+    }
+    const auto answer = QMessageBox::question(
+        this, tr("Switch Data Location"),
+        tr("Copy the launcher data to the selected directory and switch to it after a restart?\n\nThe current directory is kept as a backup."),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) return;
+
+    QString error;
+    auto task = APPLICATION->createDataLocationTask(portable, &error);
+    if (!task) {
+        QMessageBox::critical(this, tr("Data Location"), error);
+        return;
+    }
+    ProgressDialog dialog(this);
+    if (!dialog.execWithTask(task.get())) {
+        QMessageBox::critical(this, tr("Data Location"), tr("The data copy failed. The current data location has not been changed."));
+        return;
+    }
+    if (!APPLICATION->finishDataLocationSwitch(portable, &error)) {
+        QMessageBox::critical(this, tr("Data Location"), error);
+        return;
+    }
+    m_portableRadio->setChecked(portable);
+    m_userDataRadio->setChecked(!portable);
+    const auto statusAfter = APPLICATION->dataLocationStatus();
+    m_dataLocationPath->setText(tr("Current: %1").arg(QDir::toNativeSeparators(statusAfter.value("current").toString())));
+    m_dataLocationHint->setText(tr("Data will be loaded from %1 after restart.")
+                                    .arg(QDir::toNativeSeparators(portable ? statusAfter.value("portablePath").toString()
+                                                                           : statusAfter.value("systemPath").toString())));
+    const auto restart = QMessageBox::question(this, tr("Restart Required"),
+                                                tr("The data location has been switched. Restart the launcher now?"),
+                                                QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (restart == QMessageBox::Yes) {
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), QCoreApplication::arguments().mid(1));
+        qApp->quit();
+    }
+}
+
 void LauncherPage::applySettings()
 {
     auto s = APPLICATION->settings();
@@ -357,4 +453,10 @@ void LauncherPage::loadSettings()
 void LauncherPage::retranslate()
 {
     ui->retranslateUi(this);
+    if (!m_dataLocationBox) return;
+    m_dataLocationBox->setTitle(tr("Data Location"));
+    m_portableRadio->setText(tr("Portable (UserData next to the launcher)"));
+    m_userDataRadio->setText(tr("User data directory"));
+    m_switchDataLocationButton->setText(tr("Copy data and switch"));
+    refreshDataLocation();
 }

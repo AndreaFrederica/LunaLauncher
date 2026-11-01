@@ -187,6 +187,11 @@ class Application : public QApplication {
     bool finishDataMigration(const QString& name, QString* errorMessage = nullptr);
     bool declineDataMigration(const QString& name, QString* errorMessage = nullptr);
 
+    /** Current and target directories for the portable/user data-location switch. */
+    QJsonObject dataLocationStatus() const;
+    std::unique_ptr<DataMigrationTask> createDataLocationTask(bool portable, QString* errorMessage = nullptr) const;
+    bool finishDataLocationSwitch(bool portable, QString* errorMessage = nullptr);
+
     /// this is the root of the 'installation'. Used for automatic updates
     const QString& root() { return m_rootPath; }
 
@@ -250,6 +255,9 @@ class Application : public QApplication {
 
    private:
     bool handleDataMigration(const QString& currentData, const QString& oldData, const QString& name, const QString& configFile) const;
+    QString defaultDataPath() const;
+    QString portableDataPath() const;
+    QString dataPathForMode(bool portable) const;
     bool createSetupWizard();
     void performMainStartupAction();
 

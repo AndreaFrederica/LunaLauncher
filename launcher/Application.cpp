@@ -543,14 +543,20 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         adjustedBy = "Persistent data path";
 
 #ifndef Q_OS_MACOS
-        if (auto portableUserData = FS::PathCombine(m_rootPath, "UserData"); QDir(portableUserData).exists()) {
-            dataPath = portableUserData;
-            adjustedBy = "Portable user data path";
-            m_portable = true;
-        } else if (QFile::exists(FS::PathCombine(m_rootPath, "portable.txt"))) {
-            dataPath = m_rootPath;
-            adjustedBy = "Portable data path";
-            m_portable = true;
+        // A completed switch to the user data directory leaves UserData in
+        // place (removing the process working directory is unsafe on Windows)
+        // and disables portable detection until the user switches back.
+        const bool forceSystemData = QFile::exists(FS::PathCombine(m_rootPath, ".luna-use-system-data"));
+        if (!forceSystemData) {
+            if (auto portableUserData = FS::PathCombine(m_rootPath, "UserData"); QDir(portableUserData).exists()) {
+                dataPath = portableUserData;
+                adjustedBy = "Portable user data path";
+                m_portable = true;
+            } else if (QFile::exists(FS::PathCombine(m_rootPath, "portable.txt"))) {
+                dataPath = m_rootPath;
+                adjustedBy = "Portable data path";
+                m_portable = true;
+            }
         }
 #endif
     }
@@ -2421,6 +2427,123 @@ bool Application::handleDataMigration(const QString& currentData,
     } else {
         qWarning() << "<> Migration was skipped, due to existing data";
     }
+    return true;
+}
+
+QString Application::defaultDataPath() const
+{
+    QDir dir;
+    if (DesktopServices::isSnap())
+        dir = QDir(qEnvironmentVariable("SNAP_USER_COMMON"));
+    else
+        dir = QDir(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), ".."));
+    return dir.absolutePath();
+}
+
+QString Application::portableDataPath() const
+{
+    return FS::PathCombine(m_rootPath, "UserData");
+}
+
+QString Application::dataPathForMode(bool portable) const
+{
+    return portable ? portableDataPath() : defaultDataPath();
+}
+
+QJsonObject Application::dataLocationStatus() const
+{
+    const auto portablePath = portableDataPath();
+    const auto systemPath = defaultDataPath();
+    return { { "current", m_dataPath },
+             { "portable", m_portable },
+             { "portablePath", portablePath },
+             { "systemPath", systemPath },
+             { "target", dataPathForMode(!m_portable) },
+             { "restartRequired", true } };
+}
+
+std::unique_ptr<DataMigrationTask> Application::createDataLocationTask(bool portable, QString* errorMessage) const
+{
+    const auto target = dataPathForMode(portable);
+    if (QDir::cleanPath(target) == QDir::cleanPath(m_dataPath)) {
+        if (errorMessage) *errorMessage = tr("The launcher is already using this data location.");
+        return nullptr;
+    }
+    if (QFileInfo::exists(FS::PathCombine(target, BuildConfig.LAUNCHER_CONFIGFILE))) {
+        if (errorMessage) *errorMessage = tr("The target directory already contains launcher data. Close the launcher and move or back it up before switching.");
+        return nullptr;
+    }
+    if (!FS::ensureFolderPathExists(target)) {
+        if (errorMessage) *errorMessage = tr("Could not create the target data directory:\n%1").arg(QDir::toNativeSeparators(target));
+        return nullptr;
+    }
+
+    using namespace Filters;
+    QList<Filter> filters;
+    filters.append(equals(BuildConfig.LAUNCHER_CONFIGFILE));
+    filters.append(equals("lunalauncher.cfg"));
+    filters.append(equals("prismlauncher.cfg"));
+    filters.append(equals("accounts.json"));
+    filters.append(equals("neo-tasks.json"));
+    filters.append(equals("servers.dat"));
+    filters.append(equals("lunalauncher_update.cfg"));
+    filters.append(startsWith("accounts/"));
+    filters.append(startsWith("assets/"));
+    filters.append(startsWith("cache/"));
+    filters.append(startsWith("icons/"));
+    filters.append(startsWith("instances/"));
+    filters.append(startsWith("java/"));
+    filters.append(startsWith("libraries/"));
+    filters.append(startsWith("logs/"));
+    filters.append(startsWith("mods/"));
+    filters.append(startsWith("resources/"));
+    filters.append(startsWith("themes/"));
+    filters.append(startsWith("tools/"));
+    return std::make_unique<DataMigrationTask>(m_dataPath, target, any(std::move(filters)));
+}
+
+bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
+{
+    const auto target = dataPathForMode(portable);
+    const auto systemMarker = FS::PathCombine(m_rootPath, ".luna-use-system-data");
+    if (portable) {
+        if (!FS::ensureFolderPathExists(target)) {
+            if (errorMessage) *errorMessage = tr("Could not create the portable data directory:\n%1").arg(QDir::toNativeSeparators(target));
+            return false;
+        }
+        QFile::remove(systemMarker);
+        // UserData wins over portable.txt. Keep the old marker out of the way
+        // so the next start deterministically uses the portable UserData tree.
+        const auto marker = FS::PathCombine(m_rootPath, "portable.txt");
+        if (QFileInfo::exists(marker)) {
+            const auto backup = marker + ".disabled";
+            QFile::remove(backup);
+            if (!FS::move(marker, backup)) {
+                if (errorMessage) *errorMessage = tr("Could not disable the old portable marker:\n%1").arg(QDir::toNativeSeparators(marker));
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const auto marker = FS::PathCombine(m_rootPath, "portable.txt");
+    if (QFileInfo::exists(marker)) {
+        const auto backup = marker + ".disabled";
+        QFile::remove(backup);
+        if (!FS::move(marker, backup)) {
+            if (errorMessage) *errorMessage = tr("Could not disable the portable marker:\n%1").arg(QDir::toNativeSeparators(marker));
+            return false;
+        }
+    }
+    // UserData may still exist and can be the current working directory. Do
+    // not rename it while the launcher is running; the marker makes the next
+    // start ignore portable detection instead.
+    QFile file(systemMarker);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMessage) *errorMessage = tr("Could not write the data-location marker:\n%1").arg(QDir::toNativeSeparators(systemMarker));
+        return false;
+    }
+    file.write(QByteArrayLiteral("Use the user data directory; ignore portable UserData.\n"));
     return true;
 }
 

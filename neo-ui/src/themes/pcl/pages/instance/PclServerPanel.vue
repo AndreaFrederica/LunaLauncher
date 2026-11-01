@@ -12,6 +12,7 @@
         <div class="pcl-actions">
           <PclButton variant="highlight" icon="play" :disabled="busy || instance.running || !eula" @click="startServer">{{ t('instanceSections.startServer') }}</PclButton>
           <PclButton variant="red" icon="power" :disabled="busy || !instance.running" @click="stopServer">{{ t('pcl.server.stop') }}</PclButton>
+          <PclButton variant="red" icon="skull" :disabled="busy || !instance.running" @click="forceStopServer">{{ t('pcl.server.forceStop') }}</PclButton>
           <PclButton icon="monitor-cog" :disabled="busy" @click="emit('console')">{{ t('pcl.server.connect') }}</PclButton>
         </div>
       </div>
@@ -72,6 +73,15 @@
       <PclHint theme="blue">{{ t('pcl.server.yamlHint') }}</PclHint>
     </PclCard>
 
+    <PclCard v-else-if="tab === 'config'" :title="t('pcl.server.config')">
+      <div class="pcl-server-config">
+        <label><span>{{ t('pcl.server.stopCommand') }}</span><PclInput v-model="stopCommand" :placeholder="t('pcl.server.stopCommandHint')" /></label>
+        <PclCheckbox v-model="authlibEnabled" :label="t('pcl.server.authlibInjector')" :disabled="busy" />
+        <label><span>{{ t('pcl.server.authlibInjectorApi') }}</span><PclInput v-model="authlibApiUrl" :placeholder="t('pcl.server.authlibInjectorHint')" /></label>
+        <PclButton variant="highlight" icon="save" :disabled="busy || loading" @click="saveConfig">{{ t('common.save') }}</PclButton>
+      </div>
+    </PclCard>
+
     <PclCard v-else :title="t('pcl.server.eula')">
       <div class="pcl-server-eula">
         <PclCheckbox v-model="eula" :label="t('instanceSections.acceptEula')" :disabled="busy" @update:model-value="saveEula" />
@@ -102,10 +112,11 @@ const { t } = useI18n();
 
 const tabs = [
   { id: 'console', label: t('instanceSections.serverConsole') }, { id: 'properties', label: t('pcl.server.properties') }, { id: 'lists', label: t('pcl.server.lists') },
-  { id: 'yaml', label: 'YAML' }, { id: 'eula', label: 'EULA' },
+  { id: 'yaml', label: 'YAML' }, { id: 'eula', label: 'EULA' }, { id: 'config', label: t('pcl.server.config') },
 ];
 const tab = ref<any>('console'), error = ref<any>(''), loading = ref(false), command = ref<any>('');
 const eula = ref(false);
+const stopCommand = ref('stop'), authlibEnabled = ref(false), authlibApiUrl = ref('');
 const propertiesText = ref<any>('');
 const listKind = ref<any>('whitelist'), listInput = ref<any>(''), listEntries = ref<any[]>([]);
 const yamlFile = ref<any>('bukkit.yml'), yamlText = ref<any>(''), yamlRevision = ref<any>('');
@@ -145,6 +156,16 @@ async function loadYaml() {
   yamlText.value = String(result?.content || '');
   yamlRevision.value = String(result?.revision || '');
 }
+async function loadConfig() {
+  const [stop, enabled, api] = await Promise.all([
+    props.execute('settings.get', { scope: 'instance', instance: props.instance.id, key: 'StopCommand' }),
+    props.execute('settings.get', { scope: 'instance', instance: props.instance.id, key: 'AuthlibInjectorEnabled' }),
+    props.execute('settings.get', { scope: 'instance', instance: props.instance.id, key: 'AuthlibInjectorApiUrl' }),
+  ]);
+  stopCommand.value = String(stop?.value ?? 'stop');
+  authlibEnabled.value = Boolean(enabled?.value);
+  authlibApiUrl.value = String(api?.value ?? '');
+}
 async function loadAll() {
   loading.value = true;
   error.value = '';
@@ -153,6 +174,7 @@ async function loadAll() {
     await loadProperties();
     await loadList();
     await loadYaml();
+    await loadConfig();
   } catch (exception) {
     setError(exception);
   } finally {
@@ -182,6 +204,16 @@ function startServer() {
 }
 function stopServer() {
   return run(async () => { await props.execute('instance.stop', { instance: props.instance.id }); });
+}
+function forceStopServer() {
+  return run(async () => { await props.execute('instance.kill', { instance: props.instance.id }); });
+}
+function saveConfig() {
+  return run(async () => {
+    await props.execute('settings.set', { scope: 'instance', instance: props.instance.id, key: 'StopCommand', value: stopCommand.value });
+    await props.execute('settings.set', { scope: 'instance', instance: props.instance.id, key: 'AuthlibInjectorEnabled', value: authlibEnabled.value });
+    await props.execute('settings.set', { scope: 'instance', instance: props.instance.id, key: 'AuthlibInjectorApiUrl', value: authlibApiUrl.value.trim() });
+  });
 }
 function sendCommand() {
   if (!command.value.trim()) return;

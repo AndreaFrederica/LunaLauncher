@@ -188,6 +188,37 @@ std::optional<Match> Index::find(const QString& modId, const QString& name) cons
     return std::nullopt;
 }
 
+std::optional<Match> Index::findByName(const QString& query) const
+{
+    const auto original = query.trimmed();
+    if (original.isEmpty())
+        return std::nullopt;
+
+    const auto normalized = normalizeName(original);
+    if (const auto it = m_nameIndex.constFind(normalized); it != m_nameIndex.constEnd())
+        return Match{ m_projects.at(it.value()), QStringLiteral("name") };
+
+    // A query often contains a Minecraft version or a loader after the MCMod
+    // title. Prefer the longest matching title so short aliases cannot steal
+    // a more specific result.
+    const Project* matched = nullptr;
+    qsizetype matchedLength = 0;
+    for (const auto& project : m_projects) {
+        for (const auto& candidate : { project.mainName, project.secondaryName, project.abbreviation }) {
+            const auto title = candidate.trimmed();
+            if (title.isEmpty() || title.size() <= matchedLength)
+                continue;
+            if (original.contains(title, Qt::CaseInsensitive)) {
+                matched = &project;
+                matchedLength = title.size();
+            }
+        }
+    }
+    if (!matched)
+        return std::nullopt;
+    return Match{ *matched, QStringLiteral("name") };
+}
+
 QString Index::translateSearchTerm(const QString& query) const
 {
     const auto original = query.trimmed();
@@ -195,46 +226,19 @@ QString Index::translateSearchTerm(const QString& query) const
         return query;
 
     const auto normalized = normalizeName(original);
-    const Project* matched = nullptr;
-
-    // Exact aliases are the common path and avoid ambiguous partial matches.
-    if (const auto it = m_nameIndex.constFind(normalized); it != m_nameIndex.constEnd())
-        matched = &m_projects.at(it.value());
-
-    // Preserve provider-friendly suffixes such as a Minecraft version while
-    // translating a Chinese title embedded in a longer search expression.
-    if (!matched) {
-        for (const auto& project : m_projects) {
-            const auto title = project.mainName.trimmed();
-            if (!title.isEmpty() && original.contains(title, Qt::CaseInsensitive)) {
-                matched = &project;
-                break;
-            }
-        }
-    }
-
-    // Also support a Chinese query containing only part of the MCMod title,
-    // which is useful for names such as "机械动力" followed by a version tag.
-    if (!matched) {
-        for (const auto& project : m_projects) {
-            const auto mainName = normalizeName(project.mainName);
-            if (!mainName.isEmpty() && mainName.contains(normalized)) {
-                matched = &project;
-                break;
-            }
-        }
-    }
-
-    if (!matched)
+    const auto match = findByName(original);
+    if (!match)
         return query;
+
+    const auto& matched = match->project;
 
     // MCMod's secondary name is normally the English name used by the
     // download providers. Fall back to the abbreviation, then preserve the
     // original query when no useful translation was exported.
-    for (const auto& candidate : { matched->secondaryName, matched->abbreviation }) {
+    for (const auto& candidate : { matched.secondaryName, matched.abbreviation }) {
         const auto value = candidate.trimmed();
         if (!value.isEmpty() && normalizeName(value) != normalized) {
-            const auto title = matched->mainName.trimmed();
+            const auto title = matched.mainName.trimmed();
             const auto position = title.isEmpty() ? -1 : original.indexOf(title, 0, Qt::CaseInsensitive);
             if (position >= 0)
                 return original.left(position) + value + original.mid(position + title.size());

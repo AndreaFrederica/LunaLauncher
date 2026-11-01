@@ -4,12 +4,14 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonDocument>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QUrl>
@@ -75,7 +77,7 @@ QStringList supportedKinds(const QString& name)
     return { "mods", "resourcepacks", "shaderpacks", "datapacks", "modpacks" };
 }
 
-QJsonObject packJson(const Pack& pack, bool includeMcMod = false)
+QJsonObject packJson(const Pack& pack, bool includeMcMod = false, const QString& source = {})
 {
     QJsonArray authors;
     for (const auto& author : pack.authors)
@@ -85,11 +87,24 @@ QJsonObject packJson(const Pack& pack, bool includeMcMod = false)
              { "authors", authors }, { "side", ModPlatform::SideUtils::toString(pack.side) },
              { "body", pack.extraData.body }, { "sourceUrl", pack.extraData.sourceUrl },
              { "issuesUrl", pack.extraData.issuesUrl }, { "wikiUrl", pack.extraData.wikiUrl }, { "discordUrl", pack.extraData.discordUrl } };
+    if (pack.provider == ModPlatform::ResourceProvider::MODRINTH || pack.provider == ModPlatform::ResourceProvider::FLAME ||
+        pack.provider == ModPlatform::ResourceProvider::HANGAR)
+        result.insert("providerUrl", ModPlatform::getMetaURL(pack.provider, pack.addonId));
+    const auto providerName = pack.provider == ModPlatform::ResourceProvider::MODRINTH ? QStringLiteral("modrinth")
+                            : pack.provider == ModPlatform::ResourceProvider::FLAME ? QStringLiteral("curseforge")
+                                                                                    : pack.provider == ModPlatform::ResourceProvider::HANGAR ? QStringLiteral("hangar") : QString{};
+    if (!providerName.isEmpty()) {
+        result.insert("providerMeta", QJsonObject{
+            { providerName, QJsonObject{
+                { "providerUrl", result.value("providerUrl") },
+                { "projectUrl", pack.websiteUrl },
+                { "sourceUrl", pack.extraData.sourceUrl },
+            } },
+        });
+    }
+    if (!source.isEmpty()) result.insert("provider", source);
 
     if (includeMcMod) {
-        const auto providerName = pack.provider == ModPlatform::ResourceProvider::MODRINTH ? QStringLiteral("modrinth")
-                                : pack.provider == ModPlatform::ResourceProvider::FLAME ? QStringLiteral("curseforge")
-                                                                                         : QString{};
         auto match = McMod::Index::instance().findByProviderId(providerName, pack.addonId.toString());
         if (!match)
             match = McMod::Index::instance().find(QString{}, pack.name);
@@ -233,6 +248,140 @@ bool safeFilename(const QString& name)
            !forbidden.match(name).hasMatch() && !reserved.match(name).hasMatch();
 }
 
+QString mcmodProjectId(const McMod::Project& project, const QString& source)
+{
+    if (source == QStringLiteral("modrinth")) return project.modrinthId;
+    if (source == QStringLiteral("curseforge")) return project.curseForgeId;
+    return {};
+}
+
+QJsonObject searchAggregate(LauncherApi& api, const QJsonObject& p, UserInteraction& interaction)
+{
+    const auto kind = p.value("kind").toString();
+    if (kind != QStringLiteral("mods"))
+        return OperationService::failure("resource.search.v2 currently supports mods only.", 2);
+
+    QStringList sources;
+    const auto providerValues = p.value("providers");
+    if (providerValues.isArray()) {
+        for (const auto& value : providerValues.toArray()) {
+            const auto source = value.toString().trimmed();
+            if (!source.isEmpty() && !sources.contains(source)) sources.append(source);
+        }
+    }
+    if (sources.isEmpty()) sources = { QStringLiteral("modrinth"), QStringLiteral("curseforge") };
+
+    Filters filters;
+    if (!filters.parse(p)) return OperationService::failure("Invalid Minecraft version or loader filter.", 2);
+    const auto offset = p.value("offset").toInt(0);
+    if (offset < 0 || offset > 100000) return OperationService::failure("offset must be between 0 and 100000.", 2);
+
+    const auto originalQuery = p.value("query").toString().trimmed();
+    const bool mcmodEnabled = APPLICATION->settings()->get("McModSearchEnabled").toBool();
+    const auto translatedQuery = mcmodEnabled ? McMod::Index::instance().translateSearchTerm(originalQuery) : originalQuery;
+    const auto mcmodMatch = mcmodEnabled ? McMod::Index::instance().findByName(originalQuery) : std::nullopt;
+    QJsonArray projects;
+    QSet<QString> seen;
+    QHash<QString, int> positions;
+    QStringList errors;
+    bool providerSucceeded = false;
+    bool mayHaveMore = false;
+
+    auto append = [&](const Pack::Ptr& pack, const QString& source) {
+        if (!pack) return;
+        const auto object = packJson(*pack, true, source);
+        const auto mcmod = object.value("mcmod").toObject();
+        const auto projectId = object.value("projectId").toString();
+        const auto key = mcmod.value("id").toString().isEmpty()
+                       ? source + QLatin1Char(':') + projectId
+                       : QStringLiteral("mcmod:") + mcmod.value("id").toString();
+        if (!projectId.isEmpty() && !seen.contains(key)) {
+            seen.insert(key);
+            positions.insert(key, projects.size());
+            projects.append(object);
+        } else if (!projectId.isEmpty() && positions.contains(key)) {
+            // Keep one visible result per MCMod entry, but retain each
+            // provider's own project/source metadata for the links shown by
+            // the UI. MCMod data remains a fallback and never overwrites
+            // provider-owned metadata.
+            const auto index = positions.value(key);
+            auto merged = projects.at(index).toObject();
+            auto providerMeta = merged.value("providerMeta").toObject();
+            const auto incomingMeta = object.value("providerMeta").toObject();
+            for (auto it = incomingMeta.constBegin(); it != incomingMeta.constEnd(); ++it)
+                providerMeta.insert(it.key(), it.value());
+            merged.insert("providerMeta", providerMeta);
+            projects.replace(index, merged);
+        }
+    };
+
+    for (const auto& source : sources) {
+        auto service = provider(source);
+        if (!service || !supportedKinds(source).contains(kind)) {
+            errors.append(source + QStringLiteral(": unsupported provider"));
+            continue;
+        }
+
+        // A MCMod binding is authoritative for an exact title. Fetching by
+        // provider key avoids relying on provider-specific full-text ranking.
+        if (offset == 0 && mcmodMatch) {
+            const auto projectId = mcmodProjectId(mcmodMatch->project, source);
+            if (!projectId.isEmpty() && projectIdValid(projectId, source)) {
+                auto pack = std::make_shared<Pack>();
+                pack->addonId = source == QStringLiteral("curseforge") ? QVariant(projectId.toLongLong()) : QVariant(projectId);
+                pack->provider = source == QStringLiteral("modrinth") ? ModPlatform::ResourceProvider::MODRINTH : ModPlatform::ResourceProvider::FLAME;
+                Reply<Pack::Ptr> reply;
+                const auto task = service->getProjectInfo({ pack }, reply.callbacks());
+                if (reply.finish(api, task, interaction) && reply.data) {
+                    providerSucceeded = true;
+                    append(reply.data, source);
+                } else if (!reply.error.isEmpty()) {
+                    errors.append(source + QStringLiteral(": ") + reply.error);
+                }
+            }
+        }
+
+        ResourceAPI::SearchArgs args;
+        args.type = Kind::Mod;
+        args.offset = offset;
+        if (!translatedQuery.isEmpty()) args.search = QString::fromLatin1(QUrl::toPercentEncoding(translatedQuery));
+        args.versions = filters.versions;
+        args.loaders = filters.loaders;
+        args.pluginLoaders = filters.plugins;
+        args.openSource = p.value("openSource").toBool();
+        const auto sort = p.value("sort").toString();
+        if (!sort.isEmpty()) {
+            for (const auto& method : service->getSortingMethods())
+                if (method.name == sort) { args.sorting = method; break; }
+        }
+        Reply<QList<Pack::Ptr>> reply;
+        const auto task = service->searchProjects(std::move(args), reply.callbacks());
+        if (!reply.finish(api, task, interaction)) {
+            if (!reply.error.isEmpty()) errors.append(source + QStringLiteral(": ") + reply.error);
+            continue;
+        }
+        providerSucceeded = true;
+        mayHaveMore = mayHaveMore || reply.data.size() >= 25;
+        for (const auto& pack : reply.data) append(pack, source);
+    }
+
+    if (!providerSucceeded && projects.isEmpty())
+        return OperationService::failure(errors.isEmpty() ? QStringLiteral("All resource providers failed.") : errors.join(QStringLiteral("; ")));
+
+    QJsonObject result{ { "results", projects }, { "providers", QJsonArray::fromStringList(sources) },
+                        { "query", originalQuery }, { "translatedQuery", translatedQuery },
+                        { "offset", offset }, { "pageSize", 25 },
+                        { "nextOffset", offset + projects.size() }, { "mayHaveMore", mayHaveMore } };
+    if (mcmodMatch) {
+        const auto& project = mcmodMatch->project;
+        result.insert("mcmod", QJsonObject{ { "id", project.id }, { "name", project.mainName },
+                                             { "matchedBy", mcmodMatch->matchedBy },
+                                             { "url", McMod::Index::pageUrl(project.id) } });
+    }
+    if (!errors.isEmpty()) result.insert("warnings", QJsonArray::fromStringList(errors));
+    return OperationService::success(result);
+}
+
 QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject& p, UserInteraction& interaction)
 {
     const auto source = p.value("provider").toString();
@@ -268,7 +417,7 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
         const auto task = service->searchProjects(std::move(args), reply.callbacks());
         if (!reply.finish(api, task, interaction)) return OperationService::failure(reply.error);
         QJsonArray projects;
-        for (const auto& pack : reply.data) projects.append(packJson(*pack, kind == "mods"));
+        for (const auto& pack : reply.data) projects.append(packJson(*pack, kind == "mods", source));
         return OperationService::success(QJsonObject{ { "provider", source }, { "projects", projects },
             { "offset", p.value("offset").toInt() }, { "pageSize", 25 }, { "nextOffset", p.value("offset").toInt() + projects.size() },
             { "mayHaveMore", projects.size() == 25 } });
@@ -285,7 +434,7 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
         const auto task = service->getProjectInfo({ pack }, reply.callbacks());
         if (!reply.finish(api, task, interaction)) return OperationService::failure(reply.error);
         if (pack->name.isEmpty()) return OperationService::failure("Provider returned an invalid project.");
-        if (operation == "resource.project") return OperationService::success(packJson(*pack, kind == "mods"));
+        if (operation == "resource.project") return OperationService::success(packJson(*pack, kind == "mods", source));
     }
     if (operation == "resource.resolve-dependency") {
         if (source == "hangar") return OperationService::failure("Hangar does not support dependency resolution.", 2);
@@ -747,6 +896,15 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
     search.insert("openSource", boolean());
     api.registerOperation({ "resource.search", "Search remote resources; results use provider pages of 25 entries.", schema(search, { "provider", "kind" }), "catalog" },
         [&api](const QJsonObject& p, UserInteraction& i) { return browse(api, "resource.search", p, i); });
+    auto searchV2 = common;
+    searchV2.insert("query", string("Search text; MCMod titles are reverse-resolved when enabled."));
+    searchV2.insert("providers", strings());
+    searchV2.insert("offset", QJsonObject{ { "type", "integer" }, { "minimum", 0 }, { "maximum", 100000 } });
+    searchV2.insert("sort", string("Optional provider sorting ID."));
+    searchV2.insert("openSource", boolean());
+    api.registerOperation({ "resource.search.v2", "Search and aggregate mod results from multiple providers, with MCMod key reverse lookup.",
+                            schema(searchV2, { "kind" }), "catalog" },
+        [&api](const QJsonObject& p, UserInteraction& i) { return searchAggregate(api, p, i); });
     auto project = common;
     project.insert("projectId", string("Provider project ID (Hangar accepts owner/project)."));
     project.insert("includeChangelog", boolean());

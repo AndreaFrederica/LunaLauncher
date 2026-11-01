@@ -814,12 +814,12 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
     grid-template-columns: 1fr;
   }
   .pcl-launch-left {
-    height: calc(100vh - 48px);
-    min-height: calc(100vh - 48px);
+    height: 100%;
+    min-height: 0;
     padding: 20px;
   }
   .pcl-launching-panel {
-    min-height: calc(100vh - 96px);
+    min-height: 0;
   }
   .pcl-launch-right {
     padding: 16px;

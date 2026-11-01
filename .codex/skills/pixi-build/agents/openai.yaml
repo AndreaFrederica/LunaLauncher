@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pixi Build"
+  short_description: "Build LunaLauncher through repository Pixi tasks"
+  default_prompt: "Use the repository Pixi tasks for all configure, build, install, test, and clean operations."

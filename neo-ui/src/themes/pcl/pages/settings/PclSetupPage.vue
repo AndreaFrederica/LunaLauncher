@@ -1026,11 +1026,11 @@ provide(PclSetupContextKey, {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background: var(--pcl-c3);
-  color: #fff;
+  width: 56px;
+  height: 56px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pcl-text);
   font-size: calc(28px * var(--pcl-font-scale, 1));
   font-weight: 800;
 }

@@ -1,5 +1,12 @@
 <template>
 <PclCard :title="t('pcl.auto2.ke8bef90efb')">
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">{{ t('pcl.appearance.launcherName') }}</span>
+        <div class="pcl-form-row__control">
+          <PclInput v-model="preferences.pclTitleText" placeholder="LunaLauncher" />
+        </div>
+        <span class="pcl-form-row__hint">{{ t('pcl.appearance.launcherNameHint') }}</span>
+      </div>
       <div class="pcl-check-grid">
         <PclCheckbox v-model="preferences.pclTitleIcon" :label="t('pcl.appearance.titleIcon')" />
         <PclCheckbox v-model="preferences.pclTitleLogo" :label="t('pcl.appearance.titleText')" />
@@ -9,7 +16,7 @@
         <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" :label="t('pcl.auto2.k731cff1a1b')" />
         <PclCheckbox v-model="preferences.pclEditCurrentInWindow" :label="t('pcl.auto2.k61a28ec924')" />
       </div>
-      <PclHint theme="blue">{{ t('pcl.auto2.ke51c7fd2cd') }}</PclHint>
+      <PclHint theme="blue">{{ t('pcl.appearance.titleTextWhiteHint') }}</PclHint>
     </PclCard>
 </template>
 <script setup lang="ts">

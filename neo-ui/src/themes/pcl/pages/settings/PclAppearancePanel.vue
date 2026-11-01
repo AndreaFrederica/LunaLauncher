@@ -170,9 +170,10 @@ const classicIconOptions = [
   { label: '160 px', value: 160 },
 ];
 const shellOptions = [
+  { label: '终末地', value: 'endfield' },
   { label: '忘却的旋律', value: 'melody' },
   { label: t('pcl.auto2.k67cf30199a'), value: 'pcl' },
-  { label: t('pcl.auto2.k453b088186'), value: 'neo' },
+  { label: 'Demo', value: 'neo' },
 ];
 const themeOptions = [
   { label: t('pcl.auto2.k30b2c979ac'), value: 'dark' },

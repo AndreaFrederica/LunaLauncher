@@ -21,7 +21,7 @@
       <nav ref="menuElement" class="melody-menu" aria-label="窗口与主题">
         <button v-for="kind in menuKinds" :key="kind" @click="menuOpen = false; openWindow(kind)">{{ windows[kind].title }}</button>
         <button @click="menuOpen = false; openRuntimeDebug()">打开 Runtime Debugger</button>
-        <button @click="leaveTheme()">返回 NeoUI</button>
+        <button @click="leaveTheme()">返回启动器</button>
       </nav>
     </div>
   </main>
@@ -278,7 +278,7 @@ async function leaveTheme(shell: NeoShell = 'pcl') {
     persistNeoUiPreferences();
     return;
   }
-  if (!['neo', 'pcl'].includes(shell)) return;
+  if (!['neo', 'pcl', 'endfield'].includes(shell)) return;
   neoUiPreferences.shell = shell;
   persistNeoUiPreferences();
   const url = new URL(location.href);

@@ -8,7 +8,7 @@ import { recordRuntimeDebug } from './common/runtime/runtime-debug';
 export type NeoTheme = 'dark' | 'light' | 'system';
 export type NeoDensity = 'comfortable' | 'compact';
 export type NeoBackground = 'solid' | 'gradient';
-export type NeoShell = 'neo' | 'pcl' | 'melody';
+export type NeoShell = 'neo' | 'pcl' | 'melody' | 'endfield';
 export type PclFont = 'system' | 'yahei' | 'dengxian' | 'simsun';
 export type PclStylePreset = 'luna-neo' | 'pcl';
 export type PclLoadingAnimation = 'luna-spinner' | 'pcl-pickaxe' | 'pcl-bar';
@@ -60,6 +60,8 @@ export interface NeoUiPreferences {
   pclTitleBadge: boolean;
   /** Show the Luna mark before the PCL title-bar brand. */
   pclTitleIcon: boolean;
+  /** Custom text shown in the launcher title bar. */
+  pclTitleText: string;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
   pclAccentColor: string;
   /** Data URL for the PCL page background; empty means no image. */
@@ -124,6 +126,7 @@ const defaults: NeoUiPreferences = {
   pclTitleLogo: true,
   pclTitleBadge: true,
   pclTitleIcon: true,
+  pclTitleText: 'LunaLauncher',
   pclAccentColor: '#d65c9a',
   pclBackgroundImage: '',
   pclBackgroundImageName: '',
@@ -395,7 +398,8 @@ export function applyNeoUiPreferences() {
   const root = document.documentElement;
   const isDark = neoUiIsDark.value;
   root.dataset.neoTheme = isDark ? 'dark' : 'light';
-  root.dataset.neoShell = neoUiPreferences.shell;
+  root.dataset.neoShell = neoUiPreferences.shell === 'endfield' ? 'pcl' : neoUiPreferences.shell;
+  root.dataset.neoSkin = neoUiPreferences.shell === 'endfield' ? 'endfield' : '';
   root.dataset.neoDensity = neoUiPreferences.density;
   root.dataset.neoBackground = neoUiPreferences.background;
   root.dataset.neoAnimations = neoUiPreferences.animations ? 'on' : 'off';
@@ -403,11 +407,12 @@ export function applyNeoUiPreferences() {
   root.dataset.pclTitleBadge = neoUiPreferences.pclTitleBadge ? 'on' : 'off';
   root.dataset.pclTitleIcon = neoUiPreferences.pclTitleIcon ? 'on' : 'off';
   root.style.setProperty('--neo-primary', neoUiPreferences.accent);
-  const pclAccent = normalizePclAccent(neoUiPreferences.pclAccentColor);
+  const endfieldSkin = neoUiPreferences.shell === 'endfield';
+  const pclAccent = endfieldSkin ? '#fffa00' : normalizePclAccent(neoUiPreferences.pclAccentColor);
   root.style.setProperty('--pcl-c3', pclAccent);
-  root.style.setProperty('--pcl-c2', isDark ? mixHex(pclAccent, '#ffffff', 0.4) : mixHex(pclAccent, '#000000', 0.2));
-  root.style.setProperty('--pcl-c4', mixHex(pclAccent, '#ffffff', 0.2));
-  root.style.setProperty('--pcl-c5', isDark ? mixHex(pclAccent, '#000000', 0.32) : mixHex(pclAccent, '#ffffff', 0.6));
+  root.style.setProperty('--pcl-c2', endfieldSkin ? '#fff45c' : isDark ? mixHex(pclAccent, '#ffffff', 0.4) : mixHex(pclAccent, '#000000', 0.2));
+  root.style.setProperty('--pcl-c4', endfieldSkin ? '#fff2a6' : mixHex(pclAccent, '#ffffff', 0.2));
+  root.style.setProperty('--pcl-c5', endfieldSkin ? '#f2ec00' : isDark ? mixHex(pclAccent, '#000000', 0.32) : mixHex(pclAccent, '#ffffff', 0.6));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
   root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
   root.style.setProperty('--pcl-page-nav-width', `${Math.max(140, Math.min(360, Number(neoUiPreferences.pclPageNavWidth) || defaults.pclPageNavWidth))}px`);

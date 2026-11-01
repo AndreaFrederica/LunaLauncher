@@ -3,6 +3,7 @@
         :items="results"
         :busy="busy || searching || cancelling"
         :searched="searched"
+        :execute="props.execute"
         :provider="provider"
         :provider-label="providerLabel"
         :fallback-description="t('pcl.auto2.k4b64e784af')"

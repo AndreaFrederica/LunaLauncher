@@ -302,8 +302,8 @@ function sanitizeHtml(value: string) {
   return root.innerHTML;
 }
 
-function normalize(v:any){const id=String(v?.projectId||v?.slug||v?.id||v?.url||'');const icon=v?.iconUrl||v?.icon||v?.logoUrl||v?.logo?.url||'';return {...v,projectId:id,provider:provider.value,name:v?.displayName||v?.name||v?.title||v?.display_name||id,description:v?.description||v?.synopsis||v?.summary||'',iconUrl:icon};}
-function params(){const p:any={provider:provider.value};if(props.packs){if(privateCode.value.trim())p.privateCode=privateCode.value.trim();}else{p.kind=props.kind||'mods';if(gameVersion.value)p.minecraftVersion=gameVersion.value;if(loader.value)p.loaders=[loader.value];if(sort.value!=='relevance')p.sort=sort.value;}return p;}
+function normalize(v:any){const id=String(v?.projectId||v?.slug||v?.id||v?.url||'');const icon=v?.iconUrl||v?.icon||v?.logoUrl||v?.logo?.url||'';return {...v,projectId:id,provider:String(v?.provider||provider.value),name:v?.displayName||v?.name||v?.title||v?.display_name||id,description:v?.description||v?.synopsis||v?.summary||'',iconUrl:icon};}
+function params(providerOverride = provider.value){const p:any={provider:providerOverride};if(props.packs){if(privateCode.value.trim())p.privateCode=privateCode.value.trim();}else{p.kind=props.kind||'mods';if(gameVersion.value)p.minecraftVersion=gameVersion.value;if(loader.value)p.loaders=[loader.value];if(sort.value!=='relevance')p.sort=sort.value;}return p;}
 function versionLabel(v:any){const game=Array.isArray(v.minecraftVersions)?v.minecraftVersions.slice(0,2).join(', '):(v.minecraftVersion||'');return `${v.name||v.version||v.versionId}${game?' · '+game:''}`;}
 function scrollCatalogToTop() {
   void nextTick(() => {
@@ -319,7 +319,7 @@ function scrollCatalogToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
-async function search(start:number){if(props.busy || searching.value || cancelling.value)return;autoRefreshSuppressed.value=false;const generation=++searchGeneration;searching.value=true;error.value='';if(start===0)clearSelectedProjects();try{const text=[query.value,props.tag&&props.tag!==t('pcl.auto2.k778fc8f994')?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:text,offset:start});if(generation!==searchGeneration)return;const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;project.value=null;scrollCatalogToTop();}catch(e){if(generation===searchGeneration)error.value=String(e);}finally{if(generation===searchGeneration)searching.value=false;}}
+async function search(start:number){if(props.busy || searching.value || cancelling.value)return;autoRefreshSuppressed.value=false;const generation=++searchGeneration;searching.value=true;error.value='';if(start===0)clearSelectedProjects();try{const text=[query.value,props.tag&&props.tag!==t('pcl.auto2.k778fc8f994')?props.tag:''].filter(Boolean).join(' ');const aggregateMods=!props.packs&&props.kind==='mods';const operation=props.packs?'modpack.search':aggregateMods?'resource.search.v2':'resource.search';const request=aggregateMods?{...params(),providers:['modrinth','curseforge'],query:text,offset:start}:{...params(),query:text,offset:start};const r=await props.execute(operation,request);if(generation!==searchGeneration)return;const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;project.value=null;scrollCatalogToTop();}catch(e){if(generation===searchGeneration)error.value=String(e);}finally{if(generation===searchGeneration)searching.value=false;}}
 async function cancelLoading(){
   if ((!searching.value && !detailLoading.value) || cancelling.value) return;
   // Invalidate the current request immediately so a late response cannot
@@ -341,17 +341,17 @@ async function cancelLoading(){
     cancelling.value = false;
   }
 }
-function favoriteKey(item:any){return `${provider.value}:${props.kind || 'modpack'}:${item.projectId}`;}
+function favoriteKey(item:any){return `${item?.provider||provider.value}:${props.kind || 'modpack'}:${item.projectId}`;}
 function readFavorites():any[]{try{return JSON.parse(localStorage.getItem('luna-pcl-favorites') || '[]');}catch{return [];}}
 function writeFavorites(value:any[]){try{localStorage.setItem('luna-pcl-favorites',JSON.stringify(value.slice(-200)));}catch{/* storage unavailable in native webview */}}
 function toggleFavorite(){if(!project.value)return;const key=favoriteKey(project.value),all=readFavorites();if(favorite.value){writeFavorites(all.filter(item=>item.key!==key));favorite.value=false;}else{writeFavorites([...all.filter(item=>item.key!==key),{key,provider:provider.value,kind:props.kind,name:project.value.name,description:project.value.description,projectId:project.value.projectId,iconUrl:project.value.iconUrl}]);favorite.value=true;}}
-async function select(item:any){if(props.busy)return;const generation=++selectionGeneration;error.value='';versions.value=[];version.value='';project.value=normalize(item);favorite.value=readFavorites().some(entry=>entry.key===favoriteKey(project.value));detailLoading.value=true;projectTab.value='overview';try{const detail=await props.execute(props.packs?'modpack.project':'resource.project',{...params(),projectId:item.projectId});if(generation!==selectionGeneration)return;project.value={...project.value,...normalize(detail)};const r=await props.execute(props.packs?'modpack.versions':'resource.versions',{...params(),projectId:item.projectId});if(generation!==selectionGeneration)return;versions.value=(Array.isArray(r)?r:(r?.versions||[])).map((entry:any)=>({ ...entry, versionId:String(entry?.versionId||entry?.id||entry?.version||'') })).filter((entry:any)=>entry.versionId).sort((a:any,b:any)=>String(b.datePublished||b.created||b.date||'').localeCompare(String(a.datePublished||a.created||a.date||'')));version.value=versions.value[0]?.versionId||'';instanceName.value=item.name;}catch(e){if(generation===selectionGeneration)error.value=String(e);}finally{if(generation===selectionGeneration)detailLoading.value=false;}}
+async function select(item:any){if(props.busy)return;const generation=++selectionGeneration;const itemProvider=String(item?.provider||provider.value);error.value='';versions.value=[];version.value='';project.value=normalize({...item,provider:itemProvider});favorite.value=readFavorites().some(entry=>entry.key===favoriteKey(project.value));detailLoading.value=true;projectTab.value='overview';try{const detail=await props.execute(props.packs?'modpack.project':'resource.project',{...params(itemProvider),projectId:item.projectId});if(generation!==selectionGeneration)return;project.value={...project.value,...normalize({...detail,provider:itemProvider})};const r=await props.execute(props.packs?'modpack.versions':'resource.versions',{...params(itemProvider),projectId:item.projectId});if(generation!==selectionGeneration)return;versions.value=(Array.isArray(r)?r:(r?.versions||[])).map((entry:any)=>({ ...entry, versionId:String(entry?.versionId||entry?.id||entry?.version||'') })).filter((entry:any)=>entry.versionId).sort((a:any,b:any)=>String(b.datePublished||b.created||b.date||'').localeCompare(String(a.datePublished||a.created||a.date||'')));version.value=versions.value[0]?.versionId||'';instanceName.value=item.name;}catch(e){if(generation===selectionGeneration)error.value=String(e);}finally{if(generation===selectionGeneration)detailLoading.value=false;}}
 async function toggleSelected(item: any, enabled: boolean) {
   if (props.packs) return;
   if (!enabled) { delete selectedProjects[item.projectId]; return; }
   const entry = selectedProjects[item.projectId] = { ...normalize(item), loadingVersions: true, checked: true, versionId: '', versionOptions: [], versionLabel: t('pcl.resourceDownload.searching') };
   try {
-    const response: any = await props.execute('resource.versions', { ...params(), projectId: item.projectId });
+    const response: any = await props.execute('resource.versions', { ...params(entry.provider), projectId: item.projectId });
     const list = (Array.isArray(response) ? response : response?.versions || [])
       .map((value: any) => ({ ...value, versionId: String(value?.versionId || value?.id || value?.version || '') }))
       .filter((value: any) => value.versionId);
@@ -378,8 +378,8 @@ async function installSelected() {
   let failure = '';
   try {
     for (const entry of entries) {
-      const recursive = ['modrinth', 'curseforge'].includes(provider.value) && providerMeta.value?.dependencyResolution !== false;
-      let task: any = await props.execute('neo.task.start', { operation: recursive ? 'resource.install-with-dependencies' : 'resource.install-version', priority: 'high', parameters: { ...params(), instance: props.instance, projectId: entry.projectId, versionId: entry.versionId, ...(recursive ? { includeOptional: optional.value } : {}) } });
+      const recursive = ['modrinth', 'curseforge'].includes(entry.provider) && providerMeta.value?.dependencyResolution !== false;
+      let task: any = await props.execute('neo.task.start', { operation: recursive ? 'resource.install-with-dependencies' : 'resource.install-version', priority: 'high', parameters: { ...params(entry.provider), instance: props.instance, projectId: entry.projectId, versionId: entry.versionId, ...(recursive ? { includeOptional: optional.value } : {}) } });
       while (task && !isTaskItemFinished(task)) { emit('install-progress', task); await new Promise(resolve => setTimeout(resolve, 400)); task = await props.execute('neo.task.status', { taskId: task.taskId }); }
       emit('install-progress', task);
       if (!task || task.state !== 'succeeded') throw new Error(task?.error || t('pcl.auto2.k6c24c6cb06'));
@@ -415,11 +415,12 @@ async function install(){
       // The recursive task is only implemented by the built-in providers.
       // Other providers still support direct version installation and must not
       // be rejected just because the optional-dependency checkbox is enabled.
-      const recursive = ['modrinth', 'curseforge'].includes(provider.value) && providerMeta.value?.dependencyResolution !== false;
+      const projectProvider = String(project.value.provider || provider.value);
+      const recursive = ['modrinth', 'curseforge'].includes(projectProvider) && providerMeta.value?.dependencyResolution !== false;
       let task:any=await props.execute('neo.task.start',{
         operation:recursive ? 'resource.install-with-dependencies' : 'resource.install-version',
         priority:'high',
-        parameters:{...params(),instance:props.instance,projectId:project.value.projectId,versionId:version.value,...(recursive ? { includeOptional: optional.value } : {})},
+        parameters:{...params(projectProvider),instance:props.instance,projectId:project.value.projectId,versionId:version.value,...(recursive ? { includeOptional: optional.value } : {})},
       });
       while(task && !isTaskItemFinished(task)){
         emit('install-progress',task);

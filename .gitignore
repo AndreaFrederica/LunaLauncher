@@ -122,3 +122,5 @@ dist/
 /docs/pcl-neoui-*.md
 
 temp-msvc/
+temp/
+neo-ui/prototypes/

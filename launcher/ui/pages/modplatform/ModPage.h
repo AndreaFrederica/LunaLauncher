@@ -63,6 +63,7 @@ class ModPage : public ResourcePage {
     inline QString resourcesString() const override { return tr("mods"); }
     //: The singular version of 'mods'
     inline QString resourceString() const override { return tr("mod"); }
+    bool supportsMcModLinks() const override { return true; }
 
     QMap<QString, QString> urlHandlers() const override;
 

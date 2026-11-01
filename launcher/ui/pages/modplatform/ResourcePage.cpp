@@ -38,6 +38,7 @@
  */
 
 #include "ResourcePage.h"
+#include "mcmod/McModIndex.h"
 #include "modplatform/ModIndex.h"
 #include "ui/dialogs/CustomMessageBox.h"
 #include "ui_ResourcePage.h"
@@ -218,6 +219,23 @@ void ResourcePage::updateUi(const QModelIndex& index)
             authorStrs.push_back(authorToStr(author));
         }
         text += "<br>" + tr(" by ") + authorStrs.join(", ");
+    }
+
+    if (supportsMcModLinks() && APPLICATION->settings()->get("McModSearchEnabled").toBool() &&
+        current_pack->provider != ModPlatform::ResourceProvider::HANGAR) {
+        const auto provider = current_pack->provider == ModPlatform::ResourceProvider::MODRINTH
+                                  ? QStringLiteral("modrinth")
+                                  : QStringLiteral("curseforge");
+        auto mcmod = McMod::Index::instance().findByProviderId(provider, current_pack->addonId.toString());
+        if (!mcmod && provider == QStringLiteral("curseforge"))
+            mcmod = McMod::Index::instance().findByProviderId(provider, current_pack->slug);
+        if (!mcmod)
+            mcmod = McMod::Index::instance().find({}, current_pack->name);
+
+        const auto mcmodUrl = mcmod ? McMod::Index::pageUrl(mcmod->project.id) : McMod::Index::searchUrl(current_pack->name);
+        const auto mcmodName = mcmod ? mcmod->project.mainName : tr("Search on MC百科");
+        text += QStringLiteral("<br>%1 <a href=\"%2\">%3</a>")
+                    .arg(tr("MC百科:"), mcmodUrl.toHtmlEscaped(), mcmodName.toHtmlEscaped());
     }
 
     if (current_pack->extraDataLoaded) {

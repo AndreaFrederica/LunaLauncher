@@ -183,6 +183,16 @@
            </widget>
           </item>
           <item>
+           <widget class="QCheckBox" name="mcmodSearchEnabledCheckBox">
+            <property name="toolTip">
+             <string>Use MCMod's localized names to improve mod search and show reverse lookup links in the native download dialog.</string>
+            </property>
+            <property name="text">
+             <string>Use MCMod names to improve mod search</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QCheckBox" name="showNewsBarCheckBox">
             <property name="text">
              <string>Show News Bar</string>

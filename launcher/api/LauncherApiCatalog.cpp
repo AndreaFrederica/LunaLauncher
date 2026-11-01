@@ -106,6 +106,8 @@ QJsonObject packJson(const Pack& pack, bool includeMcMod = false, const QString&
 
     if (includeMcMod) {
         auto match = McMod::Index::instance().findByProviderId(providerName, pack.addonId.toString());
+        if (!match && providerName == QStringLiteral("curseforge"))
+            match = McMod::Index::instance().findByProviderId(providerName, pack.slug);
         if (!match)
             match = McMod::Index::instance().find(QString{}, pack.name);
 

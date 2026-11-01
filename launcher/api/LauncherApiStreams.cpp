@@ -20,6 +20,7 @@
 #include "minecraft/auth/AccountList.h"
 #include "cli/OperationService.h"
 #include "launch/LaunchTask.h"
+#include "minecraft/online/YukariConnect.h"
 #include "server/ServerLaunchTask.h"
 #include "ui/themes/AppearanceService.h"
 #include "ui/themes/ThemeManager.h"
@@ -131,6 +132,37 @@ QJsonObject LauncherApiStreams::subscribeConsole(const QJsonObject& p)
         if (const auto sub = weak.lock()) append(sub, { { "kind", "instance.removed" } });
     });
     attachConsole(sub, instance->getLaunchTask());
+    return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
+}
+
+QJsonObject LauncherApiStreams::subscribeMultiplayerLog(const QJsonObject& p)
+{
+    const auto requested = p.value("backend").toString().trimmed().toLower();
+    if (requested != "yukari" && requested != "yukari-connect" && requested != "yukariconnect") {
+        return OperationService::failure(
+            "Only YukariConnect provides a native pushed log stream; use multiplayer.log for this backend.", 2);
+    }
+
+    auto sub = create("multiplayer-log", "yukari");
+    if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+
+    const auto weak = std::weak_ptr<Subscription>(sub);
+    auto& yukari = YukariConnect::instance();
+    append(sub, { { "kind", "multiplayer.log.reset" },
+                  { "backend", "yukari" },
+                  { "text", QString::fromUtf8(yukari.fetchLog(false)) } });
+    QObject::connect(&yukari, &YukariConnect::logOutput, &sub->context,
+        [this, weak](const QString& message) {
+            if (const auto sub = weak.lock())
+                append(sub, { { "kind", "multiplayer.log.data" }, { "backend", "yukari" }, { "text", message } });
+        });
+    QObject::connect(&yukari, &YukariConnect::availabilityChanged, &sub->context,
+        [this, weak](bool available) {
+            if (const auto sub = weak.lock())
+                append(sub, { { "kind", "multiplayer.log.availability" },
+                              { "backend", "yukari" },
+                              { "available", available } });
+        });
     return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
 }
 
@@ -367,6 +399,10 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
     api.registerOperation({ "instance.console.subscribe", "Subscribe to launch state and console output, including future launches.",
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeConsole(p); });
+    api.registerOperation({ "multiplayer.log.subscribe",
+        "Subscribe to the native YukariConnect WebSocket log stream.",
+        schema({ { "backend", string("Multiplayer backend; YukariConnect is required.") } }, { "backend" }), "streams" },
+        [this](const QJsonObject& p, UserInteraction&) { return subscribeMultiplayerLog(p); });
     api.registerOperation({ "neo.task.subscribe", "Replay current task snapshots and push later Neo task updates.",
         schema({ { "taskId", string("Optional task UUID to watch; omit for all tasks.") } }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeTasks(p); });

@@ -23,6 +23,7 @@ class LauncherApiStreams {
     void append(const std::shared_ptr<Subscription>& sub, QJsonObject event);
     void attachConsole(const std::shared_ptr<Subscription>& sub, LaunchTask* task);
     QJsonObject subscribeConsole(const QJsonObject& p);
+    QJsonObject subscribeMultiplayerLog(const QJsonObject& p);
     QJsonObject subscribeFile(const QJsonObject& p);
     QJsonObject subscribeResources(const QJsonObject& p);
     QJsonObject subscribeMemory(const QJsonObject& p);

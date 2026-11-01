@@ -7,6 +7,7 @@
 #include <QWidget>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QCheckBox>
 
 class ServerInstance;
 
@@ -35,6 +36,9 @@ private:
     QLineEdit *m_exePathEdit;
     QLineEdit *m_argsEdit;
     QLineEdit *m_workDirEdit;
+    QLineEdit *m_stopCommandEdit;
+    QCheckBox *m_authlibEnabled;
+    QLineEdit *m_authlibApiUrlEdit;
     QPushButton *m_browseBtn;
     class QLabel *m_previewLabel;
 };

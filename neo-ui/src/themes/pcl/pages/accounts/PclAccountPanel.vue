@@ -93,28 +93,6 @@
       </div>
     </PclCard>
 
-    <PclCard v-if="selectedAccount" :title="t('account.authConfig')">
-      <PclHint theme="blue">{{ t('account.authHint') }}</PclHint>
-      <div v-if="selectedAccount.type === 'yggdrasil'" class="pcl-config-grid">
-        <label class="pcl-field"><span>{{ t('account.authUrl') }}</span><PclInput v-model="config.authUrl" placeholder="https://..." /></label>
-        <label class="pcl-field"><span>{{ t('account.sessionUrl') }}</span><PclInput v-model="config.sessionUrl" :placeholder="t('account.displayName')" /></label>
-        <label class="pcl-field"><span>{{ t('account.serviceName') }}</span><PclInput v-model="config.sourceName" :placeholder="t('account.displayName')" /></label>
-        <label class="pcl-field"><span>{{ t('account.tokenType') }}</span><PclSelect v-model="config.tokenType" :options="tokenTypeOptions" /></label>
-        <label class="pcl-field"><span>{{ t('ui.authenticateEndpoint') }}</span><PclInput v-model="config.authenticateEndpoint" /></label>
-        <label class="pcl-field"><span>{{ t('ui.refreshEndpoint') }}</span><PclInput v-model="config.refreshEndpoint" /></label>
-        <label class="pcl-field"><span>{{ t('ui.validateEndpoint') }}</span><PclInput v-model="config.validateEndpoint" /></label>
-        <label class="pcl-field"><span>{{ t('ui.profileEndpoint') }}</span><PclInput v-model="config.profileEndpoint" /></label>
-        <label class="pcl-field"><span>{{ t('ui.oauthTokenEndpoint') }}</span><PclInput v-model="config.oauthTokenEndpoint" /></label>
-      </div>
-      <div v-else-if="selectedAccount.type === 'unified-pass'" class="pcl-config-grid">
-        <label class="pcl-field"><span>{{ t('ui.unifiedPassServerId') }}</span><PclInput v-model="config.serverId" /></label>
-        <label class="pcl-field"><span>{{ t('ui.apiBaseUrl') }}</span><PclInput v-model="config.baseUrl" /></label>
-      </div>
-      <div class="pcl-actions">
-        <PclButton variant="highlight" icon="save" :disabled="busy" @click="saveConfig">{{ t('account.saveAuth') }}</PclButton>
-      </div>
-    </PclCard>
-
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
   </div>
 </template>
@@ -140,16 +118,10 @@ const { t } = useI18n();
 const emit = defineEmits<{ changed: [] }>();
 const launcherSession = useLauncherSessionStore();
 
-const selected = ref<any>(''), selectedAccount = ref<any>(null), profile = ref<any>(null), skins = ref<any[]>([]);
+const selected = ref<any>(''), profile = ref<any>(null), skins = ref<any[]>([]);
 const skinPath = ref<any>(''), skinName = ref<any>(''), variant = ref<any>('classic'), error = ref<any>('');
 const skinNames = ref<string[]>([]);
 const variantOptions = [{ label: 'Classic', value: 'classic' }, { label: 'Slim', value: 'slim' }];
-const tokenTypeOptions = [{ label: 'Standard', value: 'Standard' }, { label: 'OAuth', value: 'OAuth' }];
-const config = ref<any>({
-  authUrl: '', sessionUrl: '', sourceName: '', tokenType: 'Standard',
-  authenticateEndpoint: '', refreshEndpoint: '', validateEndpoint: '', profileEndpoint: '', oauthTokenEndpoint: '',
-  serverId: '', baseUrl: '',
-});
 
 function accountRef(account: any) { return String(account?.internalId || account?.id || account?.profileName || ''); }
 function resolveAccount(referenceOrAccount: any) {
@@ -194,6 +166,20 @@ function cacheStateLabel(account: any) {
   return ({ cached: t('account.cached'), 'not-cached': t('account.notCached'), unknown: t('account.checking') } as any)[state] || t('account.unknown');
 }
 
+function profileFallback(account: any) {
+  const source = account?.profile || {};
+  return {
+    id: source.id || account?.profileId || account?.id || '',
+    name: source.name || account?.profileName || account?.displayName || t('account.unnamed'),
+    type: source.type || account?.type || '',
+    state: source.state || accountStateLabel(account),
+    ownsMinecraft: source.ownsMinecraft ?? account?.ownsMinecraft,
+    canPlayMinecraft: source.canPlayMinecraft ?? account?.canPlayMinecraft,
+    skin: source.skin || {},
+    capes: Array.isArray(source.capes) ? source.capes : [],
+  };
+}
+
 async function attempt(action: () => Promise<any>) {
   error.value = '';
   try { return await action(); }
@@ -209,18 +195,9 @@ async function select(account: any) {
   selectedSnapshotKey = accountSnapshotKey(resolved || account);
   selected.value = reference;
   launcherSession.selectAccount(reference);
-  selectedAccount.value = resolved || account;
-  profile.value = null;
+  profile.value = profileFallback(resolved || account);
   skins.value = [];
   skinNames.value = [];
-  config.value = {
-    authUrl: resolved?.yggdrasil?.authUrl || '', sessionUrl: resolved?.yggdrasil?.sessionUrl || '',
-    sourceName: resolved?.yggdrasil?.sourceName || '', tokenType: resolved?.yggdrasil?.tokenType || 'Standard',
-    authenticateEndpoint: resolved?.yggdrasil?.authenticateEndpoint || '', refreshEndpoint: resolved?.yggdrasil?.refreshEndpoint || '',
-    validateEndpoint: resolved?.yggdrasil?.validateEndpoint || '', profileEndpoint: resolved?.yggdrasil?.profileEndpoint || '',
-    oauthTokenEndpoint: resolved?.yggdrasil?.oauthTokenEndpoint || '',
-    serverId: resolved?.unifiedPass?.serverId || '', baseUrl: resolved?.unifiedPass?.baseUrl || '',
-  };
   error.value = '';
   try {
     const [nextProfile, nextSkins] = await Promise.all([
@@ -255,7 +232,6 @@ watch(() => {
     selectionGeneration += 1;
     selectedSnapshotKey = '';
     selected.value = '';
-    selectedAccount.value = null;
     profile.value = null;
     skins.value = [];
     skinNames.value = [];
@@ -264,7 +240,7 @@ watch(() => {
 
 async function move(account: any, delta: number) { await attempt(async () => { await props.execute('account.move', { account: accountRef(account), delta }); emit('changed'); }); }
 async function setDefault(account: any) { await attempt(async () => { await props.execute('account.set-default', { account: accountRef(account) }); launcherSession.selectAccount(accountRef(account)); emit('changed'); }); }
-async function remove(account: any) { await attempt(async () => { await props.execute('account.remove', { account: accountRef(account), confirm: true }); selectionGeneration += 1; selectedSnapshotKey = ''; profile.value = null; skins.value = []; skinNames.value = []; selected.value = ''; selectedAccount.value = null; if (launcherSession.selectedAccountId === accountRef(account)) launcherSession.selectAccount(''); emit('changed'); }); }
+async function remove(account: any) { await attempt(async () => { await props.execute('account.remove', { account: accountRef(account), confirm: true }); selectionGeneration += 1; selectedSnapshotKey = ''; profile.value = null; skins.value = []; skinNames.value = []; selected.value = ''; if (launcherSession.selectedAccountId === accountRef(account)) launcherSession.selectAccount(''); emit('changed'); }); }
 async function chooseSkinFile() {
   const selected = await pickPclFile({ title: t('account.chooseSkin'), filters: [{ name: t('account.pngImage'), extensions: ['png'] }] });
   if (selected) skinPath.value = selected;
@@ -280,23 +256,6 @@ async function resetSkin() { await attempt(async () => { const reference = selec
 async function deleteSkin(skin: any) { await attempt(async () => { const reference = selected.value; await props.execute('account.skin.delete', { account: reference, skin: skin.name || skin.path, confirm: true }); await selectByReference(reference); }); }
 async function chooseCape(cape: string) { await attempt(async () => { const reference = selected.value; await props.execute('account.cape.select', { account: reference, cape }); await selectByReference(reference); }); }
 function selectCape(cape: any) { return chooseCape(cape.id); }
-async function saveConfig() {
-  await attempt(async () => {
-    const payload: any = { account: selected.value };
-    if (selectedAccount.value?.type === 'yggdrasil') {
-      Object.assign(payload, {
-        authUrl: config.value.authUrl, sessionUrl: config.value.sessionUrl, sourceName: config.value.sourceName,
-        tokenType: config.value.tokenType, authenticateEndpoint: config.value.authenticateEndpoint,
-        refreshEndpoint: config.value.refreshEndpoint, validateEndpoint: config.value.validateEndpoint,
-        profileEndpoint: config.value.profileEndpoint, oauthTokenEndpoint: config.value.oauthTokenEndpoint,
-      });
-    } else {
-      Object.assign(payload, { serverId: config.value.serverId, baseUrl: config.value.baseUrl });
-    }
-    await props.execute('account.configure', payload);
-    emit('changed');
-  });
-}
 </script>
 
 <style scoped>

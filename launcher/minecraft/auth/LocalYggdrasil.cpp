@@ -338,12 +338,10 @@ bool LocalYggdrasil::ensureProfile(const QString& name, const QString& password,
             break;
         }
     }
-    if (userId.isEmpty())
-        return createProfile(name, password, {}, profile, error);
-
     QJsonObject profiles;
     if (!request("GET", "profiles?limit=200", {}, profiles, error))
         return false;
+
     for (const auto& value : profiles.value("items").toArray()) {
         const auto candidate = value.toObject();
         if (candidate.value("user_id").toString() == userId) {
@@ -351,6 +349,56 @@ bool LocalYggdrasil::ensureProfile(const QString& name, const QString& password,
             return true;
         }
     }
+
+    // A launcher-managed account snapshot owns the profile identity, but its
+    // synthetic user id is not a usable login name.  Rebind that synthetic
+    // user to the credentials entered in the local-login dialog instead of
+    // trying to create a second profile with the same Minecraft name.  This
+    // preserves the UUID and cached textures while making the local service
+    // usable after an account was previously cached or a login was retried.
+    QJsonObject sameName;
+    for (const auto& value : profiles.value("items").toArray()) {
+        const auto candidate = value.toObject();
+        if (candidate.value("name").toString().compare(name.trimmed(), Qt::CaseInsensitive) == 0) {
+            sameName = candidate;
+            break;
+        }
+    }
+    if (!sameName.isEmpty()) {
+        const auto ownerId = sameName.value("user_id").toString();
+        if (!ownerId.startsWith("snapshot-")) {
+            error = tr("A local profile named '%1' is already owned by another user.").arg(name.trimmed());
+            return false;
+        }
+
+        // A previous failed attempt can leave an empty user with the same
+        // username. It has no profile (verified above), so removing it is
+        // safe and allows the snapshot user to take over the credentials.
+        if (!userId.isEmpty() && userId != ownerId) {
+            QJsonObject ignored;
+            QString removeError;
+            if (!request("DELETE", "users/" + QUrl::toPercentEncoding(userId), {}, ignored, removeError)) {
+                error = tr("Could not repair the previous local account: %1").arg(removeError);
+                return false;
+            }
+        }
+
+        QJsonObject ignored;
+        QString updateError;
+        const auto encodedOwner = QUrl::toPercentEncoding(ownerId);
+        if (!request("PATCH", "users/" + encodedOwner,
+                     QJsonDocument(QJsonObject{ { "username", name.trimmed() } }).toJson(), ignored, updateError) ||
+            !request("POST", "users/" + encodedOwner + "/password",
+                     QJsonDocument(QJsonObject{ { "password", password } }).toJson(), ignored, updateError)) {
+            error = tr("Could not repair the cached local profile: %1").arg(updateError);
+            return false;
+        }
+        profile = sameName;
+        return true;
+    }
+
+    if (userId.isEmpty())
+        return createProfile(name, password, {}, profile, error);
 
     QJsonObject created;
     const auto body = QJsonDocument(QJsonObject{ { "user_id", userId },

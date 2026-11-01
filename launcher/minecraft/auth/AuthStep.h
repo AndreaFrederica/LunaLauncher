@@ -1,6 +1,7 @@
 #pragma once
 #include <QList>
 #include <QObject>
+#include <QUuid>
 
 #include "QObjectPtr.h"
 #include "minecraft/auth/AccountData.h"
@@ -31,6 +32,11 @@ class AuthStep : public QObject {
 
     virtual QString describe() = 0;
 
+    // The progress UI polls the authentication flow repeatedly. Keep one
+    // identity for this step so consumers can update the existing row instead
+    // of deleting and recreating it on every snapshot.
+    QUuid progressId() const { return m_progressId; }
+
    public slots:
     virtual void perform() = 0;
     virtual void abort() {}
@@ -40,4 +46,5 @@ class AuthStep : public QObject {
 
    protected:
     AccountData* m_data;
+    QUuid m_progressId = QUuid::createUuid();
 };

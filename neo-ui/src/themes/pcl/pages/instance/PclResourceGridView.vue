@@ -17,6 +17,9 @@
         </button>
         <div class="pcl-resource-copy" @click="inspect(item)">
           <strong>{{ item.name || item.fileName || item.path || t('resource.unnamed') }}</strong>
+          <small v-if="item.provider || item.mcmod?.name" class="pcl-resource-copy__source">
+            {{ item.provider || t('resource.localResource') }}<span v-if="item.mcmod?.name"> · {{ item.mcmod.name }}</span>
+          </small>
           <small v-if="item.version || item.metadata?.version">{{ item.version || item.metadata?.version }}</small>
           <small>{{ item.enabled === false ? t('resource.disabled') : item.size ? formatSize(item.size) : statusLabel(item) }}</small>
         </div>

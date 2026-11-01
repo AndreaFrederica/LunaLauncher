@@ -36,6 +36,8 @@ public:
     static const Index& instance();
 
     std::optional<Match> find(const QString& modId, const QString& name) const;
+    /** Find an entry by its Modrinth or CurseForge project ID. */
+    std::optional<Match> findByProviderId(const QString& provider, const QString& projectId) const;
     /**
      * Translate a Chinese MCMod name to the recorded English search name.
      * Queries that are not Chinese or do not match the index are returned as-is.
@@ -57,6 +59,8 @@ private:
 
     QList<Project> m_projects;
     QHash<QString, int> m_modIdIndex;
+    QHash<QString, int> m_curseForgeIndex;
+    QHash<QString, int> m_modrinthIndex;
     QHash<QString, int> m_nameIndex;
     bool m_loaded = false;
 };

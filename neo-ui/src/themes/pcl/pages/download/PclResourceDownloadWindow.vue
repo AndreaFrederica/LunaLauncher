@@ -7,8 +7,8 @@
         <PclInput v-model="query" :placeholder="t('pcl.resourceDownload.searchPlaceholder', { kind: kindLabel })" @enter="search(true)" />
         <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? t('pcl.resourceDownload.searching') : t('search.placeholder') }}</PclButton>
         <div class="pcl-resource-download-window__view">
-          <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="28" :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" />
-          <PclIconButton icon="layout-list" :label="t('resource.list')" :size="28" :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" />
+          <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="32" :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" />
+          <PclIconButton icon="layout-list" :label="t('resource.list')" :size="32" :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" />
         </div>
       </div>
 
@@ -34,6 +34,10 @@
           <span v-else class="pcl-resource-download-card__fallback"><PclIcon name="box" :size="20" /></span>
           <div class="pcl-resource-download-card__copy" @click="openDetails(project)">
             <strong>{{ project.name }}</strong>
+            <div v-if="project.mcmod?.name || project.mcmod?.url || project.mcmod?.searchUrl" class="pcl-resource-download-card__mcmod">
+              <span v-if="project.mcmod?.name">{{ project.mcmod.name }}</span>
+              <a v-if="project.mcmod?.url || project.mcmod?.searchUrl" :href="project.mcmod.url || project.mcmod.searchUrl" target="_blank" rel="noreferrer" @click.stop="openExternal(project.mcmod.url || project.mcmod.searchUrl)">{{ t('resource.mcmodLink') }}</a>
+            </div>
             <small>{{ project.description }}</small>
             <PclSelect
               v-if="selected[project.projectId]"
@@ -57,12 +61,53 @@
       <div class="pcl-resource-download-window__footer">
         <PclCheckbox v-if="kind === 'mods'" v-model="includeOptional" :label="t('pcl.resourceDownload.optionalDeps')" />
         <span class="pcl-resource-download-window__count">{{ t('resource.selected', { count: selectedList.length }) }}</span>
-        <PclButton variant="highlight" icon="download" :disabled="!canPrepareDownload || downloading" @click="prepareDownload">
+        <PclButton variant="highlight" icon="download" :disabled="!canPrepareDownload && !downloading" @click="downloading ? (downloadOpen = true) : prepareDownload()">
           {{ downloading ? t('pcl.resourceDownload.downloading') : t('pcl.resourceDownload.checkDownload') }}
         </PclButton>
         <PclButton variant="ghost" icon="x" @click="closeWindow">{{ t('window.close') }}</PclButton>
       </div>
     </div>
+
+    <Transition name="pcl-progress">
+      <div v-if="downloadOpen" class="pcl-download-progress">
+        <section class="pcl-download-progress__card" role="dialog" aria-modal="true" :aria-label="t('pcl.resourceDownload.queue')">
+          <header class="pcl-download-progress__head">
+            <div>
+              <div class="pcl-kicker">// DOWNLOAD</div>
+              <h3>{{ downloadFinished ? (downloadHasFailures ? t('pcl.resourceDownload.downloadFailed') : t('pcl.resourceDownload.queueDone')) : t('pcl.resourceDownload.downloading') }}</h3>
+              <p>{{ t('pcl.resourceDownload.queueHint') }}</p>
+            </div>
+            <PclIconButton icon="x" :label="t('window.close')" :size="28" @click="downloadOpen = false" />
+          </header>
+
+          <div class="pcl-download-progress__summary">
+            <span>{{ t('pcl.resourceDownload.queueCount', { done: downloadCompleted, total: downloadEntries.length }) }}</span>
+            <strong>{{ downloadPercent }}%</strong>
+          </div>
+          <div class="pcl-download-progress__bar" :class="{ done: downloadFinished && !downloadHasFailures, failed: downloadFinished && downloadHasFailures }">
+            <span :style="{ width: `${downloadPercent}%` }" />
+          </div>
+
+          <div class="pcl-download-progress__rows">
+            <div v-for="entry in downloadEntries" :key="entry.projectId" class="pcl-download-progress__row" :class="entry.state">
+              <div class="pcl-download-progress__row-head">
+                <strong>{{ entry.name }}</strong>
+                <span>{{ entryStateLabel(entry) }}</span>
+              </div>
+              <div class="pcl-download-progress__row-bar">
+                <span :style="{ width: `${Math.round(entryProgress(entry) * 100)}%` }" />
+              </div>
+            </div>
+          </div>
+
+          <footer class="pcl-download-progress__actions">
+            <PclButton v-if="downloading" variant="ghost" icon="minus" @click="downloadOpen = false">{{ t('pcl.resourceDownload.background') }}</PclButton>
+            <PclButton v-if="downloading" variant="red" icon="x" @click="cancelDownloads">{{ t('pcl.resourceDownload.cancelAll') }}</PclButton>
+            <PclButton v-else variant="highlight" icon="check" @click="downloadOpen = false">{{ t('pcl.resourceDownload.finish') }}</PclButton>
+          </footer>
+        </section>
+      </div>
+    </Transition>
 
         <PclResourceDownloadDetailDialog />
 
@@ -83,6 +128,7 @@ import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
 import PclWindowTitleBar from '../../components/PclWindowTitleBar.vue';
 import { neoUiPreferences } from '../../../../neo-ui-preferences';
+import { notifyResourceChanged } from '../../../../common/runtime/resource-events';
 import { launcher } from '../../../../boot/launcher-api';
 import { waitForTask } from '../../composables/useTaskEvents';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -100,6 +146,7 @@ const providerOptions = computed(() => providerCatalog.value
 const query = ref<any>('');
 const searching = ref(false);
 const downloading = ref(false);
+const downloadOpen = ref(false);
 const includeOptional = ref(true);
 const error = ref<any>('');
 const projects = ref<any[]>([]);
@@ -120,6 +167,31 @@ const instanceLoaderLabel = ref<any>('');
 const kindLabel = computed(() => t(`resource.kinds.${props.kind}`, props.kind));
 const selectedList = computed(() => Object.values(selected));
 const canPrepareDownload = computed(() => selectedList.value.length > 0 && selectedList.value.every(entry => !entry.loadingVersions && entry.versionId && entry.state !== 'failed'));
+const downloadEntries = computed(() => confirmEntries.value.filter(entry => entry.checked && entry.versionId));
+const downloadCompleted = computed(() => downloadEntries.value.filter(isEntryFinished).length);
+const downloadPercent = computed(() => {
+  const entries = downloadEntries.value;
+  if (!entries.length) return 0;
+  const total = entries.reduce((sum, entry) => sum + entryProgress(entry), 0);
+  return Math.round((total / entries.length) * 100);
+});
+const downloadFinished = computed(() => !downloading.value && downloadEntries.value.length > 0 && downloadCompleted.value === downloadEntries.value.length);
+const downloadHasFailures = computed(() => downloadEntries.value.some(entry => ['failed', 'interrupted', 'cancelled'].includes(String(entry.state || '').toLowerCase())));
+
+function isEntryFinished(entry: any) {
+  return ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(entry.state || '').toLowerCase());
+}
+function entryProgress(entry: any) {
+  if (isEntryFinished(entry)) return 1;
+  return Math.max(0, Math.min(1, Number(entry.progress) || 0));
+}
+function entryStateLabel(entry: any) {
+  const state = String(entry.state || '').toLowerCase();
+  if (state === 'succeeded') return t('pcl.resourceDownload.downloaded');
+  if (state === 'failed' || state === 'interrupted') return entry.status || t('pcl.resourceDownload.downloadFailed');
+  if (state === 'cancelled') return t('pcl.resourceDownload.cancelled');
+  return entry.status || t('pcl.resourceDownload.waitingDownload');
+}
 
 function scrollResultsToTop() {
   void nextTick(() => resultsList.value?.scrollTo({ top: 0, behavior: 'smooth' }));
@@ -239,6 +311,7 @@ async function search(reset = true) {
       name: String(project.name || project.title || project.projectId || ''),
       description: String(project.description || project.synopsis || ''),
       iconUrl: String(project.iconUrl || project.icon || project.logoUrl || ''),
+      mcmod: project.mcmod || null,
     })).filter((project: any) => project.projectId);
     nextOffset.value = Number(result?.nextOffset ?? (offset.value + projects.value.length)) || 0;
     hasNext.value = Boolean(result?.mayHaveMore ?? (projects.value.length >= 25 && nextOffset.value > offset.value));
@@ -364,6 +437,7 @@ async function confirmDownload() {
   const entries = confirmEntries.value.filter(entry => entry.checked && entry.versionId);
   confirmOpen.value = false;
   downloading.value = true;
+  downloadOpen.value = true;
   const waits: Promise<void>[] = [];
   for (const entry of entries) {
     entry.state = 'queued';
@@ -394,7 +468,9 @@ async function confirmDownload() {
           entry.state = String(snapshot?.state || entry.state);
           entry.status = String(snapshot?.status || entry.status);
           const total = Number(snapshot?.totalProgress || snapshot?.total || 0), current = Number(snapshot?.progress || 0);
-          entry.progress = total > 0 ? current / total : entry.progress;
+          const percent = Number(snapshot?.percent ?? snapshot?.progressPercent);
+          if (total > 0) entry.progress = Math.max(0, Math.min(1, current / total));
+          else if (Number.isFinite(percent) && percent > 0) entry.progress = Math.max(0, Math.min(1, percent / 100));
         }).then(snapshot => {
           entry.state = String(snapshot?.state || entry.state);
           entry.status = snapshot?.state === 'succeeded' ? t('pcl.resourceDownload.downloaded') : (snapshot?.error || t('pcl.resourceDownload.downloadFailed'));
@@ -410,6 +486,22 @@ async function confirmDownload() {
   }
   await Promise.all(waits);
   downloading.value = false;
+  if (entries.some(entry => String(entry.state || '').toLowerCase() === 'succeeded')) {
+    await notifyResourceChanged({ instanceId: props.instanceId, kind: props.kind, source: 'pcl-resource-download' });
+  }
+}
+
+async function cancelDownloads() {
+  const active = downloadEntries.value.filter(entry => entry.taskId && !isEntryFinished(entry));
+  await Promise.all(active.map(async entry => {
+    try {
+      await execute('neo.task.cancel', { taskId: entry.taskId });
+      entry.state = 'cancelled';
+      entry.status = t('pcl.resourceDownload.cancelled');
+    } catch (exception) {
+      entry.status = exception instanceof Error ? exception.message : String(exception);
+    }
+  }));
 }
 
 async function openDetails(project: any) {
@@ -478,6 +570,8 @@ provide(PclResourceDownloadContextKey, { t, props, provider, providerLabel, deta
 .pcl-resource-download-card__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .pcl-resource-download-card__copy strong { overflow: hidden; font-size: calc(11px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .pcl-resource-download-card__copy small { display: -webkit-box; overflow: hidden; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pcl-resource-download-card__mcmod { display: flex; align-items: center; gap: 7px; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-resource-download-card__mcmod a { color: var(--pcl-c3); }
 .pcl-resource-download-card__state { flex: 0 0 auto; max-width: 110px; overflow: hidden; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); text-overflow: ellipsis; white-space: nowrap; }
 .pcl-resource-download-card__state.succeeded { color: #34d399; }
 .pcl-resource-download-card__state.failed { color: #fb7185; }
@@ -487,6 +581,121 @@ provide(PclResourceDownloadContextKey, { t, props, provider, providerLabel, deta
 .pcl-resource-download-window__footer { display: flex; align-items: center; gap: 12px; padding-top: 4px; border-top: 1px solid var(--pcl-border); }
 .pcl-resource-download-window__count { margin-left: auto; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
 @media (max-width: 760px) { .pcl-resource-download-window__list { grid-template-columns: 1fr; } }
+
+.pcl-download-progress {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(8, 16, 28, .62);
+  backdrop-filter: blur(2px);
+}
+.pcl-download-progress__card {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 94vw);
+  max-height: 82vh;
+  overflow: hidden;
+  border: 1px solid var(--pcl-card-border);
+  border-radius: var(--pcl-radius);
+  background: var(--pcl-card);
+  box-shadow: var(--pcl-shadow-hover);
+  color: var(--pcl-text);
+}
+.pcl-download-progress__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 15px 16px 10px;
+}
+.pcl-download-progress__head > div { flex: 1; min-width: 0; }
+.pcl-download-progress__head h3 { margin: 2px 0 3px; font-size: calc(16px * var(--pcl-font-scale, 1)); }
+.pcl-download-progress__head p { margin: 0; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); line-height: 1.45; }
+.pcl-download-progress__summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 16px;
+  color: var(--pcl-muted);
+  font-size: calc(10px * var(--pcl-font-scale, 1));
+}
+.pcl-download-progress__summary strong { color: var(--pcl-c3); font-size: calc(15px * var(--pcl-font-scale, 1)); }
+.pcl-download-progress__bar,
+.pcl-download-progress__row-bar {
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--pcl-c7);
+}
+.pcl-download-progress__bar { height: 7px; margin: 7px 16px 12px; }
+.pcl-download-progress__bar span,
+.pcl-download-progress__row-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pcl-c3);
+  transition: width .25s ease;
+}
+.pcl-download-progress__bar.done span { background: #34d399; }
+.pcl-download-progress__bar.failed span { background: #fb7185; }
+.pcl-download-progress__rows {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 12px;
+}
+.pcl-download-progress__row {
+  padding: 7px 8px;
+  border: 1px solid var(--pcl-border);
+  border-radius: 4px;
+  background: var(--pcl-half-white);
+}
+.pcl-download-progress__row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.pcl-download-progress__row-head strong {
+  overflow: hidden;
+  font-size: calc(11px * var(--pcl-font-scale, 1));
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pcl-download-progress__row-head span {
+  flex: 0 0 auto;
+  max-width: 48%;
+  overflow: hidden;
+  color: var(--pcl-muted);
+  font-size: calc(9px * var(--pcl-font-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pcl-download-progress__row-bar { height: 4px; }
+.pcl-download-progress__row.failed .pcl-download-progress__row-bar span,
+.pcl-download-progress__row.interrupted .pcl-download-progress__row-bar span { background: #fb7185; }
+.pcl-download-progress__row.succeeded .pcl-download-progress__row-bar span { background: #34d399; }
+.pcl-download-progress__row.failed .pcl-download-progress__row-head span,
+.pcl-download-progress__row.interrupted .pcl-download-progress__row-head span { color: #fb7185; }
+.pcl-download-progress__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--pcl-border);
+}
+.pcl-progress-enter-active,
+.pcl-progress-leave-active { transition: opacity .16s ease; }
+.pcl-progress-enter-from,
+.pcl-progress-leave-to { opacity: 0; }
 
 .pcl-resource-detail { width: 640px; max-width: 92vw; max-height: 84vh; overflow: hidden; }
 .pcl-resource-detail__head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 8px; }

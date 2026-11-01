@@ -10,6 +10,10 @@
           <div v-if="detailLoading" class="pcl-resource-detail__loading">{{ t('resource.loadingDetail') }}…</div>
           <div v-else-if="detailBody" class="pcl-resource-detail__description" v-html="detailBody" />
           <p v-else>{{ t('pcl.resourceDownload.noDescription') }}</p>
+          <div v-if="detail?.mcmod?.name || detail?.mcmod?.url || detail?.mcmod?.searchUrl" class="pcl-resource-detail__mcmod">
+            <span v-if="detail.mcmod.name">{{ detail.mcmod.name }}</span>
+            <a v-if="detail.mcmod.url || detail.mcmod.searchUrl" :href="detail.mcmod.url || detail.mcmod.searchUrl" target="_blank" rel="noreferrer" @click.prevent="openExternal(detail.mcmod.url || detail.mcmod.searchUrl)">{{ t('resource.mcmodLink') }}</a>
+          </div>
           <a v-if="detail?.websiteUrl" :href="detail.websiteUrl" target="_blank" rel="noreferrer" @click.prevent="openExternal(detail.websiteUrl)">{{ t('pcl.resourceDownload.openProject') }}</a>
         </q-card-section>
       </q-card>
@@ -32,4 +36,6 @@ const { t, props, provider, providerLabel, detailOpen, detail, detailBody, detai
 .pcl-resource-detail__description { line-height:1.55; }
 .pcl-resource-detail__description p { margin:0 0 10px; }
 .pcl-resource-detail__description a, .pcl-resource-detail__body > a { color:var(--pcl-c3); }
+.pcl-resource-detail__mcmod { display:flex; align-items:center; gap:8px; margin-top:12px; color:var(--pcl-muted); }
+.pcl-resource-detail__mcmod a { color:var(--pcl-c3); }
 </style>

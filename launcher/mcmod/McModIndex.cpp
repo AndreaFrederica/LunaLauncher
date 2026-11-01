@@ -133,19 +133,41 @@ void Index::load()
 
         const auto index = m_projects.size();
         m_projects.append(std::move(project));
-        for (const auto& modId : m_projects.constLast().modIds) {
+        const auto& loadedProject = m_projects.constLast();
+        if (!loadedProject.curseForgeId.isEmpty() && !m_curseForgeIndex.contains(normalizeModId(loadedProject.curseForgeId)))
+            m_curseForgeIndex.insert(normalizeModId(loadedProject.curseForgeId), index);
+        if (!loadedProject.modrinthId.isEmpty() && !m_modrinthIndex.contains(normalizeModId(loadedProject.modrinthId)))
+            m_modrinthIndex.insert(normalizeModId(loadedProject.modrinthId), index);
+        for (const auto& modId : loadedProject.modIds) {
             const auto key = normalizeModId(modId);
             if (!m_modIdIndex.contains(key))
                 m_modIdIndex.insert(key, index);
         }
-        for (const auto& name : { m_projects.constLast().mainName, m_projects.constLast().secondaryName,
-                                  m_projects.constLast().abbreviation }) {
+        for (const auto& name : { loadedProject.mainName, loadedProject.secondaryName, loadedProject.abbreviation }) {
             const auto key = normalizeName(name);
             if (!key.isEmpty() && !m_nameIndex.contains(key))
                 m_nameIndex.insert(key, index);
         }
     }
     m_loaded = true;
+}
+
+std::optional<Match> Index::findByProviderId(const QString& provider, const QString& projectId) const
+{
+    const auto key = normalizeModId(projectId);
+    if (key.isEmpty())
+        return std::nullopt;
+
+    const auto normalizedProvider = provider.trimmed().toCaseFolded();
+    const auto* index = normalizedProvider == QStringLiteral("curseforge") ? &m_curseForgeIndex
+                     : normalizedProvider == QStringLiteral("modrinth") ? &m_modrinthIndex
+                                                                          : nullptr;
+    if (!index)
+        return std::nullopt;
+    const auto it = index->constFind(key);
+    if (it == index->constEnd())
+        return std::nullopt;
+    return Match{ m_projects.at(it.value()), QStringLiteral("%1-id").arg(normalizedProvider) };
 }
 
 std::optional<Match> Index::find(const QString& modId, const QString& name) const

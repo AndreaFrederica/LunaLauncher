@@ -22,6 +22,7 @@
           </span>
           <span class="pcl-resource-row__copy">
             <strong>{{ item.name || item.fileName || item.path || t('resource.unnamed') }}</strong>
+            <small v-if="item.provider || item.mcmod?.name">{{ item.provider || t('resource.localResource') }}<span v-if="item.mcmod?.name"> · {{ item.mcmod.name }}</span></small>
           </span>
         </button>
         <span class="pcl-resource-row__meta">{{ item.version || item.metadata?.version || '—' }}</span>

@@ -22,6 +22,7 @@
 #include "cli/OperationService.h"
 #include "cli/HeadlessBlockedMods.h"
 #include "meta/Index.h"
+#include "meta/MetadataProvider.h"
 #include "meta/Version.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
@@ -74,16 +75,46 @@ QStringList supportedKinds(const QString& name)
     return { "mods", "resourcepacks", "shaderpacks", "datapacks", "modpacks" };
 }
 
-QJsonObject packJson(const Pack& pack)
+QJsonObject packJson(const Pack& pack, bool includeMcMod = false)
 {
     QJsonArray authors;
     for (const auto& author : pack.authors)
         authors.append(QJsonObject{ { "name", author.name }, { "url", author.url } });
-    return { { "projectId", pack.addonId.toString() }, { "name", pack.name }, { "slug", pack.slug },
+    QJsonObject result{ { "projectId", pack.addonId.toString() }, { "name", pack.name }, { "slug", pack.slug },
              { "description", pack.description }, { "iconUrl", pack.logoUrl }, { "websiteUrl", pack.websiteUrl },
              { "authors", authors }, { "side", ModPlatform::SideUtils::toString(pack.side) },
              { "body", pack.extraData.body }, { "sourceUrl", pack.extraData.sourceUrl },
              { "issuesUrl", pack.extraData.issuesUrl }, { "wikiUrl", pack.extraData.wikiUrl }, { "discordUrl", pack.extraData.discordUrl } };
+
+    if (includeMcMod) {
+        const auto providerName = pack.provider == ModPlatform::ResourceProvider::MODRINTH ? QStringLiteral("modrinth")
+                                : pack.provider == ModPlatform::ResourceProvider::FLAME ? QStringLiteral("curseforge")
+                                                                                         : QString{};
+        auto match = McMod::Index::instance().findByProviderId(providerName, pack.addonId.toString());
+        if (!match)
+            match = McMod::Index::instance().find(QString{}, pack.name);
+
+        if (match) {
+            const auto& project = match->project;
+            result.insert("mcmod", QJsonObject{
+                { "id", project.id },
+                { "url", McMod::Index::pageUrl(project.id) },
+                { "searchUrl", McMod::Index::searchUrl(project.mainName) },
+                { "name", project.mainName },
+                { "secondaryName", project.secondaryName },
+                { "abbreviation", project.abbreviation },
+                { "matchedBy", match->matchedBy },
+                { "curseForgeId", project.curseForgeId },
+                { "modrinthId", project.modrinthId },
+            });
+        } else if (!pack.name.trimmed().isEmpty()) {
+            result.insert("mcmod", QJsonObject{
+                { "searchUrl", McMod::Index::searchUrl(pack.name) },
+                { "matchedBy", "search" },
+            });
+        }
+    }
+    return result;
 }
 QJsonObject versionJson(const PackVersion& version)
 {
@@ -146,6 +177,14 @@ struct Filters {
         if (p.contains("loaders")) {
             ModPlatform::ModLoaderTypes flags;
             if (!parseFlags(p.value("loaders"), modLoaders(), flags)) return false;
+            // Cleanroom is a Forge-compatible 1.12 fork. Resource providers
+            // expose Forge filters and their returned versions carry the
+            // Forge bit, so normalize the provider-facing filter here while
+            // keeping Cleanroom as a distinct loader everywhere else.
+            if (flags.testFlag(ModPlatform::Cleanroom)) {
+                flags.setFlag(ModPlatform::Cleanroom, false);
+                flags.setFlag(ModPlatform::Forge, true);
+            }
             if (flags) loaders = flags;
         }
         if (p.contains("pluginLoaders")) {
@@ -229,7 +268,7 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
         const auto task = service->searchProjects(std::move(args), reply.callbacks());
         if (!reply.finish(api, task, interaction)) return OperationService::failure(reply.error);
         QJsonArray projects;
-        for (const auto& pack : reply.data) projects.append(packJson(*pack));
+        for (const auto& pack : reply.data) projects.append(packJson(*pack, kind == "mods"));
         return OperationService::success(QJsonObject{ { "provider", source }, { "projects", projects },
             { "offset", p.value("offset").toInt() }, { "pageSize", 25 }, { "nextOffset", p.value("offset").toInt() + projects.size() },
             { "mayHaveMore", projects.size() == 25 } });
@@ -246,7 +285,7 @@ QJsonObject browse(LauncherApi& api, const QString& operation, const QJsonObject
         const auto task = service->getProjectInfo({ pack }, reply.callbacks());
         if (!reply.finish(api, task, interaction)) return OperationService::failure(reply.error);
         if (pack->name.isEmpty()) return OperationService::failure("Provider returned an invalid project.");
-        if (operation == "resource.project") return OperationService::success(packJson(*pack));
+        if (operation == "resource.project") return OperationService::success(packJson(*pack, kind == "mods"));
     }
     if (operation == "resource.resolve-dependency") {
         if (source == "hangar") return OperationService::failure("Hangar does not support dependency resolution.", 2);
@@ -610,6 +649,15 @@ QJsonObject metadata(LauncherApi& api, const QJsonObject& p, UserInteraction& in
     if (!identifier(uid)) return OperationService::failure("Invalid component UID.", 2);
     const auto parentVersion = p.value("minecraftVersion").toString();
     if (!parentVersion.isEmpty() && !identifier(parentVersion)) return OperationService::failure("Invalid Minecraft version.", 2);
+    // The index is the authoritative source for the component list and its
+    // checksum.  Resolve it before taking the VersionList pointer: taking the
+    // pointer first creates a new empty list which is not replaced when the
+    // index is merged.  That left the Web UI with a successful
+    // `{ versions: [] }` response on a fresh data directory even though the
+    // metadata endpoint had a complete list.
+    if (!Meta::findProviderForUid(uid)) {
+        if (!loadMetadata(api, *index, offline, interaction, error)) return OperationService::failure(error);
+    }
     auto list = index->get(uid);
     if (!loadMetadata(api, *list, offline, interaction, error)) return OperationService::failure(error);
     QJsonArray versions;

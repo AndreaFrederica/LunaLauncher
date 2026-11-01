@@ -3,20 +3,29 @@
     <div class="pcl-resource-toolbar">
       <PclInput v-model="query" :placeholder="t('resource.filter')" class="pcl-resource-query" @enter="load" />
       <div class="pcl-resource-view-toggle">
-        <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="28" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
-        <PclIconButton icon="layout-list" :label="t('resource.list')" :size="28" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
+        <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="32" :class="{ active: viewMode === 'grid' }" @click="setView('grid')" />
+        <PclIconButton icon="layout-list" :label="t('resource.list')" :size="32" :class="{ active: viewMode === 'list' }" @click="setView('list')" />
       </div>
-      <PclButton v-if="catalogKind" size="sm" variant="highlight" icon="download" :disabled="busy" @click="openDownload">{{ t('resource.download', { kind: kindLabel }) }}</PclButton>
-      <PclButton size="sm" icon="refresh-cw" :disabled="busy || loading" @click="load">{{ t('resource.refresh') }}</PclButton>
-      <PclButton size="sm" icon="rotate-ccw" :disabled="busy || loading" @click="update">{{ t('resource.rescan') }}</PclButton>
-      <PclButton size="sm" icon="folder-open" :disabled="busy" @click="openFolder">{{ t('resource.openFolder') }}</PclButton>
+      <PclButton v-if="catalogKind" variant="highlight" icon="download" :disabled="busy" @click="openDownload">{{ t('resource.download', { kind: kindLabel }) }}</PclButton>
+      <PclButton icon="refresh-cw" :disabled="busy || loading" @click="load">{{ t('resource.refresh') }}</PclButton>
+      <PclButton icon="rotate-ccw" :disabled="busy || loading" @click="update">{{ t('resource.rescan') }}</PclButton>
+      <PclButton icon="folder-open" :disabled="busy" @click="openFolder">{{ t('resource.openFolder') }}</PclButton>
     </div>
 
     <div class="pcl-resource-install">
       <PclInput v-model="installSource" :placeholder="t('resource.source')" @enter="install" />
-      <PclIconButton icon="folder-open" :label="t('resource.chooseFile')" :size="28" :disabled="busy || localBusy" @click="chooseInstallFile" />
+      <PclIconButton icon="folder-open" :label="t('resource.chooseFile')" :size="32" :disabled="busy || localBusy" @click="chooseInstallFile" />
       <PclButton variant="highlight" icon="plus" :disabled="busy || localBusy || !installSource.trim()" @click="install">{{ t('resource.install') }}</PclButton>
     </div>
+
+    <ResourceUpdatesPanel
+      v-if="props.kind === 'mods'"
+      :instance="props.instance"
+      :kind="props.kind"
+      :busy="busy || localBusy"
+      :execute="execute"
+      @applied="load"
+    />
 
     <div v-if="selectedCount" class="pcl-resource-batch">
       <span>{{ t('resource.selected', { count: selectedCount }) }}</span>
@@ -42,6 +51,7 @@
         <div>
           <div class="pcl-kicker">{{ t('resource.detail') }}</div>
           <h3>{{ detail?.name || detail?.fileName || detail?.path || t('resource.detail') }}</h3>
+          <small v-if="detail?.mcmod?.name || detail?.project?.mcmod?.name" class="pcl-resource-detail__mcmod-name">{{ detail.mcmod?.name || detail.project?.mcmod?.name }}</small>
         </div>
         <PclIconButton icon="x" :label="t('resource.close')" :size="28" @click="detailOpen = false" />
       </q-card-section>
@@ -53,6 +63,12 @@
           <template v-for="entry in detailEntries" :key="entry[0]">
             <span>{{ entry[0] }}</span><code>{{ entry[1] }}</code>
           </template>
+        </div>
+        <div v-if="detailLinks.length" class="pcl-resource-detail__links">
+          <div v-for="link in detailLinks" :key="link.url">
+            <span>{{ link.label }}</span>
+            <a :href="link.url" target="_blank" rel="noreferrer" @click.prevent="openExternal(link.url)">{{ link.text }}</a>
+          </div>
         </div>
         <pre v-if="detail?.description" class="pcl-resource-detail__description">{{ detail.description }}</pre>
       </q-card-section>
@@ -102,7 +118,9 @@ import PclInput from '../../components/PclInput.vue';
 import PclLoading from '../../components/PclLoading.vue';
 import { PclResourceContextKey } from './PclResourceContext';
 import { useThemeResource } from '../../../../common/runtime/theme-runtime';
+import { onResourceChanged } from '../../../../common/runtime/resource-events';
 import PclCatalogBrowser from '../download/PclCatalogBrowser.vue';
+import ResourceUpdatesPanel from '../../../../components/ResourceUpdatesPanel.vue';
 import { launcher } from '../../../../boot/launcher-api';
 import { pickPclFile } from '../../composables/usePclFileDialog';
 import { isTaskItemFinished } from '../../composables/useTaskProgress';
@@ -132,6 +150,7 @@ const downloadOpen = ref(false);
 const resourceWindowHost = inject(resourceWindowHostKey, undefined);
 let resourceSubscription = '';
 let unlistenResourceStream: (() => void) | undefined;
+let unlistenResourceSignal: (() => void) | undefined;
 let resourceSubscriptionGeneration = 0;
 let resourceReloadTimer: ReturnType<typeof setTimeout> | undefined;
 let resourceRequestToken = 0;
@@ -231,12 +250,31 @@ const detailEntries = computed(() => {
   const item = detail.value || {};
   return [
     [t('resource.detailFile'), item.path || item.fileName || '—'],
+    [t('resource.provider'), item.provider || item.metadata?.provider || t('resource.localResource')],
     [t('resource.detailVersion'), item.version || item.metadata?.version || '—'],
     [t('resource.detailStatus'), statusLabel(item)],
     [t('resource.detailType'), item.type || '—'],
     [t('resource.detailLoader'), Array.isArray(item.loaders) ? item.loaders.join(', ') : (item.loaders || '—')],
     [t('resource.detailMinecraft'), Array.isArray(item.minecraftVersions) ? item.minecraftVersions.join(', ') : (item.minecraftVersion || '—')],
   ];
+});
+const detailLinks = computed(() => {
+  const item = detail.value || {};
+  const project = item.project || {};
+  const links: Array<{ label: string; url: string; text: string }> = [];
+  const add = (label: string, url: unknown, text?: string) => {
+    const value = String(url || '').trim();
+    if (!/^https?:\/\//i.test(value) || links.some(link => link.url === value)) return;
+    links.push({ label, url: value, text: text || value });
+  };
+  add(item.provider ? String(item.provider) : t('resource.provider'), item.homepage);
+  add(t('resource.projectPage'), project.websiteUrl);
+  add(t('resource.sourceCode'), project.sourceUrl);
+  add(t('resource.issueTracker'), project.issuesUrl || item.issueTracker);
+  add(t('resource.wiki'), project.wikiUrl);
+  const mcmod = item.mcmod || project.mcmod;
+  add(t('resource.mcmodLink'), mcmod?.url || mcmod?.searchUrl, mcmod?.name || undefined);
+  return links;
 });
 
 function resourceRef(item: any) {
@@ -371,11 +409,33 @@ async function inspect(item: any) {
   detail.value = item;
   try {
     detail.value = { ...item, ...(await props.execute('resource.inspect', { instance: props.instance, kind: props.kind, resource: resourceRef(item) })) };
+    if (props.kind === 'mods' && detail.value?.metadata?.projectId) {
+      const providerName = String(detail.value.provider || detail.value.metadata?.provider || '').toLowerCase();
+      const provider = providerName.includes('curse') ? 'curseforge' : providerName.includes('modrinth') ? 'modrinth' : '';
+      if (provider) {
+        try {
+          detail.value = {
+            ...detail.value,
+            project: await props.execute('resource.project', {
+              provider,
+              kind: 'mods',
+              projectId: String(detail.value.metadata.projectId),
+            }),
+          };
+        } catch {
+          // Installed archives can still show local metadata and MCMod links.
+        }
+      }
+    }
   } catch (exception) {
     detailError.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
     detailLoading.value = false;
   }
+}
+
+function openExternal(url: string) {
+  void props.execute('desktop.open-url', { url }).catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
 }
 async function setEnabled(item: any, enabled: boolean) {
   localBusy.value = true;
@@ -440,10 +500,15 @@ useThemeResource('pcl', () => {
   themeResourceActive = true;
   void load();
   void subscribeResources();
+  unlistenResourceSignal = onResourceChanged(payload => {
+    if (!payload.instanceId || String(payload.instanceId) === String(props.instance)) scheduleResourceReload();
+  });
   return () => {
     themeResourceActive = false;
     resourceRequestToken++;
     if (resourceReloadTimer) clearTimeout(resourceReloadTimer);
+    unlistenResourceSignal?.();
+    unlistenResourceSignal = undefined;
     void unsubscribeResources();
   };
 });
@@ -634,6 +699,13 @@ provide(PclResourceContextKey, { t, props, busy: toRef(props, 'busy'), viewMode,
   border-bottom: 1px solid var(--pcl-border);
 }
 
+.pcl-resource-detail__mcmod-name {
+  display: block;
+  margin-top: 3px;
+  color: var(--pcl-muted);
+  font-weight: 500;
+}
+
 .pcl-resource-detail__body {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
@@ -662,6 +734,40 @@ provide(PclResourceContextKey, { t, props, busy: toRef(props, 'busy'), viewMode,
 .pcl-resource-detail__meta code {
   overflow-wrap: anywhere;
   color: var(--pcl-text);
+}
+
+.pcl-resource-detail__links {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--pcl-card-border);
+  border-radius: 4px;
+  background: var(--pcl-c7);
+}
+
+.pcl-resource-detail__links > div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  font-size: calc(12px * var(--pcl-font-scale, 1));
+}
+
+.pcl-resource-detail__links span {
+  color: var(--pcl-muted);
+}
+
+.pcl-resource-detail__links a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--pcl-c3);
+  text-decoration: none;
+}
+
+.pcl-resource-detail__links a:hover {
+  text-decoration: underline;
 }
 
 .pcl-resource-detail__description {

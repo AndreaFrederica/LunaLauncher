@@ -9,6 +9,10 @@
           <div class="pcl-project-copy">
             <small>{{ providerLabel(provider) }} · {{ project.projectId }}</small>
             <h2>{{ project.name }}</h2>
+            <div v-if="project.mcmod?.name || project.mcmod?.url || project.mcmod?.searchUrl" class="pcl-project-mcmod">
+              <span v-if="project.mcmod?.name">{{ project.mcmod.name }}</span>
+              <a v-if="project.mcmod?.url || project.mcmod?.searchUrl" :href="project.mcmod.url || project.mcmod.searchUrl" target="_blank" rel="noreferrer">{{ t('resource.mcmodLink') }}</a>
+            </div>
             <p>{{ project.description }}</p>
           </div>
           <PclIconButton
@@ -65,3 +69,7 @@ import PclButton from '../../components/PclButton.vue'; import PclCheckbox from 
 const context = inject(PclCatalogContextKey); if (!context) throw new Error('PclCatalogContext is missing');
 const { t, props, emit, busy, searching, detailLoading, installing, packs, provider, query, privateCode, results, project, versions, version, error, gameVersion, loader, sort, optional, instanceName, offset, searched, projectTab, favorite, providerLabel, providerOptions, sortOptions, loaderOptions, versionOptions, renderedBody, resetFilters, changeProvider, search, select, install, toggleFavorite, versionLabel, catalogRoot, scrollCatalogToTop } = context;
 </script>
+<style scoped>
+.pcl-project-mcmod { display: flex; align-items: center; gap: 8px; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); }
+.pcl-project-mcmod a { color: var(--pcl-c3); }
+</style>

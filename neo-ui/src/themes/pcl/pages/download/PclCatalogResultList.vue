@@ -14,6 +14,10 @@
       <span v-else class="pcl-result-icon"><PclIcon name="box" :size="24" /></span>
       <span class="pcl-result-copy">
         <strong>{{ item.name }}</strong>
+        <span v-if="item.mcmod?.name || item.mcmod?.url || item.mcmod?.searchUrl" class="pcl-result-mcmod">
+          <span v-if="item.mcmod?.name">{{ item.mcmod.name }}</span>
+          <span v-if="item.mcmod?.url || item.mcmod?.searchUrl" class="pcl-result-mcmod__link" role="link" tabindex="0" @click.stop="openMcMod(item.mcmod.url || item.mcmod.searchUrl)" @keydown.enter.stop="openMcMod(item.mcmod.url || item.mcmod.searchUrl)">{{ t('resource.mcmodLink') }}</span>
+        </span>
         <small>{{ item.description || fallbackDescription }}</small>
         <em>{{ providerLabel(item.provider || provider) }} · {{ item.projectId }}</em>
       </span>
@@ -28,8 +32,11 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import PclIcon from '../../components/PclIcon.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
+
+const { t } = useI18n();
 
 defineProps<{
   items: any[];
@@ -44,6 +51,10 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{ select: [item: any]; toggle: [item: any, value: boolean] }>();
+
+function openMcMod(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 </script>
 
 <style scoped>
@@ -101,6 +112,8 @@ const emit = defineEmits<{ select: [item: any]; toggle: [item: any, value: boole
 .pcl-result-copy em { overflow: hidden; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .pcl-result-copy small { margin-top: 2px; }
 .pcl-result-copy em { margin-top: 3px; color: var(--pcl-c5); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-result-mcmod { display: flex; align-items: center; gap: 7px; margin-top: 2px; color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
+.pcl-result-mcmod__link { color: var(--pcl-c3); cursor: pointer; }
 
 .pcl-catalog-empty { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 45px 20px; color: var(--pcl-muted); font-size: calc(11px * var(--pcl-font-scale, 1)); }
 .pcl-catalog-empty :deep(svg) { color: var(--pcl-c5); }

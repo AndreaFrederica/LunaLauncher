@@ -200,10 +200,17 @@ void ModFolderPage::downloadMods()
         return;
     }
 
-    if (m_instance->typeName() != "Minecraft")
-        return;  // this is a null instance or a legacy instance
+    // Vanilla/PCL/HMCL instances use the Minecraft implementation through
+    // VanillaInstance.  `typeName()` intentionally remains "Vanilla" for
+    // provenance/UI purposes, so using it as a capability check made the
+    // Download Mods action silently return before opening its dialog.
+    auto minecraftInstance = dynamic_cast<MinecraftInstance*>(m_instance);
+    if (!minecraftInstance)
+        return;
 
-    auto profile = static_cast<MinecraftInstance*>(m_instance)->getPackProfile();
+    auto profile = minecraftInstance->getPackProfile();
+    if (!profile)
+        return;
     if (!profile->getModLoaders().has_value()) {
         if (handleNoModLoader()) {
             return;
@@ -257,10 +264,13 @@ void ModFolderPage::downloadDialogFinished(int result)
 
 void ModFolderPage::updateMods(bool includeDeps)
 {
-    if (m_instance->typeName() != "Minecraft")
-        return;  // this is a null instance or a legacy instance
+    auto minecraftInstance = dynamic_cast<MinecraftInstance*>(m_instance);
+    if (!minecraftInstance)
+        return;
 
-    auto profile = static_cast<MinecraftInstance*>(m_instance)->getPackProfile();
+    auto profile = minecraftInstance->getPackProfile();
+    if (!profile)
+        return;
     if (!profile->getModLoaders().has_value()) {
         if (handleNoModLoader()) {
             return;
@@ -392,10 +402,13 @@ void ModFolderPage::deleteModMetadata()
 
 void ModFolderPage::changeModVersion()
 {
-    if (m_instance->typeName() != "Minecraft")
-        return;  // this is a null instance or a legacy instance
+    auto minecraftInstance = dynamic_cast<MinecraftInstance*>(m_instance);
+    if (!minecraftInstance)
+        return;
 
-    auto profile = static_cast<MinecraftInstance*>(m_instance)->getPackProfile();
+    auto profile = minecraftInstance->getPackProfile();
+    if (!profile)
+        return;
     if (!profile->getModLoaders().has_value()) {
         if (handleNoModLoader()) {
             return;

@@ -14,10 +14,13 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSet>
+#include <QTimer>
 #include <QUrlQuery>
 #include <QVariant>
+#include <QUuid>
 
 #include "Application.h"
+#include "LauncherResources.h"
 #include "DataMigrationTask.h"
 #include "api/LauncherApiObjects.h"
 #include "BaseInstance.h"
@@ -26,14 +29,22 @@
 #include "InstanceCopyTask.h"
 #include "InstanceImportTask.h"
 #include "InstanceList.h"
+#include "InstanceStore.h"
+#include "VanillaCompatibleProvider.h"
+#include "VanillaInstance.h"
+#include "VanillaConversion.h"
+#include "SyncProfile.h"
 #include "LaunchController.h"
 #include "java/JavaInstall.h"
 #include "java/JavaInstallList.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/OneSixVersionFormat.h"
 #include "server/ServerInstance.h"
 #include "minecraft/mod/PluginFolderModel.h"
 #include "minecraft/mod/ModFolderModel.h"
 #include "minecraft/PackProfile.h"
+#include "meta/Index.h"
+#include "meta/Version.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/AuthFlow.h"
@@ -544,6 +555,201 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         return success(APPLICATION->dataLocationStatus());
     if (operation == "startup.set-data-location")
         return setDataLocation(parameters, interaction);
+    if (operation == "instance-store.list")
+        return success(QJsonObject{ { "stores", APPLICATION->instanceStoresStatus() } });
+    if (operation == "instance-store.add" || operation == "instance-store.update") {
+        QString error;
+        if (!APPLICATION->addOrUpdateInstanceStore(parameters, &error)) return failure(error, 2);
+        return success(QJsonObject{ { "stores", APPLICATION->instanceStoresStatus() } });
+    }
+    if (operation == "instance-store.remove") {
+        QString error;
+        if (!APPLICATION->removeInstanceStore(parameters.value("id").toString(), &error)) return failure(error, 2);
+        return success(QJsonObject{ { "stores", APPLICATION->instanceStoresStatus() } });
+    }
+    if (operation == "instance.store-transfer") {
+        const auto instanceId = parameters.value("instance").toString();
+        const auto targetStoreId = parameters.value("targetStoreId").toString();
+        const auto mode = parameters.value("mode").toString("copy");
+        auto* instance = APPLICATION->instances()->getInstanceById(instanceId);
+        auto* targetStore = APPLICATION->instanceStores()->find(targetStoreId);
+        if (!instance || !targetStore) return failure(tr("The instance or target store does not exist."), 2);
+        if (!targetStore->isPrism() || !targetStore->enabled || !targetStore->writable) return failure(tr("The target store is not a writable Prism store."), 2);
+        if (instance->isRunning()) return failure(tr("Stop the instance before transferring it."), 2);
+        const auto source = QFileInfo(instance->instanceRoot()).canonicalFilePath();
+        if (!QFileInfo::exists(QDir(source).filePath(QStringLiteral("instance.cfg"))))
+            return failure(tr("Only Prism instances can use direct Store transfer; convert the external instance first."), 2);
+        const auto destination = QFileInfo(QDir(targetStore->path).filePath(QFileInfo(source).fileName())).absoluteFilePath();
+        if (source.isEmpty() || destination.isEmpty() || QFileInfo(source).canonicalFilePath() == QFileInfo(destination).canonicalFilePath() || QFileInfo::exists(destination))
+            return failure(tr("The destination already exists or is invalid."), 2);
+        if (!QDir().mkpath(targetStore->path)) return failure(tr("Could not create the target store."), 2);
+        const auto staging = destination + QStringLiteral(".transfer-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        FS::copy copier(source, staging);
+        copier.overwrite(false);
+        if (!copier()) { FS::deletePath(staging); return failure(tr("Could not copy the instance to the target store."), 2); }
+        if (!QDir().rename(staging, destination)) { FS::deletePath(staging); return failure(tr("Could not commit the transferred instance."), 2); }
+        if (mode.compare("move", Qt::CaseInsensitive) == 0 && !FS::deletePath(source)) return failure(tr("The instance was copied, but the source could not be removed."), 2);
+        APPLICATION->instances()->loadList();
+        return success(QJsonObject{ { "source", source }, { "destination", destination }, { "mode", mode } });
+    }
+    if (operation == "vanilla-instance.list") {
+        const auto storeId = parameters.value("storeId").toString();
+        QJsonArray instances;
+        for (const auto& store : APPLICATION->instanceStores()->stores()) {
+            if (!store.enabled || !store.isVanillaCompatible() || (!storeId.isEmpty() && store.id != storeId)) continue;
+            for (const auto& instance : VanillaCompatibleProvider::scan(store.id, store.path))
+                instances.append(QJsonObject{ { "id", instance.stableId }, { "storeId", instance.storeId }, { "name", instance.name }, { "root", instance.root }, { "dialect", instance.dialect }, { "provenance", instance.provenance.toJson() }, { "versionId", instance.versionId }, { "profileVersionId", instance.profileVersionId }, { "minecraftVersion", instance.minecraftVersion }, { "loaderType", instance.loaderType }, { "loaderVersion", instance.loaderVersion }, { "gameRoot", instance.layout.gameRoot }, { "isolated", instance.layout.isolated }, { "writable", instance.writable } });
+        }
+        return success(QJsonObject{ { "instances", instances } });
+    }
+    if (operation == "vanilla-instance.provenance") {
+        const auto reference = parameters.value("instance").toString();
+        const auto* instance = APPLICATION->instances()->getInstanceById(reference);
+        if (!instance)
+            instance = APPLICATION->instances()->getInstanceByManagedName(reference);
+        if (!instance) {
+            for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                if (APPLICATION->instances()->at(i)->name().compare(reference, Qt::CaseInsensitive) == 0) {
+                    instance = APPLICATION->instances()->at(i);
+                    break;
+                }
+            }
+        }
+        const auto* vanilla = dynamic_cast<const VanillaInstance*>(instance);
+        if (!vanilla)
+            return failure(tr("The selected instance is not a vanilla-compatible external instance."), 2);
+        return success(QJsonObject{ { "instance", vanilla->id() }, { "root", vanilla->instanceRoot() },
+                                    { "provenance", vanilla->descriptor().provenance.toJson() } });
+    }
+    if (operation == "external-launchers.list-recognizers") {
+        QJsonArray recognizers;
+        for (const auto& recognizer : ExternalLauncherRecognizerRegistry::instance().recognizers())
+            recognizers.append(QJsonObject{ { "id", recognizer.id }, { "displayName", recognizer.displayName },
+                                            { "builtIn", recognizer.builtIn }, { "iconId", recognizer.iconId },
+                                            { "priority", recognizer.priority } });
+        return success(QJsonObject{ { "recognizers", recognizers } });
+    }
+    if (operation == "external-launchers.icon") {
+        const auto id = parameters.value("id").toString().trimmed();
+        static const QRegularExpression validId(QStringLiteral("^[A-Za-z0-9._-]{1,80}$"));
+        if (!validId.match(id).hasMatch()) return failure(tr("Invalid recognizer ID."), 2);
+        auto iconId = id;
+        for (const auto& recognizer : ExternalLauncherRecognizerRegistry::instance().recognizers())
+            if (recognizer.id.compare(id, Qt::CaseInsensitive) == 0 && validId.match(recognizer.iconId).hasMatch()) iconId = recognizer.iconId;
+        for (const auto& directory : LauncherResources::searchPaths(QStringLiteral("external-launchers/%1").arg(iconId))) {
+            QFile file(QDir(directory).filePath(QStringLiteral("icon.png")));
+            if (!file.open(QIODevice::ReadOnly) || file.size() > 512 * 1024) continue;
+            return success(QJsonObject{ { "id", id }, { "mime", "image/png" },
+                                        { "dataUrl", QStringLiteral("data:image/png;base64,") + QString::fromLatin1(file.readAll().toBase64()) } });
+        }
+        return failure(tr("Recognizer icon not found: %1").arg(id), 2);
+    }
+    if (operation == "instance.convert.import") {
+        VanillaImportOptions options; options.name = parameters.value("name").toString(); options.group = parameters.value("group").toString(); options.copyGameContent = parameters.value("copyGameContent").toBool(true);
+        auto target = parameters.value("target").toString();
+        const auto storeId = parameters.value("targetStoreId").toString().trimmed();
+        if (!storeId.isEmpty()) {
+            const auto* store = APPLICATION->instanceStores()->find(storeId);
+            if (!store || !store->isPrism() || !store->enabled || !store->writable)
+                return failure(tr("The selected target store is not an enabled writable Prism store."), 2);
+            const auto instanceName = options.name.isEmpty() ? QFileInfo(parameters.value("source").toString()).fileName() : options.name;
+            target = QDir(store->path).filePath(FS::DirNameFromString(instanceName, store->path));
+        }
+        if (target.isEmpty()) {
+            const auto* store = APPLICATION->instanceStores()->defaultStore();
+            if (!store)
+                return failure(tr("No writable Prism Store is configured for the conversion."), 2);
+            const auto instanceName = options.name.isEmpty() ? QFileInfo(parameters.value("source").toString()).fileName() : options.name;
+            target = QDir(store->path).filePath(FS::DirNameFromString(instanceName, store->path));
+        }
+        const auto report = VanillaConverter::importToPrism(parameters.value("source").toString(), target, options);
+        return report.succeeded ? success(report.toJson()) : failure(report.error.isEmpty() ? QObject::tr("Vanilla import was blocked.") : report.error, 2);
+    }
+    if (operation == "instance.convert.export") {
+        VanillaExportOptions options; options.versionId = parameters.value("versionId").toString(); options.versionJson = parameters.value("versionJson").toObject(); options.dialect = parameters.value("dialect").toString(); options.name = parameters.value("name").toString(); options.group = parameters.value("group").toString(); options.extensionFields = parameters.value("extensionFields").toObject(); options.copyGameContent = parameters.value("copyGameContent").toBool(true);
+        const auto report = VanillaConverter::exportToVanilla(parameters.value("source").toString(), parameters.value("target").toString(), options);
+        return report.succeeded ? success(report.toJson()) : failure(report.error.isEmpty() ? QObject::tr("Vanilla export was blocked.") : report.error, 2);
+    }
+    if (operation == "vanilla.loader.install") {
+        VanillaLoaderInstallOptions options;
+        options.versionId = parameters.value("versionId").toString();
+        options.loaderId = VanillaCompatibleProvider::loaderUidForType(parameters.value("loaderId").toString());
+        options.loaderVersion = parameters.value("loaderVersion").toString();
+        options.versionJson = parameters.value("versionJson").toObject();
+        options.clientJar = parameters.value("clientJar").toString();
+        if (options.loaderId.isEmpty())
+            return failure(tr("Unsupported standard loader: %1").arg(parameters.value("loaderId").toString()), 2);
+        if (options.versionJson.isEmpty()) {
+            interaction.status(tr("Loading %1 version %2...").arg(options.loaderId, options.loaderVersion));
+            QString metadataError;
+            const auto index = APPLICATION->metadataIndex();
+            const auto loadTask = index->loadVersion(options.loaderId, options.loaderVersion);
+            if (!waitForTask(loadTask.get(), interaction, &metadataError))
+                return failure(metadataError);
+            const auto loaderVersion = index->get(options.loaderId, options.loaderVersion);
+            if (!loaderVersion || !loaderVersion->isLoaded() || !loaderVersion->data())
+                return failure(tr("Loader version not found: %1:%2").arg(options.loaderId, options.loaderVersion), 2);
+            options.versionJson = OneSixVersionFormat::versionFileToJson(loaderVersion->data()).object();
+        }
+        const auto report = VanillaConverter::installLoader(parameters.value("target").toString(), options);
+        return report.succeeded ? success(report.toJson()) : failure(report.error.isEmpty() ? QObject::tr("Vanilla loader installation was blocked.") : report.error, 2);
+    }
+    if (operation == "sync.profile.save") {
+        QString error; const auto profile = SyncProfile::fromJson(parameters.value("profile").toObject(), &error);
+        if (!error.isEmpty() || profile.id.isEmpty() || !SyncEngine::saveProfile(APPLICATION->dataRoot(), profile, &error)) return failure(error, 2);
+        return success(QJsonObject{ { "profile", profile.toJson() } });
+    }
+    if (operation == "sync.profile.list") {
+        QJsonArray profiles;
+        const auto directory = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("sync-profiles"));
+        for (const auto& file : QDir(directory).entryInfoList({ QStringLiteral("*.json") }, QDir::Files | QDir::Readable, QDir::Name)) {
+            QString error;
+            const auto profile = SyncEngine::loadProfile(APPLICATION->dataRoot(), file.baseName(), &error);
+            if (error.isEmpty() && !profile.id.isEmpty())
+                profiles.append(profile.toJson());
+        }
+        return success(QJsonObject{ { "profiles", profiles } });
+    }
+    if (operation == "sync.profile.remove") {
+        const auto id = parameters.value("id").toString().trimmed();
+        if (id.isEmpty() || id.contains('/') || id.contains('\\') || id == "." || id == "..")
+            return failure(tr("A valid profile ID is required."), 2);
+        const auto path = SyncEngine::profilePath(APPLICATION->dataRoot(), id);
+        if (!QFile::remove(path) && QFileInfo::exists(path))
+            return failure(tr("Could not remove sync profile."), 2);
+        return success(QJsonObject{ { "id", id }, { "removed", true } });
+    }
+    if (operation == "sync.profile.plan" || operation == "sync.profile.apply") {
+        QString error; SyncProfile profile;
+        if (parameters.contains("profile")) profile = SyncProfile::fromJson(parameters.value("profile").toObject(), &error);
+        else profile = SyncEngine::loadProfile(APPLICATION->dataRoot(), parameters.value("id").toString(), &error);
+        if (!error.isEmpty() || profile.id.isEmpty()) return failure(error.isEmpty() ? QObject::tr("A valid sync profile is required.") : error, 2);
+        auto clientRoot = parameters.value("clientRoot").toString();
+        auto serverRoot = parameters.value("serverRoot").toString();
+        auto* clientInstance = APPLICATION->instances()->getInstanceById(profile.clientInstanceId);
+        const auto serverIds = profile.serverInstanceIds.isEmpty() ? QStringList{ profile.serverInstanceId } : profile.serverInstanceIds;
+        if (clientRoot.isEmpty()) {
+            if (!clientInstance) return failure(tr("The sync profile references an instance that is not loaded."), 2);
+            clientRoot = clientInstance->gameRoot();
+        }
+        if (!serverRoot.isEmpty()) {
+            const auto plan = SyncEngine::plan(profile, clientRoot, serverRoot);
+            if (operation == "sync.profile.plan") return success(plan.toJson());
+            if (!SyncEngine::apply(profile, plan, clientRoot, serverRoot, &error)) return failure(error, 2);
+        } else {
+            QJsonArray plans;
+            for (const auto& serverId : serverIds) {
+                const auto* serverInstance = APPLICATION->instances()->getInstanceById(serverId);
+                if (!serverInstance) return failure(tr("The sync profile references an instance that is not loaded: %1").arg(serverId), 2);
+                const auto plan = SyncEngine::plan(profile, clientRoot, serverInstance->gameRoot());
+                if (operation == "sync.profile.plan") plans.append(plan.toJson());
+                else if (!SyncEngine::apply(profile, plan, clientRoot, serverInstance->gameRoot(), &error)) return failure(error, 2);
+            }
+            if (operation == "sync.profile.plan") return success(QJsonObject{ { "plans", plans } });
+        }
+        if (!SyncEngine::saveProfile(APPLICATION->dataRoot(), profile, &error)) return failure(error, 2);
+        return success(QJsonObject{ { "profile", profile.toJson() }, { "applied", true } });
+    }
     if (operation == "startup.migrate")
         return migrateStartupData(parameters, interaction);
     if (operation == "startup.dismiss-migration")
@@ -573,12 +779,15 @@ QJsonObject OperationService::setDataLocation(const QJsonObject& parameters, Use
 {
     if (!parameters.contains("portable")) return failure(tr("portable is required."), 2);
     const bool portable = parameters.value("portable").toBool();
+    const bool copyData = parameters.value("copyData").toBool(false);
     QString error;
-    auto task = APPLICATION->createDataLocationTask(portable, &error);
-    if (!task) return failure(error, 2);
-    if (!waitForTask(task.get(), interaction, &error)) return failure(error);
+    if (copyData) {
+        auto task = APPLICATION->createDataLocationTask(portable, &error);
+        if (!task) return failure(error, 2);
+        if (!waitForTask(task.get(), interaction, &error)) return failure(error);
+    }
     if (!APPLICATION->finishDataLocationSwitch(portable, &error)) return failure(error);
-    return success(QJsonObject{ { "status", APPLICATION->dataLocationStatus() }, { "restartRequired", true } });
+    return success(QJsonObject{ { "status", APPLICATION->dataLocationStatus() }, { "restartRequired", true }, { "copied", copyData } });
 }
 
 QJsonObject OperationService::migrateStartupData(const QJsonObject& parameters, UserInteraction& interaction)
@@ -624,7 +833,7 @@ QJsonObject OperationService::listInstances()
     auto list = APPLICATION->instances();
     for (int i = 0; i < list->count(); ++i) {
         const auto instance = list->at(i);
-        instances.append(QJsonObject{ { "id", instance->id() },
+        QJsonObject object{ { "id", instance->id() },
                                       { "name", instance->name() },
                                       { "type", instance->typeName() },
                                       { "group", list->getInstanceGroup(instance->id()) },
@@ -633,7 +842,21 @@ QJsonObject OperationService::listInstances()
                                       { "running", instance->isRunning() },
                                       { "managed", instance->isManagedPack() },
                                       { "lastLaunch", instance->lastLaunch() },
-                                      { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) } });
+                                      { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) },
+                                      { "format", QStringLiteral("prism") } };
+        if (const auto* vanilla = dynamic_cast<const VanillaInstance*>(instance)) {
+            const auto& descriptor = vanilla->descriptor();
+            object.insert("format", QStringLiteral("vanilla-compatible"));
+            object.insert("dialect", descriptor.dialect);
+            object.insert("provenance", descriptor.provenance.toJson());
+            object.insert("loaderType", descriptor.loaderType);
+            object.insert("loaderVersion", descriptor.loaderVersion);
+            object.insert("minecraftVersion", descriptor.minecraftVersion);
+            object.insert("vanillaCompatible", true);
+        } else {
+            object.insert("vanillaCompatible", false);
+        }
+        instances.append(object);
     }
     return success(instances);
 }
@@ -730,6 +953,15 @@ QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
                       { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) } };
     if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance))
         data.insert("minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft"));
+    if (const auto vanilla = dynamic_cast<VanillaInstance*>(instance)) {
+        const auto& descriptor = vanilla->descriptor();
+        data.insert("minecraftVersion", descriptor.minecraftVersion);
+        data.insert("profileVersionId", descriptor.profileVersionId);
+        data.insert("loaderType", descriptor.loaderType);
+        data.insert("loaderVersion", descriptor.loaderVersion);
+        data.insert("dialect", descriptor.dialect);
+        data.insert("provenance", descriptor.provenance.toJson());
+    }
     return success(data);
 }
 
@@ -820,7 +1052,29 @@ QJsonObject OperationService::updateInstance(const QJsonObject& parameters, User
     QString error;
     if (!waitForTask(task.get(), interaction, &error))
         return failure(error);
-    return success(QJsonObject{ { "id", instance->id() }, { "updated", true } });
+    int syncedProfiles = 0;
+    const auto profileDir = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("sync-profiles"));
+    const auto profileFiles = QDir(profileDir).entryInfoList({ QStringLiteral("*.json") }, QDir::Files | QDir::Readable);
+    for (const auto& profileFile : profileFiles) {
+        QString profileError;
+        auto profile = SyncEngine::loadProfile(APPLICATION->dataRoot(), QFileInfo(profileFile).baseName(), &profileError);
+        const auto serverIds = profile.serverInstanceIds.isEmpty() ? QStringList{ profile.serverInstanceId } : profile.serverInstanceIds;
+        if (!profileError.isEmpty() || !profile.autoAfterUpdate || (profile.clientInstanceId != instance->id() && !serverIds.contains(instance->id())))
+            continue;
+        auto* client = APPLICATION->instances()->getInstanceById(profile.clientInstanceId);
+        if (!client || client->isRunning())
+            continue;
+        for (const auto& serverId : serverIds) {
+            auto* server = APPLICATION->instances()->getInstanceById(serverId);
+            if (!server || server->isRunning()) continue;
+            const auto syncPlan = SyncEngine::plan(profile, client->gameRoot(), server->gameRoot());
+            if (!syncPlan.valid || !syncPlan.conflicts.isEmpty()) continue;
+            if (SyncEngine::apply(profile, syncPlan, client->gameRoot(), server->gameRoot(), &profileError))
+                ++syncedProfiles;
+        }
+        SyncEngine::saveProfile(APPLICATION->dataRoot(), profile, &profileError);
+    }
+    return success(QJsonObject{ { "id", instance->id() }, { "updated", true }, { "autoSyncedProfiles", syncedProfiles } });
 }
 
 QJsonObject OperationService::deleteInstance(const QJsonObject& parameters)
@@ -974,6 +1228,20 @@ QJsonObject OperationService::removeResource(const QJsonObject& parameters)
     const auto fileName = resource->fileinfo().fileName();
     if (!resource->destroy(model->indexDir(), parameters.value("preserveMetadata").toBool(), true))
         return failure(tr("The resource could not be removed."));
+    // Resource::destroy removes the file immediately, while the model keeps
+    // its in-memory snapshot until the asynchronous directory refresh. Wait
+    // for that refresh before returning so a following API list observes the
+    // removal deterministically.
+    model->update();
+    if (model->isUpdating()) {
+        QEventLoop loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        QObject::connect(model.get(), &ResourceFolderModel::updateFinished, &loop, &QEventLoop::quit);
+        QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timeout.start(10000);
+        loop.exec();
+    }
     return success(QJsonObject{ { "fileName", fileName }, { "removed", true } });
 }
 
@@ -1525,7 +1793,18 @@ QJsonObject OperationService::importInstance(const QJsonObject& parameters, User
     const auto name = parameters.value("name").toString();
     if (!name.isEmpty())
         importTask->setName(name);
-    auto task = APPLICATION->instances()->wrapInstanceTask(importTask);
+    QString targetDirectory;
+    const auto targetStoreId = parameters.value("targetStoreId").toString().trimmed();
+    if (!targetStoreId.isEmpty()) {
+        const auto* store = APPLICATION->instanceStores()->find(targetStoreId);
+        if (!store || !store->isPrism() || !store->enabled || !store->writable)
+            return failure(tr("The selected target store is not an enabled writable Prism store."), 2);
+        targetDirectory = store->path;
+    } else if (const auto* store = APPLICATION->instanceStores()->defaultStore()) {
+        targetDirectory = store->path;
+    }
+    auto task = targetDirectory.isEmpty() ? APPLICATION->instances()->wrapInstanceTask(importTask)
+                                          : APPLICATION->instances()->wrapInstanceTask(importTask, targetDirectory);
     QString error;
     if (!waitForTask(task, interaction, &error))
         return failure(error);

@@ -76,12 +76,16 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QWidgetAction>
+#include <QUuid>
 #include <memory>
 
 #include <BaseInstance.h>
 #include <BuildConfig.h>
 #include <DesktopServices.h>
 #include <InstanceList.h>
+#include "InstanceStore.h"
+#include "VanillaConversion.h"
+#include "VanillaConversionTask.h"
 #include <MMCZip.h>
 #include <icons/IconList.h>
 #include <java/JavaInstallList.h>
@@ -644,6 +648,119 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         connect(actionVerifyAssets, &QAction::triggered, this, &MainWindow::on_actionVerifyAssets_triggered);
         actions.append(actionSep2);
         actions.append(actionVerifyAssets);
+
+        // Keep physical Store migration discoverable from the desktop UI.
+        // The source is copied transactionally and the original is retained;
+        // the CLI/API additionally exposes an explicit move mode.
+        QAction* actionTransfer = new QAction(tr("Copy to another instance directory..."), this);
+        actionTransfer->setEnabled(instance && !instance->isRunning() && QFileInfo::exists(QDir(instance->instanceRoot()).filePath("instance.cfg")));
+        connect(actionTransfer, &QAction::triggered, this, [this, instance] {
+            if (!instance) return;
+            QStringList labels;
+            QStringList ids;
+            for (const auto& value : APPLICATION->instanceStoresStatus()) {
+                const auto store = value.toObject();
+                if (store.value("format").toString() != QStringLiteral("prism") || !store.value("enabled").toBool() || !store.value("writable").toBool())
+                    continue;
+                const auto path = QDir::cleanPath(store.value("path").toString());
+                if (QDir::cleanPath(QFileInfo(instance->instanceRoot()).absolutePath()) == path) continue;
+                labels.append(QStringLiteral("%1 — %2").arg(store.value("name").toString(), QDir::toNativeSeparators(path)));
+                ids.append(store.value("id").toString());
+            }
+            if (labels.isEmpty()) {
+                QMessageBox::information(this, tr("Instance directories"), tr("No other enabled writable Prism instance directory is available."));
+                return;
+            }
+            bool accepted = false;
+            const auto selected = QInputDialog::getItem(this, tr("Copy instance"), tr("Destination instance directory:"), labels, 0, false, &accepted);
+            if (!accepted) return;
+            const auto row = labels.indexOf(selected);
+            if (row < 0) return;
+            const auto store = APPLICATION->instanceStores()->find(ids.at(row));
+            if (!store) return;
+            const auto source = QFileInfo(instance->instanceRoot()).absoluteFilePath();
+            const auto destination = QDir(store->path).filePath(QFileInfo(source).fileName());
+            if (QFileInfo::exists(destination)) {
+                QMessageBox::warning(this, tr("Copy instance"), tr("The destination already contains an instance with this name."));
+                return;
+            }
+            if (!QDir().mkpath(store->path)) {
+                QMessageBox::critical(this, tr("Copy instance"), tr("Could not create the destination instance directory."));
+                return;
+            }
+            const auto staging = destination + QStringLiteral(".transfer-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+            FS::copy copier(source, staging);
+            copier.overwrite(false);
+            if (!copier() || !QDir().rename(staging, destination)) {
+                FS::deletePath(staging);
+                QMessageBox::critical(this, tr("Copy instance"), tr("Could not complete the instance copy."));
+                return;
+            }
+            APPLICATION->instances()->loadList();
+        });
+        actions.append(actionTransfer);
+        if (instance && instance->traits().contains(QStringLiteral("vanilla-compatible"))) {
+            QAction* actionConvert = new QAction(tr("Convert to Prism copy..."), this);
+            connect(actionConvert, &QAction::triggered, this, [this, instance] {
+                QStringList labels;
+                QStringList ids;
+                for (const auto& value : APPLICATION->instanceStoresStatus()) {
+                    const auto store = value.toObject();
+                    if (store.value("format").toString() != QStringLiteral("prism") || !store.value("enabled").toBool() || !store.value("writable").toBool()) continue;
+                    labels.append(QStringLiteral("%1 — %2").arg(store.value("name").toString(), QDir::toNativeSeparators(store.value("path").toString())));
+                    ids.append(store.value("id").toString());
+                }
+                if (labels.isEmpty()) {
+                    QMessageBox::warning(this, tr("Convert instance"), tr("No enabled writable Prism instance directory is available."));
+                    return;
+                }
+                bool accepted = false;
+                const auto selected = QInputDialog::getItem(this, tr("Convert instance"), tr("Destination instance directory:"), labels, 0, false, &accepted);
+                if (!accepted) return;
+                const auto row = labels.indexOf(selected);
+                if (row < 0) return;
+                const auto store = APPLICATION->instanceStores()->find(ids.at(row));
+                if (!store) return;
+                bool nameAccepted = false;
+                const auto name = QInputDialog::getText(this, tr("Convert instance"), tr("New instance name:"), QLineEdit::Normal,
+                                                        instance->name(), &nameAccepted).trimmed();
+                if (!nameAccepted || name.isEmpty()) return;
+                bool groupAccepted = false;
+                const auto group = QInputDialog::getText(this, tr("Convert instance"), tr("Group (optional):"), QLineEdit::Normal,
+                                                         QString(), &groupAccepted).trimmed();
+                if (!groupAccepted) return;
+
+                QJsonObject parameters{
+                    { "source", instance->instanceRoot() },
+                    { "targetStoreId", store->id },
+                    { "name", name },
+                    { "group", group },
+                    { "copyGameContent", true },
+                };
+                auto task = std::make_unique<VanillaConversionTask>(VanillaConversionTask::Mode::Import, std::move(parameters));
+                ProgressDialog progress(this);
+                progress.execWithTask(static_cast<Task*>(task.get()));
+                const auto report = task->report();
+                if (!report.succeeded) {
+                    const auto message = report.error.isEmpty() ? report.blockers.join('\n') : report.error;
+                    QMessageBox::critical(this, tr("Convert instance"), message.isEmpty() ? tr("The conversion failed.") : message);
+                    return;
+                }
+                APPLICATION->instances()->loadList();
+                if (!group.isEmpty() && !report.destination.isEmpty()) {
+                    for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                        auto* converted = APPLICATION->instances()->at(i);
+                        if (QDir::cleanPath(converted->instanceRoot()) == QDir::cleanPath(report.destination)) {
+                            APPLICATION->instances()->setInstanceGroup(converted->id(), group);
+                            break;
+                        }
+                    }
+                }
+                if (!report.warnings.isEmpty())
+                    CustomMessageBox::selectable(this, tr("Conversion warnings"), report.warnings.join('\n'), QMessageBox::Warning)->exec();
+            });
+            actions.append(actionConvert);
+        }
     } else {
         auto group = view->groupNameAt(pos);
 
@@ -991,9 +1108,10 @@ void MainWindow::runModalTask(Task* task)
     loadDialog.execWithTask(task);
 }
 
-void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask)
+void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask, const QString& instanceDirectory)
 {
-    unique_qobject_ptr<Task> task(APPLICATION->instances()->wrapInstanceTask(rawTask));
+    unique_qobject_ptr<Task> task(instanceDirectory.isEmpty() ? APPLICATION->instances()->wrapInstanceTask(rawTask)
+                                                               : APPLICATION->instances()->wrapInstanceTask(rawTask, instanceDirectory));
     runModalTask(task.get());
 }
 
@@ -1042,7 +1160,7 @@ void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& e
 
     InstanceTask* creationTask = newInstDlg.extractTask();
     if (creationTask) {
-        instanceFromInstanceTask(creationTask);
+        instanceFromInstanceTask(creationTask, newInstDlg.targetStorePath());
     }
 }
 

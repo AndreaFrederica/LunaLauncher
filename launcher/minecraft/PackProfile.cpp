@@ -133,8 +133,27 @@ static ComponentPtr componentFromJsonV1(PackProfile* parent, const QString& comp
 {
     // critical
     auto uid = Json::requireString(obj.value("uid"));
-    auto filePath = componentJsonPattern.arg(uid);
-    auto component = makeShared<Component>(parent, uid);
+    const auto filePath = componentJsonPattern.arg(uid);
+    ComponentPtr component;
+    // A generated foreign-instance patch is a complete VersionFile and can
+    // be used without requiring the metadata index or a network request.
+    if (QFileInfo::exists(filePath)) {
+        QFile patchFile(filePath);
+        if (patchFile.open(QIODevice::ReadOnly)) {
+            QJsonParseError parseError;
+            const auto document = QJsonDocument::fromJson(patchFile.readAll(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && document.isObject()) {
+                try {
+                    auto versionFile = OneSixVersionFormat::versionFileFromJson(document, filePath, false);
+                    component = makeShared<Component>(parent, uid, versionFile);
+                } catch (const Exception&) {
+                    component.reset();
+                }
+            }
+        }
+    }
+    if (!component)
+        component = makeShared<Component>(parent, uid);
     component->m_version = obj.value("version").toString();
     component->m_dependencyOnly = obj.value("dependencyOnly").toBool();
     component->m_important = obj.value("important").toBool();
@@ -161,6 +180,19 @@ static bool savePackProfile(const QString& filename, const ComponentContainer& c
         orderArray.append(componentToJsonV1(component));
     }
     obj.insert("components", orderArray);
+    // Preserve Luna's external-instance provenance marker when the normal
+    // component save path rewrites mmc-pack.json. Native Prism/MMC packs do
+    // not contain this field and remain unchanged.
+    QFile existing(filename);
+    if (existing.open(QIODevice::ReadOnly)) {
+        QJsonParseError parseError;
+        const auto document = QJsonDocument::fromJson(existing.readAll(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && document.isObject()) {
+            const auto marker = document.object().value(QStringLiteral("luna")).toObject();
+            if (!marker.isEmpty())
+                obj.insert(QStringLiteral("luna"), marker);
+        }
+    }
     QSaveFile outFile(filename);
     if (!outFile.open(QFile::WriteOnly)) {
         qCCritical(instanceProfileC) << "Couldn't open" << outFile.fileName() << "for writing:" << outFile.errorString();
@@ -277,12 +309,12 @@ RuntimeContext PackProfile::runtimeContext()
 
 QString PackProfile::componentsFilePath() const
 {
-    return FS::PathCombine(d->m_instance->instanceRoot(), "mmc-pack.json");
+    return FS::PathCombine(d->m_instance->componentRoot(), "mmc-pack.json");
 }
 
 QString PackProfile::patchesPattern() const
 {
-    return FS::PathCombine(d->m_instance->instanceRoot(), "patches", "%1.json");
+    return FS::PathCombine(d->m_instance->componentRoot(), "patches", "%1.json");
 }
 
 QString PackProfile::patchFilePathForUid(const QString& uid) const
@@ -303,7 +335,7 @@ bool PackProfile::save_internal()
 
 PackProfile::Result PackProfile::load()
 {
-    if (Meta::Cleanroom::normalizeInstance(d->m_instance->instanceRoot())) {
+    if (Meta::Cleanroom::normalizeInstance(d->m_instance->componentRoot())) {
         qCInfo(instanceProfileC) << d->m_instance->name() << "| Migrated legacy Cleanroom component UID";
     }
 

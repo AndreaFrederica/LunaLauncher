@@ -16,6 +16,7 @@
 #include "DesktopServices.h"
 #include "InstanceImportTask.h"
 #include "InstanceList.h"
+#include "InstanceStore.h"
 #include "InstanceTask.h"
 #include "LaunchController.h"
 #include "LauncherApi.h"
@@ -110,6 +111,16 @@ QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& inter
     const auto name = parameters.value("name").toString().trimmed();
     const auto group = parameters.value("group").toString();
     const auto icon = parameters.value("icon").toString("default");
+    QString targetDirectory;
+    const auto targetStoreId = parameters.value("targetStoreId").toString().trimmed();
+    if (!targetStoreId.isEmpty()) {
+        const auto* store = APPLICATION->instanceStores()->find(targetStoreId);
+        if (!store || !store->isPrism() || !store->enabled || !store->writable)
+            return OperationService::failure(QObject::tr("The selected target store is not an enabled writable Prism store."), 2);
+        targetDirectory = store->path;
+    } else if (const auto* store = APPLICATION->instanceStores()->defaultStore()) {
+        targetDirectory = store->path;
+    }
 
     InstanceTask* rawTask = nullptr;
     if (!source.isEmpty()) {
@@ -183,7 +194,8 @@ QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& inter
     for (int i = 0; i < APPLICATION->instances()->count(); ++i)
         previousIds.insert(APPLICATION->instances()->at(i)->id());
 
-    auto task = APPLICATION->instances()->wrapInstanceTask(rawTask);
+    auto task = targetDirectory.isEmpty() ? APPLICATION->instances()->wrapInstanceTask(rawTask)
+                                          : APPLICATION->instances()->wrapInstanceTask(rawTask, targetDirectory);
     QString error;
     if (!waitForTask(task, interaction, &error, &api))
         return OperationService::failure(error);
@@ -507,6 +519,7 @@ void registerInstanceApiOperations(LauncherApi& api)
                                            { "loader", stringProperty("Optional loader id or alias.") },
                                            { "loaderVersion", stringProperty("Optional loader version.") },
                                            { "source", stringProperty("Local path or URL to an instance pack.") },
+                                           { "targetStoreId", stringProperty("Optional enabled writable Prism Store ID for the new instance.") },
                                            { "name", stringProperty("Instance name.") }, { "group", stringProperty("Instance group.") },
                                            { "icon", stringProperty("Icon key.") }, { "executable", stringProperty("Server executable.") },
                                            { "arguments", QJsonObject{ { "description", "Server arguments." } } } }) },

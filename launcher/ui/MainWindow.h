@@ -254,7 +254,7 @@ class MainWindow : public QMainWindow {
     void setToolBarButtonWidths(QToolBar* toolBar);
 
     void runModalTask(Task* task);
-    void instanceFromInstanceTask(InstanceTask* task);
+    void instanceFromInstanceTask(InstanceTask* task, const QString& instanceDirectory = {});
 
    private:
     Ui::MainWindow* ui;

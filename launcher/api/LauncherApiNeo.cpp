@@ -30,7 +30,7 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
 {
     api.registerOperation({ "neo.task.start",
         "Start an asynchronous Neo UI task immediately. Independent instance keys run in parallel; conflicting keys queue.",
-        objectSchema({ { "operation", stringProperty("instance.import, instance.create, instance.component.set-version, instance.special-loader.install, instance.update, java.install, modpack.install, resource.install, resource.install-version, resource.install-with-dependencies, account.refresh, account.login, instance.launch, instance.export, or server.start.") },
+        objectSchema({ { "operation", stringProperty("Any asynchronous operation: instance/import/update/launch/export/convert, instance-store mutations, instance.store-transfer, startup data migration/switching, vanilla.loader.install, sync.profile mutations, java/account/resource/modpack/server operations.") },
                        { "parameters", QJsonObject{ { "type", "object" }, { "description", "Operation parameters." } } },
                        { "priority", stringProperty("normal or high.") } }, { "operation", "parameters" }),
         "neo", true },
@@ -65,8 +65,8 @@ void registerLauncherApiNeoOperations(LauncherApi& api)
                 { "data", QJsonObject{
                     { "parallel", true },
                     { "maxActive", AsyncTaskRuntime::maxActive },
-                    { "operations", QJsonArray{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.launch", "instance.export", "server.start" } },
-                    { "conflictPolicy", "instance.import/instance.create/modpack.install use the global 'instances' key; resource.install, resource.install-version, resource.install-with-dependencies, instance.update and component updates use 'instance:<id>'; java.install uses 'java'; account.refresh uses 'account:<id>'; account.login uses 'accounts'; instance.launch, instance.export and server.start use 'instance:<id>'. instance.import, modpack.install, resource.install-version, resource.install-with-dependencies and instance.special-loader.install also share the 'interactive-install' key to isolate their interaction channels. Tasks without shared keys run concurrently." },
+                    { "operations", QJsonArray{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.launch", "instance.export", "instance.convert.import", "instance.convert.export", "server.start", "instance-store.add", "instance-store.update", "instance-store.remove", "instance.store-transfer", "startup.set-data-location", "startup.migrate", "startup.dismiss-migration", "startup.complete", "vanilla.loader.install", "sync.profile.save", "sync.profile.remove", "sync.profile.plan", "sync.profile.apply", "vanilla-instance.provenance", "external-launchers.list-recognizers", "external-launchers.icon" } },
+                    { "conflictPolicy", "Instance creation/import/conversion share 'instances'. Store and startup configuration mutations share 'launcher-configuration'; transfers lock the source instance and target store; vanilla loader writes lock 'vanilla:<target>'; sync profile operations lock 'sync:<profile>'. Resource/component/update/launch/export/server operations lock their instance, Java uses 'java', account refresh uses its account, and account login uses 'accounts'. Interactive installs also share 'interactive-install'. Independent tasks run concurrently." },
                 } }
             };
         });

@@ -45,16 +45,41 @@
 #include "BuildConfig.h"
 #include "Json.h"
 #include "minecraft/PackProfile.h"
+#include "VanillaInstance.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/update/AssetUpdateTask.h"
 #include "settings/Setting.h"
 #include "ui/dialogs/ProgressDialog.h"
+#include <DesktopServices.h>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QLabel>
+#include <QPushButton>
 
 MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QWidget* parent)
     : QWidget(parent), m_instance(std::move(instance)), m_ui(new Ui::MinecraftSettingsWidget)
 {
     m_ui->setupUi(this);
+
+    if (auto vanilla = dynamic_cast<VanillaInstance*>(m_instance)) {
+        const auto& descriptor = vanilla->descriptor();
+        auto info = new QGroupBox(tr("Detected game profile"), m_ui->scrollAreaWidgetContents);
+        auto form = new QFormLayout(info);
+        auto minecraft = new QLabel(descriptor.minecraftVersion.isEmpty() ? descriptor.versionId : descriptor.minecraftVersion, info);
+        auto loader = new QLabel(info);
+        const auto loaderName = descriptor.loaderType.isEmpty() || descriptor.loaderType == QStringLiteral("vanilla") ? tr("Vanilla")
+            : descriptor.loaderType.toUpper();
+        loader->setText(descriptor.loaderVersion.isEmpty() ? loaderName : tr("%1 %2").arg(loaderName, descriptor.loaderVersion));
+        auto profile = new QLabel(descriptor.profileVersionId.isEmpty() ? descriptor.versionId : descriptor.profileVersionId, info);
+        auto folderButton = new QPushButton(tr("Open instance folder"), info);
+        connect(folderButton, &QPushButton::clicked, this, [root = descriptor.root] { DesktopServices::openPath(root, true); });
+        form->addRow(tr("Minecraft version"), minecraft);
+        form->addRow(tr("Loader"), loader);
+        form->addRow(tr("Foreign profile"), profile);
+        form->addRow(QString(), folderButton);
+        m_ui->verticalLayout_5->insertWidget(0, info);
+    }
 
     if (m_instance == nullptr) {
         m_ui->settingsTabs->removeTab(1);

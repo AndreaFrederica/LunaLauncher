@@ -39,6 +39,7 @@
 
 #include "NewInstanceDialog.h"
 #include "Application.h"
+#include "InstanceStore.h"
 #include "ui/pages/modplatform/ModpackProviderBasePage.h"
 #include "ui/pages/modplatform/import_ftb/ImportFTBPage.h"
 #include "ui_NewInstanceDialog.h"
@@ -96,6 +97,19 @@ NewInstanceDialog::NewInstanceDialog(const QString& initialGroup,
     ui->groupBox->addItems(groups);
     ui->groupBox->setCurrentIndex(index);
     ui->groupBox->lineEdit()->setPlaceholderText(tr("No group"));
+
+    // New instances are created in an explicitly selected writable Prism
+    // store. The default store is preselected, while vanilla-compatible
+    // stores are intentionally excluded because they require conversion.
+    const auto stores = APPLICATION->instanceStoresStatus();
+    for (const auto& value : stores) {
+        const auto store = value.toObject();
+        if (store.value("format").toString() != QStringLiteral("prism") || !store.value("enabled").toBool() || !store.value("writable").toBool())
+            continue;
+        ui->storeBox->addItem(store.value("name").toString(), store.value("path").toString());
+        if (store.value("defaultForNewInstances").toBool())
+            ui->storeBox->setCurrentIndex(ui->storeBox->count() - 1);
+    }
 
     // NOTE: m_buttons must be initialized before PageContainer, because it indirectly accesses m_buttons through setSuggestedPack! Do not
     // move this below.
@@ -314,6 +328,11 @@ QString NewInstanceDialog::instGroup() const
 QString NewInstanceDialog::iconKey() const
 {
     return InstIconKey;
+}
+
+QString NewInstanceDialog::targetStorePath() const
+{
+    return ui->storeBox->currentData().toString();
 }
 
 void NewInstanceDialog::on_iconButton_clicked()

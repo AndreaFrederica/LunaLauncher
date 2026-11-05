@@ -17,6 +17,7 @@
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
+#include "VanillaInstance.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/auth/MinecraftAccount.h"
 #include "minecraft/auth/YggdrasilPresets.h"
@@ -409,6 +410,18 @@ class InstanceObject {
             result.insert("runtime", QJsonObject{ { "minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft") } });
         else
             result.insert("runtime", QJsonObject{});
+        if (const auto vanilla = dynamic_cast<VanillaInstance*>(instance)) {
+            result.insert("format", QStringLiteral("vanilla-compatible"));
+            result.insert("vanillaCompatible", true);
+            result.insert("dialect", vanilla->descriptor().dialect);
+            result.insert("provenance", vanilla->descriptor().provenance.toJson());
+            result.insert("loaderType", vanilla->descriptor().loaderType);
+            result.insert("loaderVersion", vanilla->descriptor().loaderVersion);
+            result.insert("minecraftVersion", vanilla->descriptor().minecraftVersion);
+        } else {
+            result.insert("format", QStringLiteral("prism"));
+            result.insert("vanillaCompatible", false);
+        }
         return result;
     }
 

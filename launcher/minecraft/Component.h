@@ -73,7 +73,7 @@ class Component : public QObject, public ProblemProvider {
     bool isRemovable();
     bool isCustom();
     bool isVersionChangeable(bool wait = true);
-    bool isKnownModloader();
+    bool isKnownModloader() const;
     QStringList knownConflictingComponents();
 
     // DEPRECATED: explicit numeric order values, used for loading old non-component config. TODO: refactor and move to migration code
@@ -146,6 +146,10 @@ class Component : public QObject, public ProblemProvider {
     // load state
     std::shared_ptr<Meta::Version> m_metaVersion;
     std::shared_ptr<VersionFile> m_file;
+    // Authoritative metadata loaded from an external HMCL/PCL/Mojang
+    // version profile. It behaves like a local VersionFile for launch
+    // composition without making the component a Prism custom patch.
+    std::shared_ptr<VersionFile> m_foreignFile;
     bool m_loaded = false;
 
    private:

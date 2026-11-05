@@ -46,6 +46,7 @@
 #include "BaseInstance.h"
 #include "InstanceList.h"
 #include "InstanceView.h"
+#include "VanillaInstance.h"
 
 // Origin: Qt
 static void viewItemTextLayout(QTextLayout& textLayout, int lineWidth, qreal& height, qreal& widthUsed)
@@ -157,6 +158,48 @@ void drawBadges(QPainter* painter, const QStyleOptionViewItem& option, BaseInsta
         }
     }
     painter->translate(-option.rect.topLeft());
+}
+
+// Foreign vanilla-compatible instances keep their source dialect in the
+// VanillaInstance descriptor. Draw this badge on the icon itself so the
+// source remains visible even when the instance name or group is changed.
+static void drawSourceBadge(QPainter* painter, const QRect& iconRect, BaseInstance* instance)
+{
+    const auto vanilla = dynamic_cast<VanillaInstance*>(instance);
+    if (!vanilla)
+        return;
+
+    const auto dialect = vanilla->descriptor().dialect.toLower();
+    if (dialect.isEmpty())
+        return;
+
+    constexpr int badgeSize = 22;
+    constexpr int margin = 2;
+    const QRect badgeRect(iconRect.right() - badgeSize - margin, iconRect.bottom() - badgeSize - margin, badgeSize, badgeSize);
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    const QRect content = badgeRect;
+    if (dialect == QStringLiteral("hmcl")) {
+        const QIcon icon(QStringLiteral(":/icons/multimc/scalable/instances/hmcl.png"));
+        icon.paint(painter, content, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
+    } else if (dialect == QStringLiteral("pcl")) {
+        const QIcon icon(QStringLiteral(":/icons/multimc/scalable/instances/pcl-badge.png"));
+        icon.paint(painter, content, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
+    } else if (dialect == QStringLiteral("luna")) {
+        const QIcon icon(QStringLiteral(":/icons/multimc/scalable/instances/luna-badge.png"));
+        icon.paint(painter, content, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
+    } else if (dialect == QStringLiteral("mixed") || dialect == QStringLiteral("mmc")
+               || (dialect != QStringLiteral("mojang") && dialect != QStringLiteral("vanilla"))) {
+        const QIcon icon(QStringLiteral(":/icons/multimc/scalable/instances/mixed-badge.png"));
+        icon.paint(painter, content, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
+    } else {
+        const QIcon icon(QStringLiteral(":/icons/multimc/scalable/instances/grass-badge.png"));
+        icon.paint(painter, content, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
+    }
+
+    painter->restore();
 }
 
 static QSize viewItemTextSize(const QStyleOptionViewItem* option)
@@ -274,6 +317,10 @@ void ListViewDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
     {
         iconbox.setHeight(iconSize);
         opt.icon.paint(painter, iconbox, Qt::AlignCenter, mode, state);
+        auto instance = (BaseInstance*)index.data(InstanceList::InstancePointerRole).value<void*>();
+        if (instance) {
+            drawSourceBadge(painter, iconbox, instance);
+        }
     }
     // set the text colors
     QPalette::ColorGroup cg = opt.state & QStyle::State_Enabled ? QPalette::Normal : QPalette::Disabled;

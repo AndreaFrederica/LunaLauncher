@@ -12,6 +12,24 @@ set(CORE_SOURCES
     BaseVersionList.cpp
     InstanceList.h
     InstanceList.cpp
+    InstanceStore.h
+    InstanceStore.cpp
+    VanillaInstanceLayout.h
+    VanillaInstanceLayout.cpp
+    ExternalInstanceProvenance.h
+    ExternalInstanceProvenance.cpp
+    VanillaCompatibleProvider.h
+    VanillaCompatibleProvider.cpp
+    VanillaConversion.h
+    VanillaConversion.cpp
+    VanillaConversionTask.h
+    VanillaConversionTask.cpp
+    VanillaInstance.h
+    VanillaInstance.cpp
+    ui/pages/instance/ExternalProvenancePage.h
+    ui/pages/instance/ExternalProvenancePage.cpp
+    SyncProfile.h
+    SyncProfile.cpp
     InstanceTask.h
     InstanceTask.cpp
     LoggedProcess.h
@@ -440,6 +458,8 @@ set(SETTINGS_SOURCES
     settings/INIFile.h
     settings/INISettingsObject.cpp
     settings/INISettingsObject.h
+    settings/JSONSettingsObject.cpp
+    settings/JSONSettingsObject.h
     settings/OverrideSetting.cpp
     settings/OverrideSetting.h
     settings/PassthroughSetting.cpp
@@ -884,6 +904,8 @@ set(LUNA_FEATURE_SOURCES
     modplatform/jsapi/JSResourceAPI.h
     modplatform/jsapi/JSAPIManager.cpp
     modplatform/jsapi/JSAPIManager.h
+    modplatform/jsapi/JSExternalLauncherRecognizer.cpp
+    modplatform/jsapi/JSExternalLauncherRecognizer.h
     modplatform/hangar/HangarAPI.cpp
     modplatform/hangar/HangarAPI.h
     modplatform/hangar/HangarPackIndex.cpp
@@ -1181,6 +1203,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/global/MinecraftPage.h
     ui/pages/global/LauncherPage.cpp
     ui/pages/global/LauncherPage.h
+    ui/pages/global/InstanceStoresPage.cpp
+    ui/pages/global/InstanceStoresPage.h
     ui/pages/global/AppearancePage.h
     ui/pages/global/ProxyPage.cpp
     ui/pages/global/ProxyPage.h

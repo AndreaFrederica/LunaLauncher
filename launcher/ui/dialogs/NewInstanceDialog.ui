@@ -25,6 +25,20 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
+    <layout class="QHBoxLayout" name="storeLayout">
+     <item>
+      <widget class="QLabel" name="storeLabel">
+       <property name="text">
+        <string>Install to:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="storeBox"/>
+     </item>
+    </layout>
+   </item>
+   <item>
     <layout class="QGridLayout" name="gridLayout_2">
      <item row="1" column="2">
       <widget class="QComboBox" name="groupBox">

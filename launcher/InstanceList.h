@@ -41,8 +41,11 @@
 #include <QPair>
 #include <QSet>
 #include <QStack>
+#include <QMap>
+#include <QStringList>
 
 #include "BaseInstance.h"
+#include "VanillaCompatibleProvider.h"
 
 class QFileSystemWatcher;
 class InstanceTask;
@@ -74,6 +77,9 @@ class InstanceList : public QAbstractListModel {
 
    public:
     explicit InstanceList(SettingsObject* settings, const QString& instDir, QObject* parent = 0);
+    explicit InstanceList(SettingsObject* settings, const QStringList& instDirs, QObject* parent = 0);
+    void setVanillaStores(const QList<QPair<QString, QString>>& stores);
+    void setPrismStores(const QStringList& stores);
     virtual ~InstanceList();
 
    public:
@@ -123,12 +129,15 @@ class InstanceList : public QAbstractListModel {
 
     // Wrap an instance creation task in some more task machinery and make it ready to be used
     Task* wrapInstanceTask(InstanceTask* task);
+    /** Wrap a creation/import task and commit it into a specific Prism Store. */
+    Task* wrapInstanceTask(InstanceTask* task, const QString& instanceDirectory);
 
     /**
      * Create a new empty staging area for instance creation and @return a path/key top commit it later.
      * Used by instance manipulation tasks.
      */
     QString getStagedInstancePath();
+    QString getStagedInstancePath(const QString& instanceDirectory);
 
     /**
      * Commit the staging area given by @keyPath to the provider - used when creation succeeds.
@@ -137,6 +146,7 @@ class InstanceList : public QAbstractListModel {
      * - for instance, when updating it.
      */
     bool commitStagedInstance(const QString& keyPath, const InstanceName& instanceName, QString groupName, const InstanceTask&);
+    bool commitStagedInstance(const QString& keyPath, const InstanceName& instanceName, QString groupName, const InstanceTask&, const QString& instanceDirectory);
 
     /**
      * Destroy a previously created staging area given by @keyPath - used when creation fails.
@@ -158,6 +168,9 @@ class InstanceList : public QAbstractListModel {
     QMimeData* mimeData(const QModelIndexList& indexes) const override;
 
     QStringList getLinkedInstancesById(const QString& id) const;
+
+    /** All enabled instance roots currently watched by this model. */
+    QStringList instanceDirectories() const { return m_instDirs; }
 
    signals:
     void dataIsInvalid();
@@ -183,7 +196,7 @@ class InstanceList : public QAbstractListModel {
     void loadGroupList();
     void saveGroupList();
     QList<InstanceId> discoverInstances();
-    std::unique_ptr<BaseInstance> loadInstance(const InstanceId& id);
+    std::unique_ptr<BaseInstance> loadInstance(const InstanceId& id, const QString& instanceRoot = QString());
 
     void increaseGroupCount(const QString& group);
     void decreaseGroupCount(const QString& group);
@@ -198,10 +211,15 @@ class InstanceList : public QAbstractListModel {
 
     SettingsObject* m_globalSettings;
     QString m_instDir;
+    QStringList m_instDirs;
+    QMap<InstanceId, QString> m_instanceRoots;
+    QMap<InstanceId, QString> m_instancePaths;
+    QList<QPair<QString, QString>> m_vanillaStores;
     QFileSystemWatcher* m_watcher;
     // FIXME: this is so inefficient that looking at it is almost painful.
     QSet<QString> m_collapsedGroups;
     QMap<InstanceId, GroupId> m_instanceGroupIndex;
+    QMap<InstanceId, GroupId> m_foreignGroupIndex;
     QSet<InstanceId> instanceSet;
     bool m_groupsLoaded = false;
     bool m_instancesProbed = false;

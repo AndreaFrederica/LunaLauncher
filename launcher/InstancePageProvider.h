@@ -21,6 +21,7 @@
 #include "ui/pages/instance/ShaderPackPage.h"
 #include "ui/pages/instance/TexturePackPage.h"
 #include "ui/pages/instance/VersionPage.h"
+#include "ui/pages/instance/ExternalProvenancePage.h"
 #include "ui/pages/instance/WorldListPage.h"
 #include "ui/pages/instance/YesSteveModelPage.h"
 #include "ui/pages/instance/CustomPlayerModelPage.h"
@@ -81,8 +82,17 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
         if (!onesix) {
             return values;
         }
-        values.append(new VersionPage(onesix));
-        values.append(ManagedPackPage::createPage(onesix));
+        const bool vanillaCompatible = onesix->traits().contains(QStringLiteral("vanilla-compatible"));
+        if (vanillaCompatible) {
+            // Show the resolved graph and expose only the safe standard
+            // loader edits implemented by VanillaInstance. Other component
+            // mutations remain disabled in VersionPage.
+            values.append(new VersionPage(onesix, false));
+            values.append(new ExternalProvenancePage(onesix));
+        } else {
+            values.append(new VersionPage(onesix));
+            values.append(ManagedPackPage::createPage(onesix));
+        }
         auto modsPage = new ModFolderPage(onesix, onesix->loaderModList().get());
         modsPage->setFilter("%1 (*.zip *.jar *.litemod *.nilmod)");
         values.append(modsPage);

@@ -90,6 +90,7 @@ unsigned char qResourceFeatureZstd()
 #include "ui/pages/global/JavaPage.h"
 #include "ui/pages/global/LanguagePage.h"
 #include "ui/pages/global/LauncherPage.h"
+#include "ui/pages/global/InstanceStoresPage.h"
 #include "ui/pages/global/MinecraftPage.h"
 #include "ui/pages/global/Nide8AuthPage.h"
 #include "ui/pages/global/PclDownloadPage.h"
@@ -101,6 +102,7 @@ unsigned char qResourceFeatureZstd()
 #include "ui/setupwizard/JavaWizardPage.h"
 
 #include "modplatform/jsapi/JSAPIManager.h"
+#include "modplatform/jsapi/JSExternalLauncherRecognizer.h"
 #include "ui/setupwizard/LanguageWizardPage.h"
 #include "ui/setupwizard/LoginWizardPage.h"
 #include "ui/setupwizard/PasteWizardPage.h"
@@ -139,6 +141,8 @@ unsigned char qResourceFeatureZstd()
 #include <QWindow>
 
 #include "InstanceList.h"
+#include "InstanceStore.h"
+#include "VanillaCompatibleProvider.h"
 #include "MTPixmapCache.h"
 
 #include <minecraft/auth/AccountList.h>
@@ -1210,6 +1214,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         {
             m_globalSettingsProvider = std::make_unique<GenericPageProvider>(tr("Settings"));
             m_globalSettingsProvider->addPage<LauncherPage>();
+            m_globalSettingsProvider->addPage<InstanceStoresPage>();
             m_globalSettingsProvider->addPage<LanguagePage>();
             m_globalSettingsProvider->addPage<AppearancePage>();
             m_globalSettingsProvider->addPage<MinecraftPage>();
@@ -1290,15 +1295,55 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     // initialize and load all instances
     {
         auto InstDirSetting = m_settings->getSetting("InstanceDir");
-        // instance path: check for problems with '!' in instance path and warn the user in the log
-        // and remember that we have to show him a dialog when the gui starts (if it does so)
-        QString instDir = m_settings->get("InstanceDir").toString();
-        qInfo() << "Instance path              : " << instDir;
-        if (FS::checkProblemticPathJava(QDir(instDir))) {
-            qWarning() << "Your instance path contains \'!\' and this is known to cause java problems!";
+        const auto registryPath = QDir::current().filePath(QStringLiteral("instance-stores.json"));
+        QString registryError;
+        m_instanceStores = std::make_unique<InstanceStoreRegistry>(InstanceStoreRegistry::load(registryPath, &registryError));
+        if (!registryError.isEmpty())
+            qWarning() << "Could not load instance store registry:" << registryError;
+
+        // Migrate the legacy single InstanceDir setting into the registry on
+        // first use. The setting remains as a compatibility alias for older
+        // integrations and the Classic UI path editor.
+        if (m_instanceStores->stores().isEmpty()) {
+            InstanceStore legacy;
+            legacy.name = tr("Legacy Prism instances");
+            legacy.path = m_settings->get("InstanceDir").toString();
+            legacy.format = InstanceStoreFormat::Prism;
+            legacy.origin = InstanceStoreOrigin::User;
+            legacy.enabled = true;
+            legacy.writable = true;
+            m_instanceStores->addOrUpdate(std::move(legacy));
         }
-        m_instances.reset(new InstanceList(m_settings.get(), instDir, this));
+        m_instanceStores->normalize(m_rootPath, m_portable);
+        if (!m_instanceStores->save(registryPath, &registryError) && !registryError.isEmpty())
+            qWarning() << "Could not save instance store registry:" << registryError;
+
+        QStringList prismDirs;
+        for (const auto& store : m_instanceStores->stores()) {
+            if (store.enabled && store.isPrism())
+                prismDirs.append(store.path);
+        }
+        if (prismDirs.isEmpty() && m_instanceStores->defaultStore())
+            prismDirs.append(m_instanceStores->defaultStore()->path);
+        if (prismDirs.isEmpty())
+            prismDirs.append(m_settings->get("InstanceDir").toString());
+
+        qInfo() << "Instance stores            : " << prismDirs;
+        for (const auto& instDir : prismDirs) {
+            if (FS::checkProblemticPathJava(QDir(instDir)))
+                qWarning() << "An instance path contains '!' and this is known to cause java problems:" << instDir;
+        }
+        m_instances.reset(new InstanceList(m_settings.get(), prismDirs, this));
+        QList<QPair<QString, QString>> vanillaStores;
+        for (const auto& store : m_instanceStores->stores()) {
+            if (store.enabled && store.isVanillaCompatible())
+                vanillaStores.append({ store.id, store.path });
+        }
+        m_instances->setVanillaStores(vanillaStores);
         connect(InstDirSetting.get(), &Setting::SettingChanged, m_instances.get(), &InstanceList::on_InstFolderChanged);
+        // Provenance recognizers must be available before the first external
+        // store scan. They are independent from the resource-provider cache.
+        JSExternalLauncherRecognizerRuntime::initialize(LauncherResources::searchPaths(QStringLiteral("external-launchers")));
         qInfo() << "Loading Instances...";
         m_instances->loadList();
         qInfo() << "<> Instances loaded.";
@@ -2461,7 +2506,162 @@ QJsonObject Application::dataLocationStatus() const
              { "portablePath", portablePath },
              { "systemPath", systemPath },
              { "target", dataPathForMode(!m_portable) },
+             { "instanceStores", instanceStoresStatus() },
              { "restartRequired", true } };
+}
+
+QJsonArray Application::instanceStoresStatus() const
+{
+    QJsonArray result;
+    if (!m_instanceStores)
+        return result;
+    for (const auto& store : m_instanceStores->stores()) {
+        QJsonObject status{ { "id", store.id },
+                                   { "name", store.name },
+                                   { "path", store.path },
+                                   { "exists", QFileInfo(store.path).isDir() },
+                                   { "format", store.isVanillaCompatible() ? QStringLiteral("vanilla-compatible") : QStringLiteral("prism") },
+                                   { "origin", store.origin == InstanceStoreOrigin::PortableDerived ? QStringLiteral("portable-derived") : QStringLiteral("user") },
+                                   { "enabled", store.enabled },
+                                   { "writable", store.writable },
+                                   { "defaultForNewInstances", store.defaultForNewInstances },
+                                   { "autoEnableWhenPortable", store.autoEnableWhenPortable } };
+        if (!QFileInfo(store.path).isDir()) {
+            status.insert(QStringLiteral("instanceCount"), -1);
+            status.insert(QStringLiteral("scanState"), QStringLiteral("missing"));
+        } else if (!store.enabled) {
+            status.insert(QStringLiteral("instanceCount"), -1);
+            status.insert(QStringLiteral("scanState"), QStringLiteral("disabled"));
+        } else if (store.isVanillaCompatible()) {
+            QJsonArray foreignInstances;
+            for (const auto& instance : VanillaCompatibleProvider::scan(store.id, store.path)) {
+                foreignInstances.append(QJsonObject{ { "id", instance.stableId },
+                                                     { "name", instance.name },
+                                                     { "root", instance.root },
+                                                     { "dialect", instance.dialect },
+                                                     { "provenance", instance.provenance.toJson() },
+                                                     { "versionId", instance.versionId },
+                                                     { "gameRoot", instance.layout.gameRoot },
+                                                     { "isolated", instance.layout.isolated },
+                                                     { "writable", instance.writable } });
+            }
+            status.insert(QStringLiteral("instances"), foreignInstances);
+            status.insert(QStringLiteral("instanceCount"), foreignInstances.size());
+            status.insert(QStringLiteral("scanState"), QStringLiteral("ready"));
+        } else {
+            int instanceCount = 0;
+            QDirIterator iterator(store.path, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDirIterator::NoIteratorFlags);
+            while (iterator.hasNext()) {
+                const auto instanceRoot = iterator.next();
+                if (QFileInfo::exists(QDir(instanceRoot).filePath(QStringLiteral("instance.cfg"))))
+                    ++instanceCount;
+            }
+            status.insert(QStringLiteral("instanceCount"), instanceCount);
+            status.insert(QStringLiteral("scanState"), QStringLiteral("ready"));
+        }
+        result.append(status);
+    }
+    return result;
+}
+
+bool Application::addOrUpdateInstanceStore(const QJsonObject& value, QString* errorMessage)
+{
+    if (!m_instanceStores) {
+        if (errorMessage) *errorMessage = tr("Instance store registry is not initialized.");
+        return false;
+    }
+    InstanceStore store;
+    store.id = value.value(QStringLiteral("id")).toString();
+    store.name = value.value(QStringLiteral("name")).toString();
+    store.path = value.value(QStringLiteral("path")).toString();
+    const auto format = value.value(QStringLiteral("format")).toString().trimmed().toLower();
+    if (store.path.trimmed().isEmpty()) {
+        if (errorMessage) *errorMessage = tr("An instance store path is required.");
+        return false;
+    }
+    if (format == QStringLiteral("vanilla-compatible") || format == QStringLiteral("vanilla"))
+        store.format = InstanceStoreFormat::VanillaCompatible;
+    else if (format.isEmpty() || format == QStringLiteral("prism"))
+        store.format = InstanceStoreFormat::Prism;
+    else {
+        if (errorMessage) *errorMessage = tr("Unsupported instance store format: %1").arg(format);
+        return false;
+    }
+    const auto requestedOrigin = value.value(QStringLiteral("origin")).toString().trimmed().toLower();
+    store.origin = requestedOrigin == QStringLiteral("portable-derived") ? InstanceStoreOrigin::PortableDerived : InstanceStoreOrigin::User;
+    if (store.id.isEmpty()) {
+        // addOrUpdate will derive the ID from the canonical path; keep the
+        // origin as user for newly added stores.
+        store.origin = InstanceStoreOrigin::User;
+    } else if (const auto* existing = m_instanceStores->find(store.id)) {
+        if (!value.contains(QStringLiteral("origin")))
+            store.origin = existing->origin;
+        if (!value.contains(QStringLiteral("autoEnableWhenPortable")))
+            store.autoEnableWhenPortable = existing->autoEnableWhenPortable;
+    }
+    store.enabled = value.value(QStringLiteral("enabled")).toBool(true);
+    store.writable = value.value(QStringLiteral("writable")).toBool(store.format == InstanceStoreFormat::Prism);
+    store.defaultForNewInstances = value.value(QStringLiteral("defaultForNewInstances")).toBool(false);
+    if (value.contains(QStringLiteral("autoEnableWhenPortable")))
+        store.autoEnableWhenPortable = value.value(QStringLiteral("autoEnableWhenPortable")).toBool(false);
+    m_instanceStores->addOrUpdate(std::move(store));
+    m_instanceStores->normalize(m_rootPath, m_portable);
+    QString error;
+    const auto registryPath = QDir::current().filePath(QStringLiteral("instance-stores.json"));
+    if (!m_instanceStores->save(registryPath, &error)) {
+        if (errorMessage) *errorMessage = error;
+        return false;
+    }
+    if (m_instances) {
+        QStringList prismDirs;
+        QList<QPair<QString, QString>> vanillaStores;
+        for (const auto& configured : m_instanceStores->stores()) {
+            if (!configured.enabled) continue;
+            if (configured.isPrism()) prismDirs.append(configured.path);
+            else vanillaStores.append({ configured.id, configured.path });
+        }
+        m_instances->setPrismStores(prismDirs);
+        m_instances->setVanillaStores(vanillaStores);
+        m_instances->loadList();
+    }
+    return true;
+}
+
+bool Application::removeInstanceStore(const QString& id, QString* errorMessage)
+{
+    if (!m_instanceStores || id.trimmed().isEmpty()) {
+        if (errorMessage) *errorMessage = tr("An instance store ID is required.");
+        return false;
+    }
+    const auto* store = m_instanceStores->find(id);
+    if (!store) {
+        if (errorMessage) *errorMessage = tr("Instance store not found: %1").arg(id);
+        return false;
+    }
+    if (store->origin == InstanceStoreOrigin::PortableDerived) {
+        if (errorMessage) *errorMessage = tr("The portable UserData store is managed automatically and cannot be removed.");
+        return false;
+    }
+    m_instanceStores->remove(id);
+    m_instanceStores->normalize(m_rootPath, m_portable);
+    QString error;
+    if (!m_instanceStores->save(QDir::current().filePath(QStringLiteral("instance-stores.json")), &error)) {
+        if (errorMessage) *errorMessage = error;
+        return false;
+    }
+    if (m_instances) {
+        QStringList prismDirs;
+        QList<QPair<QString, QString>> vanillaStores;
+        for (const auto& configured : m_instanceStores->stores()) {
+            if (!configured.enabled) continue;
+            if (configured.isPrism()) prismDirs.append(configured.path);
+            else vanillaStores.append({ configured.id, configured.path });
+        }
+        m_instances->setPrismStores(prismDirs);
+        m_instances->setVanillaStores(vanillaStores);
+        m_instances->loadList();
+    }
+    return true;
 }
 
 std::unique_ptr<DataMigrationTask> Application::createDataLocationTask(bool portable, QString* errorMessage) const

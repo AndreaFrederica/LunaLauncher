@@ -500,6 +500,8 @@ QStringList MinecraftInstance::getClassPath()
     QStringList jars, nativeJars;
     auto profile = m_components->getProfile();
     profile->getLibraryFiles(runtimeContext(), jars, nativeJars, getLocalLibraryPath(), binRoot());
+    if (const auto route = clientArtifactRoute(); route.has_value())
+        return route->applyToClassPath(jars);
     return jars;
 }
 
@@ -519,23 +521,30 @@ QStringList MinecraftInstance::getNativeJars()
 
 static QString replaceTokensIn(const QString& text, const QMap<QString, QString>& with)
 {
-    // TODO: does this still work??
     QString result;
-    static const QRegularExpression s_token_regexp("\\$\\{(.+)\\}", QRegularExpression::InvertedGreedinessOption);
-    QStringList list;
-    QRegularExpressionMatchIterator i = s_token_regexp.globalMatch(text);
-    int lastCapturedEnd = 0;
-    while (i.hasNext()) {
-        QRegularExpressionMatch match = i.next();
-        result.append(text.mid(lastCapturedEnd, match.capturedStart()));
-        QString key = match.captured(1);
-        auto iter = with.find(key);
-        if (iter != with.end()) {
-            result.append(*iter);
+    int cursor = 0;
+    while (cursor < text.size()) {
+        const auto start = text.indexOf(QStringLiteral("${"), cursor);
+        if (start < 0) {
+            result.append(text.mid(cursor));
+            break;
         }
-        lastCapturedEnd = match.capturedEnd();
+        result.append(text.mid(cursor, start - cursor));
+        const auto end = text.indexOf(QLatin1Char('}'), start + 2);
+        if (end < 0) {
+            // Keep malformed input visible instead of dropping the tail.
+            result.append(text.mid(start));
+            break;
+        }
+        const auto key = text.mid(start + 2, end - start - 2);
+        const auto iter = with.constFind(key);
+        if (iter != with.constEnd())
+            result.append(*iter);
+        // Unknown launch tokens intentionally expand to an empty string,
+        // matching the previous behavior while handling adjacent tokens
+        // such as ${library_directory}${classpath_separator} correctly.
+        cursor = end + 1;
     }
-    result.append(text.mid(lastCapturedEnd));
     return result;
 }
 
@@ -563,6 +572,9 @@ QStringList MinecraftInstance::extraArguments()
         agent.library->getApplicableFiles(runtimeContext(), jar, temp1, temp2, temp3, getLocalLibraryPath());
         list.append("-javaagent:" + jar[0] + (agent.argument.isEmpty() ? "" : "=" + agent.argument));
     }
+
+    if (const auto route = clientArtifactRoute(); route.has_value())
+        list.append(route->jvmArguments());
 
     {
         QString openALPath;
@@ -692,6 +704,16 @@ QStringList MinecraftInstance::javaArguments(AuthSessionPtr session)
     if (javaVersion.isModular() && shouldApplyOnlineFixes())
         // allow reflective access to java.net - required by the skin fix
         args << "--add-opens" << "java.base/java.net=ALL-UNNAMED";
+
+    // Forge 1.13+ uses BootstrapLauncher as a named module.  Its module
+    // descriptor deliberately does not export the bootstraplauncher package,
+    // while NewLaunch invokes the public main method through MethodHandles
+    // from the unnamed launcher module.  Java 17 therefore rejects the
+    // symbolic lookup unless the package is explicitly exported to the
+    // launcher.  Keep this scoped to Forge's bootstrap entry point so other
+    // modular Minecraft launchers retain their original access rules.
+    if (javaVersion.isModular() && getMainClass() == QStringLiteral("cpw.mods.bootstraplauncher.BootstrapLauncher"))
+        args << "--add-exports" << "cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED";
 
     args << "-Duser.language=en";
 
@@ -1122,7 +1144,19 @@ QMap<QString, QString> MinecraftInstance::makeProfileVarMapping(std::shared_ptr<
     result["assets_root"] = absAssetsDir;
     result["assets_index_name"] = assets->id;
 
-    result["library_directory"] = APPLICATION->metacache()->getBasePath("libraries");
+    // Keep the version JSON's library_directory token aligned with the
+    // actual instance library root. This is the shared .minecraft/libraries
+    // directory for HMCL/PCL/official profiles, while ordinary Prism
+    // instances resolve to their instance-local libraries directory. Forge
+    // and NeoForge use this property during mod discovery (for example to
+    // locate fmlcore); pointing it at Luna's global cache makes an external
+    // profile fail even when the corresponding jar is present beside it.
+    result["library_directory"] = getLocalLibraryPath();
+    // Modern Mojang/Forge version JSON uses this token to join module-path
+    // entries. Without it, an external HMCL/PCL Forge profile leaves the
+    // literal `${classpath_separator}` in the `-p` argument and Java fails
+    // with InvalidPathException before BootstrapLauncher can start.
+    result["classpath_separator"] = QString(QDir::listSeparator());
 
     return result;
 }

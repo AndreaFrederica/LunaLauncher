@@ -39,6 +39,7 @@
  */
 
 #pragma once
+#include <optional>
 #include <java/JavaVersion.h>
 #include <minecraft/mod/DataPackFolderModel.h>
 #include <minecraft/mod/YesSteveModelFolderModel.h>
@@ -47,6 +48,7 @@
 #include <QDir>
 #include <QProcess>
 #include "BaseInstance.h"
+#include "minecraft/MinecraftClientRoute.h"
 #include "minecraft/launch/MinecraftTarget.h"
 #include "minecraft/mod/Mod.h"
 
@@ -59,6 +61,7 @@ class WorldList;
 class LaunchStep;
 class LaunchProfile;
 class PackProfile;
+class VersionFile;
 
 class MinecraftInstance : public BaseInstance {
     Q_OBJECT
@@ -66,6 +69,21 @@ class MinecraftInstance : public BaseInstance {
     MinecraftInstance(SettingsObject* globalSettings, std::unique_ptr<SettingsObject> settings, const QString& rootDir);
     virtual ~MinecraftInstance() = default;
     virtual void saveNow() override;
+
+    // Foreign vanilla adapters can keep generated component metadata in a
+    // private runtime directory instead of writing Prism files beside mods.
+    virtual QString componentRoot() const { return instanceRoot(); }
+
+    // External vanilla-compatible instances (HMCL/PCL/Mojang layouts) can
+    // provide their authoritative component metadata directly from the
+    // instance's version JSON.  The default Prism instance has no such
+    // source and continues to use the metadata index.
+    virtual std::shared_ptr<VersionFile> loadForeignComponent(const QString& uid, const QString& version) const
+    {
+        Q_UNUSED(uid)
+        Q_UNUSED(version)
+        return {};
+    }
 
     void loadSpecificSettings() override;
 
@@ -108,7 +126,7 @@ class MinecraftInstance : public BaseInstance {
     QString getNativePath() const;
 
     // where the instance-local libraries should be
-    QString getLocalLibraryPath() const;
+    virtual QString getLocalLibraryPath() const;
     QString assetsRoot() const;
     bool usesLocalAssets() const;
 
@@ -168,6 +186,8 @@ class MinecraftInstance : public BaseInstance {
     virtual QStringList processMinecraftArgs(AuthSessionPtr account, MinecraftTarget::Ptr targetToJoin) const;
 
     virtual JavaVersion getJavaVersion();
+
+    virtual std::optional<MinecraftClientRoute> clientArtifactRoute() const { return std::nullopt; }
 
    protected:
     QMap<QString, QString> createCensorFilterFromSession(AuthSessionPtr session);

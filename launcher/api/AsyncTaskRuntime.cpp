@@ -54,6 +54,8 @@
 #include "net/Download.h"
 #include "net/NetJob.h"
 #include "server/ServerInstance.h"
+#include "SyncProfile.h"
+#include "VanillaConversionTask.h"
 
 namespace {
 
@@ -121,6 +123,30 @@ MinecraftAccountPtr findAccount(const QString& reference)
         }
     }
     return nullptr;
+}
+
+int autoSyncAfterUpdate(const QString& instanceId)
+{
+    if (instanceId.isEmpty())
+        return 0;
+    int applied = 0;
+    const auto profileDir = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("sync-profiles"));
+    for (const auto& file : QDir(profileDir).entryInfoList({ QStringLiteral("*.json") }, QDir::Files | QDir::Readable)) {
+        QString error;
+        auto profile = SyncEngine::loadProfile(APPLICATION->dataRoot(), file.baseName(), &error);
+        if (!error.isEmpty() || !profile.autoAfterUpdate || (profile.clientInstanceId != instanceId && profile.serverInstanceId != instanceId))
+            continue;
+        auto* client = APPLICATION->instances()->getInstanceById(profile.clientInstanceId);
+        auto* server = APPLICATION->instances()->getInstanceById(profile.serverInstanceId);
+        if (!client || !server || client->isRunning() || server->isRunning())
+            continue;
+        const auto plan = SyncEngine::plan(profile, client->gameRoot(), server->gameRoot());
+        if (!plan.valid || !plan.conflicts.isEmpty())
+            continue;
+        if (SyncEngine::apply(profile, plan, client->gameRoot(), server->gameRoot(), &error) && SyncEngine::saveProfile(APPLICATION->dataRoot(), profile, &error))
+            ++applied;
+    }
+    return applied;
 }
 
 /**
@@ -296,8 +322,20 @@ AsyncTaskRuntime::AsyncTaskRuntime(QObject* parent) : QObject(parent), m_temp()
 
 QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const
 {
-    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install" || operation == "instance.convert.import")
         return "instances";
+    if (operation == "instance.convert.export")
+        return "conversion:" + parameters.value("source").toString();
+    if (operation == "instance-store.add" || operation == "instance-store.update" || operation == "instance-store.remove"
+        || operation == "startup.set-data-location" || operation == "startup.migrate" || operation == "startup.dismiss-migration"
+        || operation == "startup.complete")
+        return "launcher-configuration";
+    if (operation == "instance.store-transfer")
+        return "instance:" + parameters.value("instance").toString();
+    if (operation == "vanilla.loader.install")
+        return "vanilla:" + parameters.value("target").toString();
+    if (operation == "sync.profile.save" || operation == "sync.profile.remove" || operation == "sync.profile.plan" || operation == "sync.profile.apply")
+        return "sync:" + parameters.value("id").toString(parameters.value("profile").toObject().value("id").toString());
     if (operation == "resource.install" || operation == "resource.install-version" || operation == "instance.component.set-version" || operation == "instance.special-loader.install")
         return "instance:" + parameters.value("instance").toString();
     return "global";
@@ -306,8 +344,21 @@ QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonOb
 QStringList resourceKeysFor(const QString& operation, const QJsonObject& parameters)
 {
     QStringList keys;
-    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install" || operation == "instance.convert.import")
         keys << "instances";
+    else if (operation == "instance.convert.export")
+        keys << "conversion:" + parameters.value("source").toString();
+    else if (operation == "instance-store.add" || operation == "instance-store.update" || operation == "instance-store.remove"
+             || operation == "startup.set-data-location" || operation == "startup.migrate" || operation == "startup.dismiss-migration"
+             || operation == "startup.complete")
+        keys << "launcher-configuration";
+    else if (operation == "instance.store-transfer") {
+        keys << "instance:" + parameters.value("instance").toString();
+        keys << "store:" + parameters.value("targetStoreId").toString();
+    } else if (operation == "vanilla.loader.install")
+        keys << "vanilla:" + parameters.value("target").toString();
+    else if (operation == "sync.profile.save" || operation == "sync.profile.remove" || operation == "sync.profile.plan" || operation == "sync.profile.apply")
+        keys << "sync:" + parameters.value("id").toString(parameters.value("profile").toObject().value("id").toString());
     else if (operation == "resource.install" || operation == "resource.install-version" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.special-loader.install" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export" || operation == "server.start")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
@@ -341,7 +392,7 @@ void AsyncTaskRuntime::addResourceKeys(Record& record) const
 int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 {
     if (operation == "modpack.install") return 30 * 60 * 1000;
-    if (operation == "instance.create" || operation == "instance.import") return 30 * 60 * 1000;
+    if (operation == "instance.create" || operation == "instance.import" || operation == "instance.convert.import" || operation == "instance.convert.export") return 30 * 60 * 1000;
     if (operation == "resource.install" || operation == "resource.install-version") return 15 * 60 * 1000;
     if (operation == "instance.component.set-version") return 10 * 60 * 1000;
     if (operation == "instance.special-loader.install") return 30 * 60 * 1000;
@@ -357,12 +408,14 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "instance.export") return 30 * 60 * 1000;
     if (operation == "server.start") return 5 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
+    if (operation == "startup.migrate" || operation == "startup.set-data-location") return 30 * 60 * 1000;
+    if (operation == "instance.store-transfer" || operation == "vanilla.loader.install" || operation == "sync.profile.apply") return 30 * 60 * 1000;
     return 15 * 60 * 1000;
 }
 
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "server.start" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "instance.convert.import", "instance.convert.export", "server.start", "instance-store.add", "instance-store.update", "instance-store.remove", "instance.store-transfer", "startup.set-data-location", "startup.migrate", "startup.dismiss-migration", "startup.complete", "vanilla.loader.install", "sync.profile.save", "sync.profile.remove", "sync.profile.plan", "sync.profile.apply", "vanilla-instance.provenance", "external-launchers.list-recognizers", "external-launchers.icon" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -495,6 +548,11 @@ void AsyncTaskRuntime::finish(const QString& taskId, bool success, const QString
     record.finished = true;
     record.state = record.cancelRequested ? "cancelled" : (success ? "succeeded" : "failed");
     record.error = error;
+    if (success && record.operation == QStringLiteral("instance.update") && !instanceId.isEmpty()) {
+        const auto synced = autoSyncAfterUpdate(instanceId);
+        if (synced > 0)
+            record.status = QObject::tr("Updated; synchronized %1 profile(s)").arg(synced);
+    }
     record.finishedAt = QDateTime::currentMSecsSinceEpoch();
     if (!instanceId.isEmpty()) record.instanceId = instanceId;
     if (record.deadline) {
@@ -623,6 +681,72 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
 void AsyncTaskRuntime::startRecord(const Record& record)
 {
     const auto id = record.id;
+    if (record.operation == "instance.convert.import" || record.operation == "instance.convert.export") {
+        const auto mode = record.operation == "instance.convert.import" ? VanillaConversionTask::Mode::Import : VanillaConversionTask::Mode::Export;
+        auto task = makeShared<VanillaConversionTask>(mode, record.parameters);
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = record.operation == "instance.convert.import" ? QStringLiteral("准备导入") : QStringLiteral("准备导出");
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) {
+            if (m_records.contains(id)) {
+                m_records[id].status = status;
+                emitChanged(m_records[id]);
+            }
+        });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+            emitChanged(m_records[id]);
+        });
+        connect(task.get(), &Task::details, this, [this, id](const QString& details) {
+            if (m_records.contains(id)) {
+                m_records[id].status = details;
+                emitChanged(m_records[id]);
+            }
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            const bool successful = task->wasSuccessful();
+            const auto destination = task->report().destination;
+            const auto group = m_records[id].parameters.value("group").toString();
+            finish(id, successful, successful ? QString() : task->failReason());
+            if (successful && !destination.isEmpty() && !group.isEmpty() && m_records[id].operation == QStringLiteral("instance.convert.import")) {
+                APPLICATION->instances()->loadList();
+                for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                    auto* instance = APPLICATION->instances()->at(i);
+                    if (QDir::cleanPath(instance->instanceRoot()) == QDir::cleanPath(destination)) {
+                        APPLICATION->instances()->setInstanceGroup(instance->id(), group);
+                        break;
+                    }
+                }
+            }
+        });
+        task->start();
+        return;
+    }
+    if (QStringList{ "instance-store.add", "instance-store.update", "instance-store.remove", "instance.store-transfer", "startup.set-data-location",
+                     "startup.migrate", "startup.dismiss-migration", "startup.complete", "vanilla.loader.install", "sync.profile.save", "sync.profile.remove",
+                     "sync.profile.plan", "sync.profile.apply", "vanilla-instance.provenance", "external-launchers.list-recognizers", "external-launchers.icon" }.contains(record.operation)) {
+        auto task = makeShared<ApiOperationTask>(record.operation, record.parameters, record.allowEmbeddedDownloadPage);
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = record.operation.startsWith("sync.profile") ? QStringLiteral("正在处理同步配置") : QStringLiteral("正在更新启动器数据");
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason());
+        });
+        task->start();
+        return;
+    }
     if (record.operation == "instance.update") {
         const auto instance = findInstance(record.parameters.value("instance").toString());
         if (!instance) { finish(id, false, "Instance not found."); return; }
@@ -699,6 +823,10 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         const auto parameters = record.parameters;
         const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
         if (!instance) { finish(id, false, "Minecraft instance not found."); return; }
+        if (instance->traits().contains(QStringLiteral("vanilla-compatible"))) {
+            finish(id, false, "This external vanilla instance must be converted to a Prism copy before changing components.");
+            return;
+        }
         if (instance->isRunning()) { finish(id, false, "Components cannot be modified while the instance is running."); return; }
         const auto requestedUid = parameters.value("component").toString().trimmed();
         const auto version = parameters.value("version").toString().trimmed();

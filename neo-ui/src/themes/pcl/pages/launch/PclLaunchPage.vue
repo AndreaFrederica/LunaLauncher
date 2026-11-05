@@ -157,7 +157,12 @@ const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(ca
 const preferences = neoUiPreferences;
 const homeInstanceUsesBelow = computed(() => preferences.pclHomeInstanceLayout === 'grid' && preferences.pclHomeInstanceTextPosition === 'below');
 function instanceSubtitle(instance: any) {
-  return String(instance?.runtime?.minecraftVersion || instance?.runtime?.minecraft || instance?.minecraftVersion || '').trim();
+  const version = String(instance?.runtime?.minecraftVersion || instance?.runtime?.minecraft || instance?.minecraftVersion || '').trim();
+  const loaderType = String(instance?.loaderType || '').trim();
+  const loader = loaderType && loaderType !== 'vanilla'
+    ? `${loaderType.toUpperCase()}${instance?.loaderVersion ? ` ${instance.loaderVersion}` : ''}`
+    : 'Vanilla';
+  return version ? `${version} · ${loader}` : loader;
 }
 function homeCardOrder(key: string) {
   const index = (preferences.pclHomeCardOrder || []).indexOf(key);

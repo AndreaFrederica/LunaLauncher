@@ -19,7 +19,7 @@
     </section>
 
     <nav class="ef-tabs">
-      <button v-for="tab in tabs" :key="tab.id" type="button" :class="{ current: section === tab.id }" @click="section = tab.id">
+      <button v-for="tab in visibleTabs" :key="tab.id" type="button" :class="{ current: section === tab.id }" @click="section = tab.id">
         <small>// {{ tab.code }}</small>{{ tab.label }}
       </button>
     </nav>
@@ -132,6 +132,16 @@
     <section v-else-if="section === 'settings'">
       <EfSettingsList :settings="instanceSettings" :busy="busy" scope="instance" @save="saveSetting" @reset="resetSetting" />
     </section>
+
+    <section v-else-if="section === 'provenance'">
+      <EfCard title="来源与修改痕迹">
+        <p class="ef-provenance-copy">{{ provenance?.mixed ? '检测到多个启动器或目录格式的修改痕迹。' : '以下结果来自目录结构和版本 JSON 证据。' }}</p>
+        <div v-for="provider in (provenance?.providers || [])" :key="provider.providerId" class="ef-row">
+          <div class="ef-row__main"><strong>{{ provider.displayName || provider.providerId }}</strong><small>{{ [...(provider.matchedPaths || []), ...(provider.matchedFields || [])].join(', ') || '标准版本 JSON' }}</small></div>
+          <span class="ef-row__state">{{ provider.confidence }}%</span>
+        </div>
+      </EfCard>
+    </section>
   </div>
 </template>
 
@@ -169,7 +179,13 @@ const tabs = [
   { id: 'logs', label: '日志', code: '04' },
   { id: 'servers', label: '服务器', code: '05' },
   { id: 'settings', label: '设置', code: '06' },
+  { id: 'provenance', label: '来源痕迹', code: '07' },
 ];
+const visibleTabs = computed(() => tabs.filter(tab =>
+  tab.id !== 'provenance' ||
+  props.instance?.format === 'vanilla-compatible' ||
+  props.instance?.vanillaCompatible,
+));
 const section = ref('overview');
 const details = ref<any>(null);
 const notes = ref('');
@@ -184,6 +200,7 @@ const servers = ref<any[]>([]);
 const serverRevision = ref('');
 const serverForm = ref({ name: '', ip: '' });
 const serverPing = ref<Record<string, string>>({});
+const provenance = computed(() => details.value?.provenance || props.instance?.provenance || {});
 
 const resourceKinds = [
   { label: '模组', value: 'mods' },

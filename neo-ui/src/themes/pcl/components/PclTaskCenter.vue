@@ -125,6 +125,8 @@ function operationLabel(operation: string) {
     'account.refresh': t('tasks.operations.accountRefresh'),
     'instance.launch': t('tasks.operations.launch'),
     'instance.export': t('tasks.operations.export'),
+    'instance.convert.import': '导入兼容实例',
+    'instance.convert.export': '导出兼容实例',
     'server.start': t('tasks.operations.serverStart'),
   };
   return labels[operation] || operation;

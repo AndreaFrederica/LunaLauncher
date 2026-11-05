@@ -154,6 +154,10 @@
           <EfSettingRow v-for="setting in rows" :key="setting.key" :setting="setting" :busy="busy" @save="saveSetting" @reset="resetSetting" />
         </template>
 
+        <template v-else-if="active === 'instance-stores'">
+          <InstanceStoreWorkspace :execute="props.execute" variant="endfield" />
+        </template>
+
         <template v-else-if="active === 'cache'">
           <div class="ef-settings-stats">
             <EfStat label="HTTP 缓存" :value="cache.httpSize ?? '—'" :unit="cache.httpSize !== undefined ? 'MB' : ''" />
@@ -267,6 +271,7 @@ import EfSelect from '../components/EfSelect.vue';
 import EfSlider from '../components/controls/EfSlider.vue';
 import EfStat from '../components/data/EfStat.vue';
 import EfSettingRow from '../components/data/EfSettingRow.vue';
+import InstanceStoreWorkspace from '../../../components/InstanceStoreWorkspace.vue';
 
 const props = defineProps<{
   busy: boolean;
@@ -291,6 +296,7 @@ const launcherCategories: Category[] = [
   { id: 'java', label: 'Java', icon: 'coffee', description: 'Java 运行时、参数与自动选择。' },
   { id: 'memory', label: '内存', icon: 'memory', description: '可用内存与分配上限。' },
   { id: 'paths', label: '路径', icon: 'folder', description: '数据目录、程序目录与外部工具路径。' },
+  { id: 'instance-stores', label: '实例目录', icon: 'layers', description: '管理 Prism、PCL、HMCL 和原版实例目录。' },
   { id: 'network', label: '网络', icon: 'wifi', description: '代理、超时与下载连接。' },
   { id: 'downloads', label: '下载', icon: 'download', description: '下载来源、并发与缓存策略。' },
   { id: 'misc', label: '其他', icon: 'more_horiz', description: '下载回退、目录监听与杂项。' },

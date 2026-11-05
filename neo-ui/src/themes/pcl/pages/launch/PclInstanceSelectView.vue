@@ -62,7 +62,7 @@
                   @click="emit('select', item)"
                 >
                   <template #icon>
-                    <img class="pcl-instance-select__icon" :src="icons[item.id] || fallback" :alt="item.name" />
+                    <span class="pcl-instance-select__icon-wrap"><img class="pcl-instance-select__icon" :src="icons[item.id] || fallback" :alt="item.name" /><InstanceFormatBadge :instance="item" /></span>
                   </template>
                   <template #actions>
                     <PclIcon v-if="item.running" name="play" :size="14" class="pcl-instance-running" />
@@ -105,6 +105,7 @@ import fallback from '../../../xmcl-port/assets/minecraft.webp';
 import PclSearchBox from '../../components/PclSearchBox.vue';
 import PclCard from '../../components/PclCard.vue';
 import PclButton from '../../components/PclButton.vue';
+import InstanceFormatBadge from '../../../../components/InstanceFormatBadge.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclListItem from '../../components/PclListItem.vue';
@@ -132,7 +133,10 @@ function createFolder() { const name = window.prompt(t('pcl.instanceSelect.newFo
 function openContext(item: any) { contextItem.value = item; contextOpen.value = true; }
 function instanceInfo(item: any) {
   const version = item.runtime?.minecraftVersion || item.runtime?.minecraft || item.minecraftVersion || 'Minecraft';
-  return `${version}${item.group ? ` · ${item.group}` : ''}`;
+  const loader = item.loaderType && item.loaderType !== 'vanilla'
+    ? `${String(item.loaderType).toUpperCase()}${item.loaderVersion ? ` ${item.loaderVersion}` : ''}`
+    : 'Vanilla';
+  return `${version} · ${loader}${item.group ? ` · ${item.group}` : ''}`;
 }
 </script>
 
@@ -318,6 +322,8 @@ function instanceInfo(item: any) {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+.pcl-instance-select__icon-wrap { position: relative; display: inline-flex; width: 30px; height: 30px; flex: 0 0 30px; }
+.pcl-instance-select__icon-wrap :deep(.instance-format-badge) { right: -4px; bottom: -4px; transform: scale(.72); transform-origin: bottom right; }
 
 .pcl-instance-running {
   color: #34d399;

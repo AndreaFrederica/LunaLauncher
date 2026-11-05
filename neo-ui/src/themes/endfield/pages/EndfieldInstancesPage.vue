@@ -19,11 +19,10 @@
       <article v-for="(item, index) in filtered" :key="item.id" class="ef-instance-row" :class="{ current: item.id === selected?.id }">
         <EfField :value="String(index + 1).padStart(3, '0')" />
         <button type="button" class="ef-instance-row__name" @click="emit('select', item)">
-          <img v-if="icons?.[item.id]" :src="icons[item.id]" alt="" />
-          <span v-else class="material-icons">inventory_2</span>
+          <span class="ef-instance-row__icon"><img v-if="icons?.[item.id]" :src="icons[item.id]" alt="" /><span v-else class="material-icons">inventory_2</span><InstanceFormatBadge :instance="item" /></span>
           <strong>{{ item.name }}</strong>
         </button>
-        <span class="ef-instance-row__version">{{ item.version || item.runtime?.minecraft || 'Minecraft' }}</span>
+        <span class="ef-instance-row__version">{{ instanceVersion(item) }}</span>
         <span class="ef-instance-row__group">{{ item.group || '—' }}</span>
         <span class="ef-instance-row__state" :class="{ running: item.running }">{{ item.running ? '运行中' : '空闲' }}</span>
         <div class="ef-instance-row__actions">
@@ -78,6 +77,7 @@ import EfIconButton from '../components/controls/EfIconButton.vue';
 import EfInput from '../components/EfInput.vue';
 import EfSearchBox from '../components/controls/EfSearchBox.vue';
 import EfSelect from '../components/EfSelect.vue';
+import InstanceFormatBadge from '../../../components/InstanceFormatBadge.vue';
 
 const props = defineProps<{
   instances: any[];
@@ -93,6 +93,11 @@ const emit = defineEmits<{
   changed: [];
   toast: [type: 'success' | 'error' | 'info', title: string, message?: string];
 }>();
+function instanceVersion(item: any) {
+  const version = String(item.version || item.runtime?.minecraft || item.minecraftVersion || 'Minecraft');
+  const loader = String(item.loaderType || '').trim();
+  return loader && loader !== 'vanilla' ? `${version} · ${loader.toUpperCase()}${item.loaderVersion ? ` ${item.loaderVersion}` : ''}` : `${version} · Vanilla`;
+}
 
 const query = ref('');
 const createOpen = ref(false);
@@ -266,6 +271,11 @@ async function removeInstance() {
   } catch { /* shell toast */ }
 }
 </script>
+<style scoped>
+.ef-instance-row__icon { position: relative; display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; }
+.ef-instance-row__icon img { width: 100%; height: 100%; border-radius: 5px; object-fit: cover; }
+.ef-instance-row__icon :deep(.instance-format-badge) { right: -5px; bottom: -5px; transform: scale(.72); transform-origin: bottom right; }
+</style>
 
 <style scoped>
 .ef-instances { width: 100%; }

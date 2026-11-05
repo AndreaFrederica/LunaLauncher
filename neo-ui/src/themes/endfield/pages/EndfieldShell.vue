@@ -412,7 +412,9 @@ function cancelInteraction() {
 }
 
 let unlisten: any = null;
+const openConversionTaskCenter = () => { taskCenterOpen.value = true; };
 onMounted(async () => {
+  window.addEventListener('luna-neo-task-started', openConversionTaskCenter);
   try {
     unlisten = await launcher.onEvent((raw: any) => {
       if (raw?.kind === 'input') {
@@ -426,7 +428,7 @@ onMounted(async () => {
   } catch { /* optional */ }
   await refresh();
 });
-onUnmounted(() => { unlisten?.(); });
+onUnmounted(() => { window.removeEventListener('luna-neo-task-started', openConversionTaskCenter); unlisten?.(); });
 </script>
 
 <style scoped>

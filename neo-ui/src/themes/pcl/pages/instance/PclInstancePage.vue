@@ -70,6 +70,11 @@
             @action="emit('action', $event)"
           />
 
+          <PclExternalProvenancePanel
+            v-else-if="section === 'provenance'"
+            :instance="instance"
+          />
+
           <PclMemoryPanel
             v-else-if="section === 'memory'"
             :active="section === 'memory'"
@@ -162,6 +167,7 @@ import PclNavResizeHandle from '../../components/PclNavResizeHandle.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclMemoryPanel from '../../features/memory/PclMemoryPanel.vue';
 import PclInstanceOverview from './PclInstanceOverview.vue';
+import PclExternalProvenancePanel from './PclExternalProvenancePanel.vue';
 import PclInstanceSections from './PclInstanceSections.vue';
 import PclInstanceResourceView from './PclInstanceResourceView.vue';
 import PclInstanceServers from './PclInstanceServers.vue';
@@ -188,6 +194,7 @@ const navGroups = [
     label: t('pcl.auto2.kd6c5da9c81'),
     items: [
       { id: 'overall', label: t('pcl.auto2.k5060421d15'), icon: 'layout-dashboard', description: t('pcl.auto2.k2daee9496a') },
+      { id: 'provenance', label: '来源与修改痕迹', icon: 'fact-check', description: '查看外部启动器和目录格式的识别证据' },
       { id: 'live', label: t('pcl.auto2.k8ad868abbc'), icon: 'scroll-text', description: t('pcl.auto2.kc7b9dd7040') },
       { id: 'memory', label: t('pcl.auto2.kd014ab7703'), icon: 'gauge', description: t('pcl.auto2.k37a994a735') },
       { id: 'install', label: t('pcl.auto2.kc9c77517fe'), icon: 'download', description: t('pcl.auto2.kbf376a6e82') },
@@ -234,8 +241,9 @@ const navGroups = [
 ];
 const allItems = navGroups.flatMap(group => group.items);
 const isServer = computed(() => /server/i.test(String(props.instance?.type || props.details?.type || '')));
+const isExternal = computed(() => props.instance?.format === 'vanilla-compatible' || props.instance?.vanillaCompatible === true);
 const visibleGroups = computed(() => navGroups
-  .map(group => ({ ...group, items: group.items.filter(item => (item.id !== 'server' || isServer.value) && (item.id !== 'servers' || !isServer.value)) }))
+  .map(group => ({ ...group, items: group.items.filter(item => (item.id !== 'server' || isServer.value) && (item.id !== 'servers' || !isServer.value) && (item.id !== 'provenance' || isExternal.value)) }))
   .filter(group => group.items.length));
 const section = ref<any>('overall');
 const current = computed(() => allItems.find(item => item.id === section.value) || allItems[0]);

@@ -19,6 +19,10 @@
             <PclAccountPage :accounts="accounts || []" :busy="busy" :execute="execute" embedded @changed="emit('changed')" />
           </div>
 
+          <div v-show="section === 'instance-stores'" class="pcl-settings-section">
+            <InstanceStoreWorkspace :execute="execute" variant="pcl" />
+          </div>
+
           <PclLaunchSettings v-show="section === 'launch'" :active="section === 'launch'" :t="t" :window-mode="windowMode" :window-options="windowOptions" :drafts="drafts" :val="val" :bool="bool" :num="num" :set-window-mode="setWindowMode" :save="save" />
 
           <PclMemorySettings v-show="section === 'memory'" :active="section === 'memory'" :t="t" :max-mem="maxMem" :memory-mode="memoryMode" :memory-used-percent="memoryUsedPercent" :memory-alloc-after-percent="memoryAllocAfterPercent" :memory-used-gib="memoryUsedGiB" :memory-total-gib="memoryTotalGiB" :drafts="drafts" :draft-number="draftNumber" :format-mib="formatMib" :on-memory-mode="onMemoryMode" :save="save" />
@@ -103,6 +107,7 @@ import PclIcon from '../../components/PclIcon.vue';
 import PclAccountPage from '../accounts/PclAccountPage.vue';
 import PclJavaPanel from './PclJavaPanel.vue';
 import PclAppearancePanel from './PclAppearancePanel.vue';
+import InstanceStoreWorkspace from '../../../../components/InstanceStoreWorkspace.vue';
 import type { PclNavGroup } from '../../types';
 import { hiddenPclFeatures, isPclFeatureHidden } from '../../composables/usePclFeatures';
 import { useRuntimeLifecycle } from '../../../../common/runtime/lifecycle-debug';
@@ -153,6 +158,7 @@ const launcherGroups: PclNavGroup[] = [
   ] },
   { label: t('pcl.auto2.ka992a7f81a'), items: [
     { id: 'accounts', label: t('pcl.auto2.k9823d89dbc'), icon: 'user', refresh: true },
+    { id: 'instance-stores', label: '实例目录', icon: 'layers', refresh: true },
     { id: 'ui', label: t('pcl.auto2.kcd4994e503'), icon: 'palette', refresh: true },
     { id: 'language', label: t('pcl.auto2.kcd99b225a0'), icon: 'earth', refresh: true },
     { id: 'misc', label: t('pcl.auto2.kb046fe277d'), icon: 'monitor-cog', refresh: true },

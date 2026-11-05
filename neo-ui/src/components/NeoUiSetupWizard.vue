@@ -298,11 +298,25 @@ async function reloadPreferences() {
   finally { working.value = ''; }
 }
 
+async function runTask(operation: string, parameters: Record<string, unknown> = {}) {
+  let task: any = await props.execute('neo.task.start', { operation, priority: 'normal', parameters });
+  if (!task?.taskId) throw new Error('异步任务未能启动。');
+  window.dispatchEvent(new CustomEvent('luna-neo-task-started', { detail: task }));
+  const finished = (value: any) => Boolean(value?.finished) || ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted'].includes(String(value?.state || '').toLowerCase());
+  while (task && !finished(task)) {
+    await new Promise(resolve => setTimeout(resolve, 350));
+    task = await props.execute('neo.task.status', { taskId: task.taskId });
+  }
+  if (!task || task.state !== 'succeeded') throw new Error(task?.error || '操作失败。');
+  return task;
+}
+
 async function migrate(item: any) {
   working.value = item.name;
   error.value = '';
   try {
-    const result = await props.execute('startup.migrate', { name: item.name });
+    await runTask('startup.migrate', { name: item.name });
+    const result = await props.execute('startup.status');
     migrations.value = Array.isArray(result?.status?.migrations)
       ? result.status.migrations
       : migrations.value.filter(candidate => candidate.name !== item.name);
@@ -321,7 +335,8 @@ async function dismiss(item: any) {
   working.value = item.name;
   error.value = '';
   try {
-    const result = await props.execute('startup.dismiss-migration', { name: item.name });
+    await runTask('startup.dismiss-migration', { name: item.name });
+    const result = await props.execute('startup.status');
     migrations.value = Array.isArray(result?.status?.migrations)
       ? result.status.migrations
       : migrations.value.filter(candidate => candidate.name !== item.name);
@@ -439,7 +454,7 @@ async function complete() {
   working.value = 'complete';
   error.value = '';
   try {
-    await props.execute('startup.complete');
+    await runTask('startup.complete');
     emit('complete');
   } catch (exception) {
     error.value = String(exception);

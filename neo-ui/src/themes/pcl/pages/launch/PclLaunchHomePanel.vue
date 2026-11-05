@@ -75,8 +75,7 @@
                     @dragleave="dragOverId = ''"
                     @drop.prevent="dropOnInstance(item, $event)"
                   >
-                    <img v-if="icons[item.id]" :src="icons[item.id]" alt="" />
-                    <span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span>
+                    <span class="pcl-home-instance__icon-wrap"><img v-if="icons[item.id]" :src="icons[item.id]" alt="" /><span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span><InstanceFormatBadge :instance="item" /></span>
                     <span class="pcl-home-instance__copy">
                       <strong>{{ item.name }}</strong>
                       <small v-if="instanceSubtitle(item)">{{ instanceSubtitle(item) }}</small>
@@ -119,6 +118,7 @@ import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclExtraButton from '../../components/PclExtraButton.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclIcon from '../../components/PclIcon.vue';
+import InstanceFormatBadge from '../../../../components/InstanceFormatBadge.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclListItem from '../../components/PclListItem.vue';
@@ -127,3 +127,8 @@ const context = inject(PclLaunchContextKey);
 if (!context) throw new Error('PclLaunchContext is missing');
 const { props, emit, selected, busy, notice, error, instances, icons, selectionOpen, accountMenu, accounts, accountId, launchState, activeAccount, launchDialogOpen, hasAccount, loginMethodLabel, launchButtonLabel, launchButtonDisabled, progressPercent, progressLabel, launchTitle, launchStage, launchLoginMethod, launchSpeed, launchDetails, launchChildren, launchError, launchHint, homeCards, preferences, homeInstanceUsesBelow, homeInstanceStyle, homeInstanceGridStyle, homeInstanceMaxHeight, orderedInstances, homeInstanceGroups, isHomeInstanceGroupCollapsed, toggleHomeInstanceGroup, draggingInstance, dragOverId, contextMenu, servers, serversLoading, serversError, instanceClickTimer, logElement, logLines, hintVisible, hintDialog, hintCode, accountKey, accountTypeLabel, chooseAccount, openAccountPage, selectInstance, onLaunch, confirmHint, formatRate, instanceSubtitle, homeCardOrder, startDrag, endDrag, moveInstanceToGroup, dropOnGroup, dropOnInstance, openContextMenu, closeContextMenu, contextActions, runContextMenu, loadServers, clickInstance, setInstanceLayout, quickLaunch, connectServer, scrollToLog, refreshHome, copyLog, loadHintVisibility, nextTick, showPclToast, pclMusic, togglePclMusic, t, consoleMonitorId, consoleMonitorOptions } = context;
 </script>
+<style scoped>
+.pcl-home-instance__icon-wrap { position: relative; display: inline-flex; width: 38px; height: 38px; flex: 0 0 38px; align-items: center; justify-content: center; }
+.pcl-home-instance__icon-wrap > img, .pcl-home-instance__icon-wrap > .pcl-home-instance__fallback { width: 38px; height: 38px; }
+.pcl-home-instance__icon-wrap :deep(.instance-format-badge) { right: -4px; bottom: -4px; transform: scale(.78); transform-origin: bottom right; }
+</style>

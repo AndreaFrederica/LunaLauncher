@@ -1,5 +1,8 @@
 test_sources = [
   'FileSystem_test.cpp',
+  'InstanceStore_test.cpp',
+  'VanillaInstanceLayout_test.cpp',
+  'VanillaProviderSync_test.cpp',
   'GZip_test.cpp',
   'GradleSpecifier_test.cpp',
   'MojangVersionFormat_test.cpp',
@@ -29,11 +32,12 @@ test_sources = [
 ]
 
 test_inc = include_directories('..', '../launcher')
+test_inc_with_buildconfig = [test_inc, buildconfig_inc]
 snapshot_moc = qt.preprocess(moc_sources: files('AccountSnapshot_test.cpp'),
-  include_directories: [test_inc], dependencies: [qt_core_dep, qt_test_dep])
+  include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
 snapshot_test = executable('AccountSnapshot_test',
   files('AccountSnapshot_test.cpp', '../launcher/minecraft/auth/AccountData.cpp', '../launcher/minecraft/auth/AuthSession.cpp') + snapshot_moc,
-  include_directories: [test_inc], dependencies: [qt_core_dep, qt_test_dep])
+  include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
 test('AccountSnapshot_test', snapshot_test, args: ['-o', '-,txt'])
 test_qt_deps = [
   qt_core_dep,
@@ -53,13 +57,13 @@ foreach test_source : test_sources
   test_name = test_source.split('/')[-1].replace('.cpp', '')
   test_moc_generated = qt.preprocess(
     moc_sources: files(test_source),
-    include_directories: [test_inc],
+    include_directories: test_inc_with_buildconfig,
     dependencies: test_qt_deps,
   )
   test_exe = executable(
     test_name,
     files(test_source) + test_moc_generated,
-    include_directories: [test_inc],
+    include_directories: test_inc_with_buildconfig,
     link_with: launcher_logic,
     dependencies: test_qt_deps,
   )
@@ -69,7 +73,7 @@ endforeach
 curseforge_external_tool_test_source = 'CurseForgeDownloadPageService_test.cpp'
 curseforge_external_tool_test_moc = qt.preprocess(
   moc_sources: files(curseforge_external_tool_test_source),
-  include_directories: [test_inc],
+  include_directories: test_inc_with_buildconfig,
   dependencies: [qt_core_dep, qt_test_dep],
 )
 curseforge_external_tool_test = executable(
@@ -78,7 +82,7 @@ curseforge_external_tool_test = executable(
     curseforge_external_tool_test_source,
     '../launcher/modplatform/flame/CurseForgeExternalTool.cpp',
   ) + curseforge_external_tool_test_moc,
-  include_directories: [test_inc],
-  dependencies: [qt_core_dep, qt_test_dep],
+  include_directories: test_inc_with_buildconfig,
+  dependencies: [qt_core_dep, qt_test_dep, qt_network_dep],
 )
 test('CurseForgeDownloadPageService_test', curseforge_external_tool_test)

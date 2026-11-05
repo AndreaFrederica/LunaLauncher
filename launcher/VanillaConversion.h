@@ -28,8 +28,9 @@ struct VanillaImportOptions {
 struct VanillaExportOptions {
     QString versionId;
     QJsonObject versionJson;
-    // Optional launcher dialect metadata. These fields are copied into the
-    // generated version JSON instead of being written as Prism files.
+    // Optional launcher dialect metadata used by the conversion workflow.
+    // Explicit extensionFields are copied into the generated version JSON;
+    // Luna does not invent PCL/HMCL-owned top-level fields.
     QString dialect;
     QString name;
     QString group;

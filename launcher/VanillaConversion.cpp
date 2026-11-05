@@ -630,10 +630,6 @@ VanillaConversionReport VanillaConverter::exportToVanilla(const QString& prismRo
     }
     for (auto it = options.extensionFields.begin(); it != options.extensionFields.end(); ++it)
         version.insert(it.key(), it.value());
-    if (options.dialect.compare(QStringLiteral("pcl"), Qt::CaseInsensitive) == 0)
-        version.insert(QStringLiteral("PCL"), QJsonObject{ { "generatedBy", QStringLiteral("LunaLauncher") } });
-    else if (options.dialect.compare(QStringLiteral("hmcl"), Qt::CaseInsensitive) == 0)
-        version.insert(QStringLiteral("hmcl"), QJsonObject{ { "generatedBy", QStringLiteral("LunaLauncher") } });
     const auto versionRoot = QDir(staging).filePath(QStringLiteral("versions/%1").arg(versionId));
     if (!writeJson(QDir(versionRoot).filePath(versionId + QStringLiteral(".json")), version, error)) { report.error = error; FS::deletePath(staging); return report; }
     if (!options.name.trimmed().isEmpty() || !options.group.trimmed().isEmpty()) {

@@ -78,10 +78,11 @@ ExternalLauncherRecognizer makeHmcl()
     ExternalLauncherRecognizer result{ QStringLiteral("hmcl"), QStringLiteral("HMCL"), QStringLiteral("hmcl"), 0, true };
     result.detect = [result](const ExternalLauncherProbeContext& context) {
         auto found = evidence(result);
+        // HMCL identifies an instance through its filesystem metadata. An
+        // arbitrary top-level field in a Mojang version JSON is not an HMCL
+        // signature: Luna may preserve such extension fields when exporting.
         findMarkers(context.root, { QStringLiteral("hmclversion.json"), QStringLiteral("hmclversion.cfg"), QStringLiteral(".hmcl"), QStringLiteral("hmcl") }, found.matchedPaths);
-        if (context.version.contains(QStringLiteral("hmcl"))) found.matchedFields.append(QStringLiteral("hmcl"));
         found.confidence = found.matchedPaths.isEmpty() ? 0 : 75;
-        if (!found.matchedFields.isEmpty()) found.confidence += 20;
         found.canReadInstanceSettings = found.confidence > 0;
         found.canEditCanonicalMetadata = found.confidence >= 75;
         return found;
@@ -94,10 +95,10 @@ ExternalLauncherRecognizer makePcl()
     ExternalLauncherRecognizer result{ QStringLiteral("pcl"), QStringLiteral("PCL"), QStringLiteral("pcl"), 0, true };
     result.detect = [result](const ExternalLauncherProbeContext& context) {
         auto found = evidence(result);
+        // PCL stores instance metadata in PCL.ini/PCL/Setup.ini. The
+        // version JSON itself has no standard top-level "PCL" marker.
         findMarkers(context.root, { QStringLiteral("PCL"), QStringLiteral("PCL.ini"), QStringLiteral("PCL.ini.json") }, found.matchedPaths);
-        if (context.version.contains(QStringLiteral("PCL"))) found.matchedFields.append(QStringLiteral("PCL"));
         found.confidence = found.matchedPaths.isEmpty() ? 0 : 75;
-        if (!found.matchedFields.isEmpty()) found.confidence += 20;
         found.canReadInstanceSettings = found.confidence > 0;
         found.canEditCanonicalMetadata = found.confidence >= 75;
         return found;

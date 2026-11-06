@@ -106,6 +106,7 @@ export default {
     titleIconHint: 'Matches the real PCL title bar and appears to the left of the LunaLauncher text.',
     titleText: 'Show LunaLauncher text in the title bar',
     titleBadge: 'Show the NEOUI subtitle in the title bar',
+    showLunaBadge: 'Show Luna provenance badges (hide metadata-only changes)',
     titleBarPreview: 'Title bar preview',
     reset: 'Restore default appearance',
     nativePreview: 'Demo',

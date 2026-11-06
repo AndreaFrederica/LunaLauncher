@@ -50,6 +50,14 @@ export interface LauncherInstance {
   loaderType?: string;
   loaderVersion?: string;
   minecraftVersion?: string;
+  /** Current Luna-owned changes recorded for vanilla-compatible instances. */
+  lunaChanges?: {
+    actions?: string[];
+    substantial?: boolean;
+    loaderType?: string;
+    loaderVersion?: string;
+    loaderEnabled?: boolean;
+  };
 }
 
 export interface LauncherSettingsEntry {

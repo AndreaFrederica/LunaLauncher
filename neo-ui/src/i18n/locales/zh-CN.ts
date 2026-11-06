@@ -106,6 +106,7 @@ export default {
     titleIconHint: '与实际 PCL 标题栏保持一致，显示在 LunaLauncher 文本左侧。',
     titleText: '标题栏显示 LunaLauncher 文本',
     titleBadge: '标题栏显示 NEOUI 副标题',
+    showLunaBadge: '显示 Luna 来源角标（仅启动器设置时隐藏）',
     titleBarPreview: '标题栏预览',
     reset: '恢复默认外观',
     nativePreview: 'Demo',

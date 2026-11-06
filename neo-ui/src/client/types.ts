@@ -28,6 +28,28 @@ export interface LauncherInstance {
   managedVersionId?: string;
   lastLaunch?: string;
   playTimeSeconds?: number;
+  /** C++ instance format discriminator shared by Classic and Neo UI. */
+  format?: 'prism' | 'vanilla-compatible' | string;
+  vanillaCompatible?: boolean;
+  dialect?: string;
+  provenance?: {
+    providers?: Array<{
+      providerId?: string;
+      displayName?: string;
+      iconId?: string;
+      confidence?: number;
+      matchedPaths?: string[];
+      matchedFields?: string[];
+      canReadInstanceSettings?: boolean;
+      canEditCanonicalMetadata?: boolean;
+    }>;
+    primaryProvider?: string;
+    mixed?: boolean;
+    badgeId?: string;
+  };
+  loaderType?: string;
+  loaderVersion?: string;
+  minecraftVersion?: string;
 }
 
 export interface LauncherSettingsEntry {

@@ -955,12 +955,22 @@ QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
         data.insert("minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft"));
     if (const auto vanilla = dynamic_cast<VanillaInstance*>(instance)) {
         const auto& descriptor = vanilla->descriptor();
+        // Keep the legacy instance.info response in lockstep with
+        // InstanceObject::snapshot()/instance.list.  Neo UI opens the
+        // standalone editor through this operation, so omitting these
+        // discriminator fields makes every external instance look like a
+        // native Prism instance there.
+        data.insert("format", QStringLiteral("vanilla-compatible"));
+        data.insert("vanillaCompatible", true);
         data.insert("minecraftVersion", descriptor.minecraftVersion);
         data.insert("profileVersionId", descriptor.profileVersionId);
         data.insert("loaderType", descriptor.loaderType);
         data.insert("loaderVersion", descriptor.loaderVersion);
         data.insert("dialect", descriptor.dialect);
         data.insert("provenance", descriptor.provenance.toJson());
+    } else {
+        data.insert("format", QStringLiteral("prism"));
+        data.insert("vanillaCompatible", false);
     }
     return success(data);
 }

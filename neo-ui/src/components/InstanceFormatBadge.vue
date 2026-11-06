@@ -18,9 +18,15 @@ import mixedBadge from '../assets/instance-format-mixed.png';
 
 const props = defineProps<{ instance: any }>();
 const kind = computed(() => {
-  if (props.instance?.format !== 'vanilla-compatible' && !props.instance?.vanillaCompatible) return '';
+  // `format` and `vanillaCompatible` are the C++ source of truth.  Keep the
+  // provenance fallback for older API snapshots so a recognized external
+  // instance never silently loses its source badge while its detail object is
+  // being refreshed.
   const provenance = props.instance?.provenance || {};
-  const badge = String(provenance.badgeId || '').toLowerCase();
+  const external = props.instance?.format === 'vanilla-compatible' || props.instance?.vanillaCompatible === true || Boolean(provenance.badgeId || provenance.primaryProvider || provenance.providers?.length);
+  if (!external) return '';
+  const provider = Array.isArray(provenance.providers) ? provenance.providers[0] : undefined;
+  const badge = String(provenance.badgeId || provenance.primaryProvider || provider?.providerId || '').toLowerCase();
   if (badge === 'mixed' || provenance.mixed === true) return 'mixed';
   const dialect = String(props.instance?.dialect || badge || '').toLowerCase();
   return dialect === 'hmcl' || dialect === 'pcl' || dialect === 'luna' ? dialect : dialect && dialect !== 'mojang' && dialect !== 'vanilla' ? 'mixed' : 'vanilla';

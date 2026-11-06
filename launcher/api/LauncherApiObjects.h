@@ -406,9 +406,33 @@ class InstanceObject {
                                             { "stop", instance->isRunning() },
                                             { "resources", true },
                                             { "settings", true } } } };
-        if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance))
-            result.insert("runtime", QJsonObject{ { "minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft") } });
-        else
+        if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance)) {
+            const auto profile = minecraft->getPackProfile();
+            result.insert("runtime", QJsonObject{ { "minecraftVersion", profile->getComponentVersion("net.minecraft") } });
+            // Native MMC/Prism instances keep their loader in the component
+            // graph rather than in a vanilla version JSON. Expose the same
+            // compact loader fields used by vanilla-compatible instances so
+            // the shared instance cards do not mistake every MMC pack for
+            // plain Vanilla.
+            QString loaderType = QStringLiteral("vanilla");
+            QString loaderVersion;
+            for (const auto& entry : { QPair<QString, QString>{ QStringLiteral("com.cleanroommc.cleanroom"), QStringLiteral("cleanroom") },
+                                       QPair<QString, QString>{ QStringLiteral("net.neoforged"), QStringLiteral("neoforge") },
+                                       QPair<QString, QString>{ QStringLiteral("net.minecraftforge"), QStringLiteral("forge") },
+                                       QPair<QString, QString>{ QStringLiteral("net.fabricmc.fabric-loader"), QStringLiteral("fabric") },
+                                       QPair<QString, QString>{ QStringLiteral("org.quiltmc.quilt-loader"), QStringLiteral("quilt") },
+                                       QPair<QString, QString>{ QStringLiteral("net.legacyfabric"), QStringLiteral("legacy-fabric") },
+                                       QPair<QString, QString>{ QStringLiteral("com.mumfrey.liteloader"), QStringLiteral("liteloader") } }) {
+                const auto component = profile->getComponent(entry.first);
+                if (!component || !component->isEnabled())
+                    continue;
+                loaderType = entry.second;
+                loaderVersion = component->getVersion();
+                break;
+            }
+            result.insert("loaderType", loaderType);
+            result.insert("loaderVersion", loaderVersion);
+        } else
             result.insert("runtime", QJsonObject{});
         if (const auto vanilla = dynamic_cast<VanillaInstance*>(instance)) {
             result.insert("format", QStringLiteral("vanilla-compatible"));
@@ -418,6 +442,19 @@ class InstanceObject {
             result.insert("loaderType", vanilla->descriptor().loaderType);
             result.insert("loaderVersion", vanilla->descriptor().loaderVersion);
             result.insert("minecraftVersion", vanilla->descriptor().minecraftVersion);
+            const auto& descriptor = vanilla->descriptor();
+            QJsonArray lunaActions;
+            if (descriptor.lunaSettingsManaged)
+                lunaActions.append(QStringLiteral("settings"));
+            if (descriptor.lunaLoaderManaged)
+                lunaActions.append(QStringLiteral("loader"));
+            result.insert("lunaChanges", QJsonObject{
+                { "actions", lunaActions },
+                { "substantial", descriptor.lunaLoaderManaged },
+                { "loaderType", descriptor.loaderType },
+                { "loaderVersion", descriptor.loaderVersionOverride.isEmpty() ? descriptor.loaderVersion : descriptor.loaderVersionOverride },
+                { "loaderEnabled", descriptor.loaderEnabled },
+            });
         } else {
             result.insert("format", QStringLiteral("prism"));
             result.insert("vanillaCompatible", false);

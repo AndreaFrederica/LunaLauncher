@@ -639,6 +639,7 @@ bool VanillaCompatibleProvider::loadSidecar(VanillaInstanceDescriptor& descripto
     QFile file(lunaSettingsPath(descriptor.root));
     if (!file.exists())
         return true;
+    descriptor.lunaSettingsManaged = true;
     if (!file.open(QIODevice::ReadOnly)) {
         if (error) *error = file.errorString();
         return false;
@@ -664,6 +665,10 @@ bool VanillaCompatibleProvider::loadSidecar(VanillaInstanceDescriptor& descripto
     descriptor.loaderVersionOverride = object.value(QStringLiteral("loaderVersionOverride")).toString();
     descriptor.loaderTypeOverride = object.value(QStringLiteral("loaderTypeOverride")).toString();
     descriptor.loaderManifestFingerprint = object.value(QStringLiteral("loaderManifestFingerprint")).toString();
+    descriptor.lunaLoaderManaged = !descriptor.loaderManifestFingerprint.isEmpty()
+        || !descriptor.loaderTypeOverride.trimmed().isEmpty()
+        || !descriptor.loaderVersionOverride.trimmed().isEmpty()
+        || !descriptor.loaderProfileOverride.isEmpty();
     QByteArray currentFingerprint;
     QFile fingerprintFile(descriptor.layout.versionJson);
     if (fingerprintFile.open(QIODevice::ReadOnly))
@@ -680,6 +685,12 @@ bool VanillaCompatibleProvider::loadSidecar(VanillaInstanceDescriptor& descripto
         descriptor.loaderType = descriptor.loaderTypeOverride;
     if (object.value(QStringLiteral("loaderProfileOverride")).isObject())
         descriptor.loaderProfileOverride = object.value(QStringLiteral("loaderProfileOverride")).toObject();
+    descriptor.lunaLoaderManaged = !descriptor.loaderManifestFingerprint.isEmpty()
+        || !descriptor.loaderTypeOverride.trimmed().isEmpty()
+        || !descriptor.loaderVersionOverride.trimmed().isEmpty()
+        || !descriptor.loaderProfileOverride.isEmpty();
+    descriptor.lunaLoaderManaged = descriptor.lunaLoaderManaged
+        || root.value(QStringLiteral("lunaChanges")).toObject().value(QStringLiteral("substantial")).toBool(false);
     return true;
 }
 
@@ -699,7 +710,19 @@ bool VanillaCompatibleProvider::saveSidecar(const VanillaInstanceDescriptor& des
                                 { "loaderVersionOverride", descriptor.loaderVersionOverride },
                                 { "loaderProfileOverride", descriptor.loaderProfileOverride },
                                 { "loaderManifestFingerprint", descriptor.loaderManifestFingerprint } };
-    const QJsonObject object{ { "formatVersion", 1 }, { "settings", settings } };
+    QJsonArray actions{ QStringLiteral("settings") };
+    const bool loaderManaged = !descriptor.loaderManifestFingerprint.isEmpty()
+        || !descriptor.loaderTypeOverride.trimmed().isEmpty()
+        || !descriptor.loaderVersionOverride.trimmed().isEmpty()
+        || !descriptor.loaderProfileOverride.isEmpty();
+    if (loaderManaged)
+        actions.append(QStringLiteral("loader"));
+    const QJsonObject changes{ { "actions", actions },
+                               { "substantial", loaderManaged },
+                               { "loaderType", descriptor.loaderType },
+                               { "loaderVersion", descriptor.loaderVersionOverride.isEmpty() ? descriptor.loaderVersion : descriptor.loaderVersionOverride },
+                               { "loaderEnabled", descriptor.loaderEnabled } };
+    const QJsonObject object{ { "formatVersion", 1 }, { "settings", settings }, { "lunaChanges", changes } };
     return writeJsonFile(lunaSettingsPath(descriptor.root),
                          QJsonDocument(object),
                          error,

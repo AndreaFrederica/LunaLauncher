@@ -69,6 +69,43 @@
 #include "tasks/Task.h"
 
 namespace {
+QJsonObject lunaChangesFor(const VanillaInstanceDescriptor& descriptor)
+{
+    QJsonArray actions;
+    if (descriptor.lunaSettingsManaged)
+        actions.append(QStringLiteral("settings"));
+    if (descriptor.lunaLoaderManaged)
+        actions.append(QStringLiteral("loader"));
+    return QJsonObject{
+        { "actions", actions },
+        { "substantial", descriptor.lunaLoaderManaged },
+        { "loaderType", descriptor.loaderType },
+        { "loaderVersion", descriptor.loaderVersionOverride.isEmpty() ? descriptor.loaderVersion : descriptor.loaderVersionOverride },
+        { "loaderEnabled", descriptor.loaderEnabled },
+    };
+}
+
+QPair<QString, QString> nativeLoaderFor(const MinecraftInstance* instance)
+{
+    const auto profile = instance ? instance->getPackProfile() : nullptr;
+    if (!profile)
+        return { QStringLiteral("vanilla"), {} };
+    for (const auto& entry : { QPair<QString, QString>{ QStringLiteral("com.cleanroommc.cleanroom"), QStringLiteral("cleanroom") },
+                               QPair<QString, QString>{ QStringLiteral("net.neoforged"), QStringLiteral("neoforge") },
+                               QPair<QString, QString>{ QStringLiteral("net.minecraftforge"), QStringLiteral("forge") },
+                               QPair<QString, QString>{ QStringLiteral("net.fabricmc.fabric-loader"), QStringLiteral("fabric") },
+                               QPair<QString, QString>{ QStringLiteral("org.quiltmc.quilt-loader"), QStringLiteral("quilt") },
+                               QPair<QString, QString>{ QStringLiteral("net.legacyfabric"), QStringLiteral("legacy-fabric") },
+                               QPair<QString, QString>{ QStringLiteral("com.mumfrey.liteloader"), QStringLiteral("liteloader") } }) {
+        const auto component = profile->getComponent(entry.first);
+        if (component && component->isEnabled())
+            return { entry.second, component->getVersion() };
+    }
+    return { QStringLiteral("vanilla"), {} };
+}
+}
+
+namespace {
 
 QString accountTypeName(AccountType type)
 {
@@ -598,7 +635,7 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         for (const auto& store : APPLICATION->instanceStores()->stores()) {
             if (!store.enabled || !store.isVanillaCompatible() || (!storeId.isEmpty() && store.id != storeId)) continue;
             for (const auto& instance : VanillaCompatibleProvider::scan(store.id, store.path))
-                instances.append(QJsonObject{ { "id", instance.stableId }, { "storeId", instance.storeId }, { "name", instance.name }, { "root", instance.root }, { "dialect", instance.dialect }, { "provenance", instance.provenance.toJson() }, { "versionId", instance.versionId }, { "profileVersionId", instance.profileVersionId }, { "minecraftVersion", instance.minecraftVersion }, { "loaderType", instance.loaderType }, { "loaderVersion", instance.loaderVersion }, { "gameRoot", instance.layout.gameRoot }, { "isolated", instance.layout.isolated }, { "writable", instance.writable } });
+                instances.append(QJsonObject{ { "id", instance.stableId }, { "storeId", instance.storeId }, { "name", instance.name }, { "root", instance.root }, { "dialect", instance.dialect }, { "provenance", instance.provenance.toJson() }, { "lunaChanges", lunaChangesFor(instance) }, { "versionId", instance.versionId }, { "profileVersionId", instance.profileVersionId }, { "minecraftVersion", instance.minecraftVersion }, { "loaderType", instance.loaderType }, { "loaderVersion", instance.loaderVersion }, { "gameRoot", instance.layout.gameRoot }, { "isolated", instance.layout.isolated }, { "writable", instance.writable } });
         }
         return success(QJsonObject{ { "instances", instances } });
     }
@@ -619,7 +656,8 @@ QJsonObject OperationService::execute(const QString& operation, const QJsonObjec
         if (!vanilla)
             return failure(tr("The selected instance is not a vanilla-compatible external instance."), 2);
         return success(QJsonObject{ { "instance", vanilla->id() }, { "root", vanilla->instanceRoot() },
-                                    { "provenance", vanilla->descriptor().provenance.toJson() } });
+                                    { "provenance", vanilla->descriptor().provenance.toJson() },
+                                    { "lunaChanges", lunaChangesFor(vanilla->descriptor()) } });
     }
     if (operation == "external-launchers.list-recognizers") {
         QJsonArray recognizers;
@@ -849,12 +887,18 @@ QJsonObject OperationService::listInstances()
             object.insert("format", QStringLiteral("vanilla-compatible"));
             object.insert("dialect", descriptor.dialect);
             object.insert("provenance", descriptor.provenance.toJson());
+            object.insert("lunaChanges", lunaChangesFor(descriptor));
             object.insert("loaderType", descriptor.loaderType);
             object.insert("loaderVersion", descriptor.loaderVersion);
             object.insert("minecraftVersion", descriptor.minecraftVersion);
             object.insert("vanillaCompatible", true);
         } else {
             object.insert("vanillaCompatible", false);
+            if (const auto* minecraft = dynamic_cast<const MinecraftInstance*>(instance)) {
+                const auto loader = nativeLoaderFor(minecraft);
+                object.insert("loaderType", loader.first);
+                object.insert("loaderVersion", loader.second);
+            }
         }
         instances.append(object);
     }
@@ -968,9 +1012,15 @@ QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
         data.insert("loaderVersion", descriptor.loaderVersion);
         data.insert("dialect", descriptor.dialect);
         data.insert("provenance", descriptor.provenance.toJson());
+        data.insert("lunaChanges", lunaChangesFor(descriptor));
     } else {
         data.insert("format", QStringLiteral("prism"));
         data.insert("vanillaCompatible", false);
+        if (const auto minecraft = dynamic_cast<const MinecraftInstance*>(instance)) {
+            const auto loader = nativeLoaderFor(minecraft);
+            data.insert("loaderType", loader.first);
+            data.insert("loaderVersion", loader.second);
+        }
     }
     return success(data);
 }

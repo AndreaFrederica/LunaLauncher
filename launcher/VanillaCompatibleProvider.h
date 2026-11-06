@@ -40,6 +40,11 @@ struct VanillaInstanceDescriptor {
     QString loaderVersionOverride;
     QJsonObject loaderProfileOverride;
     QString loaderManifestFingerprint;
+    // Persistent record of changes made by Luna to an external instance.
+    // A sidecar alone is launcher-owned metadata; a managed loader manifest
+    // represents a substantial game change.
+    bool lunaSettingsManaged = false;
+    bool lunaLoaderManaged = false;
     VanillaInstanceLayout layout;
     QJsonObject version;
     bool writable = false;

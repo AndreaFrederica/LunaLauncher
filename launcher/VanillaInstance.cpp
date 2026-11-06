@@ -403,6 +403,8 @@ bool VanillaInstance::setForeignLoaderEnabled(bool enabled, QString* error)
         return false;
     m_descriptor.loaderEnabled = enabled;
     m_descriptor.loaderManifestFingerprint = foreignLoaderManifestFingerprint();
+    m_descriptor.lunaSettingsManaged = true;
+    m_descriptor.lunaLoaderManaged = true;
     if (!VanillaCompatibleProvider::saveSidecar(m_descriptor, error))
         return false;
     m_runtimeReady = false;
@@ -429,6 +431,8 @@ bool VanillaInstance::setForeignLoaderProfile(const QString& version, const QJso
     m_descriptor.loaderProfileOverride = profile;
     m_descriptor.loaderEnabled = true;
     m_descriptor.loaderManifestFingerprint = foreignLoaderManifestFingerprint();
+    m_descriptor.lunaSettingsManaged = true;
+    m_descriptor.lunaLoaderManaged = true;
     if (!VanillaCompatibleProvider::saveSidecar(m_descriptor, error))
         return false;
     m_runtimeReady = false;

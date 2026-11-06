@@ -691,6 +691,39 @@ VanillaConversionReport VanillaConverter::installLoader(const QString& vanillaRo
         report.error = error;
         return report;
     }
+    // Keep an explicit Luna change record beside an external instance. This
+    // lets later scans distinguish a loader installed by Luna from a loader
+    // that was already present in HMCL/PCL/the official launcher.
+    const auto settingsPath = QDir(vanillaRoot).filePath(QStringLiteral("luna.settings.json"));
+    QJsonObject sidecar;
+    QFile sidecarFile(settingsPath);
+    if (sidecarFile.open(QIODevice::ReadOnly)) {
+        QJsonParseError parseError;
+        const auto document = QJsonDocument::fromJson(sidecarFile.readAll(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && document.isObject())
+            sidecar = document.object();
+    }
+    auto settings = sidecar.value(QStringLiteral("settings")).toObject();
+    settings.insert(QStringLiteral("loaderEnabled"), true);
+    settings.insert(QStringLiteral("loaderTypeOverride"), loaderType);
+    settings.insert(QStringLiteral("loaderVersionOverride"), options.loaderVersion);
+    settings.insert(QStringLiteral("loaderProfileOverride"), options.versionJson);
+    QFile installedVersionFile(QDir(targetDir).filePath(targetId + QStringLiteral(".json")));
+    if (installedVersionFile.open(QIODevice::ReadOnly))
+        settings.insert(QStringLiteral("loaderManifestFingerprint"), QString::fromLatin1(QCryptographicHash::hash(installedVersionFile.readAll(), QCryptographicHash::Sha256).toHex()));
+    sidecar.insert(QStringLiteral("formatVersion"), 1);
+    sidecar.insert(QStringLiteral("settings"), settings);
+    sidecar.insert(QStringLiteral("lunaChanges"), QJsonObject{
+        { "actions", QJsonArray{ QStringLiteral("settings"), QStringLiteral("loader") } },
+        { "substantial", true },
+        { "loaderType", loaderType },
+        { "loaderVersion", options.loaderVersion },
+        { "loaderEnabled", true },
+    });
+    if (!writeJson(settingsPath, sidecar, error)) {
+        report.error = error;
+        return report;
+    }
     report.copied.append(QDir(targetDir).relativeFilePath(targetDir + QStringLiteral("/%1.json").arg(targetId)));
     report.warnings.append(QObject::tr("The loader profile inherits the base Minecraft version. Libraries from its standard download entries will be repaired by the launcher that starts it."));
     report.succeeded = true;

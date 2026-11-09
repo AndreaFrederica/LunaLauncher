@@ -102,6 +102,61 @@ QJsonObject fetchJson(const QUrl& url, QString* error)
     return doc.object();
 }
 
+QJsonObject fastMirrorResponse(const QUrl& url, QString* error)
+{
+    const auto response = fetchJson(url, error);
+    if (response.isEmpty())
+        return {};
+    if (!response.value("success").toBool(true)) {
+        if (error)
+            *error = response.value("message").toString("FastMirror returned an error.");
+        return {};
+    }
+    const auto data = response.value("data");
+    if (!data.isObject()) {
+        if (error)
+            *error = "FastMirror returned an invalid data object.";
+        return {};
+    }
+    return data.toObject();
+}
+
+QString fastMirrorPath(const QStringList& parts)
+{
+    QStringList encoded;
+    for (const auto& part : parts)
+        encoded.append(QString::fromUtf8(QUrl::toPercentEncoding(part)));
+    return QStringLiteral("https://download.fastmirror.net/api/v3/") + encoded.join('/');
+}
+
+QJsonObject fastMirrorCore(const QJsonArray& cores, const QString& requested)
+{
+    for (const auto& value : cores) {
+        const auto core = value.toObject();
+        if (core.value("name").toString().compare(requested, Qt::CaseInsensitive) == 0)
+            return core;
+    }
+    return {};
+}
+
+QJsonArray fastMirrorCores(QString* error)
+{
+    const auto response = fetchJson(QUrl(fastMirrorPath({})), error);
+    if (response.isEmpty())
+        return {};
+    if (!response.value("success").toBool(true)) {
+        if (error)
+            *error = response.value("message").toString("FastMirror returned an error.");
+        return {};
+    }
+    if (!response.value("data").isArray()) {
+        if (error)
+            *error = "FastMirror returned an invalid core list.";
+        return {};
+    }
+    return response.value("data").toArray();
+}
+
 /// Route a Mojang/mod-loader URL through the configured download mirror.
 QString mirrorUrl(const QString& url)
 {
@@ -153,6 +208,60 @@ QJsonObject installDistribution(LauncherApi& api, const QJsonObject& p, UserInte
     instance->saveNow();
     return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "path", destination },
         { "fileName", fileName }, { "url", url.toString() }, { "configured", true }, { "changed", true } });
+}
+
+QJsonObject createDistribution(LauncherApi& api, const QJsonObject& p, UserInteraction& interaction)
+{
+    const QUrl url(p.value("url").toString());
+    const auto fileName = p.value("fileName").toString().trimmed();
+    if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http"))
+        return OperationService::failure("url must be HTTP(S).", 2);
+    static const QRegularExpression unsafe(R"([<>:"/\\|?*\x00-\x1f])");
+    if (fileName.isEmpty() || fileName == "." || fileName == ".." || unsafe.match(fileName).hasMatch() || fileName.endsWith('.'))
+        return OperationService::failure("fileName is unsafe.", 2);
+    QTemporaryDir staging(QDir(QDir::tempPath()).filePath("luna-server-XXXXXX"));
+    if (!staging.isValid())
+        return OperationService::failure("Could not create a temporary server download directory.");
+    const auto staged = QDir(staging.path()).filePath(fileName);
+    auto job = makeShared<NetJob>("Server distribution download", APPLICATION->network());
+    const auto downloadUrl = mirrorUrl(url.toString());
+    auto download = Net::ApiDownload::makeFile(QUrl(downloadUrl), staged);
+    if (downloadUrl != url.toString())
+        download->setFallbackUrl(url);
+    job->addNetAction(download);
+    QString error;
+    if (!ApiSupport::wait(api, job, interaction, error))
+        return OperationService::failure(error);
+    if (!QFileInfo(staged).isFile() || QFileInfo(staged).size() == 0)
+        return OperationService::failure("The downloaded server file is empty.");
+    const auto expectedSha1 = p.value("sha1").toString().trimmed().toLower();
+    if (!expectedSha1.isEmpty()) {
+        QFile file(staged);
+        if (!file.open(QIODevice::ReadOnly)) return OperationService::failure("The downloaded server file could not be verified.");
+        const auto actual = QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha1).toHex()).toLower();
+        if (actual != expectedSha1) return OperationService::failure("The downloaded server file failed its SHA-1 check.");
+    }
+    QJsonObject create{ { "type", "server" }, { "executable", staged }, { "name", p.value("name") },
+        { "group", p.value("group") }, { "icon", p.contains("icon") ? p.value("icon") : QJsonValue("server") } };
+    if (p.value("arguments").isArray()) create.insert("arguments", p.value("arguments"));
+    else create.insert("arguments", QJsonArray{ "nogui" });
+    const auto created = api.execute("instance.create", create, interaction);
+    if (!created.value("ok").toBool()) return created;
+    const auto data = created.value("data").toObject();
+    const auto instanceId = data.value("id").toString();
+    if (!instanceId.isEmpty()) {
+        if (auto server = findServer(instanceId)) {
+            const auto minecraftVersion = p.value("minecraftVersion").toString().trimmed();
+            if (!minecraftVersion.isEmpty()) server->setMinecraftVersion(minecraftVersion);
+            server->saveNow();
+        }
+    }
+    QJsonObject result = data;
+    result.insert("provider", p.value("provider"));
+    result.insert("url", url.toString());
+    result.insert("fileName", fileName);
+    result.insert("downloaded", true);
+    return OperationService::success(result);
 }
 
 QString listFileName(QString kind)
@@ -531,7 +640,7 @@ void registerLauncherApiServerOperations(LauncherApi& api)
     const QJsonObject entriesArray{ { "type", "array" }, { "items", QJsonObject{ { "type", "object" } } } };
 
     api.registerOperation({ "server.distribution.catalog", "Describe server distribution providers and stable catalog endpoints for a replacement UI.",
-        objectSchema({ { "provider", stringProperty("Optional provider filter: vanilla, paper, purpur, fabric, forge.") } }), "server" },
+        objectSchema({ { "provider", stringProperty("Optional provider filter: vanilla, paper, purpur, fabric, forge, or fastmirror.") } }), "server" },
         [](const QJsonObject& p, UserInteraction&) {
             const auto requested = p.value("provider").toString().trimmed().toLower();
             QJsonArray providers;
@@ -545,18 +654,20 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             add("fabric", "Fabric Loader", mirrorUrl("https://meta.fabricmc.net/v2/versions/loader"),
                 mirrorUrl("https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/1.0.0/server/jar"));
             add("forge", "Forge", "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json", "installer-url-from-manifest");
+            add("fastmirror", "FastMirror server cores", "https://download.fastmirror.net/api/v3", "https://download.fastmirror.net/download/{core}/{version}/{build}");
             if (providers.isEmpty()) return OperationService::failure("Unknown server distribution provider.", 2);
             return OperationService::success(QJsonObject{ { "providers", providers }, { "stable", true } });
         });
     api.registerOperation({ "server.distribution.resolve", "Resolve a concrete server distribution download URL from provider, version, and build identifiers.",
-        objectSchema({ { "provider", stringProperty("vanilla, paper, purpur, or fabric.") }, { "version", stringProperty("Minecraft version.") },
-                       { "build", QJsonObject{ { "type", "integer" } } }, { "loader", stringProperty("Fabric loader version.") },
-                       { "file", stringProperty("Paper download filename.") } }, { "provider", "version" }), "server" },
+        objectSchema({ { "provider", stringProperty("vanilla, paper, purpur, fabric, or fastmirror.") }, { "version", stringProperty("Minecraft version.") },
+                       { "build", QJsonObject{ { "type", "integer" } } }, { "core", stringProperty("FastMirror core name.") },
+                       { "coreVersion", stringProperty("FastMirror core build identifier, such as build133.") },
+                       { "loader", stringProperty("Fabric loader version.") }, { "file", stringProperty("Paper download filename.") } }, { "provider", "version" }), "server" },
         [](const QJsonObject& p, UserInteraction&) {
             const auto provider = p.value("provider").toString().trimmed().toLower();
             const auto version = p.value("version").toString().trimmed();
             if (version.isEmpty() || version.contains('/') || version.contains('\\')) return OperationService::failure("Invalid version.", 2);
-            QString url; QString fileName; QString executable = "java";
+            QString url; QString fileName; QString executable = "java"; QJsonObject fastMirrorDetail;
             if (provider == "vanilla") {
                 QString error;
                 const auto manifest = fetchJson(QUrl(mirrorUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")), &error);
@@ -585,11 +696,28 @@ void registerLauncherApiServerOperations(LauncherApi& api)
                 if (loader.isEmpty()) return OperationService::failure("Fabric requires a loader version.", 2);
                 fileName = "fabric-server-launch.jar";
                 url = mirrorUrl(QString("https://meta.fabricmc.net/v2/versions/loader/%1/%2/1.0.0/server/jar").arg(version, loader));
+            } else if (provider == "fastmirror") {
+                const auto core = p.value("core").toString().trimmed();
+                const auto coreVersion = p.value("coreVersion").toString().trimmed();
+                if (core.isEmpty() || coreVersion.isEmpty()) return OperationService::failure("FastMirror requires core and coreVersion.", 2);
+                if (core.contains('/') || core.contains('\\') || version.contains('/') || version.contains('\\') || coreVersion.contains('/') || coreVersion.contains('\\'))
+                    return OperationService::failure("Invalid FastMirror core, version, or build.", 2);
+                QString error;
+                fastMirrorDetail = fastMirrorResponse(QUrl(fastMirrorPath({ core, version, coreVersion })), &error);
+                url = fastMirrorDetail.value("download_url").toString();
+                fileName = fastMirrorDetail.value("filename").toString();
+                if (url.isEmpty() || fileName.isEmpty()) return OperationService::failure(error.isEmpty() ? "FastMirror build was not found." : error, 2);
             } else return OperationService::failure("Unknown distribution provider.", 2);
-            return OperationService::success(QJsonObject{ { "provider", provider }, { "version", version }, { "url", url }, { "fileName", fileName }, { "executable", executable } });
+            QJsonObject result{ { "provider", provider }, { "version", version }, { "url", url }, { "fileName", fileName }, { "executable", executable } };
+            if (provider == "fastmirror") {
+                result.insert("core", p.value("core").toString());
+                result.insert("coreVersion", p.value("coreVersion").toString());
+                result.insert("sha1", fastMirrorDetail.value("sha1"));
+            }
+            return OperationService::success(result);
         });
     api.registerOperation({ "server.distribution.versions", "Fetch available versions and builds for a server distribution provider.",
-        objectSchema({ { "provider", stringProperty("vanilla, paper, purpur, or fabric.") }, { "version", stringProperty("Optional version for build listing.") } }, { "provider" }), "server" },
+        objectSchema({ { "provider", stringProperty("vanilla, paper, purpur, fabric, or fastmirror.") }, { "core", stringProperty("FastMirror core name.") }, { "version", stringProperty("Optional version for build listing.") } }, { "provider" }), "server" },
         [](const QJsonObject& p, UserInteraction&) {
             const auto provider = p.value("provider").toString().trimmed().toLower();
             const auto version = p.value("version").toString().trimmed();
@@ -617,6 +745,30 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             } else if (provider == "fabric") {
                 const auto data = fetchJson(QUrl(mirrorUrl("https://meta.fabricmc.net/v2/versions/game")), &error);
                 for (const auto& item : data.value("versions").toArray()) versions.append(item);
+            } else if (provider == "fastmirror") {
+                const auto cores = fastMirrorCores(&error);
+                if (!cores.isEmpty() && p.value("core").toString().trimmed().isEmpty()) {
+                    for (const auto& value : cores) {
+                        const auto core = value.toObject();
+                        versions.append(QJsonObject{ { "id", core.value("name") }, { "name", core.value("name") },
+                            { "tag", core.value("tag") }, { "homepage", core.value("homepage") },
+                            { "recommend", core.value("recommend") }, { "versions", core.value("mc_versions") } });
+                    }
+                } else if (!p.value("core").toString().trimmed().isEmpty()) {
+                    const auto core = p.value("core").toString().trimmed();
+                    const auto coreIndex = fastMirrorCore(cores, core);
+                    for (const auto& value : coreIndex.value("mc_versions").toArray()) versions.append(QJsonObject{ { "id", value }, { "name", value } });
+                }
+                const auto core = p.value("core").toString().trimmed();
+                if (!core.isEmpty() && !version.isEmpty()) {
+                    const auto buildsResponse = fetchJson(QUrl(fastMirrorPath({ core, version }) + "?offset=0&limit=100"), &error);
+                    const auto data = buildsResponse.value("data").toObject();
+                    for (const auto& value : data.value("builds").toArray()) {
+                        const auto build = value.toObject();
+                        builds.append(QJsonObject{ { "id", build.value("core_version") }, { "name", build.value("core_version") },
+                            { "version", build.value("core_version") }, { "updateTime", build.value("update_time") }, { "sha1", build.value("sha1") } });
+                    }
+                }
             } else return OperationService::failure("Unknown distribution provider.", 2);
             if (versions.isEmpty() && builds.isEmpty() && !error.isEmpty()) return OperationService::failure(error, 2);
             return OperationService::success(QJsonObject{ { "provider", provider }, { "version", version }, { "versions", versions }, { "builds", builds } });
@@ -628,6 +780,14 @@ void registerLauncherApiServerOperations(LauncherApi& api)
             { "arguments", QJsonObject{ { "type", "array" }, { "items", stringProperty("Additional server arguments.") } } },
             { "minecraftVersion", stringProperty("Optional Minecraft version recorded on the server instance.") } }, { "instance", "url", "fileName" }), "server", true },
         [&api](const QJsonObject& p, UserInteraction& i) { return installDistribution(api, p, i); });
+
+    api.registerOperation({ "server.distribution.create", "Download a server distribution, create a new server instance, and configure its launch command.",
+        objectSchema({ { "provider", stringProperty("Distribution provider identifier.") }, { "url", stringProperty("HTTP(S) distribution URL.") },
+            { "fileName", stringProperty("Destination filename inside the new server instance.") }, { "sha1", stringProperty("Optional expected SHA-1 checksum.") },
+            { "minecraftVersion", stringProperty("Optional Minecraft version recorded on the server instance.") },
+            { "name", stringProperty("New server instance name.") }, { "group", stringProperty("Instance group.") }, { "icon", stringProperty("Icon key.") },
+            { "arguments", QJsonObject{ { "type", "array" }, { "items", stringProperty("Additional server arguments.") } } } }, { "url", "fileName", "name" }), "server", true },
+        [&api](const QJsonObject& p, UserInteraction& i) { return createDistribution(api, p, i); });
 
     api.registerOperation({ "server.start", "Start a configured server process without requiring a Minecraft account.",
         objectSchema({ { "instance", instance } }, { "instance" }), "server", true },

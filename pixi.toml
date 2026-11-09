@@ -69,6 +69,18 @@ depends-on = [
 ]
 cmd = "python scripts/pixi_meson.py install {{ profile }}"
 
+[tasks.installer-shell-check]
+description = "Type-check the standalone MPL-2.0 egui installer shell"
+cmd = "cargo check --manifest-path installer-shell/Cargo.toml"
+
+[tasks.installer-shell-test]
+description = "Run installer shell archive and SFX unit tests"
+cmd = "cargo test --manifest-path installer-shell/Cargo.toml"
+
+[tasks.installer-shell-build]
+description = "Build the standalone installer shell and SFX tools"
+cmd = "cargo build --manifest-path installer-shell/Cargo.toml --release --bin luna-installer-shell --bin create-zip --bin assemble-sfx"
+
 [tasks.deploy]
 description = "Deploy runtime files for the selected profile"
 args = [

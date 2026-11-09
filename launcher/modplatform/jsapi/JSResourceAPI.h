@@ -21,9 +21,11 @@
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutex>
 #include <QObject>
 #include <QString>
 #include <memory>
+#include <optional>
 
 /**
  * API 元数据结构
@@ -38,6 +40,7 @@ struct ApiMetadata {
     QString icon;                    // 图标名称
     QString description;             // 描述
     QString homepage;                // 主页 URL
+    QString kind = QStringLiteral("resource"); // resource or mirror
     bool enabled = true;             // 是否启用
     int priority = 0;                // 优先级
 };
@@ -95,6 +98,9 @@ public:
     QString getApiName() const { return m_apiName; }
     const ApiMetadata& getMetadata() const { return m_metadata; }
 
+    /** Execute a mirror API's URL rewrite hook. Null means unhandled. */
+    std::optional<QString> rewriteUrl(const QString& url, const QJsonObject& context) const;
+
     /**
      * 获取所有已注册的 JS API
      */
@@ -129,6 +135,7 @@ private:
     QString m_apiName;
     ApiMetadata m_metadata;
     mutable QString m_lastError;
+    mutable QMutex m_jsMutex;
 
     // 全局注册表
     static QList<std::shared_ptr<JSResourceAPI>> s_registeredAPIs;

@@ -19,7 +19,9 @@
 #include "MirrorDownload.h"
 
 #include <QCoreApplication>
+#include <QJsonObject>
 
+#include "modplatform/jsapi/JSAPIManager.h"
 #include "settings/SettingsObject.h"
 
 namespace {
@@ -39,44 +41,6 @@ QString joinBase(const QString& base, const QString& path)
     if (base.isEmpty())
         return {};
     return base + path;
-}
-
-/**
- * Replace a host (and optionally a path prefix below it) with another base.
- *
- * The original URL keeps everything after the matched part, including the query
- * string. `pathPrefix` must not start with a slash, because a single leading
- * slash after the host is always consumed.
- */
-bool replaceHost(QString& url, const QString& host, const QString& base, const QString& pathPrefix = {})
-{
-    if (base.isEmpty() || url.isEmpty())
-        return false;
-
-    for (const auto& scheme : { QStringLiteral("https://"), QStringLiteral("http://") }) {
-        const QString prefix = scheme + host;
-        if (!url.startsWith(prefix, Qt::CaseInsensitive))
-            continue;
-
-        QString rest = url.mid(prefix.size());
-        // Guard against matching a longer host name (e.g. "example.com.evil").
-        if (!rest.isEmpty() && !rest.startsWith('/'))
-            continue;
-
-        while (rest.startsWith('/'))
-            rest = rest.mid(1);
-
-        if (!pathPrefix.isEmpty()) {
-            if (!rest.startsWith(pathPrefix, Qt::CaseInsensitive))
-                continue;
-            rest = rest.mid(pathPrefix.size());
-        }
-
-        url = base + rest;
-        return true;
-    }
-
-    return false;
 }
 
 }  // namespace
@@ -170,47 +134,26 @@ QString MirrorDownload::rewriteUrl(const QString& url, const ResolvedMirror& mir
     if (url.isEmpty())
         return url;
 
-    QString rewritten = url;
-
-    // Mod file CDN override (e.g. the Modrinth fallback for blocked CurseForge
-    // mods). Configured independently of the Mojang mirror selection.
-    replaceHost(rewritten, QStringLiteral("cdn.modrinth.com"), mirror.modrinthCdnBase);
-
-    if (mirror.isOfficial())
-        return rewritten;
-
-    // Assets objects. AssetUpdateTask also supplies the assets base directly, but
-    // absolute asset URLs can appear in other version metadata as well.
-    replaceHost(rewritten, QStringLiteral("resources.download.minecraft.net"), mirror.assetsBase);
-
-    // Maven repositories. They all share a single Maven root and only differ in
-    // the path prefix that the official URL uses.
-    replaceHost(rewritten, QStringLiteral("libraries.minecraft.net"), mirror.librariesBase);
-    replaceHost(rewritten, QStringLiteral("files.minecraftforge.net"), mirror.librariesBase, QStringLiteral("maven/"));
-    replaceHost(rewritten, QStringLiteral("maven.minecraftforge.net"), mirror.librariesBase);
-    replaceHost(rewritten, QStringLiteral("maven.fabricmc.net"), mirror.librariesBase);
-    replaceHost(rewritten, QStringLiteral("maven.neoforged.net"), mirror.librariesBase, QStringLiteral("releases/"));
-    replaceHost(rewritten, QStringLiteral("maven.quiltmc.org"), mirror.librariesBase, QStringLiteral("repository/release/"));
-
-    // Mod loader metadata.
-    replaceHost(rewritten, QStringLiteral("meta.fabricmc.net"), mirror.fabricMetaBase);
-    replaceHost(rewritten, QStringLiteral("meta.quiltmc.org"), mirror.quiltMetaBase);
-
-    // LiteLoader is served from BMCLAPI's Maven tree under a fixed path.
-    replaceHost(rewritten, QStringLiteral("dl.liteloader.com"), joinBase(mirror.librariesBase, QStringLiteral("com/mumfrey/liteloader/")),
-                QStringLiteral("versions/"));
-
-    // Misc Mojang-hosted files.
-    replaceHost(rewritten, QStringLiteral("authlib-injector.yushi.moe"), mirror.authlibInjectorBase);
-
-    // Mojang's download CDNs keep their path below the mirror root.
-    replaceHost(rewritten, QStringLiteral("launcher.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("launchermeta.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("piston-data.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("piston-meta.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("s3.amazonaws.com"), mirror.mojangBase, QStringLiteral("Minecraft.Download/"));
-
-    return rewritten;
+    QJsonObject context{
+        { QStringLiteral("mirrorType"), mirror.isOfficial() ? QStringLiteral("official") :
+          (mirror.type == BMCLAPI ? QStringLiteral("bmclapi") : QStringLiteral("custom")) },
+        { QStringLiteral("mirrorTypeId"), static_cast<int>(mirror.type) },
+        { QStringLiteral("mojangBase"), mirror.mojangBase },
+        { QStringLiteral("librariesBase"), mirror.librariesBase },
+        { QStringLiteral("assetsBase"), mirror.assetsBase },
+        { QStringLiteral("fabricMetaBase"), mirror.fabricMetaBase },
+        { QStringLiteral("quiltMetaBase"), mirror.quiltMetaBase },
+        { QStringLiteral("fmlLibsBase"), mirror.fmlLibsBase },
+        { QStringLiteral("authlibInjectorBase"), mirror.authlibInjectorBase },
+        { QStringLiteral("modrinthCdnBase"), mirror.modrinthCdnBase },
+    };
+    auto& jsApis = JSAPIManager::instance();
+    // Tests and small command-line tools can use MirrorDownload without going
+    // through Application::initialize(). Load the packaged/user JS hooks on
+    // first use in that case.
+    if (jsApis.getAllAPIs().isEmpty())
+        jsApis.initialize();
+    return jsApis.rewriteUrl(url, context);
 }
 
 QString MirrorDownload::rewriteUrl(const QString& url, SettingsObject* settings)

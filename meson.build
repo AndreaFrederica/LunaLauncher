@@ -169,11 +169,30 @@ launcher_domain = 'lunalauncher.org'
 launcher_config_file = 'lunalauncher.cfg'
 launcher_git_url = 'https://github.com/AndreaFrederica/LunaLauncher'
 launcher_copyright = '© 2025 Luna Launcher Contributors\\n© 2022-2025 Prism Launcher Contributors\\n© 2021-2022 PolyMC Contributors\\n© 2012-2021 MultiMC Contributors'
+build_date = run_command(
+  python_prog,
+  '-c',
+  'import datetime; print(datetime.date.today().isoformat())',
+  check: true,
+).stdout().strip()
+release_revision = run_command(
+  python_prog,
+  '-c',
+  'import os; print(os.environ.get("LUNA_RELEASE_REVISION", "").strip())',
+  check: true,
+).stdout().strip()
 launcher_version_major = 11
 launcher_version_minor = 0
 launcher_version_patch = 2
-launcher_version_prerelease = ''
-launcher_version_name = '@0@.@1@.@2@'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
+launcher_version_prerelease = build_date.replace('-', '')
+if release_revision != ''
+  if release_revision.startswith('r')
+    launcher_version_prerelease += release_revision
+  else
+    launcher_version_prerelease += 'r' + release_revision
+  endif
+endif
+launcher_version_name = '@0@.@1@.@2@-@3@'.format(launcher_version_major, launcher_version_minor, launcher_version_patch, launcher_version_prerelease)
 launcher_version_name4 = '@0@.@1@.@2@.0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
 launcher_version_name4_comma = '@0@,@1@,@2@,0'.format(launcher_version_major, launcher_version_minor, launcher_version_patch)
 launcher_build_platform = '@0@-@1@'.format(host_machine.system(), host_machine.cpu_family())
@@ -243,13 +262,6 @@ if git_prog.found()
     git_refspec = git_commit.substring(0, 8)
   endif
 endif
-
-build_date = run_command(
-  python_prog,
-  '-c',
-  'import datetime; print(datetime.date.today().isoformat())',
-  check: true,
-).stdout().strip()
 
 compiler_name = cpp.get_id()
 compiler_version = cpp.version()

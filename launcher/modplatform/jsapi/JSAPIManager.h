@@ -9,6 +9,7 @@
 #include "JSResourceAPI.h"
 #include "modplatform/ModIndex.h"
 #include <QObject>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <memory>
@@ -62,6 +63,9 @@ public:
      * 根据提供商获取 API
      */
     QList<std::shared_ptr<JSResourceAPI>> getAPIsByProvider(const QString& provider) const;
+
+    /** Let registered mirror APIs rewrite a URL. APIs are tried by priority. */
+    QString rewriteUrl(const QString& url, const QJsonObject& context) const;
 
     /**
      * 重新加载所有 API

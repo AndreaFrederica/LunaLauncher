@@ -165,6 +165,25 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsByProvider(const QStr
     return result;
 }
 
+QString JSAPIManager::rewriteUrl(const QString& url, const QJsonObject& context) const
+{
+    QList<std::shared_ptr<JSResourceAPI>> mirrors;
+    for (const auto& api : m_apis) {
+        const auto& metadata = api->getMetadata();
+        if (metadata.enabled && metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) == 0)
+            mirrors.append(api);
+    }
+    std::sort(mirrors.begin(), mirrors.end(), [](const auto& left, const auto& right) {
+        return left->getMetadata().priority > right->getMetadata().priority;
+    });
+
+    for (const auto& api : mirrors) {
+        if (const auto rewritten = api->rewriteUrl(url, context); rewritten.has_value())
+            return rewritten.value();
+    }
+    return url;
+}
+
 void JSAPIManager::reloadAll()
 {
     qDebug() << "[JSAPIManager] Reloading all APIs...";

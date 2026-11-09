@@ -2,6 +2,14 @@
 
 这是一个基于 QuickJS 的插件化资源 API 框架，允许使用 JavaScript 快速开发和测试新的资源平台支持（如 Modrinth、CurseForge 等）。
 
+### 下载镜像 URL 重写
+
+镜像规则也可以由 JS 提供，不需要修改 C++。将 `metadata.kind` 设为 `"mirror"`，并实现
+`rewriteUrl(url, context)`；返回字符串表示已处理，返回 `null` 表示交给下一个镜像脚本。
+脚本按 `metadata.priority` 从高到低调用。`context` 包含 `mirrorType`、`mirrorTypeId`，以及
+`mojangBase`、`librariesBase`、`assetsBase`、`fabricMetaBase`、`quiltMetaBase`、
+`authlibInjectorBase` 和 `modrinthCdnBase` 等当前配置的端点。
+
 ## 特性
 
 - ✨ **快速开发**: 使用 JavaScript 编写 API，无需重新编译 C++

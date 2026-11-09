@@ -270,6 +270,9 @@ bool JSResourceAPI::loadMetadata()
     m_metadata.icon = getStringProp("icon");
     m_metadata.description = getStringProp("description");
     m_metadata.homepage = getStringProp("homepage");
+    m_metadata.kind = getStringProp("kind");
+    if (m_metadata.kind.isEmpty())
+        m_metadata.kind = QStringLiteral("resource");
     m_metadata.enabled = getBoolProp("enabled", true);
     m_metadata.priority = getIntProp("priority", 0);
 
@@ -415,6 +418,28 @@ QString JSResourceAPI::jsValueToString(JSValue val) const
     QString result = QString::fromUtf8(str);
     JS_FreeCString(m_context, str);
     return result;
+}
+
+std::optional<QString> JSResourceAPI::rewriteUrl(const QString& url, const QJsonObject& context) const
+{
+    if (m_metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0 || !m_context)
+        return std::nullopt;
+
+    QMutexLocker locker(&m_jsMutex);
+    JSValue jsUrl = JS_NewString(m_context, url.toUtf8().constData());
+    JSValue jsContext = jsonObjectToJSValue(context);
+    JSValue argv[] = { jsUrl, jsContext };
+    JSValue result = callJSFunction("rewriteUrl", 2, argv);
+
+    std::optional<QString> rewritten;
+    if (!JS_IsUndefined(result) && !JS_IsNull(result)) {
+        if (JS_IsString(result))
+            rewritten = jsValueToString(result);
+        JS_FreeValue(m_context, result);
+    }
+    JS_FreeValue(m_context, jsContext);
+    JS_FreeValue(m_context, jsUrl);
+    return rewritten;
 }
 
 JSValue JSResourceAPI::jsonObjectToJSValue(const QJsonObject& obj) const

@@ -332,6 +332,12 @@ interface ApiMetadata {
 
     /** API 类别；mirror API may implement rewriteUrl instead of a resource API. */
     kind?: "resource" | "mirror" | string;
+
+    /** Mirror rules marked as basic are used only when no advanced rule handles the URL. */
+    baseRule?: boolean;
+
+    /** Resource categories handled by a mirror rule. An empty list means all categories. */
+    categories?: string[];
 }
 
 // ============================================================================
@@ -426,7 +432,7 @@ interface ResourceAPI {
         authlibInjectorBase?: string;
         modrinthCdnBase?: string;
         [key: string]: any;
-    }): string | null;
+    }): string | null | string[] | { url: string; probeUrl?: string; priority?: number; category?: string }[];
 }
 
 // ============================================================================

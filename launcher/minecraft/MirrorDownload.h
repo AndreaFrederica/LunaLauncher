@@ -23,6 +23,7 @@
 #include <array>
 
 class SettingsObject;
+namespace Net { class NetRequest; }
 
 class MirrorDownload {
 public:
@@ -90,6 +91,15 @@ public:
     /// Return mirror candidates ordered by the configured priority and cached
     /// health measurements. The first item is the URL used for a download.
     static QList<QString> rewriteUrls(const QString& url, const ResolvedMirror& mirror);
+
+    /// Return the complete ordered download chain, including the original
+    /// upstream URL as the final fallback. An empty mirror match therefore
+    /// still produces the official URL.
+    static QList<QString> downloadUrls(const QString& url, const ResolvedMirror& mirror);
+
+    /// Install every remaining URL from downloadUrls() as fallbacks on a
+    /// request whose current URL is the first item in that list.
+    static void configureFallbacks(Net::NetRequest* request, const QString& officialUrl, const ResolvedMirror& mirror);
 
     /// Convenience overload that resolves the mirror from the given settings first.
     static QString rewriteUrl(const QString& url, SettingsObject* settings);

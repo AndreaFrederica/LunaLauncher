@@ -183,10 +183,11 @@ QJsonObject installDistribution(LauncherApi& api, const QJsonObject& p, UserInte
     if (!staging.isValid()) return OperationService::failure("Could not create a staging directory.");
     const auto staged = QDir(staging.path()).filePath(fileName);
     auto job = makeShared<NetJob>("Server distribution download", APPLICATION->network());
-    const auto downloadUrl = mirrorUrl(url.toString());
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    const auto downloadUrls = MirrorDownload::downloadUrls(url.toString(), mirror);
+    const auto downloadUrl = downloadUrls.constFirst();
     auto download = Net::ApiDownload::makeFile(QUrl(downloadUrl), staged);
-    if (downloadUrl != url.toString())
-        download->setFallbackUrl(url);
+    MirrorDownload::configureFallbacks(download.get(), url.toString(), mirror);
     job->addNetAction(download);
     if (!ApiSupport::wait(api, job, interaction, error)) return OperationService::failure(error);
     if (!QFileInfo(staged).isFile() || QFileInfo(staged).size() == 0) return OperationService::failure("The downloaded server file is empty.");
@@ -224,10 +225,11 @@ QJsonObject createDistribution(LauncherApi& api, const QJsonObject& p, UserInter
         return OperationService::failure("Could not create a temporary server download directory.");
     const auto staged = QDir(staging.path()).filePath(fileName);
     auto job = makeShared<NetJob>("Server distribution download", APPLICATION->network());
-    const auto downloadUrl = mirrorUrl(url.toString());
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    const auto downloadUrls = MirrorDownload::downloadUrls(url.toString(), mirror);
+    const auto downloadUrl = downloadUrls.constFirst();
     auto download = Net::ApiDownload::makeFile(QUrl(downloadUrl), staged);
-    if (downloadUrl != url.toString())
-        download->setFallbackUrl(url);
+    MirrorDownload::configureFallbacks(download.get(), url.toString(), mirror);
     job->addNetAction(download);
     QString error;
     if (!ApiSupport::wait(api, job, interaction, error))

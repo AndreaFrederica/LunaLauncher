@@ -44,6 +44,7 @@
 #include <QFile>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QCheckBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -53,6 +54,8 @@
 #include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QTabBar>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QValidator>
 #include <QVariant>
 #include <QVBoxLayout>
@@ -183,6 +186,7 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
                 docsReady = false;
         };
         copyPackagedFile(QStringLiteral("MIRROR_TUTORIAL.md"));
+        copyPackagedFile(QStringLiteral("mirror-example.json"));
         copyPackagedFile(QStringLiteral("mirror-example.js.txt"));
 
         if (!docsReady)
@@ -197,46 +201,98 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
         dialog.setWindowTitle(tr("Advanced JavaScript Mirror Management"));
         dialog.setMinimumSize(560, 420);
         auto* layout = new QVBoxLayout(&dialog);
-        auto* intro = new QLabel(tr("Enable multiple mirror scripts and arrange them from highest to lowest priority. "
-                                    "A script returning null lets the next enabled script handle the URL."),
+        auto* intro = new QLabel(tr("Combine multiple mirrors by resource category. A user rule that handles a category takes precedence over the matching basic mirror rule; failed downloads continue through the remaining candidates and then the official URL."),
                                  &dialog);
         intro->setWordWrap(true);
         layout->addWidget(intro);
 
-        auto* list = new QListWidget(&dialog);
+        const QStringList categories{ "launcher", "libraries", "assets", "java", "modrinth", "forge", "fabric", "quilt", "authlib" };
+        const QStringList categoryLabels{ tr("Launcher"), tr("Libraries"), tr("Assets"), tr("Java"), tr("Modrinth"),
+                                          tr("Forge"), tr("Fabric"), tr("Quilt"), tr("Authlib") };
+        auto* table = new QTableWidget(&dialog);
+        table->setColumnCount(3 + categories.size());
+        QStringList headers{ tr("Order"), tr("Mirror source") };
+        headers.append(categoryLabels);
+        headers.append(tr("Move"));
+        table->setHorizontalHeaderLabels(headers);
+        table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setSelectionMode(QAbstractItemView::SingleSelection);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->verticalHeader()->setVisible(false);
+        table->horizontalHeader()->setStretchLastSection(true);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
         const auto apis = JSAPIManager::instance().getOrderedAPIs(true);
+        int row = 0;
         for (const auto& api : apis) {
             const auto& metadata = api->getMetadata();
             if (metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
                 continue;
-            auto* item = new QListWidgetItem(QStringLiteral("%1  (%2, metadata priority %3)")
-                                                 .arg(metadata.displayName.isEmpty() ? metadata.id : metadata.displayName)
-                                                 .arg(metadata.id)
-                                                 .arg(metadata.priority),
-                                             list);
-            item->setData(Qt::UserRole, metadata.id);
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(JSAPIManager::instance().isApiEnabled(metadata.id) ? Qt::Checked : Qt::Unchecked);
+            table->insertRow(row);
+            table->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
+            table->item(row, 0)->setData(Qt::UserRole, metadata.id);
+            auto* source = new QCheckBox(QStringLiteral("%1  (%2, priority %3)")
+                                             .arg(metadata.displayName.isEmpty() ? metadata.id : metadata.displayName)
+                                             .arg(metadata.id)
+                                             .arg(metadata.priority),
+                                         table);
+            source->setChecked(JSAPIManager::instance().isApiEnabled(metadata.id));
+            table->setCellWidget(row, 1, source);
+            for (int column = 0; column < categories.size(); ++column) {
+                auto* check = new QCheckBox(table);
+                const auto category = categories.at(column);
+                const bool available = metadata.categories.isEmpty() || metadata.categories.contains(category);
+                check->setEnabled(available && source->isChecked());
+                check->setChecked(!JSAPIManager::instance().disabledCategories(metadata.id).contains(category));
+                QObject::connect(source, &QCheckBox::toggled, check, [check, available](bool enabled) {
+                    check->setEnabled(available && enabled);
+                });
+                table->setCellWidget(row, 2 + column, check);
+            }
+            auto* move = new QWidget(table);
+            auto* moveLayout = new QHBoxLayout(move);
+            moveLayout->setContentsMargins(2, 0, 2, 0);
+            auto* upButton = new QPushButton(tr("↑"), move);
+            auto* downButton = new QPushButton(tr("↓"), move);
+            moveLayout->addWidget(upButton);
+            moveLayout->addWidget(downButton);
+            table->setCellWidget(row, 2 + categories.size(), move);
+            QObject::connect(upButton, &QPushButton::clicked, table, [table, upButton] {
+                const auto current = table->indexAt(upButton->parentWidget()->pos()).row();
+                if (current <= 0) return;
+                for (int column = 0; column < table->columnCount(); ++column) {
+                    auto* item = table->takeItem(current, column);
+                    auto* other = table->takeItem(current - 1, column);
+                    table->setItem(current, column, other);
+                    table->setItem(current - 1, column, item);
+                    auto* widget = table->cellWidget(current, column);
+                    auto* otherWidget = table->cellWidget(current - 1, column);
+                    if (widget) table->removeCellWidget(current, column);
+                    if (otherWidget) table->removeCellWidget(current - 1, column);
+                    if (widget) table->setCellWidget(current - 1, column, widget);
+                    if (otherWidget) table->setCellWidget(current, column, otherWidget);
+                }
+                table->setCurrentCell(current - 1, 0);
+            });
+            QObject::connect(downButton, &QPushButton::clicked, table, [table, downButton] {
+                const auto current = table->indexAt(downButton->parentWidget()->pos()).row();
+                if (current < 0 || current + 1 >= table->rowCount()) return;
+                for (int column = 0; column < table->columnCount(); ++column) {
+                    auto* item = table->takeItem(current, column);
+                    auto* other = table->takeItem(current + 1, column);
+                    table->setItem(current, column, other);
+                    table->setItem(current + 1, column, item);
+                    auto* widget = table->cellWidget(current, column);
+                    auto* otherWidget = table->cellWidget(current + 1, column);
+                    if (widget) table->removeCellWidget(current, column);
+                    if (otherWidget) table->removeCellWidget(current + 1, column);
+                    if (widget) table->setCellWidget(current + 1, column, widget);
+                    if (otherWidget) table->setCellWidget(current, column, otherWidget);
+                }
+                table->setCurrentCell(current + 1, 0);
+            });
+            ++row;
         }
-        layout->addWidget(list, 1);
-
-        auto* moveLayout = new QHBoxLayout;
-        auto* up = new QPushButton(tr("Move Up"), &dialog);
-        auto* down = new QPushButton(tr("Move Down"), &dialog);
-        moveLayout->addWidget(up);
-        moveLayout->addWidget(down);
-        moveLayout->addStretch();
-        layout->addLayout(moveLayout);
-        connect(up, &QPushButton::clicked, list, [list] {
-            const auto row = list->currentRow();
-            if (row > 0)
-                list->insertItem(row - 1, list->takeItem(row)), list->setCurrentRow(row - 1);
-        });
-        connect(down, &QPushButton::clicked, list, [list] {
-            const auto row = list->currentRow();
-            if (row >= 0 && row + 1 < list->count())
-                list->insertItem(row + 1, list->takeItem(row)), list->setCurrentRow(row + 1);
-        });
+        layout->addWidget(table, 1);
 
         auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
         layout->addWidget(buttons);
@@ -247,14 +303,21 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
 
         QStringList order;
         QStringList disabled;
-        for (int i = 0; i < list->count(); ++i) {
-            auto* item = list->item(i);
-            const auto id = item->data(Qt::UserRole).toString();
+        QHash<QString, QStringList> categoryDisabled;
+        for (int i = 0; i < table->rowCount(); ++i) {
+            const auto id = table->item(i, 0)->data(Qt::UserRole).toString();
             order.append(id);
-            if (item->checkState() != Qt::Checked)
+            auto* source = qobject_cast<QCheckBox*>(table->cellWidget(i, 1));
+            if (!source || !source->isChecked())
                 disabled.append(id);
+            QStringList off;
+            for (int column = 0; column < categories.size(); ++column) {
+                auto* check = qobject_cast<QCheckBox*>(table->cellWidget(i, 2 + column));
+                if (check && !check->isChecked()) off.append(categories.at(column));
+            }
+            if (!off.isEmpty()) categoryDisabled.insert(id, off);
         }
-        JSAPIManager::instance().setConfiguration(order, disabled);
+        JSAPIManager::instance().setConfiguration(order, disabled, categoryDisabled);
     });
 }
 

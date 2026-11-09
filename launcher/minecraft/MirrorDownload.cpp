@@ -30,6 +30,7 @@
 #include <algorithm>
 
 #include "modplatform/jsapi/JSAPIManager.h"
+#include "net/NetRequest.h"
 #include "settings/SettingsObject.h"
 
 namespace {
@@ -306,6 +307,27 @@ QList<QString> MirrorDownload::rewriteUrls(const QString& url, const ResolvedMir
     for (const auto& item : ranked)
         result.append(item.candidate.url);
     return result;
+}
+
+QList<QString> MirrorDownload::downloadUrls(const QString& url, const ResolvedMirror& mirror)
+{
+    QList<QString> result = rewriteUrls(url, mirror);
+    if (!result.contains(url))
+        result.append(url);
+    if (result.isEmpty())
+        result.append(url);
+    return result;
+}
+
+void MirrorDownload::configureFallbacks(Net::NetRequest* request, const QString& officialUrl, const ResolvedMirror& mirror)
+{
+    if (!request)
+        return;
+    const auto urls = downloadUrls(officialUrl, mirror);
+    QList<QUrl> fallbacks;
+    for (const auto& value : urls)
+        fallbacks.append(QUrl(value));
+    request->setFallbackUrls(fallbacks);
 }
 
 QString MirrorDownload::rewriteUrl(const QString& url, SettingsObject* settings)

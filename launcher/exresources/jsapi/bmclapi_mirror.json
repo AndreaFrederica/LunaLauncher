@@ -1,5 +1,5 @@
 {
-  "metadata": { "id": "bmclapi-mirror", "kind": "mirror", "displayName": "BMCLAPI", "version": "2.0.0", "enabled": true, "priority": 100 },
+  "metadata": { "id": "bmclapi-mirror", "kind": "mirror", "displayName": "BMCLAPI", "version": "2.0.0", "enabled": true, "priority": 100, "baseRule": true, "categories": ["launcher", "libraries", "assets", "forge", "fabric", "quilt", "authlib", "modrinth"] },
   "rules": [
     { "match": { "mirrorTypeId": 1, "hosts": ["cdn.modrinth.com"] }, "rewrite": { "base": "{modrinthCdnBase}" } },
     { "match": { "mirrorTypeId": 1, "hosts": ["resources.download.minecraft.net"] }, "rewrite": { "base": "{assetsBase}" } },

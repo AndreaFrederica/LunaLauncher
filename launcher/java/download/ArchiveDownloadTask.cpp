@@ -40,10 +40,11 @@ void ArchiveDownloadTask::executeTask()
 
     auto download = makeShared<NetJob>(QString("JRE::DownloadJava"), APPLICATION->network());
     const QUrl officialUrl = m_url;
-    const QUrl downloadUrl(MirrorDownload::rewriteUrl(officialUrl.toString(), APPLICATION->settings()));
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    const auto urls = MirrorDownload::downloadUrls(officialUrl.toString(), mirror);
+    const QUrl downloadUrl(urls.constFirst());
     auto action = Net::Download::makeCached(downloadUrl, entry);
-    if (downloadUrl != officialUrl)
-        action->setFallbackUrl(officialUrl);
+    MirrorDownload::configureFallbacks(action.get(), officialUrl.toString(), mirror);
     if (!m_checksum_hash.isEmpty() && !m_checksum_type.isEmpty()) {
         auto hashType = QCryptographicHash::Algorithm::Sha1;
         if (m_checksum_type == "sha256") {

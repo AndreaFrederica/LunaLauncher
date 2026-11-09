@@ -11,7 +11,9 @@
 需要计算、查询或动态签名时仍可以使用 JS：将 `metadata.kind` 设为 `"mirror"`，并实现
 `rewriteUrl(url, context)`；返回字符串表示已处理，返回 `null` 表示交给下一个镜像脚本。
 JS 也可以返回字符串数组，或 `{url, probeUrl, priority}` 对象数组来声明多个候选地址。
-规则和脚本都按 `metadata.priority` 从高到低调用。`context` 包含 `mirrorType`、`mirrorTypeId`，以及
+镜像元数据可以额外声明 `baseRule: true` 和 `categories`。基础规则只在没有高级规则处理当前 URL
+时使用；高级规则可以合并多个源，并通过表格中的类别开关单独启用或禁用。规则和脚本都按
+`metadata.priority` 从高到低调用。`context` 包含 `mirrorType`、`mirrorTypeId`，以及
 `mojangBase`、`librariesBase`、`assetsBase`、`fabricMetaBase`、`quiltMetaBase`、
 `authlibInjectorBase` 和 `modrinthCdnBase` 等当前配置的端点。
 
@@ -43,7 +45,8 @@ HKMC 主线路兼容 BMCLAPI 目录规则；需要切换到其 EO 线路时，�
 
 启动器首次使用时按 `priority` 选择，并在后台对候选主机发起轻量 HEAD 探测；后续下载优先使用
 最近十分钟内测得延迟最低的候选。探测失败的候选会暂时排到最后。未声明 `probeUrl` 时使用
-候选 URL 的主机根路径。下载仍保留官方地址作为失败回退。
+候选 URL 的主机根路径。下载会按候选顺序尝试所有镜像；遇到 404、429、超时、DNS、TLS 或校验和错误时继续下一个候选，
+最后回退到官方地址。
 
 ## 特性
 

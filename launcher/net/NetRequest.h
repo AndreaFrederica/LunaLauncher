@@ -81,10 +81,12 @@ class NetRequest : public Task {
     /// are retried and then switched to this URL.
     void setFallbackUrl(const QUrl& url)
     {
-        m_fallbackUrl = url;
-        m_isMirrorRequest = true;
+        setFallbackUrls(QList<QUrl>{ url });
     }
-    QUrl fallbackUrl() const { return m_fallbackUrl; }
+    /// Set the ordered URLs to try after the current request fails. The list
+    /// may contain multiple mirrors and should end with the official URL.
+    void setFallbackUrls(const QList<QUrl>& urls);
+    QUrl fallbackUrl() const { return m_fallbackUrls.value(0); }
     virtual int replyStatusCode() const;
     virtual QNetworkReply::NetworkError error() const;
     virtual QString errorString() const;
@@ -100,6 +102,9 @@ class NetRequest : public Task {
     void downloadFinished();
     void downloadReadyRead();
     void executeTask() override;
+
+    /// Switch to the next mirror/official URL and restart this request.
+    bool tryNextFallback();
 
    protected:
     std::unique_ptr<Sink> m_sink;
@@ -124,7 +129,8 @@ class NetRequest : public Task {
     /// Mirror retry state
     int m_retry_count = 0;
     bool m_isMirrorRequest = false;
-    QUrl m_fallbackUrl;  // official URL to use when the mirror keeps failing
+    QList<QUrl> m_fallbackUrls;  // ordered mirror/official URLs after m_url
+    int m_fallbackIndex = 0;
     static const int MAX_RETRIES = 3;
 };
 }  // namespace Net

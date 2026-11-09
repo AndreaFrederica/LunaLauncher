@@ -44,6 +44,10 @@ struct ApiMetadata {
     QString kind = QStringLiteral("resource"); // resource or mirror
     bool enabled = true;             // 是否启用
     int priority = 0;                // 优先级
+    // Packaged compatibility rules provide the basic mirror presets. User
+    // rules can opt into a resource and suppress these defaults for that URL.
+    bool baseRule = false;
+    QStringList categories;
 };
 
 /** A URL produced by a mirror rule, optionally carrying a health probe URL. */
@@ -51,6 +55,7 @@ struct MirrorUrlCandidate {
     QString url;
     QString probeUrl;
     int priority = 0;
+    QString category;
 };
 
 /**

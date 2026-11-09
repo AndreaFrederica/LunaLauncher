@@ -1,5 +1,5 @@
 {
-  "metadata": { "id": "hkmc-mirror", "kind": "mirror", "displayName": "HKMC Mirror (Main)", "version": "2.0.0", "homepage": "https://bsmirror.hkmc.online", "enabled": true, "priority": 105 },
+  "metadata": { "id": "hkmc-mirror", "kind": "mirror", "displayName": "HKMC Mirror (Main)", "version": "2.0.0", "homepage": "https://bsmirror.hkmc.online", "enabled": true, "priority": 105, "baseRule": true, "categories": ["launcher", "libraries", "assets", "forge", "fabric", "quilt", "authlib", "modrinth"] },
   "rules": [
     { "match": { "mirrorTypeId": 4, "hosts": ["cdn.modrinth.com"] }, "rewrite": { "base": "{modrinthCdnBase}" } },
     { "match": { "mirrorTypeId": 4, "hosts": ["resources.download.minecraft.net"] }, "rewrite": { "base": "{assetsBase}" } },

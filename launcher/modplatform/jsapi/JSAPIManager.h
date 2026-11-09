@@ -58,9 +58,11 @@ public:
     /** User-configured order and disabled IDs, used by settings UIs. */
     QStringList configuredOrder() const { return m_orderedIds; }
     QStringList disabledIds() const { return m_disabledIds; }
+    QStringList disabledCategories(const QString& id) const { return m_disabledCategories.value(id); }
 
     /** Persist and apply user overrides without requiring a restart. */
-    void setConfiguration(const QStringList& order, const QStringList& disabled);
+    void setConfiguration(const QStringList& order, const QStringList& disabled,
+                          const QHash<QString, QStringList>& disabledCategories = {});
 
     /**
      * 根据资源类型获取可用的 API
@@ -109,6 +111,7 @@ private:
     QStringList m_loadedFiles;
     QStringList m_orderedIds;
     QStringList m_disabledIds;
+    QHash<QString, QStringList> m_disabledCategories;
 
     void loadConfiguration();
 };

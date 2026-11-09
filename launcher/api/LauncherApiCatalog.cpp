@@ -19,6 +19,7 @@
 #include "Application.h"
 #include "DesktopServices.h"
 #include "InstanceList.h"
+#include "LauncherResources.h"
 #include "ResourceDownloadTask.h"
 #include "api/LauncherApiSupport.h"
 #include "api/ResourceModelSupport.h"
@@ -917,27 +918,47 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
                 result.append(QJsonObject{ { "id", metadata.id },
                     { "name", metadata.displayName.isEmpty() ? metadata.id : metadata.displayName },
                     { "version", metadata.version }, { "enabled", JSAPIManager::instance().isApiEnabled(metadata.id) },
-                    { "scriptEnabled", metadata.enabled }, { "priority", metadata.priority },
+                    { "scriptEnabled", metadata.enabled }, { "priority", metadata.priority }, { "baseRule", metadata.baseRule },
+                    { "categories", QJsonArray::fromStringList(metadata.categories) },
+                    { "disabledCategories", QJsonArray::fromStringList(JSAPIManager::instance().disabledCategories(metadata.id)) },
                     { "order", JSAPIManager::instance().configuredOrder().indexOf(metadata.id) } });
             }
             return OperationService::success(result);
         });
-    api.registerOperation({ "resource.mirrors.configure", "Enable, disable and order JavaScript mirror rules.",
-        schema({ { "order", strings() }, { "disabled", strings() } }, { "order", "disabled" }), "catalog", true },
+    api.registerOperation({ "resource.mirrors.configure", "Enable, disable, order and select resource categories for JavaScript mirror rules.",
+        schema({ { "order", strings() }, { "disabled", strings() },
+                 { "categoryDisabled", QJsonObject{ { "type", "object" }, { "additionalProperties", strings() } } } },
+               { "order", "disabled" }), "catalog", true },
         [](const QJsonObject& p, UserInteraction&) {
             QStringList order;
             for (const auto& value : p.value("order").toArray()) order.append(value.toString());
             QStringList disabled;
             for (const auto& value : p.value("disabled").toArray()) disabled.append(value.toString());
-            JSAPIManager::instance().setConfiguration(order, disabled);
+            QHash<QString, QStringList> categoryDisabled;
+            const auto object = p.value("categoryDisabled").toObject();
+            for (auto it = object.begin(); it != object.end(); ++it) {
+                QStringList categories;
+                for (const auto& value : it.value().toArray()) categories.append(value.toString());
+                categoryDisabled.insert(it.key(), categories);
+            }
+            JSAPIManager::instance().setConfiguration(order, disabled, categoryDisabled);
             return OperationService::success();
         });
     api.registerOperation({ "resource.providers.open-directory", "Create and open the user JavaScript resource provider directory.", schema({}), "catalog", true },
         [](const QJsonObject&, UserInteraction&) {
             const auto path = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("jsapi"));
             if (!QDir().mkpath(path)) return OperationService::failure("Could not create the JavaScript provider directory.");
+            QJsonArray copied;
+            for (const auto& fileName : { QStringLiteral("MIRROR_TUTORIAL.md"), QStringLiteral("mirror-example.json"),
+                                          QStringLiteral("mirror-example.js.txt"), QStringLiteral("README.md"),
+                                          QStringLiteral("resource-api.d.ts") }) {
+                const auto destination = QDir(path).filePath(fileName);
+                if (QFileInfo::exists(destination)) continue;
+                const auto source = LauncherResources::locateFile(QStringLiteral("jsapi/") + fileName);
+                if (!source.isEmpty() && QFile::copy(source, destination)) copied.append(fileName);
+            }
             if (!DesktopServices::openPath(path)) return OperationService::failure("The desktop handler could not open the JavaScript provider directory.");
-            return OperationService::success(QJsonObject{ { "path", QDir(path).absolutePath() }, { "opened", true } });
+            return OperationService::success(QJsonObject{ { "path", QDir(path).absolutePath() }, { "opened", true }, { "copied", copied } });
         });
     const QJsonObject common{ { "provider", string("Provider ID from resource.providers, including js:<id>.") }, { "kind", string("Resource kind from resource.providers.") },
         { "minecraftVersion", string("Optional Minecraft version filter.") }, { "loaders", strings() }, { "pluginLoaders", strings() } };

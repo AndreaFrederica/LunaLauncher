@@ -138,9 +138,16 @@ void JSAPIManager::loadConfiguration()
 {
     m_orderedIds.clear();
     m_disabledIds.clear();
+    m_disabledCategories.clear();
     if (auto* application = qobject_cast<Application*>(QCoreApplication::instance()); application && application->settings()) {
         m_orderedIds = application->settings()->get("JSAPIOrder").toStringList();
         m_disabledIds = application->settings()->get("JSAPIDisabled").toStringList();
+        const auto encoded = application->settings()->get("JSAPIMirrorCategoryDisabled").toStringList();
+        for (const auto& value : encoded) {
+            const auto parts = value.split('|');
+            if (parts.size() == 2 && !parts[0].isEmpty() && !parts[1].isEmpty())
+                m_disabledCategories[parts[0]].append(parts[1]);
+        }
     }
 }
 
@@ -175,7 +182,8 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getOrderedAPIs(bool includeD
     return result;
 }
 
-void JSAPIManager::setConfiguration(const QStringList& order, const QStringList& disabled)
+void JSAPIManager::setConfiguration(const QStringList& order, const QStringList& disabled,
+                                    const QHash<QString, QStringList>& disabledCategories)
 {
     m_orderedIds.clear();
     for (const auto& id : order) {
@@ -187,9 +195,21 @@ void JSAPIManager::setConfiguration(const QStringList& order, const QStringList&
         if (!id.isEmpty() && !m_disabledIds.contains(id))
             m_disabledIds.append(id);
     }
+    m_disabledCategories.clear();
+    for (auto it = disabledCategories.cbegin(); it != disabledCategories.cend(); ++it) {
+        auto categories = it.value();
+        categories.removeDuplicates();
+        if (!it.key().isEmpty() && !categories.isEmpty())
+            m_disabledCategories.insert(it.key(), categories);
+    }
     if (auto* application = qobject_cast<Application*>(QCoreApplication::instance()); application && application->settings()) {
         application->settings()->set("JSAPIOrder", m_orderedIds);
         application->settings()->set("JSAPIDisabled", m_disabledIds);
+        QStringList encoded;
+        for (auto it = m_disabledCategories.cbegin(); it != m_disabledCategories.cend(); ++it)
+            for (const auto& category : it.value())
+                encoded.append(it.key() + QStringLiteral("|") + category);
+        application->settings()->set("JSAPIMirrorCategoryDisabled", encoded);
     }
 }
 
@@ -241,7 +261,8 @@ QString JSAPIManager::rewriteUrl(const QString& url, const QJsonObject& context)
 
 QList<MirrorUrlCandidate> JSAPIManager::rewriteUrls(const QString& url, const QJsonObject& context) const
 {
-    QList<MirrorUrlCandidate> result;
+    QList<MirrorUrlCandidate> advanced;
+    QList<MirrorUrlCandidate> base;
     QSet<QString> seen;
     for (const auto& api : getOrderedAPIs()) {
         const auto& metadata = api->getMetadata();
@@ -250,11 +271,16 @@ QList<MirrorUrlCandidate> JSAPIManager::rewriteUrls(const QString& url, const QJ
         for (const auto& candidate : api->rewriteUrls(url, context)) {
             if (candidate.url.isEmpty() || seen.contains(candidate.url))
                 continue;
+            if (!candidate.category.isEmpty() && m_disabledCategories.value(metadata.id).contains(candidate.category))
+                continue;
             seen.insert(candidate.url);
-            result.append(candidate);
+            (metadata.baseRule ? base : advanced).append(candidate);
         }
     }
-    return result;
+    // A user rule that claims this particular URL takes over from the
+    // corresponding packaged/basic rule. This still allows different user
+    // mirrors to contribute candidates for the same resource.
+    return advanced.isEmpty() ? base : advanced;
 }
 
 void JSAPIManager::reloadAll()

@@ -140,16 +140,15 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
         if (s)
             mirror = MirrorDownload::resolve(s);
     }
-    auto rewrite_url = [mirror](const QString& url) -> QString { return MirrorDownload::rewriteUrl(url, mirror); };
-
     // Lambda function to add a download request
-    auto add_download = [this, local, check_local_file, cache, stale, &out, &rewrite_url](QString storage, QString url, QString sha1) {
+    auto add_download = [this, local, check_local_file, cache, stale, &out, mirror](QString storage, QString url, QString sha1) {
         if (local) {
             return check_local_file(storage);
         }
         // Rewrite URL for mirror support, keeping the official URL for 429 fallback.
         const QString officialUrl = url;
-        url = rewrite_url(url);
+        const auto urls = MirrorDownload::downloadUrls(url, mirror);
+        url = urls.constFirst();
 
         auto entry = cache->resolveEntry("libraries", storage);
         if (stale) {
@@ -168,14 +167,12 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
         if (sha1.size()) {
             auto dl = Net::ApiDownload::makeCached(url, entry, options);
             dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, sha1));
-            if (officialUrl != url)
-                dl->setFallbackUrl(QUrl(officialUrl));
+            MirrorDownload::configureFallbacks(dl.get(), officialUrl, mirror);
             qDebug() << "Checksummed Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
             out.append(dl);
         } else {
             auto dl = Net::ApiDownload::makeCached(url, entry, options);
-            if (officialUrl != url)
-                dl->setFallbackUrl(QUrl(officialUrl));
+            MirrorDownload::configureFallbacks(dl.get(), officialUrl, mirror);
             out.append(dl);
             qDebug() << "Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
         }

@@ -31,6 +31,46 @@
 // JavaScript binding helpers
 // ============================================================================
 
+static QString mirrorCategoryForHost(const QString& host)
+{
+    const auto value = host.toLower();
+    if (value == "resources.download.minecraft.net") return QStringLiteral("assets");
+    if (value == "cdn.modrinth.com") return QStringLiteral("modrinth");
+    if (value == "meta.fabricmc.net") return QStringLiteral("fabric");
+    if (value == "meta.quiltmc.org") return QStringLiteral("quilt");
+    if (value == "authlib-injector.yushi.moe") return QStringLiteral("authlib");
+    if (value.contains("adoptium") || value.contains("api.azul.com") || value.contains("download.oracle.com"))
+        return QStringLiteral("java");
+    if (value == "launcher.mojang.com" || value == "launchermeta.mojang.com" || value == "piston-data.mojang.com" ||
+        value == "piston-meta.mojang.com" || value == "s3.amazonaws.com")
+        return QStringLiteral("launcher");
+    if (value == "files.minecraftforge.net" || value == "maven.minecraftforge.net" || value == "maven.neoforged.net")
+        return QStringLiteral("forge");
+    if (value == "maven.fabricmc.net" || value == "meta.fabricmc.net") return QStringLiteral("fabric");
+    if (value == "maven.quiltmc.org") return QStringLiteral("quilt");
+    if (value == "libraries.minecraft.net" || value.startsWith("maven.") ||
+        value == "repo.mumfrey.com" || value == "dl.liteloader.com")
+        return QStringLiteral("libraries");
+    return {};
+}
+
+static QString mirrorCategoryForMatch(const QJsonObject& match, const QString& actualHost = {})
+{
+    const auto pathRegex = match.value(QStringLiteral("pathRegex")).toString().toLower();
+    if (pathRegex.contains("adoptium") || pathRegex.contains("temurin"))
+        return QStringLiteral("java");
+    if (!actualHost.isEmpty()) {
+        const auto category = mirrorCategoryForHost(actualHost);
+        if (!category.isEmpty()) return category;
+    }
+    for (const auto& value : match.value(QStringLiteral("hosts")).toArray()) {
+        const auto category = mirrorCategoryForHost(value.toString());
+        if (!category.isEmpty())
+            return category;
+    }
+    return {};
+}
+
 // HTTP GET request
 static JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
 {
@@ -308,6 +348,23 @@ bool JSResourceAPI::loadMetadata()
         m_metadata.kind = QStringLiteral("resource");
     m_metadata.enabled = getBoolProp("enabled", true);
     m_metadata.priority = getIntProp("priority", 0);
+    m_metadata.baseRule = getBoolProp("baseRule", false);
+    m_metadata.categories.clear();
+    JSValue categoriesArray = JS_GetPropertyStr(m_context, metadataObj, "categories");
+    if (JS_IsArray(categoriesArray)) {
+        JSValue lengthVal = JS_GetPropertyStr(m_context, categoriesArray, "length");
+        uint32_t length;
+        if (JS_ToUint32(m_context, &length, lengthVal) == 0) {
+            for (uint32_t i = 0; i < length; i++) {
+                JSValue item = JS_GetPropertyUint32(m_context, categoriesArray, i);
+                if (JS_IsString(item))
+                    m_metadata.categories.append(jsValueToString(item));
+                JS_FreeValue(m_context, item);
+            }
+        }
+        JS_FreeValue(m_context, lengthVal);
+    }
+    JS_FreeValue(m_context, categoriesArray);
 
     // Read the supportedTypes array.
     JSValue typesArray = JS_GetPropertyStr(m_context, metadataObj, "supportedTypes");
@@ -356,6 +413,9 @@ bool JSResourceAPI::loadMetadata(const QJsonObject& metadata)
     m_metadata.kind = metadata.value(QStringLiteral("kind")).toString(QStringLiteral("resource"));
     m_metadata.enabled = metadata.value(QStringLiteral("enabled")).toBool(true);
     m_metadata.priority = metadata.value(QStringLiteral("priority")).toInt(0);
+    m_metadata.baseRule = metadata.value(QStringLiteral("baseRule")).toBool(false);
+    for (const auto& value : metadata.value(QStringLiteral("categories")).toArray())
+        m_metadata.categories.append(value.toString());
     for (const auto& value : metadata.value(QStringLiteral("supportedTypes")).toArray())
         m_metadata.supportedTypes.append(value.toInt());
 
@@ -518,7 +578,8 @@ QList<MirrorUrlCandidate> JSResourceAPI::rewriteUrls(const QString& url, const Q
                     const auto candidateUrl = object.value(QStringLiteral("url")).toString();
                     if (!candidateUrl.isEmpty())
                         candidates.append({ candidateUrl, object.value(QStringLiteral("probeUrl")).toString(),
-                                            object.value(QStringLiteral("priority")).toInt(0) });
+                                            object.value(QStringLiteral("priority")).toInt(0),
+                                            object.value(QStringLiteral("category")).toString() });
                 }
             }
         }
@@ -577,6 +638,7 @@ QList<MirrorUrlCandidate> JSResourceAPI::rewriteRuleUrls(const QString& url, con
         }
 
         const auto rewrite = rule.value(QStringLiteral("rewrite")).toObject();
+        const auto category = rule.value(QStringLiteral("category")).toString(mirrorCategoryForMatch(matchObject, input.host()));
         auto applyRewrite = [&](const QJsonObject& candidate) -> QString {
             QString result;
             if (candidate.contains(QStringLiteral("template")) && regexMatch.hasMatch()) {
@@ -607,13 +669,14 @@ QList<MirrorUrlCandidate> JSResourceAPI::rewriteRuleUrls(const QString& url, con
                 const auto result = applyRewrite(candidate);
                 if (!result.isEmpty())
                     candidates.append({ result, expandContext(candidate.value(QStringLiteral("probeUrl")).toString()),
-                                        candidate.value(QStringLiteral("priority")).toInt(0) });
+                                        candidate.value(QStringLiteral("priority")).toInt(0),
+                                        candidate.value(QStringLiteral("category")).toString(category) });
             }
         } else {
             const auto result = applyRewrite(rewrite);
             if (!result.isEmpty())
                 candidates.append({ result, expandContext(rewrite.value(QStringLiteral("probeUrl")).toString()),
-                                    rewrite.value(QStringLiteral("priority")).toInt(0) });
+                                    rewrite.value(QStringLiteral("priority")).toInt(0), category });
         }
         if (!candidates.isEmpty())
             return candidates;

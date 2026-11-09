@@ -6,7 +6,9 @@
     "version": "1.0.0",
     "description": "Declarative mirror rule example",
     "enabled": false,
-    "priority": 50
+    "priority": 50,
+    "baseRule": false,
+    "categories": ["assets"]
   },
   "rules": [
     {
@@ -18,12 +20,14 @@
           {
             "base": "https://mirror-a.example/assets",
             "probeUrl": "https://mirror-a.example/",
-            "priority": 10
+            "priority": 10,
+            "category": "assets"
           },
           {
             "base": "https://mirror-b.example/assets",
             "probeUrl": "https://mirror-b.example/",
-            "priority": 5
+            "priority": 5,
+            "category": "assets"
           }
         ]
       }

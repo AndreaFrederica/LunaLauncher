@@ -692,9 +692,11 @@ void FlameCreationTask::setupDownloadJob(QEventLoop& loop)
 
         // Modrinth fallback URLs point at cdn.modrinth.com; honour the optional
         // CDN override so users behind a blocked/slow CDN can reroute them.
-        const QString url = MirrorDownload::rewriteUrl(result.version.downloadUrl, mirror);
+        const auto urls = MirrorDownload::downloadUrls(result.version.downloadUrl, mirror);
+        const QString url = urls.constFirst();
         qDebug() << "Will download" << url << "to" << path;
         auto dl = Net::ApiDownload::makeFile(QUrl(url), path);
+        MirrorDownload::configureFallbacks(dl.get(), result.version.downloadUrl, mirror);
         if (!result.version.hash.isEmpty())
             dl->setExpectedIntegrity(result.version.hash_type, result.version.hash, result.version.fileSize);
         m_filesJob->addNetAction(dl);
@@ -806,6 +808,7 @@ void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop
 {
     auto failedUrls = m_filesJob->getFailedFiles();
     m_filesJob.reset();
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
 
     if (m_blockedFallbackUsed) {
         setError(reason);
@@ -821,8 +824,11 @@ void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop
         if (result.version.downloadUrl.isEmpty())
             continue;
 
-        const auto rewritten = MirrorDownload::rewriteUrl(result.version.downloadUrl, APPLICATION->settings());
-        if (!failedUrls.contains(result.version.downloadUrl) && !failedUrls.contains(rewritten))
+        const auto mirrorUrls = MirrorDownload::downloadUrls(result.version.downloadUrl, mirror);
+        bool failed = false;
+        for (const auto& mirrorUrl : mirrorUrls)
+            failed = failed || failedUrls.contains(mirrorUrl);
+        if (!failed)
             continue;
 
         auto fileName = FS::RemoveInvalidPathChars(result.version.fileName);

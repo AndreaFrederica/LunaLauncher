@@ -42,7 +42,9 @@ void AssetUpdateTask::executeTask()
     // Rewrite the asset index URL through the shared mirror implementation so
     // both the BMCLAPI preset and custom mirrors use the same host mapping.
     const QUrl officialIndexUrl = indexUrl;
-    indexUrl = QUrl(MirrorDownload::rewriteUrl(indexUrl.toString(), APPLICATION->settings()));
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    const auto indexUrls = MirrorDownload::downloadUrls(indexUrl.toString(), mirror);
+    indexUrl = QUrl(indexUrls.constFirst());
 
     QString localPath = assets->id + ".json";
     auto job = makeShared<NetJob>(tr("Asset index for %1").arg(m_inst->name()), APPLICATION->network());
@@ -78,8 +80,7 @@ void AssetUpdateTask::executeTask()
     qDebug() << "Asset index SHA1:" << hexSha1;
     auto dl = Net::ApiDownload::makeCached(indexUrl, entry);
     dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, assets->sha1));
-    if (officialIndexUrl != indexUrl)
-        dl->setFallbackUrl(officialIndexUrl);
+    MirrorDownload::configureFallbacks(dl.get(), officialIndexUrl.toString(), mirror);
     job->addNetAction(dl);
 
     downloadJob.reset(job);

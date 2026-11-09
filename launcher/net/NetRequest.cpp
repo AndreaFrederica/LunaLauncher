@@ -58,6 +58,38 @@
 
 namespace Net {
 
+void NetRequest::setFallbackUrls(const QList<QUrl>& urls)
+{
+    m_fallbackUrls.clear();
+    m_fallbackIndex = 0;
+    for (const auto& url : urls) {
+        if (!url.isValid() || url.isEmpty() || url == m_url || m_fallbackUrls.contains(url))
+            continue;
+        m_fallbackUrls.append(url);
+    }
+    m_isMirrorRequest = !m_fallbackUrls.isEmpty();
+}
+
+bool NetRequest::tryNextFallback()
+{
+    while (m_fallbackIndex < m_fallbackUrls.size()) {
+        const auto next = m_fallbackUrls.at(m_fallbackIndex++);
+        if (!next.isValid() || next == m_url)
+            continue;
+
+        qCWarning(logCat) << getUid().toString() << "Mirror request failed; trying fallback URL:" << next;
+        if (m_sink)
+            m_sink->abort();
+        m_reply.reset();
+        m_url = next;
+        m_state = State::Inactive;
+        m_retry_count = 0;
+        QTimer::singleShot(0, this, [this]() { executeTask(); });
+        return true;
+    }
+    return false;
+}
+
 void NetRequest::addValidator(Validator* v)
 {
     m_sink->addValidator(v);
@@ -272,20 +304,18 @@ void NetRequest::downloadFinished()
             return;
         }
 
-        if (m_fallbackUrl.isValid() && m_url != m_fallbackUrl) {
-            qCWarning(logCat) << getUid().toString() << "Mirror 429 error after" << MAX_RETRIES << "retries, switching to official source";
-
-            m_url = m_fallbackUrl;
-            m_state = State::Inactive;
-            m_reply.reset();
-            m_retry_count = 0;  // Reset retry count for the official URL
-
-            qCWarning(logCat) << getUid().toString() << "Retrying with official source:" << m_url.toString();
-
-            QTimer::singleShot(0, this, [this]() { executeTask(); });
+        if (tryNextFallback()) {
+            qCWarning(logCat) << getUid().toString() << "Mirror 429 error after" << MAX_RETRIES
+                              << "retries, switching to the next configured source";
             return;
         }
     }
+
+    // A mirror can fail with 404, timeout, DNS, TLS, checksum, or another
+    // response besides 429. Exhaust the current candidate and continue with
+    // the next configured mirror before reporting the request as failed.
+    if (m_state == State::Failed && m_isMirrorRequest && tryNextFallback())
+        return;
 
     // if the download failed before this point ...
     if (m_state == State::Succeeded)  // pretend to succeed so we continue processing :)

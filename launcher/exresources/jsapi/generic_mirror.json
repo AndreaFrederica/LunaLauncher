@@ -1,5 +1,5 @@
 {
-  "metadata": { "id": "generic-mirror", "kind": "mirror", "displayName": "Custom mirror mapping", "version": "2.0.0", "enabled": true, "priority": 10 },
+  "metadata": { "id": "generic-mirror", "kind": "mirror", "displayName": "Custom mirror mapping", "version": "2.0.0", "enabled": true, "priority": 10, "baseRule": true, "categories": ["launcher", "libraries", "assets", "forge", "fabric", "quilt", "authlib", "modrinth"] },
   "rules": [
     { "match": { "hosts": ["cdn.modrinth.com"] }, "rewrite": { "base": "{modrinthCdnBase}" } },
     { "match": { "mirrorTypeId": 2, "hosts": ["resources.download.minecraft.net"] }, "rewrite": { "base": "{assetsBase}" } },

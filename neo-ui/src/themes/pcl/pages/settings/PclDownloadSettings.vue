@@ -154,6 +154,52 @@
               <PclCheckbox :model-value="bool('McModSearchEnabled')" :label="t('resource.mcmodSearchEnabled')" @update:model-value="save('McModSearchEnabled', $event)" />
               <PclHint theme="blue">{{ t('resource.mcmodSearchHint') }}</PclHint>
             </PclCard>
+
+            <PclCard title="高级 JavaScript 镜像规则">
+              <p class="pcl-muted">可以合并多个镜像。每个资源类别单独选择代理；高级规则接管某类资源后，会自动停用该资源的基础镜像规则。</p>
+              <div class="pcl-actions pcl-mirror-script-actions">
+                <PclButton icon="folder-open" :disabled="busy || mirrorScriptsBusy" @click="openMirrorDirectory">打开镜像配置目录</PclButton>
+                <PclButton icon="refresh-cw" :disabled="busy || mirrorScriptsBusy" @click="loadMirrorScripts">刷新列表</PclButton>
+                <PclButton icon="save" :disabled="busy || mirrorScriptsBusy" @click="saveMirrorScripts">保存规则配置</PclButton>
+              </div>
+              <PclHint v-if="mirrorScriptsError" theme="red">{{ mirrorScriptsError }}</PclHint>
+              <div v-if="mirrorScripts.length" class="pcl-mirror-table-wrap">
+                <table class="pcl-mirror-table">
+                  <thead>
+                    <tr>
+                      <th>顺序</th>
+                      <th>镜像源</th>
+                      <th v-for="category in mirrorCategories" :key="category.id">{{ category.label }}</th>
+                      <th>调整</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(script, index) in mirrorScripts" :key="script.id" :class="{ 'is-disabled': script.enabled === false }">
+                      <td class="pcl-mirror-order-number">{{ index + 1 }}</td>
+                      <td class="pcl-mirror-source">
+                        <PclCheckbox :model-value="script.enabled !== false" :label="script.name || script.id" :disabled="mirrorScriptsBusy" @update:model-value="script.enabled = $event" />
+                        <small>{{ script.id }} · priority {{ script.priority }}</small>
+                      </td>
+                      <td v-for="category in mirrorCategories" :key="category.id" class="pcl-mirror-category">
+                        <input
+                          type="checkbox"
+                          :checked="categoryEnabled(script, category.id)"
+                          :disabled="mirrorScriptsBusy || script.enabled === false || !categoryAvailable(script, category.id)"
+                          :title="categoryAvailable(script, category.id) ? `启用 ${category.label} 代理` : '此源未声明该类别'"
+                          @change="onCategoryChange(script, category.id, $event)"
+                        />
+                      </td>
+                      <td class="pcl-mirror-script-order">
+                        <PclIconButton icon="arrow-up" label="上移" :disabled="index === 0 || mirrorScriptsBusy" @click="moveMirrorScript(index, -1)" />
+                        <PclIconButton icon="arrow-down" label="下移" :disabled="index === mirrorScripts.length - 1 || mirrorScriptsBusy" @click="moveMirrorScript(index, 1)" />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="pcl-muted">没有已加载的镜像规则。请先打开配置目录放入 .json 或 .js 文件，再刷新列表。</p>
+            </PclCard>
+
             <PclCard :title="t('pcl.auto2.k1ed8c078d6')">
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">{{ t('pcl.auto2.ka832ab6015') }}</span>
@@ -222,12 +268,13 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue';
+import { inject, onMounted, ref } from 'vue';
 import { PclSetupContextKey } from './PclSetupContext';
 import PclCard from '../../components/PclCard.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
+import PclButton from '../../components/PclButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclNumberInput from '../../components/PclNumberInput.vue';
 import PclSecretInput from '../../components/PclSecretInput.vue';
@@ -237,5 +284,82 @@ import PclSlider from '../../components/PclSlider.vue';
 const context = inject(PclSetupContextKey);
 if (!context) throw new Error('PclSetupContext is missing');
 const { t, props, settings, scope, busy, execute, drafts, languages, languageId, useSystemLocale, languagesLoading, runtimeInfo, updateState, updateCheck, updateChecked, updateChecking, proxy, proxyTestUrl, proxyTestResult, cacheState, cacheRoutes, cacheBusy, cacheError, onlineBackends, onlineBusy, isInstance, windowMode, mirrorType, windowOptions, mirrorOptions, downloadBackendOptions, modApiMirrorOptions, proxyTypeOptions, consoleColorOptions, consoleFontOptions, assetVerificationOptions, assetVerificationDescriptions, languageOptions, pathSettings, toolPathSettings, ariaProxyDisabled, formatBytes, applicationVersion, credits, contributors, projectUrl, licenseUrl, docsUrl, bmclApiUrl, mcimUrl, maxMem, memoryMode, memoryTotalGiB, memoryUsedGiB, memoryUsedPercent, memoryAllocAfterPercent, sectionOverrideGroups, error, notice, val, num, bool, draftNumber, draftValue, formatMib, formatSpeed, setWindowMode, save, saveMirrorType, savePasteUrl, chooseGlobalDataPacks, chooseDirectory, chooseFilePath, secretConfigured, onMemoryMode, refreshSection, verifyAndTrust, loadOnlineBackends, loadCache, purgeYggdrasilCache, clearMetadataCache, loadLanguages, selectLanguage, setSystemLocale, loadRuntime, loadUpdate, configureUpdate, checkUpdate, applyUpdate, loadProxy, saveProxy, testProxy, openUrl, openPath, openLogs, openUpdateLog, section } = context;
+
+const mirrorScripts = ref<any[]>([]);
+const mirrorScriptsBusy = ref(false);
+const mirrorScriptsError = ref('');
+const mirrorCategories = [
+  { id: 'launcher', label: '启动器' },
+  { id: 'libraries', label: '库文件' },
+  { id: 'assets', label: '资源' },
+  { id: 'java', label: 'Java' },
+  { id: 'modrinth', label: 'Modrinth' },
+  { id: 'forge', label: 'Forge' },
+  { id: 'fabric', label: 'Fabric' },
+  { id: 'quilt', label: 'Quilt' },
+  { id: 'authlib', label: '认证库' },
+];
+function categoryAvailable(script: any, category: string) {
+  return !Array.isArray(script.categories) || script.categories.length === 0 || script.categories.includes(category);
+}
+function categoryEnabled(script: any, category: string) {
+  return !Array.isArray(script.disabledCategories) || !script.disabledCategories.includes(category);
+}
+function toggleCategory(script: any, category: string, enabled: boolean) {
+  const disabled = Array.isArray(script.disabledCategories) ? script.disabledCategories : [];
+  script.disabledCategories = enabled ? disabled.filter((item: string) => item !== category) : [...new Set([...disabled, category])];
+}
+function onCategoryChange(script: any, category: string, event: Event) {
+  toggleCategory(script, category, (event.target as HTMLInputElement).checked);
+}
+async function loadMirrorScripts() {
+  mirrorScriptsBusy.value = true;
+  mirrorScriptsError.value = '';
+  try { mirrorScripts.value = await execute('resource.mirrors', {}); }
+  catch (e) { mirrorScriptsError.value = e instanceof Error ? e.message : String(e); }
+  finally { mirrorScriptsBusy.value = false; }
+}
+async function openMirrorDirectory() {
+  mirrorScriptsError.value = '';
+  try { await execute('resource.providers.open-directory', {}); }
+  catch (e) { mirrorScriptsError.value = e instanceof Error ? e.message : String(e); }
+}
+async function saveMirrorScripts() {
+  mirrorScriptsBusy.value = true;
+  mirrorScriptsError.value = '';
+  try {
+    await execute('resource.mirrors.configure', {
+      order: mirrorScripts.value.map(item => item.id),
+      disabled: mirrorScripts.value.filter(item => item.enabled === false).map(item => item.id),
+      categoryDisabled: Object.fromEntries(mirrorScripts.value
+        .filter(item => Array.isArray(item.disabledCategories) && item.disabledCategories.length)
+        .map(item => [item.id, item.disabledCategories])),
+    });
+  } catch (e) { mirrorScriptsError.value = e instanceof Error ? e.message : String(e); }
+  finally { mirrorScriptsBusy.value = false; }
+}
+function moveMirrorScript(index: number, delta: number) {
+  const target = index + delta;
+  if (target < 0 || target >= mirrorScripts.value.length) return;
+  const item = mirrorScripts.value.splice(index, 1)[0];
+  mirrorScripts.value.splice(target, 0, item);
+  void saveMirrorScripts();
+}
+onMounted(() => { void loadMirrorScripts(); });
 </script>
+
+<style scoped>
+.pcl-mirror-script-actions { flex-wrap: wrap; margin: 12px 0; }
+.pcl-mirror-table-wrap { overflow-x: auto; margin-top: 12px; }
+.pcl-mirror-table { width: 100%; min-width: 940px; border-collapse: collapse; font-size: 13px; }
+.pcl-mirror-table th, .pcl-mirror-table td { padding: 8px 7px; border-bottom: 1px solid var(--pcl-border); text-align: center; white-space: nowrap; }
+.pcl-mirror-table th { color: var(--pcl-muted); font-weight: 600; }
+.pcl-mirror-table .pcl-mirror-source { min-width: 210px; text-align: left; }
+.pcl-mirror-source small { display: block; margin: 3px 0 0 28px; color: var(--pcl-muted); }
+.pcl-mirror-order-number { width: 42px; color: var(--pcl-muted); }
+.pcl-mirror-category input { width: 16px; height: 16px; accent-color: var(--pcl-accent); }
+.pcl-mirror-category input:disabled { opacity: .35; }
+.pcl-mirror-table tr.is-disabled { opacity: .55; }
+.pcl-mirror-script-order { display: flex; gap: 4px; }
+</style>
 

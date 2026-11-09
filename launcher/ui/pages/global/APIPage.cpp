@@ -40,6 +40,7 @@
 #include "ui_APIPage.h"
 
 #include <QFileDialog>
+#include <QDir>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QSignalBlocker>
@@ -50,6 +51,7 @@
 
 #include "Application.h"
 #include "BuildConfig.h"
+#include "DesktopServices.h"
 #include "minecraft/MirrorDownload.h"
 #include "modplatform/ModApiMirror.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
@@ -159,6 +161,11 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     resetBaseURLNote();
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLNote);
     connect(ui->baseURLEntry, &QLineEdit::textEdited, this, &APIPage::resetBaseURLNote);
+    connect(ui->openMirrorConfigButton, &QPushButton::clicked, this, [this] {
+        const auto path = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("jsapi"));
+        if (!QDir().mkpath(path) || !DesktopServices::openPath(path))
+            QMessageBox::warning(this, tr("Open mirror configuration"), tr("Could not open the mirror configuration directory."));
+    });
 }
 
 APIPage::~APIPage()

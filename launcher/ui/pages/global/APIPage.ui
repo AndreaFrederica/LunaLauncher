@@ -153,6 +153,16 @@
             </property>
            </widget>
          </item>
+          <item>
+           <widget class="QPushButton" name="openMirrorConfigButton">
+            <property name="text">
+             <string>Open Mirror Configuration Directory</string>
+            </property>
+            <property name="icon">
+             <iconset theme="folder-open"/>
+            </property>
+           </widget>
+          </item>
         </layout>
         </widget>
        </item>

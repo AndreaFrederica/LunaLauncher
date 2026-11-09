@@ -254,6 +254,22 @@ private slots:
                  QString("https://fabric.fastmcmirror.org/net/fabricmc/fabric-loader/0.15/fabric-loader-0.15.jar"));
     }
 
+    void testHKMCMirrorMapping() {
+        m_settings->set("DownloadMirrorType", static_cast<int>(MirrorDownload::HKMC));
+
+        const auto mirror = MirrorDownload::resolve(m_settings.get());
+        QCOMPARE(static_cast<int>(mirror.type), static_cast<int>(MirrorDownload::HKMC));
+        QCOMPARE(mirror.mojangBase, QString("https://bsmirror.hkmc.online/"));
+        QCOMPARE(mirror.assetsBase, QString("https://bsmirror.hkmc.online/assets/"));
+        QCOMPARE(mirror.librariesBase, QString("https://bsmirror.hkmc.online/maven/"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", mirror),
+                 QString("https://bsmirror.hkmc.online/mc/game/version_manifest_v2.json"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://resources.download.minecraft.net/ab/abcdef", mirror),
+                 QString("https://bsmirror.hkmc.online/assets/ab/abcdef"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://libraries.minecraft.net/com/example/lib/1.0/lib-1.0.jar", mirror),
+                 QString("https://bsmirror.hkmc.online/maven/com/example/lib/1.0/lib-1.0.jar"));
+    }
+
     void testCustomDoesNotRewriteUnknownHosts() {
         m_settings->set("DownloadMirrorType", 2);
         m_settings->set("MojangDownloadsMirrorURL", "https://mirror.example.test/");

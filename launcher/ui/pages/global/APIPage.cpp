@@ -79,7 +79,7 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     }
 
     // Add mirror type dropdown
-    int mirrorTypes[] = { MirrorDownload::Official, MirrorDownload::BMCLAPI, MirrorDownload::Custom, MirrorDownload::FastMCMirror };
+    int mirrorTypes[] = { MirrorDownload::Official, MirrorDownload::BMCLAPI, MirrorDownload::Custom, MirrorDownload::FastMCMirror, MirrorDownload::HKMC };
     for (auto mirrorType : mirrorTypes) {
         ui->mirrorTypeComboBox->addItem(tr(MirrorDownload::MirrorTypes.at(mirrorType).name.toUtf8()), mirrorType);
     }
@@ -269,6 +269,14 @@ void APIPage::updateMirrorSelection()
             ui->fmlLibsURL->setText(mirrorInfo.defaultFMLLibsUrl);
             ui->mojangDownloadsMirrorURL->setText("");
             ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("FastMinecraftMirror (auto)"));
+        } else if (mirrorType == MirrorDownload::HKMC) {
+            ui->metaURL->setText("");
+            ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+            ui->resourceURL->setText(mirrorInfo.defaultAssetsUrl);
+            ui->libraryURL->setText(mirrorInfo.defaultLibrariesUrl);
+            ui->fmlLibsURL->setText(mirrorInfo.defaultFMLLibsUrl);
+            ui->mojangDownloadsMirrorURL->setText("");
+            ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("HKMC Mirror (auto)"));
         }
     }
 }
@@ -455,6 +463,13 @@ void APIPage::applySettings()
         s->set("MojangDownloadsMirrorURL", "");  // BMCLAPI URL is handled in code, not stored
     } else if (mirrorType == MirrorDownload::FastMCMirror) {
         const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::FastMCMirror);
+        s->set("MetaURLOverride", "");
+        s->set("ResourceURLOverride", mirrorInfo.defaultAssetsUrl);
+        s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
+        s->set("LegacyFMLLibsURLOverride", mirrorInfo.defaultFMLLibsUrl);
+        s->set("MojangDownloadsMirrorURL", "");
+    } else if (mirrorType == MirrorDownload::HKMC) {
+        const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::HKMC);
         s->set("MetaURLOverride", "");
         s->set("ResourceURLOverride", mirrorInfo.defaultAssetsUrl);
         s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);

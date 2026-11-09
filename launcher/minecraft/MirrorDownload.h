@@ -30,8 +30,9 @@ public:
         BMCLAPI,   // Use BMCLAPI mirror
         Custom,    // User-specified URLs
         FastMCMirror,  // Use FastMinecraftMirror
+        HKMC,  // Use the HKMC BMCLAPI-compatible mirror
         First = Official,
-        Last = FastMCMirror
+        Last = HKMC
     };
 
     struct MirrorTypeInfo {
@@ -76,7 +77,7 @@ public:
         bool isEmpty() const { return mojangBase.isEmpty() && librariesBase.isEmpty() && assetsBase.isEmpty(); }
     };
 
-    static const std::array<MirrorTypeInfo, 4> MirrorTypes;
+    static const std::array<MirrorTypeInfo, 5> MirrorTypes;
 
     /// Build the effective mirror configuration from settings. A null settings object
     /// resolves to the official servers.

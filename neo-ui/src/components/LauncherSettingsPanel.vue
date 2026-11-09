@@ -61,6 +61,10 @@
           <q-input dark outlined v-model="mirrorDraft.ResourceURLOverride" :label="t('neo.auto2.ke322863a69')" @blur="saveKey('ResourceURLOverride',mirrorDraft.ResourceURLOverride)" />
           <q-input dark outlined v-model="mirrorDraft.LegacyFMLLibsURLOverride" :label="t('neo.auto2.kce3f74d643')" @blur="saveKey('LegacyFMLLibsURLOverride',mirrorDraft.LegacyFMLLibsURLOverride)" />
         </template>
+        <div class="row q-gutter-sm q-mt-md">
+          <q-btn flat icon="folder_open" label="打开镜像配置目录" :disable="busy" @click="openMirrorDirectory" />
+        </div>
+        <q-banner v-if="mirrorDirectoryError" class="bg-red-9 q-mt-md">{{ mirrorDirectoryError }}</q-banner>
       </section>
       <SettingsPanel class="q-mt-lg" :settings="mirrorOtherSettings" category="all" :busy="busy" @save="save" @reset="reset" />
     </div>
@@ -80,12 +84,13 @@ import LauncherControlPanel from './LauncherControlPanel.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref<any>('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref<any>('authlib-injector'),externalTool=ref<any>('jprofiler'),externalPath=ref<any>('');
-const dataLocation=ref<any>(null),dataLocationMode=ref<'portable'|'user'>('user'),dataLocationBusy=ref(false),dataLocationError=ref(''),dataLocationNotice=ref('');
+const dataLocation=ref<any>(null),dataLocationMode=ref<'portable'|'user'>('user'),dataLocationBusy=ref(false),dataLocationError=ref(''),dataLocationNotice=ref(''),mirrorDirectoryError=ref('');
 const dataLocationOptions=computed(()=>[{label:t('neo.dataLocation.portable'),value:'portable'},{label:t('neo.dataLocation.userData'),value:'user'}]);
 const dataLocationCurrentMode=computed<'portable'|'user'>(()=>dataLocation.value?.portable?'portable':'user');
 const dataLocationTarget=computed(()=>dataLocationMode.value==='portable'?dataLocation.value?.portablePath:dataLocation.value?.systemPath);
 async function loadDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';try{dataLocation.value=await props.execute('startup.data-location');dataLocationMode.value=dataLocationCurrentMode.value;}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
 async function openDataPath(path:string|undefined){if(!path)return;try{await props.execute('desktop.open-path',{path});}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}}
+async function openMirrorDirectory(){mirrorDirectoryError.value='';try{await props.execute('resource.providers.open-directory');}catch(e){mirrorDirectoryError.value=e instanceof Error?e.message:String(e);}}
 async function applyDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';dataLocationNotice.value='';try{const result=await props.execute('startup.set-data-location',{portable:dataLocationMode.value==='portable'});dataLocation.value=result?.status||dataLocation.value;dataLocationNotice.value=t('neo.dataLocation.applied');}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
 onMounted(loadDataLocation);
 const backends=[{label:t('neo.auto2.ka626fe7700'),value:0},{label:'Aria2',value:1},{label:t('neo.auto2.k6a21c71e5f'),value:2}];

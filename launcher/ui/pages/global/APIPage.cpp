@@ -41,6 +41,7 @@
 
 #include <QFileDialog>
 #include <QDir>
+#include <QFile>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QSignalBlocker>
@@ -52,6 +53,7 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "DesktopServices.h"
+#include "LauncherResources.h"
 #include "minecraft/MirrorDownload.h"
 #include "modplatform/ModApiMirror.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
@@ -163,7 +165,23 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     connect(ui->baseURLEntry, &QLineEdit::textEdited, this, &APIPage::resetBaseURLNote);
     connect(ui->openMirrorConfigButton, &QPushButton::clicked, this, [this] {
         const auto path = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("jsapi"));
-        if (!QDir().mkpath(path) || !DesktopServices::openPath(path))
+        bool docsReady = QDir().mkpath(path);
+        const auto copyPackagedFile = [&path, &docsReady](const QString& fileName) {
+            const auto destination = QDir(path).filePath(fileName);
+            if (QFileInfo::exists(destination))
+                return;
+            const auto source = LauncherResources::locateFile(QStringLiteral("jsapi/") + fileName);
+            if (source.isEmpty() || !QFile::copy(source, destination))
+                docsReady = false;
+        };
+        copyPackagedFile(QStringLiteral("MIRROR_TUTORIAL.md"));
+        copyPackagedFile(QStringLiteral("mirror-example.js.txt"));
+
+        if (!docsReady)
+            QMessageBox::information(this, tr("Mirror configuration"),
+                                     tr("The directory was opened, but the tutorial files could not be created. "
+                                        "You can find the same documentation in the install directory's resource/jsapi folder."));
+        if (!DesktopServices::openPath(path))
             QMessageBox::warning(this, tr("Open mirror configuration"), tr("Could not open the mirror configuration directory."));
     });
 }

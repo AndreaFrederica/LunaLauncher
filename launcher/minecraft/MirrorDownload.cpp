@@ -18,8 +18,16 @@
 
 #include "MirrorDownload.h"
 
+#include "Application.h"
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QJsonObject>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QElapsedTimer>
+#include <QHash>
+#include <QSet>
+#include <algorithm>
 
 #include "modplatform/jsapi/JSAPIManager.h"
 #include "settings/SettingsObject.h"
@@ -41,6 +49,68 @@ QString joinBase(const QString& base, const QString& path)
     if (base.isEmpty())
         return {};
     return base + path;
+}
+
+struct ProbeScore {
+    qint64 milliseconds = 0;
+    qint64 measuredAt = 0;
+};
+
+QHash<QString, ProbeScore> probeScores;
+QSet<QString> probesInFlight;
+
+QString probeKey(const QString& url)
+{
+    const QUrl parsed(url);
+    if (!parsed.isValid() || parsed.host().isEmpty())
+        return {};
+    return parsed.scheme().toLower() + QStringLiteral("://") + parsed.host().toLower() +
+           (parsed.port() > 0 ? QStringLiteral(":%1").arg(parsed.port()) : QString());
+}
+
+void scheduleProbe(const MirrorUrlCandidate& candidate)
+{
+    auto* application = APPLICATION_DYN;
+    if (!application)
+        return;
+
+    const bool hasExplicitProbe = !candidate.probeUrl.isEmpty();
+    const auto sourceUrl = hasExplicitProbe ? candidate.probeUrl : candidate.url;
+    const auto key = probeKey(sourceUrl);
+    if (key.isEmpty())
+        return;
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    if (probeScores.contains(key) && now - probeScores.value(key).measuredAt < 10 * 60 * 1000)
+        return;
+    if (probesInFlight.contains(key))
+        return;
+
+    QUrl url(sourceUrl);
+    if (!hasExplicitProbe)
+        url.setPath(QStringLiteral("/"));
+    url.setQuery({});
+    url.setFragment({});
+    if (!url.isValid())
+        return;
+
+    auto network = application->network();
+    if (!network)
+        return;
+
+    probesInFlight.insert(key);
+    auto timer = std::make_shared<QElapsedTimer>();
+    timer->start();
+    QNetworkRequest request(url);
+    request.setTransferTimeout(3000);
+    auto reply = network->head(request);
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, key, timer]() {
+        const auto elapsed = timer->elapsed();
+        const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool reachable = reply->error() == QNetworkReply::NoError || status > 0;
+        probeScores.insert(key, { reachable ? elapsed : 60000, QDateTime::currentMSecsSinceEpoch() });
+        probesInFlight.remove(key);
+        reply->deleteLater();
+    });
 }
 
 }  // namespace
@@ -171,8 +241,15 @@ MirrorDownload::ResolvedMirror MirrorDownload::resolve(SettingsObject* settings)
 
 QString MirrorDownload::rewriteUrl(const QString& url, const ResolvedMirror& mirror)
 {
+    const auto candidates = rewriteUrls(url, mirror);
+    return candidates.isEmpty() ? url : candidates.constFirst();
+}
+
+QList<QString> MirrorDownload::rewriteUrls(const QString& url, const ResolvedMirror& mirror)
+{
+    QList<QString> empty;
     if (url.isEmpty())
-        return url;
+        return empty;
 
     QJsonObject context{
         { QStringLiteral("mirrorType"), mirror.isOfficial() ? QStringLiteral("official") :
@@ -195,7 +272,40 @@ QString MirrorDownload::rewriteUrl(const QString& url, const ResolvedMirror& mir
     // first use in that case.
     if (jsApis.getAllAPIs().isEmpty())
         jsApis.initialize();
-    return jsApis.rewriteUrl(url, context);
+    const auto candidates = jsApis.rewriteUrls(url, context);
+    if (candidates.isEmpty())
+        return empty;
+
+    struct RankedCandidate {
+        MirrorUrlCandidate candidate;
+        qsizetype index = 0;
+        bool measured = false;
+        qint64 score = 0;
+    };
+    QList<RankedCandidate> ranked;
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    for (qsizetype i = 0; i < candidates.size(); ++i) {
+        const auto& candidate = candidates.at(i);
+        scheduleProbe(candidate);
+        const auto key = probeKey(candidate.probeUrl.isEmpty() ? candidate.url : candidate.probeUrl);
+        const auto score = probeScores.value(key);
+        const bool measured = !key.isEmpty() && score.measuredAt > 0 && now - score.measuredAt < 10 * 60 * 1000;
+        ranked.append({ candidate, i, measured, measured ? score.milliseconds : 0 });
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto& left, const auto& right) {
+        if (left.measured != right.measured)
+            return left.measured;
+        if (left.measured && left.score != right.score)
+            return left.score < right.score;
+        if (left.candidate.priority != right.candidate.priority)
+            return left.candidate.priority > right.candidate.priority;
+        return left.index < right.index;
+    });
+
+    QList<QString> result;
+    for (const auto& item : ranked)
+        result.append(item.candidate.url);
+    return result;
 }
 
 QString MirrorDownload::rewriteUrl(const QString& url, SettingsObject* settings)

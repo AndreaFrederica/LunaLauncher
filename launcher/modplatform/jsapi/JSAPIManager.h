@@ -80,6 +80,9 @@ public:
     /** Let registered mirror APIs rewrite a URL. APIs are tried by priority. */
     QString rewriteUrl(const QString& url, const QJsonObject& context) const;
 
+    /** Return every candidate declared by the enabled mirror APIs. */
+    QList<MirrorUrlCandidate> rewriteUrls(const QString& url, const QJsonObject& context) const;
+
     /**
      * 重新加载所有 API
      */

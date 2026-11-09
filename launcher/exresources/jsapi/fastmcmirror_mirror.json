@@ -1,0 +1,15 @@
+{
+  "metadata": { "id": "fastmcmirror-mirror", "kind": "mirror", "displayName": "FastMinecraftMirror", "version": "2.0.0", "homepage": "https://fastmcmirror.org/CN.html", "enabled": true, "priority": 110 },
+  "rules": [
+    { "match": { "mirrorTypeId": 3, "hosts": ["launchermeta.mojang.com", "piston-meta.mojang.com"] }, "rewrite": { "base": "https://launchermeta.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["launcher.mojang.com", "piston-data.mojang.com"] }, "rewrite": { "base": "https://launcher.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["resources.download.minecraft.net"] }, "rewrite": { "base": "https://resources.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["libraries.minecraft.net", "libraries.mojang.com"] }, "rewrite": { "base": "https://libraries.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["files.minecraftforge.net"], "pathPrefix": "/maven/" }, "rewrite": { "base": "https://forge.fastmcmirror.org/", "stripPrefix": "/maven/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["maven.minecraftforge.net"] }, "rewrite": { "base": "https://forge.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["meta.fabricmc.net"] }, "rewrite": { "base": "https://fabricmeta.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["maven.fabricmc.net"] }, "rewrite": { "base": "https://fabric.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["repo.mumfrey.com", "dl.liteloader.com"] }, "rewrite": { "base": "https://liteloader.fastmcmirror.org/" } },
+    { "match": { "mirrorTypeId": 3, "hosts": ["s3.amazonaws.com"], "pathPrefix": "/Minecraft.Download/" }, "rewrite": { "base": "https://launcher.fastmcmirror.org/", "stripPrefix": "/Minecraft.Download/" } }
+  ]
+}

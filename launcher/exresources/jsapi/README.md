@@ -4,20 +4,46 @@
 
 ### 下载镜像 URL 重写
 
-镜像规则也可以由 JS 提供，不需要修改 C++。将 `metadata.kind` 设为 `"mirror"`，并实现
+镜像规则优先使用纯 JSON 文件，不需要编写 JavaScript 或修改 C++。JSON 文件包含
+`metadata` 和 `rules`，每条规则通过 `match.hosts`、`match.pathPrefix`、
+`match.pathRegex`、`match.mirrorTypeId` 匹配 URL，再用 `rewrite.base` 或
+`rewrite.template` 生成目标地址。返回空结果表示交给下一个规则。
+需要计算、查询或动态签名时仍可以使用 JS：将 `metadata.kind` 设为 `"mirror"`，并实现
 `rewriteUrl(url, context)`；返回字符串表示已处理，返回 `null` 表示交给下一个镜像脚本。
-脚本按 `metadata.priority` 从高到低调用。`context` 包含 `mirrorType`、`mirrorTypeId`，以及
+JS 也可以返回字符串数组，或 `{url, probeUrl, priority}` 对象数组来声明多个候选地址。
+规则和脚本都按 `metadata.priority` 从高到低调用。`context` 包含 `mirrorType`、`mirrorTypeId`，以及
 `mojangBase`、`librariesBase`、`assetsBase`、`fabricMetaBase`、`quiltMetaBase`、
 `authlibInjectorBase` 和 `modrinthCdnBase` 等当前配置的端点。
 
-启动器内置了 `bmclapi_mirror.js`、`fastmcmirror_mirror.js`、`hkmc_mirror.js` 和
-`adoptium_tuna_mirror.js` 四个镜像配置。TUNA Adoptium 规则只处理
+启动器内置了 `bmclapi_mirror.json`、`fastmcmirror_mirror.json`、`hkmc_mirror.json`、
+`generic_mirror.json` 和 `adoptium_tuna_mirror.json` 五个纯规则源。TUNA Adoptium 规则只处理
 Eclipse Adoptium 的 GitHub 二进制 URL，不会改写 Mojang、Azul 或其他下载源。
 FastMinecraftMirror 使用独立域名提供 LauncherMeta、Launcher、资源、Forge、
 Fabric 和 LiteLoader，因此由自己的 JS provider 按上游域名分别重写，而不是套用
 BMCLAPI 的 `/assets/`、`/maven/` 目录规则。
 HKMC 主线路兼容 BMCLAPI 目录规则；需要切换到其 EO 线路时，可在 Custom 模式中
 填写 `https://mirror.hkmc.online`。
+
+## 多候选源和自动测速
+
+纯 JSON 规则可以在一条规则里声明 `rewrite.candidates`。每个候选使用和普通 `rewrite` 相同的
+`base`、`stripPrefix`、`template` 字段，并可填写 `probeUrl` 与 `priority`：
+
+```json
+{
+  "match": { "hosts": ["resources.download.minecraft.net"] },
+  "rewrite": {
+    "candidates": [
+      { "base": "https://mirror-a.example/assets", "probeUrl": "https://mirror-a.example/", "priority": 10 },
+      { "base": "https://mirror-b.example/assets", "probeUrl": "https://mirror-b.example/", "priority": 5 }
+    ]
+  }
+}
+```
+
+启动器首次使用时按 `priority` 选择，并在后台对候选主机发起轻量 HEAD 探测；后续下载优先使用
+最近十分钟内测得延迟最低的候选。探测失败的候选会暂时排到最后。未声明 `probeUrl` 时使用
+候选 URL 的主机根路径。下载仍保留官方地址作为失败回退。
 
 ## 特性
 

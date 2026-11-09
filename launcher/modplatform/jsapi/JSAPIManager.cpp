@@ -18,7 +18,11 @@
 #include "settings/SettingsObject.h"
 #include <algorithm>
 #include <QDir>
+#include <QFile>
 #include <QDirIterator>
+#include <QJsonDocument>
+#include <QJsonParseError>
+#include <QSet>
 
 JSAPIManager& JSAPIManager::instance()
 {
@@ -57,7 +61,7 @@ void JSAPIManager::loadAPIsFromDirectory(const QString& directory)
     // 检查是否是 qrc 路径
     if (directory.startsWith(":/")) {
         // Qt 资源系统路径
-        QDirIterator it(directory, QStringList() << "*.js", QDir::Files, QDirIterator::Subdirectories);
+        QDirIterator it(directory, QStringList() << "*.js" << "*.json", QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             QString filePath = it.next();
             qDebug() << "[JSAPIManager] Found qrc file:" << filePath;
@@ -65,7 +69,7 @@ void JSAPIManager::loadAPIsFromDirectory(const QString& directory)
         }
     } else {
         // 文件系统路径
-        QDirIterator it(directory, QStringList() << "*.js", QDir::Files, QDirIterator::Subdirectories);
+        QDirIterator it(directory, QStringList() << "*.js" << "*.json", QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             QString filePath = it.next();
             loadAPIFromFile(filePath);
@@ -85,7 +89,11 @@ bool JSAPIManager::loadAPIFromFile(const QString& filePath)
 
     qDebug() << "[JSAPIManager] Loading API from:" << filePath;
 
-    auto api = JSResourceAPI::fromFile(filePath, apiName);
+    std::shared_ptr<JSResourceAPI> api;
+    if (fileInfo.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) == 0)
+        api = JSResourceAPI::fromRuleFile(filePath, apiName);
+    else
+        api = JSResourceAPI::fromFile(filePath, apiName);
     if (!api) {
         qWarning() << "[JSAPIManager] Failed to load API from:" << filePath;
         return false;
@@ -225,18 +233,28 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsByProvider(const QStr
 
 QString JSAPIManager::rewriteUrl(const QString& url, const QJsonObject& context) const
 {
-    QList<std::shared_ptr<JSResourceAPI>> mirrors;
+    const auto candidates = rewriteUrls(url, context);
+    if (!candidates.isEmpty())
+        return candidates.constFirst().url;
+    return url;
+}
+
+QList<MirrorUrlCandidate> JSAPIManager::rewriteUrls(const QString& url, const QJsonObject& context) const
+{
+    QList<MirrorUrlCandidate> result;
+    QSet<QString> seen;
     for (const auto& api : getOrderedAPIs()) {
         const auto& metadata = api->getMetadata();
-        if (metadata.enabled && metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) == 0)
-            mirrors.append(api);
+        if (!metadata.enabled || metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
+            continue;
+        for (const auto& candidate : api->rewriteUrls(url, context)) {
+            if (candidate.url.isEmpty() || seen.contains(candidate.url))
+                continue;
+            seen.insert(candidate.url);
+            result.append(candidate);
+        }
     }
-
-    for (const auto& api : mirrors) {
-        if (const auto rewritten = api->rewriteUrl(url, context); rewritten.has_value())
-            return rewritten.value();
-    }
-    return url;
+    return result;
 }
 
 void JSAPIManager::reloadAll()

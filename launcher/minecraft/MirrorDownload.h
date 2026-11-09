@@ -19,6 +19,7 @@
 #pragma once
 
 #include <QString>
+#include <QList>
 #include <array>
 
 class SettingsObject;
@@ -85,6 +86,10 @@ public:
 
     /// Rewrite a download URL according to the given mirror configuration.
     static QString rewriteUrl(const QString& url, const ResolvedMirror& mirror);
+
+    /// Return mirror candidates ordered by the configured priority and cached
+    /// health measurements. The first item is the URL used for a download.
+    static QList<QString> rewriteUrls(const QString& url, const ResolvedMirror& mirror);
 
     /// Convenience overload that resolves the mirror from the given settings first.
     static QString rewriteUrl(const QString& url, SettingsObject* settings);

@@ -1,0 +1,17 @@
+{
+  "metadata": { "id": "bmclapi-mirror", "kind": "mirror", "displayName": "BMCLAPI", "version": "2.0.0", "enabled": true, "priority": 100 },
+  "rules": [
+    { "match": { "mirrorTypeId": 1, "hosts": ["cdn.modrinth.com"] }, "rewrite": { "base": "{modrinthCdnBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["resources.download.minecraft.net"] }, "rewrite": { "base": "{assetsBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["libraries.minecraft.net", "maven.minecraftforge.net", "maven.fabricmc.net"] }, "rewrite": { "base": "{librariesBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["files.minecraftforge.net"], "pathPrefix": "/maven/" }, "rewrite": { "base": "{librariesBase}", "stripPrefix": "/maven/" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["maven.neoforged.net"], "pathPrefix": "/releases/" }, "rewrite": { "base": "{librariesBase}", "stripPrefix": "/releases/" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["maven.quiltmc.org"], "pathPrefix": "/repository/release/" }, "rewrite": { "base": "{librariesBase}", "stripPrefix": "/repository/release/" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["meta.fabricmc.net"] }, "rewrite": { "base": "{fabricMetaBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["meta.quiltmc.org"] }, "rewrite": { "base": "{quiltMetaBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["dl.liteloader.com"], "pathPrefix": "/versions/" }, "rewrite": { "base": "{librariesBase}com/mumfrey/liteloader/", "stripPrefix": "/versions/" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["authlib-injector.yushi.moe"] }, "rewrite": { "base": "{authlibInjectorBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["launcher.mojang.com", "launchermeta.mojang.com", "piston-data.mojang.com", "piston-meta.mojang.com"] }, "rewrite": { "base": "{mojangBase}" } },
+    { "match": { "mirrorTypeId": 1, "hosts": ["s3.amazonaws.com"], "pathPrefix": "/Minecraft.Download/" }, "rewrite": { "base": "{mojangBase}", "stripPrefix": "/Minecraft.Download/" } }
+  ]
+}

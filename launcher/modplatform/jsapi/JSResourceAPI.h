@@ -20,6 +20,7 @@
 
 #include <QHash>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QMutex>
 #include <QObject>
@@ -43,6 +44,13 @@ struct ApiMetadata {
     QString kind = QStringLiteral("resource"); // resource or mirror
     bool enabled = true;             // 是否启用
     int priority = 0;                // 优先级
+};
+
+/** A URL produced by a mirror rule, optionally carrying a health probe URL. */
+struct MirrorUrlCandidate {
+    QString url;
+    QString probeUrl;
+    int priority = 0;
 };
 
 /**
@@ -76,6 +84,9 @@ public:
      */
     static std::shared_ptr<JSResourceAPI> fromString(const QString& jsCode, const QString& apiName);
 
+    /** Load a declarative mirror/resource rule file without evaluating JavaScript. */
+    static std::shared_ptr<JSResourceAPI> fromRuleFile(const QString& jsonFilePath, const QString& apiName);
+
     ~JSResourceAPI() override;
 
     // ResourceAPI 接口实现
@@ -101,6 +112,12 @@ public:
     /** Execute a mirror API's URL rewrite hook. Null means unhandled. */
     std::optional<QString> rewriteUrl(const QString& url, const QJsonObject& context) const;
 
+    /** Execute a mirror hook and return all declared candidates. */
+    QList<MirrorUrlCandidate> rewriteUrls(const QString& url, const QJsonObject& context) const;
+
+    /** Whether this API came from a declarative rule file. */
+    bool isRuleBased() const { return m_ruleBased; }
+
     /**
      * 获取所有已注册的 JS API
      */
@@ -118,6 +135,8 @@ private:
     void setupJSBindings();
     void cleanup();
     bool loadMetadata();
+    bool loadMetadata(const QJsonObject& metadata);
+    QList<MirrorUrlCandidate> rewriteRuleUrls(const QString& url, const QJsonObject& context) const;
 
     // JavaScript 执行辅助函数
     JSValue callJSFunction(const char* funcName, int argc, JSValueConst* argv) const;
@@ -134,6 +153,8 @@ private:
 
     QString m_apiName;
     ApiMetadata m_metadata;
+    bool m_ruleBased = false;
+    QJsonArray m_rules;
     mutable QString m_lastError;
     mutable QMutex m_jsMutex;
 

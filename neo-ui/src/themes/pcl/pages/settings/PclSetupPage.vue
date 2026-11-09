@@ -204,6 +204,7 @@ const mirrorOptions = [
   { label: t('pcl.auto2.k212e81e6d0'), value: 0 },
   { label: t('pcl.auto2.kf0aba8a42d'), value: 1 },
   { label: t('pcl.auto2.kfe7276cd17'), value: 2 },
+  { label: 'FastMinecraftMirror', value: 3 },
 ];
 const downloadBackendOptions = [
   { label: t('pcl.auto2.ka626fe7700'), value: 0 },

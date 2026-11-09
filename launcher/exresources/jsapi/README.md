@@ -10,6 +10,11 @@
 `mojangBase`、`librariesBase`、`assetsBase`、`fabricMetaBase`、`quiltMetaBase`、
 `authlibInjectorBase` 和 `modrinthCdnBase` 等当前配置的端点。
 
+启动器内置了 `bmclapi_mirror.js` 和 `fastmcmirror_mirror.js` 两个镜像配置。
+FastMinecraftMirror 使用独立域名提供 LauncherMeta、Launcher、资源、Forge、
+Fabric 和 LiteLoader，因此由自己的 JS provider 按上游域名分别重写，而不是套用
+BMCLAPI 的 `/assets/`、`/maven/` 目录规则。
+
 ## 特性
 
 - ✨ **快速开发**: 使用 JavaScript 编写 API，无需重新编译 C++

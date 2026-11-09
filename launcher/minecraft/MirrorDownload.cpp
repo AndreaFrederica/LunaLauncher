@@ -45,7 +45,7 @@ QString joinBase(const QString& base, const QString& path)
 
 }  // namespace
 
-const std::array<MirrorDownload::MirrorTypeInfo, 3> MirrorDownload::MirrorTypes = {
+const std::array<MirrorDownload::MirrorTypeInfo, 4> MirrorDownload::MirrorTypes = {
     {
         // Official - Empty strings mean use BuildConfig defaults
         {
@@ -70,6 +70,14 @@ const std::array<MirrorDownload::MirrorTypeInfo, 3> MirrorDownload::MirrorTypes 
             "",  // User-provided
             "",  // User-provided
             ""   // User-provided
+        },
+        // FastMinecraftMirror - https://fastmcmirror.org/CN.html
+        {
+            QT_TRANSLATE_NOOP("APIPage", "FastMinecraftMirror"),
+            "https://launchermeta.fastmcmirror.org/",
+            "https://resources.fastmcmirror.org/",
+            "https://libraries.fastmcmirror.org/",
+            "https://forge.fastmcmirror.org/"
         }
     }
 };
@@ -105,6 +113,18 @@ MirrorDownload::ResolvedMirror MirrorDownload::resolve(SettingsObject* settings)
         return mirror;
     }
 
+    if (mirror.type == FastMCMirror) {
+        // FastMinecraftMirror uses separate hosts for each upstream service.
+        // The JS mirror provider performs the host-specific rewrite; these
+        // bases also cover callers that consume assets/libraries directly.
+        mirror.mojangBase = QStringLiteral("https://launcher.fastmcmirror.org/");
+        mirror.librariesBase = QStringLiteral("https://libraries.fastmcmirror.org/");
+        mirror.assetsBase = QStringLiteral("https://resources.fastmcmirror.org/");
+        mirror.fabricMetaBase = QStringLiteral("https://fabricmeta.fastmcmirror.org/");
+        mirror.fmlLibsBase = QStringLiteral("https://forge.fastmcmirror.org/");
+        return mirror;
+    }
+
     // Custom: every endpoint is optional. If only the Mojang downloads base is
     // configured, assume a BMCLAPI-compatible layout for the well-known subtrees
     // so a single custom API URL is enough for the common case.
@@ -136,7 +156,8 @@ QString MirrorDownload::rewriteUrl(const QString& url, const ResolvedMirror& mir
 
     QJsonObject context{
         { QStringLiteral("mirrorType"), mirror.isOfficial() ? QStringLiteral("official") :
-          (mirror.type == BMCLAPI ? QStringLiteral("bmclapi") : QStringLiteral("custom")) },
+          (mirror.type == BMCLAPI ? QStringLiteral("bmclapi") :
+           (mirror.type == FastMCMirror ? QStringLiteral("fastmcmirror") : QStringLiteral("custom"))) },
         { QStringLiteral("mirrorTypeId"), static_cast<int>(mirror.type) },
         { QStringLiteral("mojangBase"), mirror.mojangBase },
         { QStringLiteral("librariesBase"), mirror.librariesBase },

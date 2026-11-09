@@ -230,6 +230,30 @@ private slots:
                  QString("https://bmclapi2.bangbang93.com/assets/ab/abcdef"));
     }
 
+    void testFastMinecraftMirrorMapping() {
+        m_settings->set("DownloadMirrorType", static_cast<int>(MirrorDownload::FastMCMirror));
+
+        const auto mirror = MirrorDownload::resolve(m_settings.get());
+        QCOMPARE(static_cast<int>(mirror.type), static_cast<int>(MirrorDownload::FastMCMirror));
+        QCOMPARE(mirror.assetsBase, QString("https://resources.fastmcmirror.org/"));
+        QCOMPARE(mirror.librariesBase, QString("https://libraries.fastmcmirror.org/"));
+
+        QCOMPARE(MirrorDownload::rewriteUrl("https://launchermeta.mojang.com/mc/game/version_manifest_v2.json", mirror),
+                 QString("https://launchermeta.fastmcmirror.org/mc/game/version_manifest_v2.json"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://launcher.mojang.com/v1/objects/a/client.jar", mirror),
+                 QString("https://launcher.fastmcmirror.org/v1/objects/a/client.jar"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://resources.download.minecraft.net/ab/abcdef", mirror),
+                 QString("https://resources.fastmcmirror.org/ab/abcdef"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://libraries.mojang.com/com/example/lib/1.0/lib-1.0.jar", mirror),
+                 QString("https://libraries.fastmcmirror.org/com/example/lib/1.0/lib-1.0.jar"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://files.minecraftforge.net/maven/net/minecraftforge/forge/1.0/forge-1.0.jar", mirror),
+                 QString("https://forge.fastmcmirror.org/net/minecraftforge/forge/1.0/forge-1.0.jar"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://meta.fabricmc.net/v2/versions/loader", mirror),
+                 QString("https://fabricmeta.fastmcmirror.org/v2/versions/loader"));
+        QCOMPARE(MirrorDownload::rewriteUrl("https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.15/fabric-loader-0.15.jar", mirror),
+                 QString("https://fabric.fastmcmirror.org/net/fabricmc/fabric-loader/0.15/fabric-loader-0.15.jar"));
+    }
+
     void testCustomDoesNotRewriteUnknownHosts() {
         m_settings->set("DownloadMirrorType", 2);
         m_settings->set("MojangDownloadsMirrorURL", "https://mirror.example.test/");

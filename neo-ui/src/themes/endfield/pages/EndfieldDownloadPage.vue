@@ -28,6 +28,8 @@
         <EfSelect v-if="mode === 'resource'" v-model="kind" :options="kindOptions" />
         <EfSearchBox v-model="query" placeholder="搜索项目" @enter="search" />
         <EfButton icon="search" :busy="searching" @click="search">搜索</EfButton>
+        <EfButton icon="folder_open" :disabled="searching || providerRefreshing" @click="openProviderDirectory">打开 JS API 目录</EfButton>
+        <EfButton icon="refresh" :busy="providerRefreshing" :disabled="searching || providerRefreshing" @click="refreshProviders">{{ providerRefreshing ? '正在刷新来源…' : '刷新来源' }}</EfButton>
       </div>
 
       <div class="ef-download__grid">
@@ -142,6 +144,7 @@ const provider = ref('');
 const kind = ref(props.initialKind || 'mods');
 const query = ref('');
 const searching = ref(false);
+const providerRefreshing = ref(false);
 const results = ref<any[]>([]);
 const project = ref<any>(null);
 const versions = ref<any[]>([]);
@@ -171,7 +174,10 @@ const kindOptions = [
 const gameVersionOptions = computed(() => gameVersions.value.map(entry => ({ label: versionOf(entry), value: versionOf(entry) })));
 const gameLoaderVersionOptions = computed(() => gameLoaderVersions.value.map(entry => ({ label: versionOf(entry), value: versionOf(entry) })));
 const versionOptions = computed(() => versions.value.map(entry => ({ label: versionOf(entry), value: versionOf(entry) })));
-const providerOptions = computed(() => providers.value.map((item: any) => ({
+const providerOptions = computed(() => providers.value.filter((item: any) => {
+  const supported = Array.isArray(item?.kinds) ? item.kinds : [];
+  return mode.value === 'modpacks' ? supported.includes('modpacks') : supported.includes(kind.value);
+}).map((item: any) => ({
   label: item.name || item.label || item.id,
   value: String(item.id),
 })));
@@ -279,13 +285,31 @@ async function importInstance() {
   await runTask('instance.import', { path }, path.split(/[\\/]/).pop() || path, '导入完成');
 }
 
-async function loadProviders() {
-  if (providers.value.length) return;
+async function loadProviders(force = false) {
+  if (providers.value.length && !force) return;
   try {
     const result: any = await props.execute('resource.providers');
     providers.value = Array.isArray(result) ? result : [];
-    if (!provider.value && providers.value.length) provider.value = String(providers.value[0].id);
+    ensureProvider();
   } catch { /* ignore */ }
+}
+function ensureProvider() {
+  if (!providerOptions.value.some(option => option.value === provider.value)) provider.value = String(providerOptions.value[0]?.value || '');
+}
+async function openProviderDirectory() {
+  try { await props.execute('resource.providers.open-directory'); }
+  catch (error: any) { emit('toast', 'error', '打开目录失败', error?.message || String(error)); }
+}
+async function refreshProviders() {
+  if (providerRefreshing.value) return;
+  providerRefreshing.value = true;
+  try {
+    await props.execute('resource.providers.reload');
+    await loadProviders(true);
+    if (mode.value !== 'game') await search();
+  } catch (error: any) {
+    emit('toast', 'error', '刷新来源失败', error?.message || String(error));
+  } finally { providerRefreshing.value = false; }
 }
 
 async function search() {
@@ -356,8 +380,9 @@ watch(mode, value => {
   versions.value = [];
   results.value = [];
   if (value === 'game') void loadGameVersions();
-  else void loadProviders();
+  else { void loadProviders(); ensureProvider(); }
 }, { immediate: true });
+watch(kind, () => { if (mode.value === 'resource') ensureProvider(); });
 watch(() => game.value.loader, () => { void loadLoaderVersions(); });
 watch(() => game.value.version, () => { if (game.value.loader) void loadLoaderVersions(); });
 </script>

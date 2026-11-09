@@ -6,6 +6,8 @@
         <PclSelect v-model="provider" :options="providerOptions" @update:model-value="changeProvider" />
         <PclInput v-model="query" :placeholder="t('pcl.resourceDownload.searchPlaceholder', { kind: kindLabel })" @enter="search(true)" />
         <PclButton variant="highlight" icon="search" :disabled="searching" @click="search(true)">{{ searching ? t('pcl.resourceDownload.searching') : t('search.placeholder') }}</PclButton>
+        <PclButton variant="ghost" icon="folder-open" :disabled="searching || providerRefreshing" @click="openProviderDirectory">{{ t('resource.providerDirectory') }}</PclButton>
+        <PclButton variant="ghost" icon="refresh-cw" :disabled="searching || providerRefreshing" @click="refreshProviders">{{ providerRefreshing ? t('resource.providerRefreshing') : t('resource.providerRefresh') }}</PclButton>
         <div class="pcl-resource-download-window__view">
           <PclIconButton icon="grid-2x2" :label="t('resource.grid')" :size="32" :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" />
           <PclIconButton icon="layout-list" :label="t('resource.list')" :size="32" :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" />
@@ -146,6 +148,7 @@ const props = defineProps<{ instanceId: string; instanceName?: string; kind: str
 const { t } = useI18n();
 const provider = ref<any>('modrinth');
 const providerCatalog = ref<any[]>([]);
+const providerRefreshing = ref(false);
 const providerOptions = computed(() => providerCatalog.value
   .filter((entry: any) => Array.isArray(entry.kinds) && entry.kinds.includes(props.kind))
   .map((entry: any) => ({ label: providerLabel(entry.id), value: String(entry.id) })));
@@ -311,6 +314,21 @@ async function loadProviders() {
     provider.value = String(available[0].value);
   }
 }
+async function openProviderDirectory() {
+  try { await execute('resource.providers.open-directory'); }
+  catch (exception) { error.value = exception instanceof Error ? exception.message : String(exception); }
+}
+async function refreshProviders() {
+  if (providerRefreshing.value) return;
+  providerRefreshing.value = true;
+  try {
+    await execute('resource.providers.reload');
+    await loadProviders();
+    await search(true);
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  } finally { providerRefreshing.value = false; }
+}
 
 async function loadInstanceConstraints() {
   try {
@@ -355,8 +373,9 @@ async function search(reset = true) {
   error.value = '';
   try {
     const aggregateMods = props.kind === 'mods';
+    const aggregateProviders = providerCatalog.value.filter((entry: any) => entry?.kinds?.includes('mods')).map((entry: any) => String(entry.id));
     const searchParams: Record<string, unknown> = aggregateMods
-      ? { kind: props.kind, providers: ['modrinth', 'curseforge'], query: query.value.trim(), offset: offset.value }
+      ? { kind: props.kind, providers: aggregateProviders.length ? aggregateProviders : ['modrinth', 'curseforge'], query: query.value.trim(), offset: offset.value }
       : { ...requestParams(), query: query.value.trim(), offset: offset.value };
     if (aggregateMods && instanceVersion.value) searchParams.minecraftVersion = instanceVersion.value;
     if (aggregateMods) {

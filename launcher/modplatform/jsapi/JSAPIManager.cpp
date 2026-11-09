@@ -189,12 +189,11 @@ void JSAPIManager::reloadAll()
     qDebug() << "[JSAPIManager] Reloading all APIs...";
 
     m_apis.clear();
-    QStringList files = m_loadedFiles;
     m_loadedFiles.clear();
 
-    for (const QString& file : files) {
-        loadAPIFromFile(file);
-    }
+    // Re-scan every configured directory so newly copied user APIs and
+    // removed or replaced files are reflected by the refresh action.
+    initialize(getDefaultAPIDirectories());
 
     emit apisReloaded();
 

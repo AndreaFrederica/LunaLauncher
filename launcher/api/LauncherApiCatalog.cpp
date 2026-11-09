@@ -17,6 +17,7 @@
 #include <QUrl>
 
 #include "Application.h"
+#include "DesktopServices.h"
 #include "InstanceList.h"
 #include "ResourceDownloadTask.h"
 #include "api/LauncherApiSupport.h"
@@ -882,13 +883,33 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
                 const auto service = provider(name);
                 QJsonArray sorts;
                 for (const auto& sort : service->getSortingMethods()) sorts.append(QJsonObject{ { "id", sort.name }, { "name", sort.readable_name } });
-                result.append(QJsonObject{ { "id", name }, { "kinds", QJsonArray::fromStringList(supportedKinds(name)) }, { "sorts", sorts },
-                    { "dependencyResolution", name != "hangar" }, { "minecraftSearchFilter", name != "hangar" } });
+                QJsonObject entry{ { "id", name }, { "kinds", QJsonArray::fromStringList(supportedKinds(name)) }, { "sorts", sorts },
+                    { "dependencyResolution", name != "hangar" }, { "minecraftSearchFilter", name != "hangar" } };
+                if (name.startsWith("js:")) {
+                    const auto js = JSAPIManager::instance().getAPIById(name.mid(3));
+                    if (js) {
+                        const auto& metadata = js->getMetadata();
+                        entry.insert("name", metadata.displayName.isEmpty() ? metadata.id : metadata.displayName);
+                        entry.insert("description", metadata.description);
+                        entry.insert("homepage", metadata.homepage);
+                        entry.insert("icon", metadata.icon);
+                        entry.insert("dependencyResolution", false);
+                        entry.insert("minecraftSearchFilter", true);
+                    }
+                }
+                result.append(entry);
             }
             return OperationService::success(result);
         });
     api.registerOperation({ "resource.providers.reload", "Reload installed JavaScript resource providers.", schema({}), "catalog", true },
         [](const QJsonObject&, UserInteraction&) { JSAPIManager::instance().reloadAll(); return OperationService::success(); });
+    api.registerOperation({ "resource.providers.open-directory", "Create and open the user JavaScript resource provider directory.", schema({}), "catalog", true },
+        [](const QJsonObject&, UserInteraction&) {
+            const auto path = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("jsapi"));
+            if (!QDir().mkpath(path)) return OperationService::failure("Could not create the JavaScript provider directory.");
+            if (!DesktopServices::openPath(path)) return OperationService::failure("The desktop handler could not open the JavaScript provider directory.");
+            return OperationService::success(QJsonObject{ { "path", QDir(path).absolutePath() }, { "opened", true } });
+        });
     const QJsonObject common{ { "provider", string("Provider ID from resource.providers, including js:<id>.") }, { "kind", string("Resource kind from resource.providers.") },
         { "minecraftVersion", string("Optional Minecraft version filter.") }, { "loaders", strings() }, { "pluginLoaders", strings() } };
     auto search = common;

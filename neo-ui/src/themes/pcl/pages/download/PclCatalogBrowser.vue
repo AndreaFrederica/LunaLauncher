@@ -5,6 +5,10 @@
       <PclInput v-model="query" :placeholder="t('pcl.auto2.kb617f05c84')" @enter="search(0)" />
       <PclInput v-if="packs && provider === 'legacy-ftb'" v-model="privateCode" :placeholder="t('pcl.auto2.k0b67abdebc')" @enter="search(0)" />
       <PclButton variant="highlight" icon="search" :disabled="busy || searching" @click="search(0)">{{ t('pcl.auto2.kf04090805c') }}</PclButton>
+      <div class="pcl-catalog-provider-actions">
+        <PclButton variant="ghost" icon="folder-open" :disabled="busy || providerRefreshing" @click="openProviderDirectory">{{ t('resource.providerDirectory') }}</PclButton>
+        <PclButton variant="ghost" icon="refresh-cw" :disabled="busy || providerRefreshing" @click="refreshProviders">{{ providerRefreshing ? t('resource.providerRefreshing') : t('resource.providerRefresh') }}</PclButton>
+      </div>
     </div>
     <div v-if="!packs" class="pcl-catalog-filters">
       <PclInput v-model="gameVersion" :placeholder="t('pcl.auto2.kff0b86d5da')" />
@@ -59,6 +63,7 @@ const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftV
 const emit=defineEmits<{installed:[result:any]; 'install-start':[info:any]; 'install-progress':[task:any]; 'install-done':[info:any]}>();
 const providers = ref<string[]>(props.packs ? ['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb'] : ['modrinth','curseforge']);
 const providerCatalog = ref<any[]>([]);
+const providerRefreshing = ref(false);
 const catalogRoot = ref<HTMLElement | null>(null);
 const provider=ref(props.defaultProvider||'modrinth'),query=ref<any>(''),privateCode=ref<any>(''),results=ref<any[]>([]),project=ref<any>(null),versions=ref<any[]>([]),version=ref<any>(''),error=ref<any>(''),gameVersion=ref(props.minecraftVersion||''),loader=ref(props.loader||''),sort=ref<any>('relevance'),optional=ref(false),instanceName=ref<any>(''),offset=ref(0),searched=ref(false),searching=ref(false),detailLoading=ref(false),installing=ref(false),cancelling=ref(false),projectTab=ref<'overview'|'versions'>('overview'),favorite=ref(false);
 const selectedProjects = reactive<Record<string, any>>({});
@@ -110,6 +115,22 @@ async function loadProviders() {
     // Static providers remain available if dynamic discovery fails.
   }
 }
+async function openProviderDirectory() {
+  try { await props.execute('resource.providers.open-directory'); }
+  catch (exception) { error.value = exception instanceof Error ? exception.message : String(exception); }
+}
+async function refreshProviders() {
+  if (providerRefreshing.value) return;
+  providerRefreshing.value = true;
+  try {
+    await props.execute('resource.providers.reload');
+    await loadProviders();
+    reset(false);
+    if (!props.busy && props.autoRefresh !== false) await search(0);
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : String(exception);
+  } finally { providerRefreshing.value = false; }
+}
 onMounted(async () => {
   if (props.active === false) return;
   await loadProviders();
@@ -138,6 +159,7 @@ const loaderOptions = [
 const versionOptions = computed(() => versions.value.map(v => ({ label: versionLabel(v), value: v.versionId })));
 const renderedBody = computed(() => renderMarkdown(String(project.value?.body || project.value?.description || t('pcl.auto2.kcbbd8f733d'))));
 const providerMeta = computed(() => providerCatalog.value.find(entry => String(entry?.id) === provider.value) || null);
+function providerMetaFor(source: string) { return providerCatalog.value.find(entry => String(entry?.id) === source) || null; }
 
 const allowedTags = new Set(['a', 'p', 'br', 'strong', 'em', 'del', 'code', 'pre', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'div', 'span']);
 const allowedAttributes: Record<string, string[]> = {
@@ -319,7 +341,7 @@ function scrollCatalogToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
-async function search(start:number){if(props.busy || searching.value || cancelling.value)return;autoRefreshSuppressed.value=false;const generation=++searchGeneration;searching.value=true;error.value='';if(start===0)clearSelectedProjects();try{const text=[query.value,props.tag&&props.tag!==t('pcl.auto2.k778fc8f994')?props.tag:''].filter(Boolean).join(' ');const aggregateMods=!props.packs&&props.kind==='mods';const operation=props.packs?'modpack.search':aggregateMods?'resource.search.v2':'resource.search';const request=aggregateMods?{...params(),providers:['modrinth','curseforge'],query:text,offset:start}:{...params(),query:text,offset:start};const r=await props.execute(operation,request);if(generation!==searchGeneration)return;const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;project.value=null;scrollCatalogToTop();}catch(e){if(generation===searchGeneration)error.value=String(e);}finally{if(generation===searchGeneration)searching.value=false;}}
+async function search(start:number){if(props.busy || searching.value || cancelling.value)return;autoRefreshSuppressed.value=false;const generation=++searchGeneration;searching.value=true;error.value='';if(start===0)clearSelectedProjects();try{const text=[query.value,props.tag&&props.tag!==t('pcl.auto2.k778fc8f994')?props.tag:''].filter(Boolean).join(' ');const aggregateMods=!props.packs&&props.kind==='mods';const operation=props.packs?'modpack.search':aggregateMods?'resource.search.v2':'resource.search';const aggregateProviders=providers.value.filter(id=>providerMetaFor(id)?.kinds?.includes('mods') ?? ['modrinth','curseforge'].includes(id));const request=aggregateMods?{...params(),providers:aggregateProviders.length?aggregateProviders:['modrinth','curseforge'],query:text,offset:start}:{...params(),query:text,offset:start};const r=await props.execute(operation,request);if(generation!==searchGeneration)return;const list=Array.isArray(r)?r:(r?.results||r?.projects||r?.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;project.value=null;scrollCatalogToTop();}catch(e){if(generation===searchGeneration)error.value=String(e);}finally{if(generation===searchGeneration)searching.value=false;}}
 async function cancelLoading(){
   if ((!searching.value && !detailLoading.value) || cancelling.value) return;
   // Invalidate the current request immediately so a late response cannot
@@ -378,7 +400,7 @@ async function installSelected() {
   let failure = '';
   try {
     for (const entry of entries) {
-      const recursive = ['modrinth', 'curseforge'].includes(entry.provider) && providerMeta.value?.dependencyResolution !== false;
+      const recursive = providerMetaFor(String(entry.provider || provider.value))?.dependencyResolution === true;
       let task: any = await props.execute('neo.task.start', { operation: recursive ? 'resource.install-with-dependencies' : 'resource.install-version', priority: 'high', parameters: { ...params(entry.provider), instance: props.instance, projectId: entry.projectId, versionId: entry.versionId, ...(recursive ? { includeOptional: optional.value } : {}) } });
       while (task && !isTaskItemFinished(task)) { emit('install-progress', task); await new Promise(resolve => setTimeout(resolve, 400)); task = await props.execute('neo.task.status', { taskId: task.taskId }); }
       emit('install-progress', task);
@@ -416,7 +438,7 @@ async function install(){
       // Other providers still support direct version installation and must not
       // be rejected just because the optional-dependency checkbox is enabled.
       const projectProvider = String(project.value.provider || provider.value);
-      const recursive = ['modrinth', 'curseforge'].includes(projectProvider) && providerMeta.value?.dependencyResolution !== false;
+      const recursive = providerMetaFor(projectProvider)?.dependencyResolution === true;
       let task:any=await props.execute('neo.task.start',{
         operation:recursive ? 'resource.install-with-dependencies' : 'resource.install-version',
         priority:'high',
@@ -457,6 +479,12 @@ provide(PclCatalogContextKey, { t, props, emit, busy: toRef(props, 'busy'), sear
 
 .pcl-catalog-toolbar .pcl-input {
   flex: 1;
+}
+
+.pcl-catalog-provider-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .pcl-catalog-filters {

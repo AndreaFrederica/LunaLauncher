@@ -15,6 +15,8 @@
 #include "net/HttpMetaCache.h"
 #include "Application.h"
 #include "LauncherResources.h"
+#include "settings/SettingsObject.h"
+#include <algorithm>
 #include <QDir>
 #include <QDirIterator>
 
@@ -42,6 +44,8 @@ void JSAPIManager::initialize(const QStringList& apiDirectories)
             qDebug() << "[JSAPIManager] Directory not found:" << dir;
         }
     }
+
+    loadConfiguration();
 
     qDebug() << "[JSAPIManager] Loaded" << m_apis.size() << "APIs";
 }
@@ -122,22 +126,76 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAllAPIs() const
     return m_apis;
 }
 
+void JSAPIManager::loadConfiguration()
+{
+    m_orderedIds.clear();
+    m_disabledIds.clear();
+    if (auto* application = qobject_cast<Application*>(QCoreApplication::instance()); application && application->settings()) {
+        m_orderedIds = application->settings()->get("JSAPIOrder").toStringList();
+        m_disabledIds = application->settings()->get("JSAPIDisabled").toStringList();
+    }
+}
+
+bool JSAPIManager::isApiEnabled(const QString& id) const
+{
+    const auto api = getAPIById(id);
+    return api && api->getMetadata().enabled && !m_disabledIds.contains(id);
+}
+
+QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getOrderedAPIs(bool includeDisabled) const
+{
+    auto result = m_apis;
+    std::stable_sort(result.begin(), result.end(), [this](const auto& left, const auto& right) {
+        const auto& leftMeta = left->getMetadata();
+        const auto& rightMeta = right->getMetadata();
+        const int leftRank = m_orderedIds.indexOf(leftMeta.id);
+        const int rightRank = m_orderedIds.indexOf(rightMeta.id);
+        const bool leftConfigured = leftRank >= 0;
+        const bool rightConfigured = rightRank >= 0;
+        if (leftConfigured != rightConfigured)
+            return leftConfigured;
+        if (leftConfigured && leftRank != rightRank)
+            return leftRank < rightRank;
+        if (leftMeta.priority != rightMeta.priority)
+            return leftMeta.priority > rightMeta.priority;
+        return leftMeta.id < rightMeta.id;
+    });
+
+    if (!includeDisabled) {
+        result.erase(std::remove_if(result.begin(), result.end(), [this](const auto& api) { return !isApiEnabled(api->getMetadata().id); }), result.end());
+    }
+    return result;
+}
+
+void JSAPIManager::setConfiguration(const QStringList& order, const QStringList& disabled)
+{
+    m_orderedIds.clear();
+    for (const auto& id : order) {
+        if (!id.isEmpty() && !m_orderedIds.contains(id))
+            m_orderedIds.append(id);
+    }
+    m_disabledIds.clear();
+    for (const auto& id : disabled) {
+        if (!id.isEmpty() && !m_disabledIds.contains(id))
+            m_disabledIds.append(id);
+    }
+    if (auto* application = qobject_cast<Application*>(QCoreApplication::instance()); application && application->settings()) {
+        application->settings()->set("JSAPIOrder", m_orderedIds);
+        application->settings()->set("JSAPIDisabled", m_disabledIds);
+    }
+}
+
 QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsForType(ModPlatform::ResourceType type) const
 {
     QList<std::shared_ptr<JSResourceAPI>> result;
     int typeInt = static_cast<int>(type);
 
-    for (const auto& api : m_apis) {
+    for (const auto& api : getOrderedAPIs()) {
         const auto& metadata = api->getMetadata();
         if (metadata.enabled && metadata.supportedTypes.contains(typeInt)) {
             result.append(api);
         }
     }
-
-    // 按优先级排序
-    std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
-        return a->getMetadata().priority > b->getMetadata().priority;
-    });
 
     return result;
 }
@@ -156,7 +214,7 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsByProvider(const QStr
 {
     QList<std::shared_ptr<JSResourceAPI>> result;
 
-    for (const auto& api : m_apis) {
+    for (const auto& api : getOrderedAPIs()) {
         if (api->getMetadata().provider.compare(provider, Qt::CaseInsensitive) == 0) {
             result.append(api);
         }
@@ -168,14 +226,11 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsByProvider(const QStr
 QString JSAPIManager::rewriteUrl(const QString& url, const QJsonObject& context) const
 {
     QList<std::shared_ptr<JSResourceAPI>> mirrors;
-    for (const auto& api : m_apis) {
+    for (const auto& api : getOrderedAPIs()) {
         const auto& metadata = api->getMetadata();
         if (metadata.enabled && metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) == 0)
             mirrors.append(api);
     }
-    std::sort(mirrors.begin(), mirrors.end(), [](const auto& left, const auto& right) {
-        return left->getMetadata().priority > right->getMetadata().priority;
-    });
 
     for (const auto& api : mirrors) {
         if (const auto rewritten = api->rewriteUrl(url, context); rewritten.has_value())

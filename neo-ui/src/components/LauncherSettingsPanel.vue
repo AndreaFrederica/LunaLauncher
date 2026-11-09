@@ -65,6 +65,31 @@
           <q-btn flat icon="folder_open" label="打开镜像配置目录" :disable="busy" @click="openMirrorDirectory" />
         </div>
         <q-banner v-if="mirrorDirectoryError" class="bg-red-9 q-mt-md">{{ mirrorDirectoryError }}</q-banner>
+        <section class="mirror-script-manager q-mt-md">
+          <h6>高级 JavaScript 镜像规则</h6>
+          <p class="data-location-hint">可同时启用多个脚本；列表从上到下执行。脚本返回 null 时会继续交给下一个脚本。</p>
+          <div class="row q-gutter-sm q-mb-sm">
+            <q-btn flat label="刷新脚本列表" :disable="busy || mirrorScriptsBusy" @click="loadMirrorScripts" />
+            <q-btn flat label="保存排序和启用状态" :disable="busy || mirrorScriptsBusy" @click="saveMirrorScripts" />
+          </div>
+          <q-banner v-if="mirrorScriptsError" class="bg-red-9 q-mb-sm">{{ mirrorScriptsError }}</q-banner>
+          <q-list v-if="mirrorScripts.length" bordered separator>
+            <q-item v-for="(script,index) in mirrorScripts" :key="script.id">
+              <q-item-section avatar><q-checkbox v-model="script.enabled" :disable="mirrorScriptsBusy" /></q-item-section>
+              <q-item-section>
+                <q-item-label>{{ script.name }}</q-item-label>
+                <q-item-label caption>{{ script.id }} · metadata priority {{ script.priority }}</q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <div class="row q-gutter-xs">
+                  <q-btn flat dense icon="arrow_upward" :disable="index === 0 || mirrorScriptsBusy" @click="moveMirrorScript(index,-1)" />
+                  <q-btn flat dense icon="arrow_downward" :disable="index === mirrorScripts.length - 1 || mirrorScriptsBusy" @click="moveMirrorScript(index,1)" />
+                </div>
+              </q-item-section>
+            </q-item>
+          </q-list>
+          <div v-else class="data-location-hint">没有已加载的镜像脚本。请先放入 .js 文件并刷新列表。</div>
+        </section>
       </section>
       <SettingsPanel class="q-mt-lg" :settings="mirrorOtherSettings" category="all" :busy="busy" @save="save" @reset="reset" />
     </div>
@@ -84,15 +109,18 @@ import LauncherControlPanel from './LauncherControlPanel.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref<any>('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref<any>('authlib-injector'),externalTool=ref<any>('jprofiler'),externalPath=ref<any>('');
-const dataLocation=ref<any>(null),dataLocationMode=ref<'portable'|'user'>('user'),dataLocationBusy=ref(false),dataLocationError=ref(''),dataLocationNotice=ref(''),mirrorDirectoryError=ref('');
+const dataLocation=ref<any>(null),dataLocationMode=ref<'portable'|'user'>('user'),dataLocationBusy=ref(false),dataLocationError=ref(''),dataLocationNotice=ref(''),mirrorDirectoryError=ref(''),mirrorScripts=ref<any[]>([]),mirrorScriptsBusy=ref(false),mirrorScriptsError=ref('');
 const dataLocationOptions=computed(()=>[{label:t('neo.dataLocation.portable'),value:'portable'},{label:t('neo.dataLocation.userData'),value:'user'}]);
 const dataLocationCurrentMode=computed<'portable'|'user'>(()=>dataLocation.value?.portable?'portable':'user');
 const dataLocationTarget=computed(()=>dataLocationMode.value==='portable'?dataLocation.value?.portablePath:dataLocation.value?.systemPath);
 async function loadDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';try{dataLocation.value=await props.execute('startup.data-location');dataLocationMode.value=dataLocationCurrentMode.value;}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
 async function openDataPath(path:string|undefined){if(!path)return;try{await props.execute('desktop.open-path',{path});}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}}
 async function openMirrorDirectory(){mirrorDirectoryError.value='';try{await props.execute('resource.providers.open-directory');}catch(e){mirrorDirectoryError.value=e instanceof Error?e.message:String(e);}}
+async function loadMirrorScripts(){mirrorScriptsBusy.value=true;mirrorScriptsError.value='';try{mirrorScripts.value=await props.execute('resource.mirrors',{});}catch(e){mirrorScriptsError.value=e instanceof Error?e.message:String(e);}finally{mirrorScriptsBusy.value=false;}}
+async function saveMirrorScripts(){mirrorScriptsBusy.value=true;mirrorScriptsError.value='';try{await props.execute('resource.mirrors.configure',{order:mirrorScripts.value.map(item=>item.id),disabled:mirrorScripts.value.filter(item=>!item.enabled).map(item=>item.id)});emit('changed');}catch(e){mirrorScriptsError.value=e instanceof Error?e.message:String(e);}finally{mirrorScriptsBusy.value=false;}}
+function moveMirrorScript(index:number,delta:number){const target=index+delta;if(target<0||target>=mirrorScripts.value.length)return;const item=mirrorScripts.value.splice(index,1)[0];mirrorScripts.value.splice(target,0,item);void saveMirrorScripts();}
 async function applyDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';dataLocationNotice.value='';try{const result=await props.execute('startup.set-data-location',{portable:dataLocationMode.value==='portable'});dataLocation.value=result?.status||dataLocation.value;dataLocationNotice.value=t('neo.dataLocation.applied');}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
-onMounted(loadDataLocation);
+onMounted(()=>{void loadDataLocation();void loadMirrorScripts();});
 const backends=[{label:t('neo.auto2.ka626fe7700'),value:0},{label:'Aria2',value:1},{label:t('neo.auto2.k6a21c71e5f'),value:2}];
 const mirrorTypes=[{label:t('neo.auto2.k212e81e6d0'),value:0},{label:t('neo.auto2.kf0aba8a42d'),value:1},{label:t('neo.auto2.kfe7276cd17'),value:2},{label:'FastMinecraftMirror',value:3},{label:'HKMC Mirror (Main)',value:4}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);

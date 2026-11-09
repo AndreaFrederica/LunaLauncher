@@ -42,13 +42,20 @@
 #include <QFileDialog>
 #include <QDir>
 #include <QFile>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QTabBar>
 #include <QValidator>
 #include <QVariant>
+#include <QVBoxLayout>
 
 #include "Application.h"
 #include "BuildConfig.h"
@@ -56,6 +63,7 @@
 #include "LauncherResources.h"
 #include "minecraft/MirrorDownload.h"
 #include "modplatform/ModApiMirror.h"
+#include "modplatform/jsapi/JSAPIManager.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "net/PasteUpload.h"
 #include "net/PclDownloadLibrary.h"
@@ -183,6 +191,70 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
                                         "You can find the same documentation in the install directory's resource/jsapi folder."));
         if (!DesktopServices::openPath(path))
             QMessageBox::warning(this, tr("Open mirror configuration"), tr("Could not open the mirror configuration directory."));
+    });
+    connect(ui->manageMirrorScriptsButton, &QPushButton::clicked, this, [this] {
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Advanced JavaScript Mirror Management"));
+        dialog.setMinimumSize(560, 420);
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* intro = new QLabel(tr("Enable multiple mirror scripts and arrange them from highest to lowest priority. "
+                                    "A script returning null lets the next enabled script handle the URL."),
+                                 &dialog);
+        intro->setWordWrap(true);
+        layout->addWidget(intro);
+
+        auto* list = new QListWidget(&dialog);
+        const auto apis = JSAPIManager::instance().getOrderedAPIs(true);
+        for (const auto& api : apis) {
+            const auto& metadata = api->getMetadata();
+            if (metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
+                continue;
+            auto* item = new QListWidgetItem(QStringLiteral("%1  (%2, metadata priority %3)")
+                                                 .arg(metadata.displayName.isEmpty() ? metadata.id : metadata.displayName)
+                                                 .arg(metadata.id)
+                                                 .arg(metadata.priority),
+                                             list);
+            item->setData(Qt::UserRole, metadata.id);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(JSAPIManager::instance().isApiEnabled(metadata.id) ? Qt::Checked : Qt::Unchecked);
+        }
+        layout->addWidget(list, 1);
+
+        auto* moveLayout = new QHBoxLayout;
+        auto* up = new QPushButton(tr("Move Up"), &dialog);
+        auto* down = new QPushButton(tr("Move Down"), &dialog);
+        moveLayout->addWidget(up);
+        moveLayout->addWidget(down);
+        moveLayout->addStretch();
+        layout->addLayout(moveLayout);
+        connect(up, &QPushButton::clicked, list, [list] {
+            const auto row = list->currentRow();
+            if (row > 0)
+                list->insertItem(row - 1, list->takeItem(row)), list->setCurrentRow(row - 1);
+        });
+        connect(down, &QPushButton::clicked, list, [list] {
+            const auto row = list->currentRow();
+            if (row >= 0 && row + 1 < list->count())
+                list->insertItem(row + 1, list->takeItem(row)), list->setCurrentRow(row + 1);
+        });
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+
+        QStringList order;
+        QStringList disabled;
+        for (int i = 0; i < list->count(); ++i) {
+            auto* item = list->item(i);
+            const auto id = item->data(Qt::UserRole).toString();
+            order.append(id);
+            if (item->checkState() != Qt::Checked)
+                disabled.append(id);
+        }
+        JSAPIManager::instance().setConfiguration(order, disabled);
     });
 }
 

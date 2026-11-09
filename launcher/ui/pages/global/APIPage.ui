@@ -163,6 +163,16 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="manageMirrorScriptsButton">
+            <property name="text">
+             <string>Advanced JavaScript Mirror Management…</string>
+            </property>
+            <property name="icon">
+             <iconset theme="preferences-system"/>
+            </property>
+           </widget>
+          </item>
         </layout>
         </widget>
        </item>

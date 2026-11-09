@@ -1136,6 +1136,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_settings->registerSetting("LibrariesURL", "");
             m_settings->registerSetting({ "LegacyFMLLibsURLOverride", "FMLLibsURL" }, "");
             m_settings->registerSetting("MojangDownloadsMirrorURL", "");  // For replacing URLs in version JSON
+            m_settings->registerSetting("JSAPIOrder", QStringList{});
+            m_settings->registerSetting("JSAPIDisabled", QStringList{});
 
             QUrl librariesUrl(m_settings->get("LibrariesURL").toString());
             // get rid of invalid libraries urls

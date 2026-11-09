@@ -57,7 +57,11 @@ std::shared_ptr<ResourceAPI> provider(const QString& name)
     if (name == "modrinth") return std::make_shared<ModrinthAPI>();
     if (name == "curseforge") return std::make_shared<FlameAPI>();
     if (name == "hangar") return std::make_shared<HangarAPI>();
-    if (name.startsWith("js:")) return JSAPIManager::instance().getAPIById(name.mid(3));
+    if (name.startsWith("js:")) {
+        const auto id = name.mid(3);
+        if (!JSAPIManager::instance().isApiEnabled(id)) return {};
+        return JSAPIManager::instance().getAPIById(id);
+    }
     return {};
 }
 
@@ -68,7 +72,7 @@ QStringList supportedKinds(const QString& name)
     if (name.startsWith("js:")) {
         const auto api = JSAPIManager::instance().getAPIById(name.mid(3));
         QStringList result;
-        if (!api || !api->getMetadata().enabled) return result;
+        if (!api || !JSAPIManager::instance().isApiEnabled(api->getMetadata().id)) return result;
         for (auto it = kinds.begin(); it != kinds.end(); ++it)
             if (api->getMetadata().supportedTypes.contains(static_cast<int>(it.value()))) result.append(it.key());
         return result;
@@ -878,7 +882,7 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
         [](const QJsonObject&, UserInteraction&) {
             QJsonArray result;
             QStringList names{ "modrinth", "curseforge", "hangar" };
-            for (const auto& js : JSAPIManager::instance().getAllAPIs()) if (js->getMetadata().enabled) names.append("js:" + js->getMetadata().id);
+            for (const auto& js : JSAPIManager::instance().getOrderedAPIs()) names.append("js:" + js->getMetadata().id);
             for (const auto& name : names) {
                 const auto service = provider(name);
                 QJsonArray sorts;
@@ -903,6 +907,31 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
         });
     api.registerOperation({ "resource.providers.reload", "Reload installed JavaScript resource providers.", schema({}), "catalog", true },
         [](const QJsonObject&, UserInteraction&) { JSAPIManager::instance().reloadAll(); return OperationService::success(); });
+    api.registerOperation({ "resource.mirrors", "List JavaScript mirror rules and their effective enable/order state.", schema({}), "catalog" },
+        [](const QJsonObject&, UserInteraction&) {
+            QJsonArray result;
+            for (const auto& js : JSAPIManager::instance().getOrderedAPIs(true)) {
+                const auto& metadata = js->getMetadata();
+                if (metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
+                    continue;
+                result.append(QJsonObject{ { "id", metadata.id },
+                    { "name", metadata.displayName.isEmpty() ? metadata.id : metadata.displayName },
+                    { "version", metadata.version }, { "enabled", JSAPIManager::instance().isApiEnabled(metadata.id) },
+                    { "scriptEnabled", metadata.enabled }, { "priority", metadata.priority },
+                    { "order", JSAPIManager::instance().configuredOrder().indexOf(metadata.id) } });
+            }
+            return OperationService::success(result);
+        });
+    api.registerOperation({ "resource.mirrors.configure", "Enable, disable and order JavaScript mirror rules.",
+        schema({ { "order", strings() }, { "disabled", strings() } }, { "order", "disabled" }), "catalog", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            QStringList order;
+            for (const auto& value : p.value("order").toArray()) order.append(value.toString());
+            QStringList disabled;
+            for (const auto& value : p.value("disabled").toArray()) disabled.append(value.toString());
+            JSAPIManager::instance().setConfiguration(order, disabled);
+            return OperationService::success();
+        });
     api.registerOperation({ "resource.providers.open-directory", "Create and open the user JavaScript resource provider directory.", schema({}), "catalog", true },
         [](const QJsonObject&, UserInteraction&) {
             const auto path = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("jsapi"));

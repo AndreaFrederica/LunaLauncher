@@ -10,7 +10,9 @@
 `mojangBase`、`librariesBase`、`assetsBase`、`fabricMetaBase`、`quiltMetaBase`、
 `authlibInjectorBase` 和 `modrinthCdnBase` 等当前配置的端点。
 
-启动器内置了 `bmclapi_mirror.js`、`fastmcmirror_mirror.js` 和 `hkmc_mirror.js` 三个镜像配置。
+启动器内置了 `bmclapi_mirror.js`、`fastmcmirror_mirror.js`、`hkmc_mirror.js` 和
+`adoptium_tuna_mirror.js` 四个镜像配置。TUNA Adoptium 规则只处理
+Eclipse Adoptium 的 GitHub 二进制 URL，不会改写 Mojang、Azul 或其他下载源。
 FastMinecraftMirror 使用独立域名提供 LauncherMeta、Launcher、资源、Forge、
 Fabric 和 LiteLoader，因此由自己的 JS provider 按上游域名分别重写，而不是套用
 BMCLAPI 的 `/assets/`、`/maven/` 目录规则。

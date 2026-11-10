@@ -28,9 +28,12 @@ choice screen.
 
 The install wizard also configures the launcher's existing data conventions:
 MMC mode selects non-portable data and leaves the current directory
-unregistered; 原版/HMCL/PCL mode enables portable data and registers the
-installation directory as a vanilla-compatible store; 自定义 mode exposes the
-portable checkbox, store path, format, and registration toggle.
+unregistered; 原版/HMCL/PCL mode keeps the shell in the current directory,
+installs the launcher payload into a `LunaLauncher/` child directory, enables
+portable data, and registers that child as a vanilla-compatible store; 自定义
+mode exposes the portable checkbox, store path, format, and registration
+toggle. Reopening the package shell from either location starts the saved UI
+selection directly after installation.
 
 Release ZIP creation omits the portable/system marker files because they are
 machine-local installation state rather than launcher payload files.

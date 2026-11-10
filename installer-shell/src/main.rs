@@ -63,7 +63,7 @@ fn main() -> Result<()> {
         && !args.install
         && !args.no_launch
         && let Some(saved) = config::load()?.filter(|saved| {
-            current_executable_is_in_install_dir(&saved.install_dir)
+            current_executable_is_shell_for_install_dir(&saved.install_dir)
         })
     {
         platform::launch(&saved.install_dir, saved.entry_point)?;
@@ -97,6 +97,10 @@ fn main() -> Result<()> {
         });
         if let Some(install_dir) = args.install_dir {
             existing.install_dir = install_dir;
+        } else if existing.instance_layout == config::InstanceLayoutMode::Vanilla {
+            if let Some(install_dir) = vanilla_install_directory() {
+                existing.install_dir = install_dir;
+            }
         }
         let setup = LauncherSetup {
             instance_layout: existing.instance_layout,
@@ -151,20 +155,53 @@ fn install_shell_font(context: &egui::Context, font: Option<Vec<u8>>) {
     context.set_fonts(definitions);
 }
 
-fn current_executable_is_in_install_dir(install_dir: &Path) -> bool {
+fn current_executable_is_shell_for_install_dir(install_dir: &Path) -> bool {
     let Ok(executable) = std::env::current_exe() else {
         return false;
     };
-    executable
+    let Some(executable_directory) = executable
         .parent()
         .and_then(|directory| directory.canonicalize().ok())
-        == install_dir.canonicalize().ok()
+    else {
+        return false;
+    };
+    let Some(install_directory) = install_dir.canonicalize().ok() else {
+        return false;
+    };
+    if executable_directory == install_directory {
+        return true;
+    }
+    // In portable vanilla/HMCL/PCL mode the shell stays in the parent folder
+    // while the launcher payload lives in the LunaLauncher subdirectory.
+    if install_directory
+        .file_name()
+        .is_none_or(|name| !name.eq_ignore_ascii_case("LunaLauncher"))
+        || install_directory.parent() != Some(executable_directory.as_path())
+    {
+        return false;
+    }
+    PayloadSource::from_path(executable)
+        .map(|source| source.footer.is_some())
+        .unwrap_or(false)
 }
 
 fn current_executable_directory() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(Path::to_path_buf))
+}
+
+fn vanilla_install_directory() -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let directory = executable.parent()?.to_path_buf();
+    let file_name = executable.file_name()?.to_string_lossy();
+    if file_name.eq_ignore_ascii_case("luna-installer-shell.exe")
+        || file_name.eq_ignore_ascii_case("luna-installer-shell")
+    {
+        Some(directory)
+    } else {
+        Some(directory.join("LunaLauncher"))
+    }
 }
 
 fn payload_source(external: Option<PathBuf>) -> Result<PayloadSource> {
@@ -217,7 +254,14 @@ impl InstallerApp {
         let first_run = existing.is_none();
         let destination = existing
             .as_ref()
-            .map(|config| config.install_dir.display().to_string())
+            .and_then(|config| {
+                if config.instance_layout == config::InstanceLayoutMode::Vanilla {
+                    vanilla_install_directory()
+                } else {
+                    Some(config.install_dir.clone())
+                }
+            })
+            .map(|path| path.display().to_string())
             .unwrap_or_else(default_install_dir);
         let extract_destination = format!("{}-extracted", destination);
         let default_instance_store_path = destination.clone();
@@ -415,7 +459,7 @@ impl InstallerApp {
                 ui.label("MMC：非便携模式，不注册当前安装目录为实例目录。");
             }
             config::InstanceLayoutMode::Vanilla => {
-                ui.label("原版：便携模式，并注册当前安装目录为原版/HMCL/PCL 实例目录。");
+                ui.label("原版：便携模式，安装到当前 shell 目录下的 LunaLauncher 子目录，并注册为原版/HMCL/PCL 实例目录。");
             }
             config::InstanceLayoutMode::Custom => {
                 ui.horizontal(|ui| {
@@ -516,8 +560,8 @@ impl InstallerApp {
                 self.portable_mode = true;
                 self.register_instance_store = true;
                 self.instance_store_format = config::InstanceStoreFormat::VanillaCompatible;
-                if let Some(shell_directory) = current_executable_directory() {
-                    self.destination = shell_directory.display().to_string();
+                if let Some(install_directory) = vanilla_install_directory() {
+                    self.destination = install_directory.display().to_string();
                     self.extract_destination = format!("{}-extracted", self.destination);
                 }
                 self.instance_store_path = self.destination.clone();

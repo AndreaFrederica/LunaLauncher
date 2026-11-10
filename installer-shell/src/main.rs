@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use eframe::egui;
 
-use luna_installer_shell::{archive, config, platform, sfx::PayloadSource};
+use luna_installer_shell::{archive, config, i18n, platform, sfx::PayloadSource};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -62,9 +62,8 @@ fn main() -> Result<()> {
         && !args.list
         && !args.install
         && !args.no_launch
-        && let Some(saved) = config::load()?.filter(|saved| {
-            current_executable_is_shell_for_install_dir(&saved.install_dir)
-        })
+        && let Some(saved) = config::load()?
+            .filter(|saved| current_executable_is_shell_for_install_dir(&saved.install_dir))
     {
         platform::launch(&saved.install_dir, saved.entry_point)?;
         return Ok(());
@@ -106,7 +105,8 @@ fn main() -> Result<()> {
             instance_layout: existing.instance_layout,
             portable_mode: existing.portable_mode,
             register_instance_store: existing.register_instance_store,
-            instance_store_path: if existing.instance_layout == config::InstanceLayoutMode::Vanilla {
+            instance_store_path: if existing.instance_layout == config::InstanceLayoutMode::Vanilla
+            {
                 existing
                     .install_dir
                     .parent()
@@ -254,6 +254,7 @@ struct InstallerApp {
     installing: bool,
     install_progress: f32,
     install_progress_text: String,
+    language: i18n::Language,
 }
 
 impl InstallerApp {
@@ -323,6 +324,7 @@ impl InstallerApp {
             installing: false,
             install_progress: 0.0,
             install_progress_text: String::new(),
+            language: i18n::Language::detect(),
         }
     }
 }
@@ -339,6 +341,24 @@ impl eframe::App for InstallerApp {
 }
 
 impl InstallerApp {
+    fn show_language_picker(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                egui::ComboBox::from_id_salt("installer-language")
+                    .selected_text(self.language.name())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.language,
+                            i18n::Language::SimplifiedChinese,
+                            "简体中文",
+                        );
+                        ui.selectable_value(&mut self.language, i18n::Language::English, "English");
+                    });
+                ui.label(i18n::text(self.language, "language"));
+            });
+        });
+    }
+
     fn poll_install(&mut self, context: &egui::Context) {
         let Some(receiver) = self.install_receiver.take() else {
             return;
@@ -375,18 +395,28 @@ impl InstallerApp {
     }
 
     fn show_first_run(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Open LunaLauncher package");
-        ui.label("Choose what to do with this package before any installation settings are saved.");
-        ui.label("You can install it, extract its files manually, or inspect the archive first.");
+        self.show_language_picker(ui);
+        ui.heading(i18n::text(self.language, "first.title"));
+        ui.label(i18n::text(self.language, "first.subtitle"));
+        ui.label(i18n::text(self.language, "first.intro"));
         ui.separator();
-        if ui.button("Install LunaLauncher").clicked() {
+        if ui
+            .add_sized(
+                [220.0, 36.0],
+                egui::Button::new(i18n::text(self.language, "first.install")),
+            )
+            .clicked()
+        {
             self.screen = InstallerScreen::Install;
         }
-        if ui.button("Extract files only").clicked() {
+        if ui
+            .button(i18n::text(self.language, "first.extract"))
+            .clicked()
+        {
             self.screen = InstallerScreen::ArchiveViewer;
             self.status = "Choose a destination, then extract the complete archive.".to_owned();
         }
-        if ui.button("View archive contents").clicked() {
+        if ui.button(i18n::text(self.language, "first.view")).clicked() {
             self.screen = InstallerScreen::ArchiveViewer;
             self.status = "Archive opened in read-only mode.".to_owned();
         }
@@ -396,67 +426,80 @@ impl InstallerApp {
         } else {
             ui.separator();
             ui.label(format!(
-                "{} archive entries are ready to inspect.",
-                self.entries.len()
+                "{} {}",
+                self.entries.len(),
+                i18n::text(self.language, "first.ready")
             ));
         }
-        ui.label("Installation is considered complete only after the Install button succeeds.");
-        ui.label("Leaving this window before then will show this choice screen again next time.");
+        ui.label(i18n::text(self.language, "first.complete"));
+        ui.label(i18n::text(self.language, "first.leave"));
     }
 
     fn show_install(&mut self, ui: &mut egui::Ui) {
-        ui.heading("LunaLauncher Installer");
-        ui.label("The existing launcher files will be extracted without changing their layout.");
+        self.show_language_picker(ui);
+        ui.heading(i18n::text(self.language, "install.title"));
+        ui.label(i18n::text(self.language, "install.subtitle"));
         if self.installing {
             ui.separator();
-            ui.label("Installing LunaLauncher...");
+            ui.label(i18n::text(self.language, "progress.installing"));
             ui.add(egui::ProgressBar::new(self.install_progress).show_percentage());
             ui.label(&self.install_progress_text);
             return;
         }
         ui.separator();
+        ui.heading(i18n::text(self.language, "step.location"));
         ui.horizontal(|ui| {
-            ui.label("Install directory:");
+            ui.label(i18n::text(self.language, "install.directory"));
             if self.instance_layout == config::InstanceLayoutMode::Vanilla {
                 ui.label(&self.destination);
             } else {
                 ui.text_edit_singleline(&mut self.destination);
             }
         });
+        if self.instance_layout == config::InstanceLayoutMode::Vanilla {
+            ui.small(i18n::text(self.language, "install.shell_dir"));
+        }
+        ui.separator();
+        ui.heading(i18n::text(self.language, "step.ui"));
         ui.horizontal(|ui| {
-            ui.label("Default UI:");
+            ui.label(i18n::text(self.language, "install.ui"));
             ui.radio_value(
                 &mut self.entry_point,
                 config::EntryPoint::Classic,
-                "Classic UI",
+                i18n::text(self.language, "ui.classic"),
             );
-            ui.radio_value(&mut self.entry_point, config::EntryPoint::Neo, "NeoUI");
-            ui.radio_value(&mut self.entry_point, config::EntryPoint::Both, "Both");
+            ui.radio_value(
+                &mut self.entry_point,
+                config::EntryPoint::Neo,
+                i18n::text(self.language, "ui.neo"),
+            );
+            ui.radio_value(
+                &mut self.entry_point,
+                config::EntryPoint::Both,
+                i18n::text(self.language, "ui.both"),
+            );
         });
-        ui.checkbox(&mut self.desktop_shortcuts, "Create desktop shortcut(s)");
-        ui.checkbox(
-            &mut self.start_menu_shortcuts,
-            "Create Start Menu shortcut(s)",
-        );
+        ui.small(i18n::text(self.language, "ui.help"));
         ui.separator();
-        ui.label("Launcher data and instance directory");
-        ui.label("Choose how the directory containing the installed shell is handled.");
+        ui.heading(i18n::text(self.language, "step.data"));
+        ui.label(i18n::text(self.language, "data.title"));
+        ui.small(i18n::text(self.language, "data.help"));
         let previous_layout = self.instance_layout;
         ui.horizontal(|ui| {
             ui.radio_value(
                 &mut self.instance_layout,
                 config::InstanceLayoutMode::Mmc,
-                "MMC",
+                i18n::text(self.language, "mode.mmc"),
             );
             ui.radio_value(
                 &mut self.instance_layout,
                 config::InstanceLayoutMode::Vanilla,
-                "原版 / HMCL / PCL",
+                i18n::text(self.language, "mode.vanilla"),
             );
             ui.radio_value(
                 &mut self.instance_layout,
                 config::InstanceLayoutMode::Custom,
-                "自定义",
+                i18n::text(self.language, "mode.custom"),
             );
         });
         if self.instance_layout != previous_layout {
@@ -464,36 +507,50 @@ impl InstallerApp {
         }
         match self.instance_layout {
             config::InstanceLayoutMode::Mmc => {
-                ui.label("MMC：非便携模式，不注册当前安装目录为实例目录。");
+                ui.label(i18n::text(self.language, "mode.mmc.help"));
             }
             config::InstanceLayoutMode::Vanilla => {
-                ui.label("原版：便携模式，安装到当前 shell 目录下的 LunaLauncher 子目录，并将外层目录注册为原版/HMCL/PCL 实例目录。");
+                ui.label(i18n::text(self.language, "mode.vanilla.help"));
             }
             config::InstanceLayoutMode::Custom => {
                 ui.horizontal(|ui| {
-                    ui.label("实例目录：");
+                    ui.label(i18n::text(self.language, "custom.instance"));
                     ui.text_edit_singleline(&mut self.instance_store_path);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("实例格式：");
+                    ui.label(i18n::text(self.language, "custom.format"));
                     ui.radio_value(
                         &mut self.instance_store_format,
                         config::InstanceStoreFormat::Prism,
-                        "MMC / Prism",
+                        i18n::text(self.language, "mode.mmc"),
                     );
                     ui.radio_value(
                         &mut self.instance_store_format,
                         config::InstanceStoreFormat::VanillaCompatible,
-                        "原版 / HMCL / PCL",
+                        i18n::text(self.language, "mode.vanilla"),
                     );
                 });
-                ui.checkbox(&mut self.register_instance_store, "注册这个实例目录");
+                ui.checkbox(
+                    &mut self.register_instance_store,
+                    i18n::text(self.language, "custom.register"),
+                );
+                ui.small(i18n::text(self.language, "mode.custom.help"));
             }
         }
+        ui.separator();
+        ui.heading(i18n::text(self.language, "step.shortcuts"));
+        ui.checkbox(
+            &mut self.desktop_shortcuts,
+            i18n::text(self.language, "shortcuts.desktop"),
+        );
+        ui.checkbox(
+            &mut self.start_menu_shortcuts,
+            i18n::text(self.language, "shortcuts.start"),
+        );
         if ui
             .checkbox(
                 &mut self.portable_mode,
-                "开启便携模式（UserData 放在启动器目录）",
+                i18n::text(self.language, "portable"),
             )
             .changed()
             && self.instance_layout != config::InstanceLayoutMode::Custom
@@ -502,7 +559,10 @@ impl InstallerApp {
             // the selection into a custom setup so it is preserved explicitly.
             self.instance_layout = config::InstanceLayoutMode::Custom;
         }
-        if ui.button("Install").clicked() {
+        if ui
+            .button(i18n::text(self.language, "install.button"))
+            .clicked()
+        {
             let destination = PathBuf::from(self.destination.trim());
             let setup = self.launcher_setup(&destination);
             self.start_install(destination, setup);
@@ -510,10 +570,17 @@ impl InstallerApp {
         ui.separator();
         ui.label(&self.status);
         ui.horizontal(|ui| {
-            if self.first_run && ui.button("Back").clicked() {
+            if self.first_run
+                && ui
+                    .button(i18n::text(self.language, "install.back"))
+                    .clicked()
+            {
                 self.screen = InstallerScreen::FirstRun;
             }
-            if ui.button("View archive").clicked() {
+            if ui
+                .button(i18n::text(self.language, "install.archive"))
+                .clicked()
+            {
                 self.screen = InstallerScreen::ArchiveViewer;
             }
         });
@@ -595,10 +662,7 @@ impl InstallerApp {
                 portable_mode: true,
                 register_instance_store: true,
                 instance_store_path: Some(
-                    destination
-                        .parent()
-                        .unwrap_or(destination)
-                        .to_path_buf(),
+                    destination.parent().unwrap_or(destination).to_path_buf(),
                 ),
                 instance_store_format: config::InstanceStoreFormat::VanillaCompatible,
             },
@@ -617,13 +681,14 @@ impl InstallerApp {
     }
 
     fn show_archive_viewer(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Archive viewer");
+        self.show_language_picker(ui);
+        ui.heading(i18n::text(self.language, "archive.title"));
         if let Some(error) = &self.entries_error {
             ui.colored_label(egui::Color32::RED, error);
         }
         ui.label(format!("{} entries", self.entries.len()));
         ui.horizontal(|ui| {
-            ui.label("Filter:");
+            ui.label(i18n::text(self.language, "archive.filter"));
             ui.text_edit_singleline(&mut self.search);
         });
         ui.separator();
@@ -650,11 +715,14 @@ impl InstallerApp {
                 }
             });
         ui.separator();
-        ui.label("Extract a normal directory that you can browse or edit manually:");
+        ui.label(i18n::text(self.language, "archive.extract"));
         ui.horizontal(|ui| {
-            ui.label("Destination:");
+            ui.label(i18n::text(self.language, "archive.destination"));
             ui.text_edit_singleline(&mut self.extract_destination);
-            if ui.button("Extract all").clicked() {
+            if ui
+                .button(i18n::text(self.language, "archive.extract_all"))
+                .clicked()
+            {
                 let destination = PathBuf::from(self.extract_destination.trim());
                 match archive::extract(&self.source, &destination) {
                     Ok(count) => {
@@ -667,10 +735,16 @@ impl InstallerApp {
         });
         ui.label(&self.status);
         ui.horizontal(|ui| {
-            if ui.button("Install...").clicked() {
+            if ui
+                .button(i18n::text(self.language, "archive.install"))
+                .clicked()
+            {
                 self.screen = InstallerScreen::Install;
             }
-            if ui.button("Back").clicked() {
+            if ui
+                .button(i18n::text(self.language, "archive.back"))
+                .clicked()
+            {
                 self.screen = if self.first_run {
                     InstallerScreen::FirstRun
                 } else {
@@ -735,10 +809,11 @@ fn install_with_progress(
             .file_name()
             .context("launcher entry point has no file name")?
             .to_string_lossy();
-        if !installed_entries.iter().any(|entry| entry == expected_name.as_ref()) {
-            anyhow::bail!(
-                "package is missing the selected launcher entry point: {expected_name}"
-            );
+        if !installed_entries
+            .iter()
+            .any(|entry| entry == expected_name.as_ref())
+        {
+            anyhow::bail!("package is missing the selected launcher entry point: {expected_name}");
         }
     }
     progress(0.05, "Extracting launcher files...");
@@ -753,17 +828,12 @@ fn install_with_progress(
             &format!("Extracting launcher files ({done}/{total})..."),
         );
     };
-    let count = if current_executable_directory().is_some_and(|directory| {
-        directory.canonicalize().ok() == destination.canonicalize().ok()
-    }) {
+    let count = if current_executable_directory()
+        .is_some_and(|directory| directory.canonicalize().ok() == destination.canonicalize().ok())
+    {
         archive::extract_with_progress(source, destination, &mut extraction_progress)?
     } else {
-        archive::extract_atomic_with_progress(
-            source,
-            destination,
-            true,
-            &mut extraction_progress,
-        )?
+        archive::extract_atomic_with_progress(source, destination, true, &mut extraction_progress)?
     };
     progress(0.80, "Installing shell and shortcuts...");
     install_uninstaller_copy(destination)?;

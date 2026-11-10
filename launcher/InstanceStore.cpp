@@ -179,16 +179,39 @@ void InstanceStoreRegistry::normalize(const QString& launcherRoot, bool portable
 
     if (!launcherRoot.isEmpty()) {
         const auto portablePath = portableInstancesPath(launcherRoot);
+        // The portable UserData store is part of the launcher layout. Create
+        // it while portable mode is active so the registry never exposes a
+        // default store that cannot be scanned immediately after startup.
+        if (portable)
+            QDir().mkpath(portablePath);
+
         bool found = false;
         for (auto& store : normalized) {
             if (store.canonicalPath == normalizePath(portablePath)) {
                 found = true;
+                // Older registries did not tag this reserved path as a
+                // portable-derived store. Upgrade it in place so a previous
+                // `enabled: false` value cannot permanently disable the
+                // automatically managed UserData/instances directory.
+                if (store.origin == InstanceStoreOrigin::User) {
+                    store.id = QStringLiteral("portable-userdata");
+                    store.name = QStringLiteral("便携版实例目录");
+                    store.format = InstanceStoreFormat::Prism;
+                    store.origin = InstanceStoreOrigin::PortableDerived;
+                    store.writable = true;
+                    store.autoEnableWhenPortable = true;
+                }
                 // A derived portable store follows the selected mode while
-                // autoEnableWhenPortable remains true. The settings UI clears
-                // that flag when the user explicitly disables the candidate.
-                if (store.autoEnableWhenPortable && portable) {
-                    store.enabled = true;
-                    store.defaultForNewInstances = true;
+                // autoEnableWhenPortable remains available for an explicit
+                // user disable in the settings UI.
+                if (store.origin == InstanceStoreOrigin::PortableDerived) {
+                    if (portable && store.autoEnableWhenPortable) {
+                        store.enabled = true;
+                        store.defaultForNewInstances = true;
+                    } else if (!portable) {
+                        store.enabled = false;
+                        store.defaultForNewInstances = false;
+                    }
                 }
                 break;
             }

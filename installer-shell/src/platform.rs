@@ -564,7 +564,10 @@ mod tests {
             true,
             Some(directory.path()),
             InstanceStoreFormat::VanillaCompatible,
-            directory.path().join("UserData").join("instance-stores.json"),
+            directory
+                .path()
+                .join("UserData")
+                .join("instance-stores.json"),
         )
         .unwrap();
 
@@ -572,7 +575,10 @@ mod tests {
         assert!(!directory.path().join(".luna-use-system-data").exists());
         let registry: Value = serde_json::from_str(
             &fs::read_to_string(
-                directory.path().join("UserData").join("instance-stores.json"),
+                directory
+                    .path()
+                    .join("UserData")
+                    .join("instance-stores.json"),
             )
             .unwrap(),
         )
@@ -612,11 +618,13 @@ mod tests {
         assert!(!directory.path().join("portable.txt").exists());
         assert!(directory.path().join(".luna-use-system-data").is_file());
         assert!(!directory.path().join("test-registry.json").exists());
-        assert!(!directory
-            .path()
-            .join("UserData")
-            .join("instance-stores.json")
-            .exists());
+        assert!(
+            !directory
+                .path()
+                .join("UserData")
+                .join("instance-stores.json")
+                .exists()
+        );
     }
 
     #[test]

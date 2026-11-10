@@ -22,7 +22,7 @@
               <small>{{ store.format === 'vanilla-compatible' ? 'PCL / HMCL / Mojang' : 'Prism / MMC' }} · {{ store.path }} · {{ store.exists === false ? '目录不存在' : '目录存在' }} · {{ store.scanState === 'disabled' ? '未启用' : store.scanState === 'missing' ? '无法扫描' : `已发现 ${store.instanceCount ?? 0} 个实例` }}</small>
             </div>
             <div class="instance-store-row__flags">
-              <PclCheckbox :model-value="store.enabled" label="启用" :disabled="busy" @update:model-value="updateStore(store, { enabled: $event })" />
+              <PclCheckbox :model-value="store.enabled" label="启用" :disabled="busy" @update:model-value="setStoreEnabled(store, $event)" />
               <PclCheckbox :model-value="store.writable" label="可写" :disabled="busy" @update:model-value="updateStore(store, { writable: $event })" />
               <PclRadio v-if="store.format === 'prism'" name="default-instance-store" :model-value="store.defaultForNewInstances ? store.id : ''" :value="store.id" label="新实例默认" :disabled="busy" @update:model-value="updateStore(store, { defaultForNewInstances: true })" />
               <button type="button" class="instance-store-workspace__link" :disabled="busy" @click="openStore(store)">打开目录</button>
@@ -40,9 +40,9 @@
       </article>
 
       <article class="instance-store-card">
-        <div class="instance-store-card__title"><strong>便携模式</strong><small>{{ location?.portable ? '当前启用' : '当前关闭' }}</small></div>
-        <div class="instance-store-location"><span>当前数据目录</span><code>{{ location?.current || '—' }}</code></div>
-        <div class="instance-store-location"><span>便携目录</span><code>{{ location?.portablePath || '—' }}</code></div>
+        <div class="instance-store-card__title"><strong>便携模式</strong><small>{{ location ? (location.portable ? '当前启用' : '当前关闭') : '正在读取' }}</small></div>
+        <div class="instance-store-location"><span>当前数据目录</span><code>{{ location?.current || '正在读取…' }}</code></div>
+        <div class="instance-store-location"><span>便携目录</span><code>{{ location?.portablePath || '正在读取…' }}</code></div>
         <div class="instance-store-actions">
           <PclButton type="button" class="instance-store-workspace__button" :disabled="busy || location?.portable" @click="setPortable(true)">启用便携模式</PclButton>
           <PclButton type="button" class="instance-store-workspace__button is-muted" :disabled="busy || !location?.portable" @click="setPortable(false)">使用用户目录</PclButton>
@@ -134,12 +134,18 @@ async function run(operation: string, parameters: Record<string, unknown> = {}) 
   try { return await props.execute(operation, parameters); }
   catch (exception) { error.value = exception instanceof Error ? exception.message : String(exception); throw exception; }
 }
-async function loadStores() { const data = await run('instance-store.list'); stores.value = data?.stores || []; }
-async function loadLocation() { location.value = await run('startup.data-location'); }
-async function loadVanilla() { const data = await run('vanilla-instance.list'); vanillaInstances.value = data?.instances || []; }
+function unwrap(value: any): any {
+  if (value?.ok === true && value.data && typeof value.data === 'object') return value.data;
+  if (value?.status && typeof value.status === 'object') return value.status;
+  return value;
+}
+async function loadStores() { const data = unwrap(await run('instance-store.list')); stores.value = data?.stores || []; }
+async function loadLocation() { location.value = unwrap(await run('startup.data-location')); }
+async function loadVanilla() { const data = unwrap(await run('vanilla-instance.list')); vanillaInstances.value = data?.instances || []; }
 async function loadAll() { busy.value = true; try { await Promise.all([loadStores(), loadLocation(), loadVanilla()]); notice.value = '实例目录状态已刷新。'; } finally { busy.value = false; } }
 async function addStore() { busy.value = true; try { await waitForTask('instance-store.add', { ...newStore, enabled: true, writable: true }); Object.assign(newStore, { name: '', path: '' }); await loadStores(); notice.value = '实例目录已添加。'; } finally { busy.value = false; } }
 async function updateStore(store: any, changes: Record<string, unknown>) { busy.value = true; try { await waitForTask('instance-store.update', { id: store.id, path: store.path, format: store.format, name: store.name, ...changes }); await loadStores(); } finally { busy.value = false; } }
+async function setStoreEnabled(store: any, enabled: boolean) { await updateStore(store, { enabled, ...(store.origin === 'portable-derived' ? { autoEnableWhenPortable: enabled } : {}) }); }
 async function openStore(store: any) { try { await run('desktop.open-path', { path: store.path }); notice.value = `已打开「${store.name || store.id}」。`; } catch { /* run() exposes the backend error in the workspace message. */ } }
 async function removeStore(store: any) { if (!window.confirm(`从注册表移除「${store.name || store.id}」？目录文件不会被删除。`)) return; busy.value = true; try { await waitForTask('instance-store.remove', { id: store.id }); await loadStores(); notice.value = '实例目录已从注册表移除。'; } finally { busy.value = false; } }
 async function setPortable(portable: boolean) { busy.value = true; try { await waitForTask('startup.set-data-location', { portable }); await loadLocation(); notice.value = '模式切换将在重启启动器后生效。'; } finally { busy.value = false; } }

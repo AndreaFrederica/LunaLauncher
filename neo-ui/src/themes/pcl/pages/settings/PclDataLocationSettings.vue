@@ -14,7 +14,7 @@
       <div class="pcl-form-row__control">
         <PclSelect v-model="mode" :options="modeOptions" :disabled="busy || loading" />
       </div>
-      <span class="pcl-form-row__hint">{{ modeHint }}</span>
+      <span class="pcl-form-row__hint">{{ modeHint }} · {{ currentMode === 'portable' ? t('pcl.dataLocation.portable') : t('pcl.dataLocation.userData') }}</span>
     </div>
     <div class="pcl-form-row">
       <span class="pcl-form-row__label">{{ t('pcl.dataLocation.target') }}</span>
@@ -53,7 +53,21 @@ const modeOptions = computed(() => [
   { label: t('pcl.dataLocation.portable'), value: 'portable' },
   { label: t('pcl.dataLocation.userData'), value: 'user' },
 ]);
-const currentMode = computed<'portable' | 'user'>(() => status.value?.portable ? 'portable' : 'user');
+function unwrapStatus(value: any): any {
+  if (value?.ok === true && value.data && typeof value.data === 'object') return value.data;
+  if (value?.status && typeof value.status === 'object') return value.status;
+  return value;
+}
+
+function pathKey(value: unknown): string {
+  return String(value || '').replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
+}
+
+const currentMode = computed<'portable' | 'user'>(() => {
+  if (!status.value) return 'user';
+  if (typeof status.value.portable === 'boolean') return status.value.portable ? 'portable' : 'user';
+  return pathKey(status.value.current) === pathKey(status.value.portablePath) ? 'portable' : 'user';
+});
 const targetPath = computed(() => mode.value === 'portable' ? status.value?.portablePath : status.value?.systemPath);
 const modeHint = computed(() => mode.value === 'portable' ? t('pcl.dataLocation.portableHint') : t('pcl.dataLocation.userDataHint'));
 
@@ -61,8 +75,8 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    status.value = await execute('startup.data-location');
-    mode.value = status.value?.portable ? 'portable' : 'user';
+    status.value = unwrapStatus(await execute('startup.data-location'));
+    mode.value = currentMode.value;
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);
   } finally {
@@ -85,8 +99,8 @@ async function apply() {
   error.value = '';
   notice.value = '';
   try {
-    const result = await execute('startup.set-data-location', { portable: mode.value === 'portable' });
-    status.value = result?.status || status.value;
+    const result = unwrapStatus(await execute('startup.set-data-location', { portable: mode.value === 'portable' }));
+    status.value = result || status.value;
     notice.value = t('pcl.dataLocation.applied');
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : String(exception);

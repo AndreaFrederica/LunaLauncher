@@ -9,6 +9,7 @@ class InstanceStoreTest : public QObject {
    private slots:
     void normalizesPortableCandidateWithoutEnablingInUserMode();
     void enablesPortableCandidateInPortableMode();
+    void upgradesLegacyPortableStoreAndCreatesDirectory();
     void deduplicatesStoresByCanonicalPath();
     void roundTripsRegistry();
 };
@@ -41,6 +42,36 @@ void InstanceStoreTest::enablesPortableCandidateInPortableMode()
     const auto& store = registry.stores().constFirst();
     QVERIFY(store.enabled);
     QVERIFY(store.defaultForNewInstances);
+}
+
+void InstanceStoreTest::upgradesLegacyPortableStoreAndCreatesDirectory()
+{
+    QTemporaryDir launcher;
+    QVERIFY(launcher.isValid());
+
+    // This is the shape written by early installer-shell builds: a plain
+    // Prism entry at the reserved UserData/instances path with no portable
+    // metadata and with the old disabled default.
+    InstanceStore legacy;
+    legacy.path = InstanceStoreRegistry::portableInstancesPath(launcher.path());
+    legacy.format = InstanceStoreFormat::Prism;
+    legacy.origin = InstanceStoreOrigin::User;
+    legacy.enabled = false;
+    legacy.writable = true;
+
+    InstanceStoreRegistry registry;
+    registry.addOrUpdate(legacy);
+    QVERIFY(!QDir(legacy.path).exists());
+    registry.normalize(launcher.path(), true);
+
+    QCOMPARE(registry.stores().size(), 1);
+    const auto& store = registry.stores().constFirst();
+    QCOMPARE(store.id, QStringLiteral("portable-userdata"));
+    QCOMPARE(store.origin, InstanceStoreOrigin::PortableDerived);
+    QVERIFY(store.enabled);
+    QVERIFY(store.defaultForNewInstances);
+    QVERIFY(store.autoEnableWhenPortable);
+    QVERIFY(QDir(store.path).exists());
 }
 
 void InstanceStoreTest::deduplicatesStoresByCanonicalPath()

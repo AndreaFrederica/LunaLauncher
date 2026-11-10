@@ -26,6 +26,11 @@ archive to a directory. Viewing or extracting does not mark installation as
 complete; until the install wizard succeeds, the next launch returns to this
 choice screen.
 
+The wizard detects the process locale, defaults to Simplified Chinese for
+unknown Windows locales, and provides an English/简体中文 switch in the window.
+The install page is organized as four beginner-friendly steps: location, UI,
+data/instance mode, and shortcuts.
+
 The install wizard also configures the launcher's existing data conventions:
 MMC mode selects non-portable data and leaves the current directory
 unregistered; 原版/HMCL/PCL mode keeps the shell in the current directory,

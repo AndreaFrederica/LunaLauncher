@@ -2722,13 +2722,19 @@ bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
             if (errorMessage) *errorMessage = tr("Could not create the portable data directory:\n%1").arg(QDir::toNativeSeparators(target));
             return false;
         }
-        QFile::remove(systemMarker);
+        if (QFileInfo::exists(systemMarker) && !QFile::remove(systemMarker)) {
+            if (errorMessage) *errorMessage = tr("Could not enable portable mode because the system-data marker could not be removed:\n%1").arg(QDir::toNativeSeparators(systemMarker));
+            return false;
+        }
         // UserData wins over portable.txt. Keep the old marker out of the way
         // so the next start deterministically uses the portable UserData tree.
         const auto marker = FS::PathCombine(m_rootPath, "portable.txt");
         if (QFileInfo::exists(marker)) {
             const auto backup = marker + ".disabled";
-            QFile::remove(backup);
+            if (QFileInfo::exists(backup) && !QFile::remove(backup)) {
+                if (errorMessage) *errorMessage = tr("Could not replace the old portable marker:\n%1").arg(QDir::toNativeSeparators(backup));
+                return false;
+            }
             if (!FS::move(marker, backup)) {
                 if (errorMessage) *errorMessage = tr("Could not disable the old portable marker:\n%1").arg(QDir::toNativeSeparators(marker));
                 return false;
@@ -2740,7 +2746,10 @@ bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
     const auto marker = FS::PathCombine(m_rootPath, "portable.txt");
     if (QFileInfo::exists(marker)) {
         const auto backup = marker + ".disabled";
-        QFile::remove(backup);
+        if (QFileInfo::exists(backup) && !QFile::remove(backup)) {
+            if (errorMessage) *errorMessage = tr("Could not replace the old portable marker:\n%1").arg(QDir::toNativeSeparators(backup));
+            return false;
+        }
         if (!FS::move(marker, backup)) {
             if (errorMessage) *errorMessage = tr("Could not disable the portable marker:\n%1").arg(QDir::toNativeSeparators(marker));
             return false;
@@ -2754,7 +2763,11 @@ bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
         if (errorMessage) *errorMessage = tr("Could not write the data-location marker:\n%1").arg(QDir::toNativeSeparators(systemMarker));
         return false;
     }
-    file.write(QByteArrayLiteral("Use the user data directory; ignore portable UserData.\n"));
+    const auto markerContents = QByteArrayLiteral("Use the user data directory; ignore portable UserData.\n");
+    if (file.write(markerContents) != markerContents.size() || !file.flush()) {
+        if (errorMessage) *errorMessage = tr("Could not write the data-location marker:\n%1").arg(QDir::toNativeSeparators(systemMarker));
+        return false;
+    }
     return true;
 }
 

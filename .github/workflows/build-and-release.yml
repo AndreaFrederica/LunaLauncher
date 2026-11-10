@@ -220,6 +220,12 @@ jobs:
           if (-not (Test-Path $stub)) {
               throw "Installer shell was not built: $stub"
           }
+          # These files are per-installation state. A stale marker here would
+          # force every fresh release into the system data directory and make
+          # the portable setting appear broken on first launch.
+          foreach ($marker in @(".luna-use-system-data", "portable.txt", "portable.txt.disabled")) {
+              Remove-Item -LiteralPath (Join-Path "install-release" $marker) -Force -ErrorAction SilentlyContinue
+          }
           New-Item -ItemType Directory -Force install-release/licenses | Out-Null
           Copy-Item installer-shell/LICENSE-MPL-2.0 install-release/licenses/installer-shell-MPL-2.0.txt -Force
           pixi run cargo run --manifest-path installer-shell/Cargo.toml --release --bin create-zip -- --source install-release --output $archive

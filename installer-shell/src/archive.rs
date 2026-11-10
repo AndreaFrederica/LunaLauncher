@@ -155,6 +155,10 @@ pub fn create_zip(source: &Path, output: &Path) -> Result<usize> {
     let source = source.canonicalize()?;
     let mut paths = Vec::new();
     collect_entries(&source, &source, &mut paths)?;
+    // Portable/system selection is installation state, not release content.
+    // Never let a stale local marker make a freshly packaged release start in
+    // the wrong data location.
+    paths.retain(|(relative, _)| !is_runtime_state_marker(relative));
     paths.sort_by(|left, right| left.0.cmp(&right.0));
 
     let mut count = 0;
@@ -180,6 +184,16 @@ pub fn create_zip(source: &Path, output: &Path) -> Result<usize> {
     }
     writer.finish()?;
     Ok(count)
+}
+
+fn is_runtime_state_marker(path: &Path) -> bool {
+    if path.components().count() != 1 {
+        return false;
+    }
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(".luna-use-system-data") | Some("portable.txt") | Some("portable.txt.disabled")
+    )
 }
 
 fn collect_entries(
@@ -294,6 +308,7 @@ mod tests {
         fs::create_dir_all(source.join("资源")).unwrap();
         fs::write(source.join("资源/启动器.txt"), "内容").unwrap();
         fs::write(source.join("ascii.txt"), "ascii").unwrap();
+        fs::write(source.join(".luna-use-system-data"), "stale state").unwrap();
 
         assert_eq!(create_zip(&source, &output).unwrap(), 3);
         let bytes = fs::read(&output).unwrap();

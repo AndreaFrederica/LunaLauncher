@@ -32,6 +32,9 @@ unregistered; 原版/HMCL/PCL mode enables portable data and registers the
 installation directory as a vanilla-compatible store; 自定义 mode exposes the
 portable checkbox, store path, format, and registration toggle.
 
+Release ZIP creation omits the portable/system marker files because they are
+machine-local installation state rather than launcher payload files.
+
 The SFX assembler places a fixed footer before the ZIP payload. This keeps the
 archive readable by standard tools without a trailing private-data warning,
 while the shell can still verify the payload hash before extraction.

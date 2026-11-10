@@ -50,11 +50,26 @@ pub fn read_entry(source: &PayloadSource, name: &str) -> Result<Vec<u8>> {
 }
 
 pub fn extract(source: &PayloadSource, destination: &Path) -> Result<usize> {
+    let mut no_progress = |_: usize, _: usize| {};
+    extract_with_progress(source, destination, &mut no_progress)
+}
+
+/// Extract a payload and report completed archive entries through `progress`.
+///
+/// The callback is deliberately entry based: it keeps the archive module
+/// independent from the installer UI while still allowing a responsive
+/// progress indicator during a large installation.
+pub fn extract_with_progress(
+    source: &PayloadSource,
+    destination: &Path,
+    progress: &mut dyn FnMut(usize, usize),
+) -> Result<usize> {
     source.verify_hash()?;
     fs::create_dir_all(destination)
         .with_context(|| format!("create extraction directory: {}", destination.display()))?;
     let mut archive =
         ZipArchive::new(source.open_reader()?).context("payload is not a readable ZIP archive")?;
+    let total_entries = archive.len();
     let mut extracted = 0;
     let mut seen = HashSet::with_capacity(archive.len());
     for index in 0..archive.len() {
@@ -72,6 +87,7 @@ pub fn extract(source: &PayloadSource, destination: &Path) -> Result<usize> {
                 bail!("refusing to overwrite symbolic link: {}", output.display());
             }
             fs::create_dir_all(&output)?;
+            progress(index + 1, total_entries);
             continue;
         }
         if entry
@@ -95,6 +111,7 @@ pub fn extract(source: &PayloadSource, destination: &Path) -> Result<usize> {
         std::io::copy(&mut entry, &mut file)?;
         file.flush()?;
         extracted += 1;
+        progress(index + 1, total_entries);
     }
     Ok(extracted)
 }
@@ -107,13 +124,23 @@ pub fn extract_atomic(
     destination: &Path,
     preserve_user_data: bool,
 ) -> Result<usize> {
+    let mut no_progress = |_: usize, _: usize| {};
+    extract_atomic_with_progress(source, destination, preserve_user_data, &mut no_progress)
+}
+
+pub fn extract_atomic_with_progress(
+    source: &PayloadSource,
+    destination: &Path,
+    preserve_user_data: bool,
+    progress: &mut dyn FnMut(usize, usize),
+) -> Result<usize> {
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)?;
     let staging = tempfile::Builder::new()
         .prefix(".luna-install-")
         .tempdir_in(parent)
         .context("create installation staging directory")?;
-    let count = extract(source, staging.path())?;
+    let count = extract_with_progress(source, staging.path(), progress)?;
 
     let backup = if destination.exists() {
         let backup = tempfile::Builder::new()
@@ -345,7 +372,15 @@ mod tests {
                 .unwrap()
                 .contains(&"资源/启动器.txt".to_owned())
         );
-        assert_eq!(extract(&payload, &destination).unwrap(), 2);
+        let mut updates = Vec::new();
+        assert_eq!(
+            extract_with_progress(&payload, &destination, &mut |done, total| {
+                updates.push((done, total));
+            })
+            .unwrap(),
+            2
+        );
+        assert_eq!(updates.last().copied(), Some((3, 3)));
         assert_eq!(
             fs::read_to_string(destination.join("资源/启动器.txt")).unwrap(),
             "内容"

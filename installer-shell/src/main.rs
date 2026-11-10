@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -204,6 +205,10 @@ struct InstallerApp {
     register_instance_store: bool,
     instance_store_path: String,
     instance_store_format: config::InstanceStoreFormat,
+    install_receiver: Option<mpsc::Receiver<InstallMessage>>,
+    installing: bool,
+    install_progress: f32,
+    install_progress_text: String,
 }
 
 impl InstallerApp {
@@ -262,12 +267,17 @@ impl InstallerApp {
                 .as_ref()
                 .map(|config| config.instance_store_format)
                 .unwrap_or_default(),
+            install_receiver: None,
+            installing: false,
+            install_progress: 0.0,
+            install_progress_text: String::new(),
         }
     }
 }
 
 impl eframe::App for InstallerApp {
     fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
+        self.poll_install(context);
         egui::CentralPanel::default().show(context, |ui| match self.screen {
             InstallerScreen::FirstRun => self.show_first_run(ui),
             InstallerScreen::Install => self.show_install(ui),
@@ -277,6 +287,41 @@ impl eframe::App for InstallerApp {
 }
 
 impl InstallerApp {
+    fn poll_install(&mut self, context: &egui::Context) {
+        let Some(receiver) = self.install_receiver.take() else {
+            return;
+        };
+        let mut keep_receiver = true;
+        for message in receiver.try_iter() {
+            match message {
+                InstallMessage::Progress { fraction, text } => {
+                    self.install_progress = fraction.clamp(0.0, 1.0);
+                    self.install_progress_text = text;
+                }
+                InstallMessage::Finished(result) => {
+                    self.installing = false;
+                    keep_receiver = false;
+                    match result {
+                        Ok(count) => {
+                            self.first_run = false;
+                            self.status = format!("Installed {count} files successfully");
+                            self.install_progress = 1.0;
+                            self.install_progress_text = "Installation complete".to_owned();
+                        }
+                        Err(error) => {
+                            self.status = format!("Install failed: {error}");
+                            self.install_progress_text = "Installation failed".to_owned();
+                        }
+                    }
+                }
+            }
+        }
+        if keep_receiver {
+            self.install_receiver = Some(receiver);
+            context.request_repaint_after(Duration::from_millis(50));
+        }
+    }
+
     fn show_first_run(&mut self, ui: &mut egui::Ui) {
         ui.heading("Open LunaLauncher package");
         ui.label("Choose what to do with this package before any installation settings are saved.");
@@ -310,6 +355,13 @@ impl InstallerApp {
     fn show_install(&mut self, ui: &mut egui::Ui) {
         ui.heading("LunaLauncher Installer");
         ui.label("The existing launcher files will be extracted without changing their layout.");
+        if self.installing {
+            ui.separator();
+            ui.label("Installing LunaLauncher...");
+            ui.add(egui::ProgressBar::new(self.install_progress).show_percentage());
+            ui.label(&self.install_progress_text);
+            return;
+        }
         ui.separator();
         ui.horizontal(|ui| {
             ui.label("Install directory:");
@@ -401,21 +453,7 @@ impl InstallerApp {
         if ui.button("Install").clicked() {
             let destination = PathBuf::from(self.destination.trim());
             let setup = self.launcher_setup(&destination);
-            match install(
-                &self.source,
-                &destination,
-                self.entry_point,
-                self.desktop_shortcuts,
-                self.start_menu_shortcuts,
-                setup,
-                true,
-            ) {
-                Ok(count) => {
-                    self.first_run = false;
-                    self.status = format!("Installed {count} files to {}", destination.display());
-                }
-                Err(error) => self.status = format!("Install failed: {error:#}"),
-            }
+            self.start_install(destination, setup);
         }
         ui.separator();
         ui.label(&self.status);
@@ -426,6 +464,44 @@ impl InstallerApp {
             if ui.button("View archive").clicked() {
                 self.screen = InstallerScreen::ArchiveViewer;
             }
+        });
+    }
+
+    fn start_install(&mut self, destination: PathBuf, setup: LauncherSetup) {
+        if self.installing {
+            return;
+        }
+        let (sender, receiver) = mpsc::channel();
+        let source = self.source.clone();
+        let entry_point = self.entry_point;
+        let desktop_shortcuts = self.desktop_shortcuts;
+        let start_menu_shortcuts = self.start_menu_shortcuts;
+        self.install_receiver = Some(receiver);
+        self.installing = true;
+        self.install_progress = 0.0;
+        self.install_progress_text = "Preparing installation...".to_owned();
+        self.status = "Installation in progress".to_owned();
+        std::thread::spawn(move || {
+            let result = {
+                let mut report = |fraction: f32, text: &str| {
+                    let _ = sender.send(InstallMessage::Progress {
+                        fraction,
+                        text: text.to_owned(),
+                    });
+                };
+                install_with_progress(
+                    &source,
+                    &destination,
+                    entry_point,
+                    desktop_shortcuts,
+                    start_menu_shortcuts,
+                    setup,
+                    true,
+                    &mut report,
+                )
+                .map_err(|error| format!("{error:#}"))
+            };
+            let _ = sender.send(InstallMessage::Finished(result));
         });
     }
 
@@ -554,6 +630,12 @@ struct LauncherSetup {
     instance_store_format: config::InstanceStoreFormat,
 }
 
+#[derive(Debug)]
+enum InstallMessage {
+    Progress { fraction: f32, text: String },
+    Finished(Result<usize, String>),
+}
+
 fn install(
     source: &PayloadSource,
     destination: &Path,
@@ -563,18 +645,67 @@ fn install(
     setup: LauncherSetup,
     launch_after: bool,
 ) -> Result<usize> {
+    let mut no_progress = |_: f32, _: &str| {};
+    install_with_progress(
+        source,
+        destination,
+        entry_point,
+        desktop_shortcuts,
+        start_menu_shortcuts,
+        setup,
+        launch_after,
+        &mut no_progress,
+    )
+}
+
+fn install_with_progress(
+    source: &PayloadSource,
+    destination: &Path,
+    entry_point: config::EntryPoint,
+    desktop_shortcuts: bool,
+    start_menu_shortcuts: bool,
+    setup: LauncherSetup,
+    launch_after: bool,
+    progress: &mut dyn FnMut(f32, &str),
+) -> Result<usize> {
+    progress(0.02, "Validating package...");
     let installed_entries = archive::list(source)?;
+    for (_, target) in platform::entry_targets(destination, entry_point) {
+        let expected_name = target
+            .file_name()
+            .context("launcher entry point has no file name")?
+            .to_string_lossy();
+        if !installed_entries.iter().any(|entry| entry == expected_name.as_ref()) {
+            anyhow::bail!(
+                "package is missing the selected launcher entry point: {expected_name}"
+            );
+        }
+    }
+    progress(0.05, "Extracting launcher files...");
     // A self-extracting shell can be placed directly in the directory it is
     // installing into. Windows cannot rename a directory containing the
     // currently running executable, so use a verified in-place extraction in
     // that one case; all other installs keep the atomic replacement path.
+    let mut extraction_progress = |done: usize, total: usize| {
+        let fraction = 0.05 + 0.73 * (done as f32 / total.max(1) as f32);
+        progress(
+            fraction,
+            &format!("Extracting launcher files ({done}/{total})..."),
+        );
+    };
     let count = if current_executable_directory().is_some_and(|directory| {
         directory.canonicalize().ok() == destination.canonicalize().ok()
     }) {
-        archive::extract(source, destination)?
+        archive::extract_with_progress(source, destination, &mut extraction_progress)?
     } else {
-        archive::extract_atomic(source, destination, true)?
+        archive::extract_atomic_with_progress(
+            source,
+            destination,
+            true,
+            &mut extraction_progress,
+        )?
     };
+    progress(0.80, "Installing shell and shortcuts...");
     install_uninstaller_copy(destination)?;
     platform::create_shortcuts(
         destination,
@@ -583,6 +714,7 @@ fn install(
         start_menu_shortcuts,
     )?;
     platform::create_uninstall_shortcut(destination, desktop_shortcuts, start_menu_shortcuts)?;
+    progress(0.90, "Configuring launcher data directories...");
     platform::configure_launcher(
         destination,
         setup.portable_mode,
@@ -591,6 +723,7 @@ fn install(
         setup.instance_store_format,
     )?;
     if launch_after {
+        progress(0.96, "Starting selected launcher UI...");
         platform::launch(destination, entry_point)?;
     }
     // Persist the completed wizard only after extraction, shortcuts, and the
@@ -609,6 +742,7 @@ fn install(
         instance_store_path: setup.instance_store_path,
         instance_store_format: setup.instance_store_format,
     })?;
+    progress(1.0, "Installation complete");
     Ok(count)
 }
 

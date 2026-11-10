@@ -62,7 +62,7 @@ fn main() -> Result<()> {
         && !args.install
         && !args.no_launch
         && let Some(saved) = config::load()?.filter(|saved| {
-            current_executable_is_installed_shell(&saved.install_dir)
+            current_executable_is_in_install_dir(&saved.install_dir)
         })
     {
         platform::launch(&saved.install_dir, saved.entry_point)?;
@@ -150,16 +150,14 @@ fn install_shell_font(context: &egui::Context, font: Option<Vec<u8>>) {
     context.set_fonts(definitions);
 }
 
-fn current_executable_is_installed_shell(install_dir: &Path) -> bool {
+fn current_executable_is_in_install_dir(install_dir: &Path) -> bool {
     let Ok(executable) = std::env::current_exe() else {
         return false;
     };
-    let expected = install_dir.join(if cfg!(windows) {
-        "luna-installer-shell.exe"
-    } else {
-        "luna-installer-shell"
-    });
-    executable.canonicalize().ok() == expected.canonicalize().ok()
+    executable
+        .parent()
+        .and_then(|directory| directory.canonicalize().ok())
+        == install_dir.canonicalize().ok()
 }
 
 fn current_executable_directory() -> Option<PathBuf> {

@@ -50,6 +50,33 @@ pub fn configure_launcher(
     instance_store_path: Option<&Path>,
     instance_store_format: InstanceStoreFormat,
 ) -> Result<()> {
+    let registry_path = if portable {
+        install_dir.join("UserData").join("instance-stores.json")
+    } else {
+        directories::BaseDirs::new()
+            .context("locate user config directory")?
+            .config_dir()
+            .join("LunaLauncher")
+            .join("instance-stores.json")
+    };
+    configure_launcher_at(
+        install_dir,
+        portable,
+        register_instance_store,
+        instance_store_path,
+        instance_store_format,
+        registry_path,
+    )
+}
+
+fn configure_launcher_at(
+    install_dir: &Path,
+    portable: bool,
+    register_instance_store: bool,
+    instance_store_path: Option<&Path>,
+    instance_store_format: InstanceStoreFormat,
+    registry_path: PathBuf,
+) -> Result<()> {
     let portable_marker = install_dir.join("portable.txt");
     let system_marker = install_dir.join(".luna-use-system-data");
     if portable {
@@ -76,11 +103,6 @@ pub fn configure_launcher(
         // portable selection in the directory that is no longer read.
         remove_if_exists(portable_registry_path.clone())?;
     }
-    let registry_path = if portable {
-        portable_registry_path
-    } else {
-        root_registry_path
-    };
     let mut registry = if registry_path.exists() {
         let contents = fs::read_to_string(&registry_path).with_context(|| {
             format!("read instance store registry: {}", registry_path.display())
@@ -160,6 +182,9 @@ pub fn configure_launcher(
         remove_if_exists(registry_path)?;
     } else {
         let contents = serde_json::to_string_pretty(&registry)?;
+        if let Some(parent) = registry_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         fs::write(&registry_path, contents).with_context(|| {
             format!("write instance store registry: {}", registry_path.display())
         })?;
@@ -533,12 +558,13 @@ mod tests {
     #[test]
     fn vanilla_setup_enables_portable_mode_and_registers_store() {
         let directory = tempdir().unwrap();
-        configure_launcher(
+        configure_launcher_at(
             directory.path(),
             true,
             true,
             Some(directory.path()),
             InstanceStoreFormat::VanillaCompatible,
+            directory.path().join("UserData").join("instance-stores.json"),
         )
         .unwrap();
 
@@ -564,26 +590,28 @@ mod tests {
     #[test]
     fn mmc_setup_disables_portable_mode_and_removes_current_store() {
         let directory = tempdir().unwrap();
-        configure_launcher(
+        configure_launcher_at(
             directory.path(),
             true,
             true,
             Some(directory.path()),
             InstanceStoreFormat::VanillaCompatible,
+            directory.path().join("test-registry.json"),
         )
         .unwrap();
-        configure_launcher(
+        configure_launcher_at(
             directory.path(),
             false,
             false,
             None,
             InstanceStoreFormat::Prism,
+            directory.path().join("test-registry.json"),
         )
         .unwrap();
 
         assert!(!directory.path().join("portable.txt").exists());
         assert!(directory.path().join(".luna-use-system-data").is_file());
-        assert!(!directory.path().join("instance-stores.json").exists());
+        assert!(!directory.path().join("test-registry.json").exists());
         assert!(!directory
             .path()
             .join("UserData")
@@ -596,20 +624,22 @@ mod tests {
         let root = tempdir().unwrap();
         let install = root.path().join("LunaLauncher");
         fs::create_dir_all(&install).unwrap();
-        configure_launcher(
+        configure_launcher_at(
             &install,
             true,
             true,
             Some(&install),
             InstanceStoreFormat::VanillaCompatible,
+            install.join("UserData").join("instance-stores.json"),
         )
         .unwrap();
-        configure_launcher(
+        configure_launcher_at(
             &install,
             true,
             true,
             Some(root.path()),
             InstanceStoreFormat::VanillaCompatible,
+            install.join("UserData").join("instance-stores.json"),
         )
         .unwrap();
 

@@ -63,7 +63,24 @@ pub fn configure_launcher(
         remove_if_exists(portable_marker)?;
     }
 
-    let registry_path = install_dir.join("instance-stores.json");
+    let root_registry_path = install_dir.join("instance-stores.json");
+    let portable_registry_path = install_dir.join("UserData").join("instance-stores.json");
+    if portable {
+        // Portable launcher startup changes its working directory to UserData
+        // before loading the instance registry. Keep the registry beside the
+        // data files so the launcher reads the shell's registration.
+        fs::create_dir_all(install_dir.join("UserData"))?;
+        remove_if_exists(root_registry_path.clone())?;
+    } else {
+        // A system-data installation must not retain a registry from a prior
+        // portable selection in the directory that is no longer read.
+        remove_if_exists(portable_registry_path.clone())?;
+    }
+    let registry_path = if portable {
+        portable_registry_path
+    } else {
+        root_registry_path
+    };
     let mut registry = if registry_path.exists() {
         let contents = fs::read_to_string(&registry_path).with_context(|| {
             format!("read instance store registry: {}", registry_path.display())
@@ -528,7 +545,10 @@ mod tests {
         assert!(directory.path().join("portable.txt").is_file());
         assert!(!directory.path().join(".luna-use-system-data").exists());
         let registry: Value = serde_json::from_str(
-            &fs::read_to_string(directory.path().join("instance-stores.json")).unwrap(),
+            &fs::read_to_string(
+                directory.path().join("UserData").join("instance-stores.json"),
+            )
+            .unwrap(),
         )
         .unwrap();
         assert_eq!(
@@ -564,6 +584,11 @@ mod tests {
         assert!(!directory.path().join("portable.txt").exists());
         assert!(directory.path().join(".luna-use-system-data").is_file());
         assert!(!directory.path().join("instance-stores.json").exists());
+        assert!(!directory
+            .path()
+            .join("UserData")
+            .join("instance-stores.json")
+            .exists());
     }
 
     #[test]
@@ -589,7 +614,7 @@ mod tests {
         .unwrap();
 
         let registry: Value = serde_json::from_str(
-            &fs::read_to_string(install.join("instance-stores.json")).unwrap(),
+            &fs::read_to_string(install.join("UserData").join("instance-stores.json")).unwrap(),
         )
         .unwrap();
         let stores = registry["InstanceStores"].as_array().unwrap();

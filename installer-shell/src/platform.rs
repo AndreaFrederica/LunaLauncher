@@ -1,9 +1,12 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
-use crate::config::EntryPoint;
+use crate::config::{EntryPoint, InstanceStoreFormat};
 
 pub fn entry_targets(install_dir: &Path, entry_point: EntryPoint) -> Vec<(&'static str, PathBuf)> {
     let mut targets = Vec::new();
@@ -34,6 +37,99 @@ pub fn launch(install_dir: &Path, entry_point: EntryPoint) -> Result<()> {
         .current_dir(install_dir)
         .spawn()
         .with_context(|| format!("launch {}", target.display()))?;
+    Ok(())
+}
+
+/// Apply the launcher's existing portable-data and instance-store conventions.
+/// The launcher reads these files from its working directory, which is also the
+/// installation directory used by shortcuts and `launch` above.
+pub fn configure_launcher(
+    install_dir: &Path,
+    portable: bool,
+    register_instance_store: bool,
+    instance_store_path: Option<&Path>,
+    instance_store_format: InstanceStoreFormat,
+) -> Result<()> {
+    let portable_marker = install_dir.join("portable.txt");
+    let system_marker = install_dir.join(".luna-use-system-data");
+    if portable {
+        fs::write(&portable_marker, "LunaLauncher portable mode\n")?;
+        remove_if_exists(system_marker)?;
+    } else {
+        fs::write(
+            &system_marker,
+            "Use the user data directory; ignore portable UserData.\n",
+        )?;
+        remove_if_exists(portable_marker)?;
+    }
+
+    let registry_path = install_dir.join("instance-stores.json");
+    let mut registry = if registry_path.exists() {
+        let contents = fs::read_to_string(&registry_path).with_context(|| {
+            format!("read instance store registry: {}", registry_path.display())
+        })?;
+        serde_json::from_str::<Value>(&contents).with_context(|| {
+            format!("parse instance store registry: {}", registry_path.display())
+        })?
+    } else {
+        json!({ "formatVersion": 1, "InstanceStores": [] })
+    };
+    let root = registry
+        .as_object_mut()
+        .context("instance store registry must be a JSON object")?;
+    root.insert("formatVersion".to_owned(), json!(1));
+    let existing_stores = root
+        .remove("InstanceStores")
+        .or_else(|| root.remove("stores"))
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let stores = root
+        .entry("InstanceStores".to_owned())
+        .or_insert(existing_stores);
+    let stores = stores
+        .as_array_mut()
+        .context("instance store registry InstanceStores must be an array")?;
+    let install_key = normalized_path(install_dir);
+    stores.retain(|store| {
+        store
+            .get("path")
+            .and_then(Value::as_str)
+            .is_none_or(|path| normalized_store_path(install_dir, Path::new(path)) != install_key)
+    });
+    if register_instance_store {
+        let path = instance_store_path.context("registered instance store path is missing")?;
+        if path.as_os_str().is_empty() {
+            bail!("registered instance store path is empty");
+        }
+        let path = normalized_store_path(install_dir, path);
+        if path.is_empty() {
+            bail!("registered instance store path is empty");
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(path.as_bytes());
+        let id = format!("installer-{}", hex_lower(&hasher.finalize()));
+        stores.push(json!({
+            "id": id,
+            "name": "LunaLauncher directory",
+            "path": path,
+            "format": match instance_store_format {
+                InstanceStoreFormat::Prism => "prism",
+                InstanceStoreFormat::VanillaCompatible => "vanilla-compatible",
+            },
+            "origin": "user",
+            "enabled": true,
+            "writable": true,
+            "defaultForNewInstances": true,
+            "autoEnableWhenPortable": false,
+        }));
+    }
+    if stores.is_empty() {
+        remove_if_exists(registry_path)?;
+    } else {
+        let contents = serde_json::to_string_pretty(&registry)?;
+        fs::write(&registry_path, contents).with_context(|| {
+            format!("write instance store registry: {}", registry_path.display())
+        })?;
+    }
     Ok(())
 }
 
@@ -233,6 +329,33 @@ fn launcher_path(install_dir: &Path, stem: &str) -> PathBuf {
     }
 }
 
+fn normalized_path(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_ascii_lowercase()
+}
+
+fn normalized_store_path(install_dir: &Path, path: &Path) -> String {
+    if path.is_absolute() {
+        normalized_path(path)
+    } else {
+        normalized_path(&install_dir.join(path))
+    }
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
 fn desktop_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     {
@@ -366,4 +489,63 @@ fn dirs_fallback(suffix: &str) -> Result<PathBuf> {
     std::env::var_os("HOME")
         .map(|path| PathBuf::from(path).join(suffix))
         .context("HOME is not set")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn vanilla_setup_enables_portable_mode_and_registers_store() {
+        let directory = tempdir().unwrap();
+        configure_launcher(
+            directory.path(),
+            true,
+            true,
+            Some(directory.path()),
+            InstanceStoreFormat::VanillaCompatible,
+        )
+        .unwrap();
+
+        assert!(directory.path().join("portable.txt").is_file());
+        assert!(!directory.path().join(".luna-use-system-data").exists());
+        let registry: Value = serde_json::from_str(
+            &fs::read_to_string(directory.path().join("instance-stores.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            registry["InstanceStores"][0]["format"],
+            "vanilla-compatible"
+        );
+        assert_eq!(
+            registry["InstanceStores"][0]["path"],
+            normalized_path(directory.path())
+        );
+    }
+
+    #[test]
+    fn mmc_setup_disables_portable_mode_and_removes_current_store() {
+        let directory = tempdir().unwrap();
+        configure_launcher(
+            directory.path(),
+            true,
+            true,
+            Some(directory.path()),
+            InstanceStoreFormat::VanillaCompatible,
+        )
+        .unwrap();
+        configure_launcher(
+            directory.path(),
+            false,
+            false,
+            None,
+            InstanceStoreFormat::Prism,
+        )
+        .unwrap();
+
+        assert!(!directory.path().join("portable.txt").exists());
+        assert!(directory.path().join(".luna-use-system-data").is_file());
+        assert!(!directory.path().join("instance-stores.json").exists());
+    }
 }

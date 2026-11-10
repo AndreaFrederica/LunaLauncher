@@ -26,6 +26,12 @@ archive to a directory. Viewing or extracting does not mark installation as
 complete; until the install wizard succeeds, the next launch returns to this
 choice screen.
 
+The install wizard also configures the launcher's existing data conventions:
+MMC mode selects non-portable data and leaves the current directory
+unregistered; 原版/HMCL/PCL mode enables portable data and registers the
+installation directory as a vanilla-compatible store; 自定义 mode exposes the
+portable checkbox, store path, format, and registration toggle.
+
 The SFX assembler places a fixed footer before the ZIP payload. This keeps the
 archive readable by standard tools without a trailing private-data warning,
 while the shell can still verify the payload hash before extraction.

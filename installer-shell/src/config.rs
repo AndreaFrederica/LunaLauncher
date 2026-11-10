@@ -14,6 +14,23 @@ pub enum EntryPoint {
     Both,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InstanceLayoutMode {
+    #[default]
+    Mmc,
+    Vanilla,
+    Custom,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InstanceStoreFormat {
+    #[default]
+    Prism,
+    VanillaCompatible,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstallConfig {
     pub install_dir: PathBuf,
@@ -27,6 +44,16 @@ pub struct InstallConfig {
     pub start_menu_shortcuts: bool,
     #[serde(default = "default_true")]
     pub keep_user_data: bool,
+    #[serde(default)]
+    pub instance_layout: InstanceLayoutMode,
+    #[serde(default)]
+    pub portable_mode: bool,
+    #[serde(default)]
+    pub register_instance_store: bool,
+    #[serde(default)]
+    pub instance_store_path: Option<PathBuf>,
+    #[serde(default)]
+    pub instance_store_format: InstanceStoreFormat,
 }
 
 fn default_true() -> bool {

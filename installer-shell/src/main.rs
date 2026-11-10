@@ -72,16 +72,29 @@ fn main() -> Result<()> {
             desktop_shortcuts: false,
             start_menu_shortcuts: false,
             keep_user_data: true,
+            instance_layout: config::InstanceLayoutMode::Mmc,
+            portable_mode: false,
+            register_instance_store: false,
+            instance_store_path: None,
+            instance_store_format: config::InstanceStoreFormat::Prism,
         });
         if let Some(install_dir) = args.install_dir {
             existing.install_dir = install_dir;
         }
+        let setup = LauncherSetup {
+            instance_layout: existing.instance_layout,
+            portable_mode: existing.portable_mode,
+            register_instance_store: existing.register_instance_store,
+            instance_store_path: existing.instance_store_path.clone(),
+            instance_store_format: existing.instance_store_format,
+        };
         let count = install(
             &source,
             &existing.install_dir,
             existing.entry_point,
             existing.desktop_shortcuts,
             existing.start_menu_shortcuts,
+            setup,
             !args.no_launch,
         )?;
         println!(
@@ -133,6 +146,11 @@ struct InstallerApp {
     entry_point: config::EntryPoint,
     desktop_shortcuts: bool,
     start_menu_shortcuts: bool,
+    instance_layout: config::InstanceLayoutMode,
+    portable_mode: bool,
+    register_instance_store: bool,
+    instance_store_path: String,
+    instance_store_format: config::InstanceStoreFormat,
 }
 
 impl InstallerApp {
@@ -144,6 +162,7 @@ impl InstallerApp {
             .map(|config| config.install_dir.display().to_string())
             .unwrap_or_else(default_install_dir);
         let extract_destination = format!("{}-extracted", destination);
+        let default_instance_store_path = destination.clone();
         let (entries, entries_error) = match archive::list(&source) {
             Ok(entries) => (entries, None),
             Err(error) => (Vec::new(), Some(format!("Cannot read archive: {error:#}"))),
@@ -173,6 +192,23 @@ impl InstallerApp {
             start_menu_shortcuts: existing
                 .as_ref()
                 .is_some_and(|config| config.start_menu_shortcuts),
+            instance_layout: existing
+                .as_ref()
+                .map(|config| config.instance_layout)
+                .unwrap_or_default(),
+            portable_mode: existing.as_ref().is_some_and(|config| config.portable_mode),
+            register_instance_store: existing
+                .as_ref()
+                .is_some_and(|config| config.register_instance_store),
+            instance_store_path: existing
+                .as_ref()
+                .and_then(|config| config.instance_store_path.as_ref())
+                .map(|path| path.display().to_string())
+                .unwrap_or(default_instance_store_path),
+            instance_store_format: existing
+                .as_ref()
+                .map(|config| config.instance_store_format)
+                .unwrap_or_default(),
         }
     }
 }
@@ -241,14 +277,80 @@ impl InstallerApp {
             &mut self.start_menu_shortcuts,
             "Create Start Menu shortcut(s)",
         );
+        ui.separator();
+        ui.label("Launcher data and instance directory");
+        ui.label("Choose how the directory containing the installed shell is handled.");
+        let previous_layout = self.instance_layout;
+        ui.horizontal(|ui| {
+            ui.radio_value(
+                &mut self.instance_layout,
+                config::InstanceLayoutMode::Mmc,
+                "MMC",
+            );
+            ui.radio_value(
+                &mut self.instance_layout,
+                config::InstanceLayoutMode::Vanilla,
+                "原版 / HMCL / PCL",
+            );
+            ui.radio_value(
+                &mut self.instance_layout,
+                config::InstanceLayoutMode::Custom,
+                "自定义",
+            );
+        });
+        if self.instance_layout != previous_layout {
+            self.apply_instance_layout_defaults();
+        }
+        match self.instance_layout {
+            config::InstanceLayoutMode::Mmc => {
+                ui.label("MMC：非便携模式，不注册当前安装目录为实例目录。");
+            }
+            config::InstanceLayoutMode::Vanilla => {
+                ui.label("原版：便携模式，并注册当前安装目录为原版/HMCL/PCL 实例目录。");
+            }
+            config::InstanceLayoutMode::Custom => {
+                ui.horizontal(|ui| {
+                    ui.label("实例目录：");
+                    ui.text_edit_singleline(&mut self.instance_store_path);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("实例格式：");
+                    ui.radio_value(
+                        &mut self.instance_store_format,
+                        config::InstanceStoreFormat::Prism,
+                        "MMC / Prism",
+                    );
+                    ui.radio_value(
+                        &mut self.instance_store_format,
+                        config::InstanceStoreFormat::VanillaCompatible,
+                        "原版 / HMCL / PCL",
+                    );
+                });
+                ui.checkbox(&mut self.register_instance_store, "注册这个实例目录");
+            }
+        }
+        if ui
+            .checkbox(
+                &mut self.portable_mode,
+                "开启便携模式（UserData 放在启动器目录）",
+            )
+            .changed()
+            && self.instance_layout != config::InstanceLayoutMode::Custom
+        {
+            // Presets provide the requested defaults. Editing this choice turns
+            // the selection into a custom setup so it is preserved explicitly.
+            self.instance_layout = config::InstanceLayoutMode::Custom;
+        }
         if ui.button("Install").clicked() {
             let destination = PathBuf::from(self.destination.trim());
+            let setup = self.launcher_setup(&destination);
             match install(
                 &self.source,
                 &destination,
                 self.entry_point,
                 self.desktop_shortcuts,
                 self.start_menu_shortcuts,
+                setup,
                 true,
             ) {
                 Ok(count) => {
@@ -268,6 +370,53 @@ impl InstallerApp {
                 self.screen = InstallerScreen::ArchiveViewer;
             }
         });
+    }
+
+    fn apply_instance_layout_defaults(&mut self) {
+        match self.instance_layout {
+            config::InstanceLayoutMode::Mmc => {
+                self.portable_mode = false;
+                self.register_instance_store = false;
+                self.instance_store_format = config::InstanceStoreFormat::Prism;
+            }
+            config::InstanceLayoutMode::Vanilla => {
+                self.portable_mode = true;
+                self.register_instance_store = true;
+                self.instance_store_format = config::InstanceStoreFormat::VanillaCompatible;
+                self.instance_store_path = self.destination.clone();
+            }
+            config::InstanceLayoutMode::Custom => {}
+        }
+    }
+
+    fn launcher_setup(&self, destination: &Path) -> LauncherSetup {
+        match self.instance_layout {
+            config::InstanceLayoutMode::Mmc => LauncherSetup {
+                instance_layout: config::InstanceLayoutMode::Mmc,
+                portable_mode: false,
+                register_instance_store: false,
+                instance_store_path: None,
+                instance_store_format: config::InstanceStoreFormat::Prism,
+            },
+            config::InstanceLayoutMode::Vanilla => LauncherSetup {
+                instance_layout: config::InstanceLayoutMode::Vanilla,
+                portable_mode: true,
+                register_instance_store: true,
+                instance_store_path: Some(destination.to_path_buf()),
+                instance_store_format: config::InstanceStoreFormat::VanillaCompatible,
+            },
+            config::InstanceLayoutMode::Custom => LauncherSetup {
+                instance_layout: config::InstanceLayoutMode::Custom,
+                portable_mode: self.portable_mode,
+                register_instance_store: self.register_instance_store,
+                instance_store_path: if self.register_instance_store {
+                    Some(PathBuf::from(self.instance_store_path.trim()))
+                } else {
+                    None
+                },
+                instance_store_format: self.instance_store_format,
+            },
+        }
     }
 
     fn show_archive_viewer(&mut self, ui: &mut egui::Ui) {
@@ -335,12 +484,22 @@ impl InstallerApp {
     }
 }
 
+#[derive(Debug, Clone)]
+struct LauncherSetup {
+    instance_layout: config::InstanceLayoutMode,
+    portable_mode: bool,
+    register_instance_store: bool,
+    instance_store_path: Option<PathBuf>,
+    instance_store_format: config::InstanceStoreFormat,
+}
+
 fn install(
     source: &PayloadSource,
     destination: &Path,
     entry_point: config::EntryPoint,
     desktop_shortcuts: bool,
     start_menu_shortcuts: bool,
+    setup: LauncherSetup,
     launch_after: bool,
 ) -> Result<usize> {
     let installed_entries = archive::list(source)?;
@@ -353,6 +512,13 @@ fn install(
         start_menu_shortcuts,
     )?;
     platform::create_uninstall_shortcut(destination, desktop_shortcuts, start_menu_shortcuts)?;
+    platform::configure_launcher(
+        destination,
+        setup.portable_mode,
+        setup.register_instance_store,
+        setup.instance_store_path.as_deref(),
+        setup.instance_store_format,
+    )?;
     if launch_after {
         platform::launch(destination, entry_point)?;
     }
@@ -366,6 +532,11 @@ fn install(
         desktop_shortcuts,
         start_menu_shortcuts,
         keep_user_data: true,
+        instance_layout: setup.instance_layout,
+        portable_mode: setup.portable_mode,
+        register_instance_store: setup.register_instance_store,
+        instance_store_path: setup.instance_store_path,
+        instance_store_format: setup.instance_store_format,
     })?;
     Ok(count)
 }

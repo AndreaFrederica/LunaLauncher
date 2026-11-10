@@ -81,6 +81,26 @@ cmd = "cargo test --manifest-path installer-shell/Cargo.toml"
 description = "Build the standalone installer shell and SFX tools"
 cmd = "cargo build --manifest-path installer-shell/Cargo.toml --release --bin luna-installer-shell --bin create-zip --bin assemble-sfx"
 
+[tasks.package-sfx]
+description = "Build the Windows release tree and package a ZIP plus SFX installer"
+args = [{ arg = "profile", default = "release", choices = ["release"] }]
+depends-on = [
+  "installer-shell-build",
+  { task = "install", args = ["{{ profile }}"] },
+]
+cmd = "python scripts/pixi_sfx.py {{ profile }}"
+env = { LUNA_NEO_UI = "disabled" }
+
+[tasks.package-sfx-webui]
+description = "Build the Windows Web UI release tree and package a ZIP plus SFX installer"
+args = [{ arg = "profile", default = "release", choices = ["release"] }]
+depends-on = [
+  "installer-shell-build",
+  { task = "install-webui", args = ["{{ profile }}"] },
+]
+cmd = "python scripts/pixi_sfx.py {{ profile }}"
+env = { LUNA_NEO_UI = "enabled" }
+
 [tasks.deploy]
 description = "Deploy runtime files for the selected profile"
 args = [

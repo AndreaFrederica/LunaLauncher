@@ -178,7 +178,7 @@ fn run_launch_chooser(
     let language = i18n::Language::detect();
     eframe::run_native(
         "LunaLauncher",
-        shell_native_options(),
+        launch_chooser_native_options(),
         Box::new(move |cc| {
             install_shell_font(&cc.egui_ctx, installer_font);
             Ok(Box::new(LaunchChooserApp::new(
@@ -189,6 +189,25 @@ fn run_launch_chooser(
         }),
     )
     .map_err(|error| anyhow::anyhow!("run launcher chooser: {error}"))
+}
+
+fn launch_chooser_native_options() -> eframe::NativeOptions {
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([480.0, 220.0])
+        .with_min_inner_size([380.0, 180.0])
+        .with_max_inner_size([640.0, 320.0])
+        .with_resizable(false)
+        .with_maximize_button(false);
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!(
+        "../../launcher/exresources/icons/lunalauncher.png"
+    )) {
+        viewport = viewport.with_icon(icon);
+    }
+    eframe::NativeOptions {
+        viewport,
+        persist_window: false,
+        ..Default::default()
+    }
 }
 
 fn install_shell_font(context: &egui::Context, font: Option<Vec<u8>>) {

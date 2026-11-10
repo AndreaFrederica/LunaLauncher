@@ -19,6 +19,11 @@ cargo run -- --uninstall path/to/installation
 cargo run -- --payload path/to/app.zip
 ```
 
+From the repository root, use `pixi run package-sfx release` for the Classic
+UI tree or `pixi run package-sfx-webui release` for the tree that also includes
+NeoUI. Each task writes a ZIP, a self-extracting `-Setup.exe`, and matching
+SHA-256 files to `release-assets/`.
+
 When launched without an explicit command, the egui window first offers an
 install wizard, an extract-only action, and a read-only archive viewer. The
 viewer lists UTF-8 ZIP entries with a filter and can extract the complete

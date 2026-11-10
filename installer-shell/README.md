@@ -19,6 +19,13 @@ cargo run -- --uninstall path/to/installation
 cargo run -- --payload path/to/app.zip
 ```
 
+When launched without an explicit command, the egui window first offers an
+install wizard, an extract-only action, and a read-only archive viewer. The
+viewer lists UTF-8 ZIP entries with a filter and can extract the complete
+archive to a directory. Viewing or extracting does not mark installation as
+complete; until the install wizard succeeds, the next launch returns to this
+choice screen.
+
 The SFX assembler places a fixed footer before the ZIP payload. This keeps the
 archive readable by standard tools without a trailing private-data warning,
 while the shell can still verify the payload hash before extraction.

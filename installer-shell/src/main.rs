@@ -112,9 +112,23 @@ fn payload_source(external: Option<PathBuf>) -> Result<PayloadSource> {
     Ok(source)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallerScreen {
+    FirstRun,
+    Install,
+    ArchiveViewer,
+}
+
 struct InstallerApp {
     source: PayloadSource,
+    entries: Vec<String>,
+    entries_error: Option<String>,
+    screen: InstallerScreen,
+    first_run: bool,
     destination: String,
+    extract_destination: String,
+    search: String,
+    selected_entry: Option<usize>,
     status: String,
     entry_point: config::EntryPoint,
     desktop_shortcuts: bool,
@@ -124,13 +138,30 @@ struct InstallerApp {
 impl InstallerApp {
     fn new(source: PayloadSource) -> Self {
         let existing = config::load().ok().flatten();
+        let first_run = existing.is_none();
         let destination = existing
             .as_ref()
             .map(|config| config.install_dir.display().to_string())
             .unwrap_or_else(default_install_dir);
+        let extract_destination = format!("{}-extracted", destination);
+        let (entries, entries_error) = match archive::list(&source) {
+            Ok(entries) => (entries, None),
+            Err(error) => (Vec::new(), Some(format!("Cannot read archive: {error:#}"))),
+        };
         Self {
             source,
+            entries,
+            entries_error,
+            screen: if first_run {
+                InstallerScreen::FirstRun
+            } else {
+                InstallerScreen::Install
+            },
+            first_run,
             destination,
+            extract_destination,
+            search: String::new(),
+            selected_entry: None,
             status: "Ready to install".to_owned(),
             entry_point: existing
                 .as_ref()
@@ -148,50 +179,158 @@ impl InstallerApp {
 
 impl eframe::App for InstallerApp {
     fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(context, |ui| {
-            ui.heading("LunaLauncher Installer");
-            ui.label(
-                "The existing launcher files will be extracted without changing their layout.",
-            );
+        egui::CentralPanel::default().show(context, |ui| match self.screen {
+            InstallerScreen::FirstRun => self.show_first_run(ui),
+            InstallerScreen::Install => self.show_install(ui),
+            InstallerScreen::ArchiveViewer => self.show_archive_viewer(ui),
+        });
+    }
+}
+
+impl InstallerApp {
+    fn show_first_run(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Open LunaLauncher package");
+        ui.label("Choose what to do with this package before any installation settings are saved.");
+        ui.label("You can install it, extract its files manually, or inspect the archive first.");
+        ui.separator();
+        if ui.button("Install LunaLauncher").clicked() {
+            self.screen = InstallerScreen::Install;
+        }
+        if ui.button("Extract files only").clicked() {
+            self.screen = InstallerScreen::ArchiveViewer;
+            self.status = "Choose a destination, then extract the complete archive.".to_owned();
+        }
+        if ui.button("View archive contents").clicked() {
+            self.screen = InstallerScreen::ArchiveViewer;
+            self.status = "Archive opened in read-only mode.".to_owned();
+        }
+        if let Some(error) = &self.entries_error {
             ui.separator();
-            ui.horizontal(|ui| {
-                ui.label("Install directory:");
-                ui.text_edit_singleline(&mut self.destination);
-            });
-            ui.horizontal(|ui| {
-                ui.label("Default UI:");
-                ui.radio_value(
-                    &mut self.entry_point,
-                    config::EntryPoint::Classic,
-                    "Classic UI",
-                );
-                ui.radio_value(&mut self.entry_point, config::EntryPoint::Neo, "NeoUI");
-                ui.radio_value(&mut self.entry_point, config::EntryPoint::Both, "Both");
-            });
-            ui.checkbox(&mut self.desktop_shortcuts, "Create desktop shortcut(s)");
-            ui.checkbox(
-                &mut self.start_menu_shortcuts,
-                "Create Start Menu shortcut(s)",
+            ui.colored_label(egui::Color32::RED, error);
+        } else {
+            ui.separator();
+            ui.label(format!(
+                "{} archive entries are ready to inspect.",
+                self.entries.len()
+            ));
+        }
+        ui.label("Installation is considered complete only after the Install button succeeds.");
+        ui.label("Leaving this window before then will show this choice screen again next time.");
+    }
+
+    fn show_install(&mut self, ui: &mut egui::Ui) {
+        ui.heading("LunaLauncher Installer");
+        ui.label("The existing launcher files will be extracted without changing their layout.");
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Install directory:");
+            ui.text_edit_singleline(&mut self.destination);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Default UI:");
+            ui.radio_value(
+                &mut self.entry_point,
+                config::EntryPoint::Classic,
+                "Classic UI",
             );
-            if ui.button("Install").clicked() {
-                let destination = PathBuf::from(self.destination.trim());
-                match install(
-                    &self.source,
-                    &destination,
-                    self.entry_point,
-                    self.desktop_shortcuts,
-                    self.start_menu_shortcuts,
-                    true,
-                ) {
+            ui.radio_value(&mut self.entry_point, config::EntryPoint::Neo, "NeoUI");
+            ui.radio_value(&mut self.entry_point, config::EntryPoint::Both, "Both");
+        });
+        ui.checkbox(&mut self.desktop_shortcuts, "Create desktop shortcut(s)");
+        ui.checkbox(
+            &mut self.start_menu_shortcuts,
+            "Create Start Menu shortcut(s)",
+        );
+        if ui.button("Install").clicked() {
+            let destination = PathBuf::from(self.destination.trim());
+            match install(
+                &self.source,
+                &destination,
+                self.entry_point,
+                self.desktop_shortcuts,
+                self.start_menu_shortcuts,
+                true,
+            ) {
+                Ok(count) => {
+                    self.first_run = false;
+                    self.status = format!("Installed {count} files to {}", destination.display());
+                }
+                Err(error) => self.status = format!("Install failed: {error:#}"),
+            }
+        }
+        ui.separator();
+        ui.label(&self.status);
+        ui.horizontal(|ui| {
+            if self.first_run && ui.button("Back").clicked() {
+                self.screen = InstallerScreen::FirstRun;
+            }
+            if ui.button("View archive").clicked() {
+                self.screen = InstallerScreen::ArchiveViewer;
+            }
+        });
+    }
+
+    fn show_archive_viewer(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Archive viewer");
+        if let Some(error) = &self.entries_error {
+            ui.colored_label(egui::Color32::RED, error);
+        }
+        ui.label(format!("{} entries", self.entries.len()));
+        ui.horizontal(|ui| {
+            ui.label("Filter:");
+            ui.text_edit_singleline(&mut self.search);
+        });
+        ui.separator();
+        let search = self.search.to_lowercase();
+        egui::ScrollArea::vertical()
+            .id_salt("archive-entries")
+            .max_height(320.0)
+            .show(ui, |ui| {
+                for (index, name) in self.entries.iter().enumerate() {
+                    if !search.is_empty() && !name.to_lowercase().contains(&search) {
+                        continue;
+                    }
+                    let label = if name.ends_with('/') {
+                        format!("📁 {name}")
+                    } else {
+                        format!("📄 {name}")
+                    };
+                    if ui
+                        .selectable_label(self.selected_entry == Some(index), label)
+                        .clicked()
+                    {
+                        self.selected_entry = Some(index);
+                    }
+                }
+            });
+        ui.separator();
+        ui.label("Extract a normal directory that you can browse or edit manually:");
+        ui.horizontal(|ui| {
+            ui.label("Destination:");
+            ui.text_edit_singleline(&mut self.extract_destination);
+            if ui.button("Extract all").clicked() {
+                let destination = PathBuf::from(self.extract_destination.trim());
+                match archive::extract(&self.source, &destination) {
                     Ok(count) => {
                         self.status =
-                            format!("Installed {count} files to {}", destination.display())
+                            format!("Extracted {count} files to {}", destination.display())
                     }
-                    Err(error) => self.status = format!("Install failed: {error:#}"),
+                    Err(error) => self.status = format!("Extraction failed: {error:#}"),
                 }
             }
-            ui.separator();
-            ui.label(&self.status);
+        });
+        ui.label(&self.status);
+        ui.horizontal(|ui| {
+            if ui.button("Install...").clicked() {
+                self.screen = InstallerScreen::Install;
+            }
+            if ui.button("Back").clicked() {
+                self.screen = if self.first_run {
+                    InstallerScreen::FirstRun
+                } else {
+                    InstallerScreen::Install
+                };
+            }
         });
     }
 }
@@ -207,14 +346,6 @@ fn install(
     let installed_entries = archive::list(source)?;
     let count = archive::extract_atomic(source, destination, true)?;
     install_uninstaller_copy(destination)?;
-    config::save(&config::InstallConfig {
-        install_dir: destination.to_path_buf(),
-        installed_entries,
-        entry_point,
-        desktop_shortcuts,
-        start_menu_shortcuts,
-        keep_user_data: true,
-    })?;
     platform::create_shortcuts(
         destination,
         entry_point,
@@ -225,6 +356,17 @@ fn install(
     if launch_after {
         platform::launch(destination, entry_point)?;
     }
+    // Persist the completed wizard only after extraction, shortcuts, and the
+    // optional launch all succeed. A cancelled or failed first run therefore
+    // remains on the first-run choice screen next time.
+    config::save(&config::InstallConfig {
+        install_dir: destination.to_path_buf(),
+        installed_entries,
+        entry_point,
+        desktop_shortcuts,
+        start_menu_shortcuts,
+        keep_user_data: true,
+    })?;
     Ok(count)
 }
 

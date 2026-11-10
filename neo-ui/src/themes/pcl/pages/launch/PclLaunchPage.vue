@@ -262,7 +262,7 @@ function openContextMenu(instance: any, event: MouseEvent) {
 }
 function closeContextMenu() { contextMenu.value = null; }
 function contextActions(instance: any) {
-  return [
+  const actions = [
     { id: 'launch', label: t('pcl.sidebar.launch'), icon: 'play', disabled: Boolean(instance?.running) },
     { id: 'stop', label: t('pcl.sidebar.stopProcess'), icon: 'power', disabled: !instance?.running },
     { id: 'edit', label: t('common.edit'), icon: 'settings', disabled: false },
@@ -273,6 +273,9 @@ function contextActions(instance: any) {
     { id: 'delete', label: t('common.delete'), icon: 'trash-2', disabled: false, danger: true },
     { id: 'shortcut', label: t('pcl.sidebar.shortcut'), icon: 'external-link', disabled: false },
   ];
+  if (instance?.format === 'vanilla-compatible' || instance?.vanillaCompatible === true)
+    actions.splice(8, 0, { id: 'convert', label: t('pcl.conversion.action'), icon: 'copy', disabled: false });
+  return actions;
 }
 function runContextMenu(action: string) {
   const item = contextMenu.value?.item;

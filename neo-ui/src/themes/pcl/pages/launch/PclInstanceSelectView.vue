@@ -89,6 +89,7 @@
         <q-item clickable v-close-popup @click="emit('action', contextItem, 'rename')"><q-item-section avatar><PclIcon name="pencil" :size="16" /></q-item-section><q-item-section>{{ t('instance.rename') }}</q-item-section></q-item>
         <q-item clickable v-close-popup @click="emit('action', contextItem, 'group')"><q-item-section avatar><PclIcon name="folder-open" :size="16" /></q-item-section><q-item-section>{{ t('app.moveGroup') }}</q-item-section></q-item>
         <q-item clickable v-close-popup @click="emit('action', contextItem, 'copy')"><q-item-section avatar><PclIcon name="copy" :size="16" /></q-item-section><q-item-section>{{ t('xmcl.instance.copy') }}</q-item-section></q-item>
+        <q-item v-if="contextItem?.format === 'vanilla-compatible' || contextItem?.vanillaCompatible === true" clickable v-close-popup @click="emit('action', contextItem, 'convert')"><q-item-section avatar><PclIcon name="copy" :size="16" /></q-item-section><q-item-section>{{ t('pcl.conversion.action') }}</q-item-section></q-item>
         <q-item clickable v-close-popup @click="emit('action', contextItem, 'verify')"><q-item-section avatar><PclIcon name="shield-check" :size="16" /></q-item-section><q-item-section>{{ t('instance.verify') }}</q-item-section></q-item>
         <q-item clickable v-close-popup @click="emit('action', contextItem, 'stop')"><q-item-section avatar><PclIcon name="power" :size="16" /></q-item-section><q-item-section>{{ t('xmcl.instance.stop') }}</q-item-section></q-item>
         <q-separator />
@@ -318,12 +319,12 @@ function instanceInfo(item: any) {
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  object-fit: cover;
+  object-fit: contain;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 .pcl-instance-select__icon-wrap { position: relative; display: inline-flex; width: 30px; height: 30px; flex: 0 0 30px; }
-.pcl-instance-select__icon-wrap :deep(.instance-format-badge) { right: -4px; bottom: -4px; transform: scale(.72); transform-origin: bottom right; }
+.pcl-instance-select__icon-wrap :deep(.instance-format-badge) { right: 0; bottom: 0; transform: scale(.72); transform-origin: bottom right; }
 
 .pcl-instance-running {
   color: #34d399;

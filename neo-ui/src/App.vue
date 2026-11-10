@@ -411,8 +411,51 @@ async function changeIcon(iconKey?: string){
 }
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}
 async function workspaceAction(op:string){const labels:Record<string,string>={rename:t('xmcl.instance.rename'),copy:t('xmcl.instance.copy'),group:t('xmcl.instance.group')};if(labels[op]){await instanceAction(op,op==='group'?'group':'name',labels[op]);return;}await instanceAction(op,undefined,op);}
+async function convertInstanceToPrism(instance:any){
+ if(!instance?.id)return;
+ try{
+  const info=await call('instance.info',{instance:instance.id});
+  const source=String(info?.root || instance.root || '').trim();
+  if(!source)throw new Error(t('app.operationFailed'));
+  const storeData=await call('instance-store.list');
+  const stores=(Array.isArray(storeData?.stores)?storeData.stores:[]).filter((store:any)=>
+   store?.format==='prism' && store.enabled===true && store.writable===true,
+  );
+  if(!stores.length){error.value=t('pcl.conversion.noStore');return;}
+  const storeId=await ask(
+   t('pcl.conversion.target'),
+   stores[0].id,
+   false,
+   stores.map((store:any)=>({label:`${store.name || store.id} — ${store.path}`,value:store.id})),
+  );
+  if(storeId===null)return;
+  const name=await ask(t('pcl.conversion.name'),instance.name || '');
+  if(name===null || !String(name).trim())return;
+  const group=await ask(t('pcl.conversion.group'),instance.group || '');
+  if(group===null)return;
+
+  busy.value=true;
+  status.value=t('app.executing');
+  let task:any=await call('neo.task.start',{
+   operation:'instance.convert.import',
+   priority:'normal',
+   parameters:{source,targetStoreId:storeId,name:String(name).trim(),group:String(group).trim(),copyGameContent:true},
+  });
+  window.dispatchEvent(new CustomEvent('luna-neo-task-started',{detail:task}));
+  while(task && !task.finished){
+   status.value=task.status || task.state || t('app.executing');
+   await new Promise(resolve=>setTimeout(resolve,350));
+   task=await call('neo.task.status',{taskId:task.taskId});
+  }
+  if(!task || task.state!=='succeeded')throw new Error(task?.error || t('app.operationFailed'));
+  notice.value=t('pcl.conversion.success');
+  await refresh();
+ }catch(exception){error.value=message(exception);}
+ finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
+}
 async function instanceSelectionAction(instance:any,op:string){
  if(!instance?.id)return;
+ if(op==='convert'){await convertInstanceToPrism(instance);return;}
  if(op==='delete'){if(await ask(t('app.confirmRemove', { name: instance.name }),'',true))await run('instance.delete',{instance:instance.id,confirm:true});return;}
  const labels:Record<string,string>={rename:t('xmcl.instance.rename'),group:t('app.moveGroup'),copy:t('xmcl.instance.copy')};
  if(labels[op]){const field=op==='group'?'group':'name';const value=await ask(labels[op],field==='group'?(instance.group||''):(instance.name||''));if(value===null)return;await run(`instance.${op}`,{instance:instance.id,[field]:value});return;}

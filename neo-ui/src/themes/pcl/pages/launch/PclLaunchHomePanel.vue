@@ -130,5 +130,6 @@ const { props, emit, selected, busy, notice, error, instances, icons, selectionO
 <style scoped>
 .pcl-home-instance__icon-wrap { position: relative; display: inline-flex; width: 38px; height: 38px; flex: 0 0 38px; align-items: center; justify-content: center; }
 .pcl-home-instance__icon-wrap > img, .pcl-home-instance__icon-wrap > .pcl-home-instance__fallback { width: 38px; height: 38px; }
-.pcl-home-instance__icon-wrap :deep(.instance-format-badge) { right: -4px; bottom: -4px; transform: scale(.78); transform-origin: bottom right; }
+.pcl-home-instance__icon-wrap > img { object-fit: contain; }
+.pcl-home-instance__icon-wrap :deep(.instance-format-badge) { right: 0; bottom: 0; transform: scale(.78); transform-origin: bottom right; }
 </style>

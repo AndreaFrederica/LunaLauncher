@@ -871,6 +871,12 @@ QJsonObject OperationService::listInstances()
     auto list = APPLICATION->instances();
     for (int i = 0; i < list->count(); ++i) {
         const auto instance = list->at(i);
+        const auto* vanilla = dynamic_cast<const VanillaInstance*>(instance);
+        // Match the Classic UI's read path. Resolving a vanilla-compatible
+        // instance's profile materializes its MMC-compatible component graph
+        // before the instance is exposed to Neo UI.
+        if (vanilla)
+            vanilla->componentRoot();
         QJsonObject object{ { "id", instance->id() },
                                       { "name", instance->name() },
                                       { "type", instance->typeName() },
@@ -882,7 +888,7 @@ QJsonObject OperationService::listInstances()
                                       { "lastLaunch", instance->lastLaunch() },
                                       { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) },
                                       { "format", QStringLiteral("prism") } };
-        if (const auto* vanilla = dynamic_cast<const VanillaInstance*>(instance)) {
+        if (vanilla) {
             const auto& descriptor = vanilla->descriptor();
             object.insert("format", QStringLiteral("vanilla-compatible"));
             object.insert("dialect", descriptor.dialect);

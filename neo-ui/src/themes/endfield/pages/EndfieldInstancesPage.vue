@@ -273,8 +273,8 @@ async function removeInstance() {
 </script>
 <style scoped>
 .ef-instance-row__icon { position: relative; display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; }
-.ef-instance-row__icon img { width: 100%; height: 100%; border-radius: 5px; object-fit: cover; }
-.ef-instance-row__icon :deep(.instance-format-badge) { right: -5px; bottom: -5px; transform: scale(.72); transform-origin: bottom right; }
+.ef-instance-row__icon img { width: 100%; height: 100%; border-radius: 5px; object-fit: contain; }
+.ef-instance-row__icon :deep(.instance-format-badge) { right: 0; bottom: 0; transform: scale(.72); transform-origin: bottom right; }
 </style>
 
 <style scoped>
@@ -327,7 +327,7 @@ async function removeInstance() {
 .ef-instance-row__name img {
   width: 24px;
   height: 24px;
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid var(--ef-rule);
 }
 .ef-instance-row__name .material-icons { font-size: 18px; color: var(--ef-ink-2); }

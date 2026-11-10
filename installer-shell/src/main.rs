@@ -1008,7 +1008,7 @@ fn install_with_progress(
         setup.instance_store_path.as_deref(),
         setup.instance_store_format,
     )?;
-    if launch_after {
+    if launch_after && entry_point != config::EntryPoint::Both {
         progress(0.96, "Starting selected launcher UI...");
         platform::launch_with_monitor(destination, entry_point, launch_monitor)?;
     }

@@ -27,6 +27,28 @@ pub fn list(source: &PayloadSource) -> Result<Vec<String>> {
     Ok(names)
 }
 
+/// Read one UTF-8 named file from the payload without extracting the archive.
+///
+/// The installer uses this for resources that belong to the shell itself, such
+/// as the bundled Chinese font. Keeping the resource in the normal payload
+/// keeps the shell executable small while still making the SFX self-contained.
+pub fn read_entry(source: &PayloadSource, name: &str) -> Result<Vec<u8>> {
+    source.verify_hash()?;
+    let mut archive =
+        ZipArchive::new(source.open_reader()?).context("payload is not a readable ZIP archive")?;
+    let mut entry = archive
+        .by_name(name)
+        .with_context(|| format!("payload entry is missing: {name}"))?;
+    validate_utf8_name(entry.name_raw())?;
+    let relative = validate_entry_name(entry.name())?;
+    if relative != Path::new(name) || entry.is_dir() {
+        bail!("payload entry is not the requested file: {name}");
+    }
+    let mut contents = Vec::with_capacity(entry.size() as usize);
+    std::io::copy(&mut entry, &mut contents)?;
+    Ok(contents)
+}
+
 pub fn extract(source: &PayloadSource, destination: &Path) -> Result<usize> {
     source.verify_hash()?;
     fs::create_dir_all(destination)
@@ -327,6 +349,10 @@ mod tests {
         assert_eq!(
             fs::read_to_string(destination.join("资源/启动器.txt")).unwrap(),
             "内容"
+        );
+        assert_eq!(
+            read_entry(&payload, "资源/启动器.txt").unwrap(),
+            "内容".as_bytes()
         );
     }
 

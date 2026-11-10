@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -50,6 +51,21 @@ fn main() -> Result<()> {
     }
     if let Some(install_dir) = args.uninstall {
         uninstall(&install_dir, args.purge)?;
+        return Ok(());
+    }
+    // The shell copied into the installation directory becomes the user's
+    // launcher entry point after the first install. Opening that copy again
+    // should launch the selected UI directly instead of reopening the wizard.
+    if args.payload.is_none()
+        && args.extract.is_none()
+        && !args.list
+        && !args.install
+        && !args.no_launch
+        && let Some(saved) = config::load()?.filter(|saved| {
+            current_executable_is_installed_shell(&saved.install_dir)
+        })
+    {
+        platform::launch(&saved.install_dir, saved.entry_point)?;
         return Ok(());
     }
     let source = payload_source(args.payload)?;
@@ -104,13 +120,52 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let installer_font = archive::read_entry(&source, "resource/fonts/SarasaUiSC-Regular.ttf").ok();
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "LunaLauncher Installer",
         native_options,
-        Box::new(move |_cc| Ok(Box::new(InstallerApp::new(source)))),
+        Box::new(move |cc| {
+            install_shell_font(&cc.egui_ctx, installer_font);
+            Ok(Box::new(InstallerApp::new(source)))
+        }),
     )
     .map_err(|error| anyhow::anyhow!("run installer UI: {error}"))
+}
+
+fn install_shell_font(context: &egui::Context, font: Option<Vec<u8>>) {
+    let Some(font) = font else {
+        return;
+    };
+    let mut definitions = egui::FontDefinitions::default();
+    let name = "LunaLauncherSarasa".to_owned();
+    definitions
+        .font_data
+        .insert(name.clone(), Arc::new(egui::FontData::from_owned(font)));
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        if let Some(fonts) = definitions.families.get_mut(&family) {
+            fonts.insert(0, name.clone());
+        }
+    }
+    context.set_fonts(definitions);
+}
+
+fn current_executable_is_installed_shell(install_dir: &Path) -> bool {
+    let Ok(executable) = std::env::current_exe() else {
+        return false;
+    };
+    let expected = install_dir.join(if cfg!(windows) {
+        "luna-installer-shell.exe"
+    } else {
+        "luna-installer-shell"
+    });
+    executable.canonicalize().ok() == expected.canonicalize().ok()
+}
+
+fn current_executable_directory() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
 }
 
 fn payload_source(external: Option<PathBuf>) -> Result<PayloadSource> {
@@ -260,7 +315,11 @@ impl InstallerApp {
         ui.separator();
         ui.horizontal(|ui| {
             ui.label("Install directory:");
-            ui.text_edit_singleline(&mut self.destination);
+            if self.instance_layout == config::InstanceLayoutMode::Vanilla {
+                ui.label(&self.destination);
+            } else {
+                ui.text_edit_singleline(&mut self.destination);
+            }
         });
         ui.horizontal(|ui| {
             ui.label("Default UI:");
@@ -383,6 +442,10 @@ impl InstallerApp {
                 self.portable_mode = true;
                 self.register_instance_store = true;
                 self.instance_store_format = config::InstanceStoreFormat::VanillaCompatible;
+                if let Some(shell_directory) = current_executable_directory() {
+                    self.destination = shell_directory.display().to_string();
+                    self.extract_destination = format!("{}-extracted", self.destination);
+                }
                 self.instance_store_path = self.destination.clone();
             }
             config::InstanceLayoutMode::Custom => {}
@@ -503,7 +566,17 @@ fn install(
     launch_after: bool,
 ) -> Result<usize> {
     let installed_entries = archive::list(source)?;
-    let count = archive::extract_atomic(source, destination, true)?;
+    // A self-extracting shell can be placed directly in the directory it is
+    // installing into. Windows cannot rename a directory containing the
+    // currently running executable, so use a verified in-place extraction in
+    // that one case; all other installs keep the atomic replacement path.
+    let count = if current_executable_directory().is_some_and(|directory| {
+        directory.canonicalize().ok() == destination.canonicalize().ok()
+    }) {
+        archive::extract(source, destination)?
+    } else {
+        archive::extract_atomic(source, destination, true)?
+    };
     install_uninstaller_copy(destination)?;
     platform::create_shortcuts(
         destination,

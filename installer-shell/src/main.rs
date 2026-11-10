@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 use eframe::egui;
+use raw_window_handle::HasWindowHandle;
 
 use luna_installer_shell::{archive, config, i18n, platform, sfx::PayloadSource};
 
@@ -134,7 +135,16 @@ fn main() -> Result<()> {
     }
 
     let installer_font = archive::read_entry(&source, "resource/fonts/SarasaUiSC-Regular.ttf").ok();
-    let native_options = eframe::NativeOptions::default();
+    let mut viewport = egui::ViewportBuilder::default();
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!(
+        "../../launcher/exresources/icons/lunalauncher.png"
+    )) {
+        viewport = viewport.with_icon(icon);
+    }
+    let native_options = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    };
     eframe::run_native(
         "LunaLauncher Installer",
         native_options,
@@ -255,6 +265,7 @@ struct InstallerApp {
     install_progress: f32,
     install_progress_text: String,
     language: i18n::Language,
+    launch_monitor: Option<platform::LaunchMonitor>,
 }
 
 impl InstallerApp {
@@ -325,12 +336,17 @@ impl InstallerApp {
             install_progress: 0.0,
             install_progress_text: String::new(),
             language: i18n::Language::detect(),
+            launch_monitor: None,
         }
     }
 }
 
 impl eframe::App for InstallerApp {
-    fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, context: &egui::Context, frame: &mut eframe::Frame) {
+        self.launch_monitor = frame
+            .window_handle()
+            .ok()
+            .and_then(|handle| platform::monitor_for_window_handle(handle.as_raw()));
         self.poll_install(context);
         egui::CentralPanel::default().show(context, |ui| match self.screen {
             InstallerScreen::FirstRun => self.show_first_run(ui),
@@ -595,6 +611,7 @@ impl InstallerApp {
         let entry_point = self.entry_point;
         let desktop_shortcuts = self.desktop_shortcuts;
         let start_menu_shortcuts = self.start_menu_shortcuts;
+        let launch_monitor = self.launch_monitor;
         self.install_receiver = Some(receiver);
         self.installing = true;
         self.install_progress = 0.0;
@@ -616,6 +633,7 @@ impl InstallerApp {
                     start_menu_shortcuts,
                     setup,
                     true,
+                    launch_monitor,
                     &mut report,
                 )
                 .map_err(|error| format!("{error:#}"))
@@ -788,6 +806,7 @@ fn install(
         start_menu_shortcuts,
         setup,
         launch_after,
+        None,
         &mut no_progress,
     )
 }
@@ -800,6 +819,7 @@ fn install_with_progress(
     start_menu_shortcuts: bool,
     setup: LauncherSetup,
     launch_after: bool,
+    launch_monitor: Option<platform::LaunchMonitor>,
     progress: &mut dyn FnMut(f32, &str),
 ) -> Result<usize> {
     progress(0.02, "Validating package...");
@@ -854,7 +874,7 @@ fn install_with_progress(
     )?;
     if launch_after {
         progress(0.96, "Starting selected launcher UI...");
-        platform::launch(destination, entry_point)?;
+        platform::launch_with_monitor(destination, entry_point, launch_monitor)?;
     }
     // Persist the completed wizard only after extraction, shortcuts, and the
     // optional launch all succeed. A cancelled or failed first run therefore

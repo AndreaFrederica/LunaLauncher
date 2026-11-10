@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
+use raw_window_handle::RawWindowHandle;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -26,6 +27,40 @@ pub fn entry_targets(install_dir: &Path, entry_point: EntryPoint) -> Vec<(&'stat
 }
 
 pub fn launch(install_dir: &Path, entry_point: EntryPoint) -> Result<()> {
+    launch_with_monitor(install_dir, entry_point, None)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LaunchMonitor {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+/// Resolve the monitor containing the installer shell window. Windows uses
+/// the work area reported by the desktop; other platforms intentionally leave
+/// placement to the launcher/window manager.
+pub fn monitor_for_window_handle(handle: RawWindowHandle) -> Option<LaunchMonitor> {
+    #[cfg(windows)]
+    {
+        let RawWindowHandle::Win32(window) = handle else {
+            return None;
+        };
+        return monitor_for_hwnd(window.hwnd.get() as _);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = handle;
+        None
+    }
+}
+
+pub fn launch_with_monitor(
+    install_dir: &Path,
+    entry_point: EntryPoint,
+    monitor: Option<LaunchMonitor>,
+) -> Result<()> {
     let (_, target) = entry_targets(install_dir, entry_point)
         .into_iter()
         .next()
@@ -33,11 +68,106 @@ pub fn launch(install_dir: &Path, entry_point: EntryPoint) -> Result<()> {
     if !target.is_file() {
         bail!("launcher entry point does not exist: {}", target.display());
     }
-    Command::new(&target)
+    let child = Command::new(&target)
         .current_dir(install_dir)
         .spawn()
         .with_context(|| format!("launch {}", target.display()))?;
+    if let Some(monitor) = monitor {
+        position_child_window(child.id(), monitor);
+    }
     Ok(())
+}
+
+#[cfg(windows)]
+fn monitor_for_hwnd(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<LaunchMonitor> {
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+    };
+
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    if monitor.is_null() {
+        return None;
+    }
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    if unsafe { GetMonitorInfoW(monitor, &mut info) } == 0 {
+        return None;
+    }
+    Some(LaunchMonitor {
+        x: info.rcWork.left,
+        y: info.rcWork.top,
+        width: info.rcWork.right.saturating_sub(info.rcWork.left),
+        height: info.rcWork.bottom.saturating_sub(info.rcWork.top),
+    })
+}
+
+#[cfg(not(windows))]
+fn position_child_window(_pid: u32, _monitor: LaunchMonitor) {}
+
+#[cfg(windows)]
+fn position_child_window(pid: u32, monitor: LaunchMonitor) {
+    // Qt/Tauri may create the top-level window a little after the process is
+    // spawned, so poll briefly instead of racing the window creation.
+    std::thread::spawn(move || {
+        for _ in 0..100 {
+            if let Some(hwnd) = find_visible_window(pid) {
+                use windows_sys::Win32::UI::WindowsAndMessaging::{
+                    HWND_TOP, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
+                };
+                let x = monitor.x.saturating_add(32);
+                let y = monitor.y.saturating_add(32);
+                unsafe {
+                    SetWindowPos(
+                        hwnd,
+                        HWND_TOP,
+                        x,
+                        y,
+                        0,
+                        0,
+                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+                    );
+                }
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    });
+}
+
+#[cfg(windows)]
+fn find_visible_window(pid: u32) -> Option<windows_sys::Win32::Foundation::HWND> {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+    use windows_sys::core::BOOL;
+
+    struct Search {
+        pid: u32,
+        hwnd: Option<HWND>,
+    }
+
+    unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let search = unsafe { &mut *(lparam as *mut Search) };
+        if unsafe { IsWindowVisible(hwnd) } == 0 {
+            return 1;
+        }
+        let mut window_pid = 0;
+        unsafe { GetWindowThreadProcessId(hwnd, &mut window_pid) };
+        if window_pid == search.pid {
+            search.hwnd = Some(hwnd);
+            return 0;
+        }
+        1
+    }
+
+    let mut search = Search { pid, hwnd: None };
+    unsafe {
+        EnumWindows(Some(callback), &mut search as *mut Search as LPARAM);
+    }
+    search.hwnd
 }
 
 /// Apply the launcher's existing portable-data and instance-store conventions.

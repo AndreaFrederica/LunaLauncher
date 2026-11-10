@@ -66,7 +66,11 @@ fn main() -> Result<()> {
         && let Some(saved) = config::load()?
             .filter(|saved| current_executable_is_shell_for_install_dir(&saved.install_dir))
     {
-        platform::launch(&saved.install_dir, saved.entry_point)?;
+        platform::launch_with_monitor(
+            &saved.install_dir,
+            saved.entry_point,
+            platform::current_cursor_monitor(),
+        )?;
         return Ok(());
     }
     let source = payload_source(args.payload)?;

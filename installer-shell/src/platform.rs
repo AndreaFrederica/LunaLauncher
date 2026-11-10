@@ -56,6 +56,28 @@ pub fn monitor_for_window_handle(handle: RawWindowHandle) -> Option<LaunchMonito
     }
 }
 
+/// Resolve the monitor under the pointer for the installed shell's direct
+/// launch path, where there is no installer window left to inspect.
+pub fn current_cursor_monitor() -> Option<LaunchMonitor> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::POINT;
+        use windows_sys::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+        let mut point = POINT { x: 0, y: 0 };
+        if unsafe { GetCursorPos(&mut point) } == 0 {
+            return None;
+        }
+        let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
+        return monitor_from_handle(monitor);
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 pub fn launch_with_monitor(
     install_dir: &Path,
     entry_point: EntryPoint,
@@ -80,11 +102,18 @@ pub fn launch_with_monitor(
 
 #[cfg(windows)]
 fn monitor_for_hwnd(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<LaunchMonitor> {
-    use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
-    };
+    use windows_sys::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromWindow};
 
     let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    monitor_from_handle(monitor)
+}
+
+#[cfg(windows)]
+fn monitor_from_handle(
+    monitor: windows_sys::Win32::Graphics::Gdi::HMONITOR,
+) -> Option<LaunchMonitor> {
+    use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITORINFO};
+
     if monitor.is_null() {
         return None;
     }

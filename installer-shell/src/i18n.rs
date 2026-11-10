@@ -65,6 +65,7 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::SimplifiedChinese, "ui.help") => {
             "两个启动程序都会安装；选择界面决定 shell 启动时的行为。"
         }
+        (Language::SimplifiedChinese, "ui.preview") => "界面预览：",
         (Language::SimplifiedChinese, "shortcuts.desktop") => "创建桌面快捷方式",
         (Language::SimplifiedChinese, "shortcuts.start") => "创建开始菜单快捷方式",
         (Language::SimplifiedChinese, "data.title") => "启动器数据和实例目录",
@@ -135,6 +136,7 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::English, "ui.help") => {
             "Both launchers are installed; this choice controls shell startup behavior."
         }
+        (Language::English, "ui.preview") => "UI preview:",
         (Language::English, "shortcuts.desktop") => "Create desktop shortcut",
         (Language::English, "shortcuts.start") => "Create Start Menu shortcut",
         (Language::English, "data.title") => "Launcher data and instance folders",

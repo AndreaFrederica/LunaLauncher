@@ -146,14 +146,18 @@ fn main() -> Result<()> {
         native_options,
         Box::new(move |cc| {
             install_shell_font(&cc.egui_ctx, installer_font);
-            Ok(Box::new(InstallerApp::new(source)))
+            Ok(Box::new(InstallerApp::new(source, &cc.egui_ctx)))
         }),
     )
     .map_err(|error| anyhow::anyhow!("run installer UI: {error}"))
 }
 
 fn shell_native_options() -> eframe::NativeOptions {
-    let mut viewport = egui::ViewportBuilder::default();
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([900.0, 800.0])
+        .with_min_inner_size([680.0, 560.0])
+        .with_resizable(true)
+        .with_maximize_button(true);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!(
         "../../launcher/exresources/icons/lunalauncher.png"
     )) {
@@ -298,6 +302,8 @@ struct InstallerApp {
     install_progress_text: String,
     language: i18n::Language,
     launch_monitor: Option<platform::LaunchMonitor>,
+    classic_preview: egui::TextureHandle,
+    neo_preview: egui::TextureHandle,
 }
 
 struct LaunchChooserApp {
@@ -363,7 +369,7 @@ impl LaunchChooserApp {
 }
 
 impl InstallerApp {
-    fn new(source: PayloadSource) -> Self {
+    fn new(source: PayloadSource, context: &egui::Context) -> Self {
         let existing = config::load().ok().flatten();
         let first_run = existing.is_none();
         let destination = existing
@@ -431,8 +437,27 @@ impl InstallerApp {
             install_progress_text: String::new(),
             language: i18n::Language::detect(),
             launch_monitor: None,
+            classic_preview: load_preview(
+                context,
+                "luna-installer-preview-classic",
+                include_bytes!("../resources/preview-classicui.png"),
+            ),
+            neo_preview: load_preview(
+                context,
+                "luna-installer-preview-neo",
+                include_bytes!("../resources/preview-neoui.png"),
+            ),
         }
     }
+}
+
+fn load_preview(context: &egui::Context, name: &str, bytes: &[u8]) -> egui::TextureHandle {
+    let image = image::load_from_memory(bytes)
+        .expect("bundled installer preview must be a valid PNG")
+        .into_rgba8();
+    let size = [image.width() as usize, image.height() as usize];
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+    context.load_texture(name, color_image, egui::TextureOptions::LINEAR)
 }
 
 impl eframe::App for InstallerApp {
@@ -442,11 +467,15 @@ impl eframe::App for InstallerApp {
             .ok()
             .and_then(|handle| platform::monitor_for_window_handle(handle.as_raw()));
         self.poll_install(context);
-        egui::CentralPanel::default().show(context, |ui| match self.screen {
-            InstallerScreen::FirstRun => self.show_first_run(ui),
-            InstallerScreen::Install => self.show_install(ui),
-            InstallerScreen::ArchiveViewer => self.show_archive_viewer(ui),
-            InstallerScreen::LaunchChoice => self.show_launch_choice(ui),
+        egui::CentralPanel::default().show(context, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| match self.screen {
+                    InstallerScreen::FirstRun => self.show_first_run(ui),
+                    InstallerScreen::Install => self.show_install(ui),
+                    InstallerScreen::ArchiveViewer => self.show_archive_viewer(ui),
+                    InstallerScreen::LaunchChoice => self.show_launch_choice(ui),
+                });
         });
     }
 }
@@ -631,6 +660,7 @@ impl InstallerApp {
             );
         });
         ui.small(i18n::text(self.language, "ui.help"));
+        self.show_ui_preview(ui);
         ui.separator();
         ui.heading(i18n::text(self.language, "step.data"));
         ui.label(i18n::text(self.language, "data.title"));
@@ -907,6 +937,33 @@ impl InstallerApp {
             }
         });
     }
+
+    fn show_ui_preview(&mut self, ui: &mut egui::Ui) {
+        ui.separator();
+        ui.label(i18n::text(self.language, "ui.preview"));
+        let available_width = ui.available_width().max(320.0);
+        match self.entry_point {
+            config::EntryPoint::Classic => {
+                show_preview_image(ui, &self.classic_preview, available_width.min(860.0));
+            }
+            config::EntryPoint::Neo => {
+                show_preview_image(ui, &self.neo_preview, available_width.min(860.0));
+            }
+            config::EntryPoint::Both => {
+                ui.horizontal_top(|ui| {
+                    let width = ((ui.available_width() - 12.0) / 2.0).max(220.0);
+                    show_preview_image(ui, &self.classic_preview, width);
+                    show_preview_image(ui, &self.neo_preview, width);
+                });
+            }
+        }
+    }
+}
+
+fn show_preview_image(ui: &mut egui::Ui, texture: &egui::TextureHandle, width: f32) {
+    let source_size = texture.size_vec2();
+    let size = egui::vec2(width, width * source_size.y / source_size.x.max(1.0));
+    ui.add(egui::Image::from_texture(texture).fit_to_exact_size(size));
 }
 
 #[derive(Debug, Clone)]

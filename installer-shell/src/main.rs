@@ -66,11 +66,12 @@ fn main() -> Result<()> {
         && let Some(saved) = config::load()?
             .filter(|saved| current_executable_is_shell_for_install_dir(&saved.install_dir))
     {
-        platform::launch_with_monitor(
-            &saved.install_dir,
-            saved.entry_point,
-            platform::current_cursor_monitor(),
-        )?;
+        let monitor = platform::current_cursor_monitor();
+        if saved.entry_point == config::EntryPoint::Both {
+            run_launch_chooser(saved.install_dir, monitor)?;
+        } else {
+            platform::launch_with_monitor(&saved.install_dir, saved.entry_point, monitor)?;
+        }
         return Ok(());
     }
     let source = payload_source(args.payload)?;
@@ -139,16 +140,7 @@ fn main() -> Result<()> {
     }
 
     let installer_font = archive::read_entry(&source, "resource/fonts/SarasaUiSC-Regular.ttf").ok();
-    let mut viewport = egui::ViewportBuilder::default();
-    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!(
-        "../../launcher/exresources/icons/lunalauncher.png"
-    )) {
-        viewport = viewport.with_icon(icon);
-    }
-    let native_options = eframe::NativeOptions {
-        viewport,
-        ..Default::default()
-    };
+    let native_options = shell_native_options();
     eframe::run_native(
         "LunaLauncher Installer",
         native_options,
@@ -158,6 +150,41 @@ fn main() -> Result<()> {
         }),
     )
     .map_err(|error| anyhow::anyhow!("run installer UI: {error}"))
+}
+
+fn shell_native_options() -> eframe::NativeOptions {
+    let mut viewport = egui::ViewportBuilder::default();
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!(
+        "../../launcher/exresources/icons/lunalauncher.png"
+    )) {
+        viewport = viewport.with_icon(icon);
+    }
+    eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    }
+}
+
+fn run_launch_chooser(
+    install_dir: PathBuf,
+    monitor: Option<platform::LaunchMonitor>,
+) -> Result<()> {
+    let source = payload_source(None)?;
+    let installer_font = archive::read_entry(&source, "resource/fonts/SarasaUiSC-Regular.ttf").ok();
+    let language = i18n::Language::detect();
+    eframe::run_native(
+        "LunaLauncher",
+        shell_native_options(),
+        Box::new(move |cc| {
+            install_shell_font(&cc.egui_ctx, installer_font);
+            Ok(Box::new(LaunchChooserApp::new(
+                install_dir,
+                monitor,
+                language,
+            )))
+        }),
+    )
+    .map_err(|error| anyhow::anyhow!("run launcher chooser: {error}"))
 }
 
 fn install_shell_font(context: &egui::Context, font: Option<Vec<u8>>) {
@@ -243,6 +270,7 @@ enum InstallerScreen {
     FirstRun,
     Install,
     ArchiveViewer,
+    LaunchChoice,
 }
 
 struct InstallerApp {
@@ -270,6 +298,68 @@ struct InstallerApp {
     install_progress_text: String,
     language: i18n::Language,
     launch_monitor: Option<platform::LaunchMonitor>,
+}
+
+struct LaunchChooserApp {
+    install_dir: PathBuf,
+    launch_monitor: Option<platform::LaunchMonitor>,
+    language: i18n::Language,
+    status: String,
+}
+
+impl LaunchChooserApp {
+    fn new(
+        install_dir: PathBuf,
+        launch_monitor: Option<platform::LaunchMonitor>,
+        language: i18n::Language,
+    ) -> Self {
+        Self {
+            install_dir,
+            launch_monitor,
+            language,
+            status: String::new(),
+        }
+    }
+}
+
+impl eframe::App for LaunchChooserApp {
+    fn update(&mut self, context: &egui::Context, frame: &mut eframe::Frame) {
+        self.launch_monitor = frame
+            .window_handle()
+            .ok()
+            .and_then(|handle| platform::monitor_for_window_handle(handle.as_raw()));
+        egui::CentralPanel::default().show(context, |ui| {
+            ui.heading(match self.language {
+                i18n::Language::SimplifiedChinese => "选择启动界面",
+                i18n::Language::English => "Choose launcher UI",
+            });
+            ui.label(match self.language {
+                i18n::Language::SimplifiedChinese => "两个界面都已安装。请选择这次要打开的界面。",
+                i18n::Language::English => "Both UIs are installed. Choose which one to open now.",
+            });
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button(i18n::text(self.language, "ui.classic")).clicked() {
+                    self.launch(ui, config::EntryPoint::Classic);
+                }
+                if ui.button(i18n::text(self.language, "ui.neo")).clicked() {
+                    self.launch(ui, config::EntryPoint::Neo);
+                }
+            });
+            if !self.status.is_empty() {
+                ui.label(&self.status);
+            }
+        });
+    }
+}
+
+impl LaunchChooserApp {
+    fn launch(&mut self, ui: &egui::Ui, entry_point: config::EntryPoint) {
+        match platform::launch_with_monitor(&self.install_dir, entry_point, self.launch_monitor) {
+            Ok(()) => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+            Err(error) => self.status = format!("Launch failed: {error:#}"),
+        }
+    }
 }
 
 impl InstallerApp {
@@ -356,6 +446,7 @@ impl eframe::App for InstallerApp {
             InstallerScreen::FirstRun => self.show_first_run(ui),
             InstallerScreen::Install => self.show_install(ui),
             InstallerScreen::ArchiveViewer => self.show_archive_viewer(ui),
+            InstallerScreen::LaunchChoice => self.show_launch_choice(ui),
         });
     }
 }
@@ -396,7 +487,14 @@ impl InstallerApp {
                     match result {
                         Ok(count) => {
                             self.first_run = false;
-                            self.status = format!("Installed {count} files successfully");
+                            if self.entry_point == config::EntryPoint::Both {
+                                self.screen = InstallerScreen::LaunchChoice;
+                                self.status = format!(
+                                    "Installed {count} files successfully; choose a launcher UI"
+                                );
+                            } else {
+                                self.status = format!("Installed {count} files successfully");
+                            }
                             self.install_progress = 1.0;
                             self.install_progress_text = "Installation complete".to_owned();
                         }
@@ -453,6 +551,39 @@ impl InstallerApp {
         }
         ui.label(i18n::text(self.language, "first.complete"));
         ui.label(i18n::text(self.language, "first.leave"));
+    }
+
+    fn show_launch_choice(&mut self, ui: &mut egui::Ui) {
+        self.show_language_picker(ui);
+        ui.heading(match self.language {
+            i18n::Language::SimplifiedChinese => "选择启动界面",
+            i18n::Language::English => "Choose launcher UI",
+        });
+        ui.label(match self.language {
+            i18n::Language::SimplifiedChinese => "两个界面都已安装。请选择这次要打开的界面。",
+            i18n::Language::English => "Both UIs are installed. Choose which one to open now.",
+        });
+        ui.separator();
+        ui.horizontal(|ui| {
+            if ui.button(i18n::text(self.language, "ui.classic")).clicked() {
+                self.launch_selected_ui(ui, config::EntryPoint::Classic);
+            }
+            if ui.button(i18n::text(self.language, "ui.neo")).clicked() {
+                self.launch_selected_ui(ui, config::EntryPoint::Neo);
+            }
+        });
+        ui.label(&self.status);
+    }
+
+    fn launch_selected_ui(&mut self, ui: &egui::Ui, entry_point: config::EntryPoint) {
+        match platform::launch_with_monitor(
+            Path::new(&self.destination),
+            entry_point,
+            self.launch_monitor,
+        ) {
+            Ok(()) => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+            Err(error) => self.status = format!("Launch failed: {error:#}"),
+        }
     }
 
     fn show_install(&mut self, ui: &mut egui::Ui) {
@@ -616,6 +747,7 @@ impl InstallerApp {
         let desktop_shortcuts = self.desktop_shortcuts;
         let start_menu_shortcuts = self.start_menu_shortcuts;
         let launch_monitor = self.launch_monitor;
+        let launch_after = entry_point != config::EntryPoint::Both;
         self.install_receiver = Some(receiver);
         self.installing = true;
         self.install_progress = 0.0;
@@ -636,7 +768,7 @@ impl InstallerApp {
                     desktop_shortcuts,
                     start_menu_shortcuts,
                     setup,
-                    true,
+                    launch_after,
                     launch_monitor,
                     &mut report,
                 )

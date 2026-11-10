@@ -61,9 +61,9 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::SimplifiedChinese, "install.ui") => "启动时打开：",
         (Language::SimplifiedChinese, "ui.classic") => "Classic UI（经典界面）",
         (Language::SimplifiedChinese, "ui.neo") => "NeoUI（新界面）",
-        (Language::SimplifiedChinese, "ui.both") => "两个界面都安装",
+        (Language::SimplifiedChinese, "ui.both") => "每次启动时询问",
         (Language::SimplifiedChinese, "ui.help") => {
-            "不确定时请选择 NeoUI；两个启动程序都会随包安装。"
+            "两个启动程序都会安装；选择界面决定 shell 启动时的行为。"
         }
         (Language::SimplifiedChinese, "shortcuts.desktop") => "创建桌面快捷方式",
         (Language::SimplifiedChinese, "shortcuts.start") => "创建开始菜单快捷方式",
@@ -131,9 +131,9 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::English, "install.ui") => "Open on launch:",
         (Language::English, "ui.classic") => "Classic UI",
         (Language::English, "ui.neo") => "NeoUI",
-        (Language::English, "ui.both") => "Install both UIs",
+        (Language::English, "ui.both") => "Ask every time",
         (Language::English, "ui.help") => {
-            "If you are unsure, choose NeoUI. Both launchers are included in the package."
+            "Both launchers are installed; this choice controls shell startup behavior."
         }
         (Language::English, "shortcuts.desktop") => "Create desktop shortcut",
         (Language::English, "shortcuts.start") => "Create Start Menu shortcut",

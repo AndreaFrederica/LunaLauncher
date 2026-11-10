@@ -89,13 +89,7 @@ pub fn configure_launcher(
         .as_array_mut()
         .context("instance store registry InstanceStores must be an array")?;
     let install_key = normalized_path(install_dir);
-    stores.retain(|store| {
-        store
-            .get("path")
-            .and_then(Value::as_str)
-            .is_none_or(|path| normalized_store_path(install_dir, Path::new(path)) != install_key)
-    });
-    if register_instance_store {
+    let registered_path = if register_instance_store {
         let path = instance_store_path.context("registered instance store path is missing")?;
         if path.as_os_str().is_empty() {
             bail!("registered instance store path is empty");
@@ -104,6 +98,29 @@ pub fn configure_launcher(
         if path.is_empty() {
             bail!("registered instance store path is empty");
         }
+        Some(path)
+    } else {
+        None
+    };
+    stores.retain(|store| {
+        let path = store
+            .get("path")
+            .and_then(Value::as_str)
+            .map(|path| normalized_store_path(install_dir, Path::new(path)));
+        let is_shell_registration = store
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| id.starts_with("installer-"));
+        let is_under_install_dir = path.as_ref().is_some_and(|path| {
+            path == &install_key || path.starts_with(&format!("{install_key}/"))
+        });
+        let is_replaced_registration = registered_path
+            .as_ref()
+            .zip(path.as_ref())
+            .is_some_and(|(new_path, old_path)| new_path == old_path);
+        !(is_shell_registration && (is_under_install_dir || is_replaced_registration))
+    });
+    if let Some(path) = registered_path {
         let mut hasher = Sha256::new();
         hasher.update(path.as_bytes());
         let id = format!("installer-{}", hex_lower(&hasher.finalize()));
@@ -547,5 +564,37 @@ mod tests {
         assert!(!directory.path().join("portable.txt").exists());
         assert!(directory.path().join(".luna-use-system-data").is_file());
         assert!(!directory.path().join("instance-stores.json").exists());
+    }
+
+    #[test]
+    fn vanilla_registration_replaces_child_with_shell_parent() {
+        let root = tempdir().unwrap();
+        let install = root.path().join("LunaLauncher");
+        fs::create_dir_all(&install).unwrap();
+        configure_launcher(
+            &install,
+            true,
+            true,
+            Some(&install),
+            InstanceStoreFormat::VanillaCompatible,
+        )
+        .unwrap();
+        configure_launcher(
+            &install,
+            true,
+            true,
+            Some(root.path()),
+            InstanceStoreFormat::VanillaCompatible,
+        )
+        .unwrap();
+
+        let registry: Value = serde_json::from_str(
+            &fs::read_to_string(install.join("instance-stores.json")).unwrap(),
+        )
+        .unwrap();
+        let stores = registry["InstanceStores"].as_array().unwrap();
+        assert_eq!(stores.len(), 1);
+        assert_eq!(stores[0]["path"], normalized_path(root.path()));
+        assert_eq!(stores[0]["format"], "vanilla-compatible");
     }
 }

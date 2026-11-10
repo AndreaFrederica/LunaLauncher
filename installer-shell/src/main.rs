@@ -106,7 +106,15 @@ fn main() -> Result<()> {
             instance_layout: existing.instance_layout,
             portable_mode: existing.portable_mode,
             register_instance_store: existing.register_instance_store,
-            instance_store_path: existing.instance_store_path.clone(),
+            instance_store_path: if existing.instance_layout == config::InstanceLayoutMode::Vanilla {
+                existing
+                    .install_dir
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .or_else(|| existing.instance_store_path.clone())
+            } else {
+                existing.instance_store_path.clone()
+            },
             instance_store_format: existing.instance_store_format,
         };
         let count = install(
@@ -459,7 +467,7 @@ impl InstallerApp {
                 ui.label("MMC：非便携模式，不注册当前安装目录为实例目录。");
             }
             config::InstanceLayoutMode::Vanilla => {
-                ui.label("原版：便携模式，安装到当前 shell 目录下的 LunaLauncher 子目录，并注册为原版/HMCL/PCL 实例目录。");
+                ui.label("原版：便携模式，安装到当前 shell 目录下的 LunaLauncher 子目录，并将外层目录注册为原版/HMCL/PCL 实例目录。");
             }
             config::InstanceLayoutMode::Custom => {
                 ui.horizontal(|ui| {
@@ -564,7 +572,10 @@ impl InstallerApp {
                     self.destination = install_directory.display().to_string();
                     self.extract_destination = format!("{}-extracted", self.destination);
                 }
-                self.instance_store_path = self.destination.clone();
+                self.instance_store_path = Path::new(&self.destination)
+                    .parent()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|| self.destination.clone());
             }
             config::InstanceLayoutMode::Custom => {}
         }
@@ -583,7 +594,12 @@ impl InstallerApp {
                 instance_layout: config::InstanceLayoutMode::Vanilla,
                 portable_mode: true,
                 register_instance_store: true,
-                instance_store_path: Some(destination.to_path_buf()),
+                instance_store_path: Some(
+                    destination
+                        .parent()
+                        .unwrap_or(destination)
+                        .to_path_buf(),
+                ),
                 instance_store_format: config::InstanceStoreFormat::VanillaCompatible,
             },
             config::InstanceLayoutMode::Custom => LauncherSetup {

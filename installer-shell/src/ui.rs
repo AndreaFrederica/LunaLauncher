@@ -159,6 +159,7 @@ struct InstallerApp {
     start_menu_shortcuts: bool,
     instance_layout: config::InstanceLayoutMode,
     portable_mode: bool,
+    data_directory: String,
     register_instance_store: bool,
     instance_store_path: String,
     migration: Option<luna_installer_shell::migration::Plan>,
@@ -289,6 +290,11 @@ impl InstallerApp {
                 .map(|config| config.instance_layout)
                 .unwrap_or_default(),
             portable_mode: existing.as_ref().is_some_and(|config| config.portable_mode),
+            data_directory: existing
+                .as_ref()
+                .and_then(|config| config.data_dir.as_ref())
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(system_data_directory),
             register_instance_store: existing
                 .as_ref()
                 .is_some_and(|config| config.register_instance_store),
@@ -674,7 +680,10 @@ impl InstallerApp {
                     i18n::text(self.language, "wizard.next")
                 };
                 if let Some(next) = next
-                    && ui.button(next_label).clicked()
+                    && ui.add_enabled(
+                        self.screen != InstallerScreen::WizardData || self.data_directory_error().is_none(),
+                        egui::Button::new(next_label),
+                    ).clicked()
                 {
                     if next == InstallerScreen::Extracting {
                         self.start_extract_only(PathBuf::from(self.destination.trim()));
@@ -809,10 +818,7 @@ impl InstallerApp {
         match self.install_method {
             InstallMethod::Mmc => {
                 ui.label(i18n::text(self.language, "mode.mmc.help"));
-                ui.horizontal(|ui| {
-                    ui.label(i18n::text(self.language, "data.system_path"));
-                    ui.monospace(system_data_directory());
-                });
+                self.show_data_directory_editor(ui);
                 ui.checkbox(
                     &mut self.register_instance_store,
                     i18n::text(self.language, "data.extra_store"),
@@ -899,6 +905,11 @@ impl InstallerApp {
                     &mut self.portable_mode,
                     i18n::text(self.language, "portable"),
                 );
+                if !self.portable_mode {
+                    self.show_data_directory_editor(ui);
+                } else {
+                    ui.label(format!("{} {}", i18n::text(self.language, "data.portable_path"), self.effective_data_directory().display()));
+                }
             }
             InstallMethod::ExtractOnly => {
                 ui.label(i18n::text(self.language, "mode.extract.help"));
@@ -919,6 +930,52 @@ impl InstallerApp {
         ui.label(i18n::text(self.language, "wizard.shortcuts_help"));
     }
 
+    fn effective_data_directory(&self) -> PathBuf {
+        if self.instance_layout == config::InstanceLayoutMode::Vanilla || self.portable_mode {
+            Path::new(self.destination.trim()).join("UserData")
+        } else {
+            PathBuf::from(self.data_directory.trim())
+        }
+    }
+
+    fn custom_data_directory(&self) -> Option<PathBuf> {
+        if self.instance_layout == config::InstanceLayoutMode::Vanilla
+            || self.portable_mode
+            || self.data_directory.trim() == system_data_directory()
+        {
+            None
+        } else {
+            Some(PathBuf::from(self.data_directory.trim()))
+        }
+    }
+
+    fn data_directory_error(&self) -> Option<String> {
+        self.custom_data_directory().and_then(|path| {
+            platform::validate_data_directory(&path, Path::new(self.destination.trim()))
+                .err().map(|error| error.to_string())
+        })
+    }
+
+    fn show_data_directory_editor(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(i18n::text(self.language, "data.path"));
+            ui.add(egui::TextEdit::singleline(&mut self.data_directory)
+                .desired_width((ui.available_width() - 180.0).max(100.0)));
+            if ui.button(i18n::text(self.language, "browse")).clicked()
+                && let Some(path) = pick_folder(&self.data_directory, i18n::text(self.language, "data.path"))
+            {
+                self.data_directory = path.display().to_string();
+            }
+            if ui.button(i18n::text(self.language, "data.reset")).clicked() {
+                self.data_directory = system_data_directory();
+            }
+        });
+        ui.small(i18n::text(self.language, "data.path_help"));
+        if let Some(error) = self.data_directory_error() {
+            ui.colored_label(egui::Color32::RED, error);
+        }
+    }
+
     fn show_wizard_review(&mut self, ui: &mut egui::Ui) {
         ui.heading(i18n::text(self.language, "wizard.review_title"));
         ui.label(format!(
@@ -936,6 +993,11 @@ impl InstallerApp {
             i18n::text(self.language, "data.title"),
             self.install_method_label()
         ));
+        ui.label(format!("{} {}", i18n::text(self.language, "data.path"), self.effective_data_directory().display()));
+        let data_error = self.data_directory_error();
+        if let Some(error) = &data_error {
+            ui.colored_label(egui::Color32::RED, error);
+        }
         ui.label(format!(
             "{} {}, {}",
             i18n::text(self.language, "wizard.shortcut_summary"),
@@ -978,7 +1040,7 @@ impl InstallerApp {
             ui.label(&self.status);
         }
         if ui
-            .add_enabled(!migrating || (self.migration_confirmed && self.migration.as_ref().is_some_and(|p| p.profiles.iter().all(|i| i.mode != "auto"))), egui::Button::new(i18n::text(self.language, "install.button")))
+            .add_enabled(data_error.is_none() && (!migrating || (self.migration_confirmed && self.migration.as_ref().is_some_and(|p| p.profiles.iter().all(|i| i.mode != "auto")))), egui::Button::new(i18n::text(self.language, "install.button")))
             .clicked()
         {
             let destination = PathBuf::from(self.destination.trim());
@@ -1132,6 +1194,7 @@ impl InstallerApp {
                 migration: None,
                 instance_layout: config::InstanceLayoutMode::Mmc,
                 portable_mode: false,
+                data_dir: self.custom_data_directory(),
                 register_instance_store: self.register_instance_store,
                 instance_store_path: if self.register_instance_store {
                     Some(PathBuf::from(self.instance_store_path.trim()))
@@ -1144,6 +1207,7 @@ impl InstallerApp {
                 migration: self.migration.clone(),
                 instance_layout: config::InstanceLayoutMode::Vanilla,
                 portable_mode: true,
+                data_dir: None,
                 register_instance_store: true,
                 instance_store_path: Some(
                     PathBuf::from(self.instance_store_path.trim()),
@@ -1154,6 +1218,7 @@ impl InstallerApp {
                 migration: None,
                 instance_layout: config::InstanceLayoutMode::Custom,
                 portable_mode: self.portable_mode,
+                data_dir: self.custom_data_directory(),
                 register_instance_store: self.register_instance_store,
                 instance_store_path: if self.register_instance_store {
                     Some(PathBuf::from(self.instance_store_path.trim()))

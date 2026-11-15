@@ -49,6 +49,8 @@ pub struct InstallConfig {
     #[serde(default)]
     pub portable_mode: bool,
     #[serde(default)]
+    pub data_dir: Option<PathBuf>,
+    #[serde(default)]
     pub register_instance_store: bool,
     #[serde(default)]
     pub instance_store_path: Option<PathBuf>,
@@ -101,4 +103,18 @@ pub fn reset() -> Result<()> {
 
 pub fn is_within_install_dir(path: &Path, install_dir: &Path) -> bool {
     path == install_dir || path.starts_with(install_dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_installer_config_defaults_to_system_data_and_custom_path_roundtrips() {
+        let mut config: InstallConfig = serde_json::from_str(r#"{"install_dir":"launcher"}"#).unwrap();
+        assert!(config.data_dir.is_none());
+        config.data_dir = Some(PathBuf::from("数据 with spaces"));
+        let decoded: InstallConfig = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(decoded.data_dir, config.data_dir);
+    }
 }

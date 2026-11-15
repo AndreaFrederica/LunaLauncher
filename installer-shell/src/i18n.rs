@@ -99,6 +99,9 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::SimplifiedChinese, "shortcuts.start") => "创建开始菜单快捷方式",
         (Language::SimplifiedChinese, "data.title") => "启动器数据和实例目录",
         (Language::SimplifiedChinese, "data.system_path") => "系统数据目录：",
+        (Language::SimplifiedChinese, "data.path") => "启动器数据目录：",
+        (Language::SimplifiedChinese, "data.reset") => "恢复默认",
+        (Language::SimplifiedChinese, "data.path_help") => "保存设置、账号、缓存及默认实例。可选择已有数据目录；修改路径不会自动搬迁旧数据。",
         (Language::SimplifiedChinese, "data.portable_path") => "便携数据目录：",
         (Language::SimplifiedChinese, "data.extra_store") => "额外注册一个实例目录",
         (Language::SimplifiedChinese, "data.help") => {
@@ -109,7 +112,7 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::SimplifiedChinese, "mode.custom") => "自定义",
         (Language::SimplifiedChinese, "mode.extract") => "自解压",
         (Language::SimplifiedChinese, "mode.mmc.help") => {
-            "标准安装模式：程序放在系统安装目录，数据放在系统目录，不把程序目录注册为实例目录；同时提供卸载、协议和文件关联。"
+            "标准安装模式：程序与数据分开存放，数据目录可修改，不把程序目录注册为实例目录；同时提供卸载、协议和文件关联。"
         }
         (Language::SimplifiedChinese, "mode.vanilla.help") => {
             "适合从 PCL/HMCL 迁移：探测已有游戏目录，核对各版本的隔离设置后再安装。"
@@ -220,6 +223,9 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::English, "shortcuts.start") => "Create Start Menu shortcut",
         (Language::English, "data.title") => "Launcher data and instance folders",
         (Language::English, "data.system_path") => "System data folder:",
+        (Language::English, "data.path") => "Launcher data folder:",
+        (Language::English, "data.reset") => "Reset to default",
+        (Language::English, "data.path_help") => "Stores settings, accounts, cache and default instances. Existing data can be used here; changing the path does not move old data automatically.",
         (Language::English, "data.portable_path") => "Portable data folder:",
         (Language::English, "data.extra_store") => "Register an additional instance folder",
         (Language::English, "data.help") => {
@@ -230,7 +236,7 @@ pub fn text(language: Language, key: &str) -> &'static str {
         (Language::English, "mode.custom") => "Custom",
         (Language::English, "mode.extract") => "Self-extract",
         (Language::English, "mode.mmc.help") => {
-            "Standard installer mode: keep binaries in the system install folder, keep data in the system folder, and include the uninstaller, URL handlers, and file associations."
+            "Standard installer mode: keep binaries and data separate, choose a data folder, and include the uninstaller, URL handlers, and file associations."
         }
         (Language::English, "mode.vanilla.help") => {
             "For PCL/HMCL migration: detect existing game folders and review each version’s directory mode before installing."

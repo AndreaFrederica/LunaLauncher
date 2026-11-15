@@ -213,6 +213,13 @@ fn register_windows_installation(install_dir: &Path) -> Result<()> {
     use winreg::enums::HKEY_CURRENT_USER;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    register_windows_installation_at(install_dir, &hkcu)?;
+    notify_shell_association_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn register_windows_installation_at(install_dir: &Path, hkcu: &winreg::RegKey) -> Result<()> {
     let launcher = launcher_path(install_dir, "lunalauncher");
     let shell = launcher_path(install_dir, "luna-installer-shell");
     let launcher_command = format!("\"{}\" \"%1\"", launcher.display());
@@ -291,7 +298,6 @@ fn register_windows_installation(install_dir: &Path) -> Result<()> {
     register_extension(&hkcu, ".mrpack", true)?;
     register_extension(&hkcu, ".zip", false)?;
 
-    notify_shell_association_change();
     Ok(())
 }
 
@@ -322,6 +328,13 @@ fn unregister_windows_installation(install_dir: &Path) -> Result<()> {
     use winreg::enums::HKEY_CURRENT_USER;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    unregister_windows_installation_at(install_dir, &hkcu)?;
+    notify_shell_association_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn unregister_windows_installation_at(install_dir: &Path, hkcu: &winreg::RegKey) -> Result<()> {
     let registered_dir = hkcu
         .open_subkey("Software\\LunaLauncher")
         .ok()
@@ -346,7 +359,6 @@ fn unregister_windows_installation(install_dir: &Path) -> Result<()> {
     delete_registry_value(&hkcu, "Software\\RegisteredApplications", "Luna Launcher")?;
     unregister_extension(&hkcu, ".mrpack", true)?;
     unregister_extension(&hkcu, ".zip", false)?;
-    notify_shell_association_change();
     Ok(())
 }
 
@@ -364,7 +376,7 @@ fn unregister_extension(
     restore_default: bool,
 ) -> Result<()> {
     let path = format!("Software\\Classes\\{extension}");
-    if let Ok(key) = hkcu.open_subkey_with_flags(&path, winreg::enums::KEY_WRITE) {
+    if let Ok(key) = hkcu.open_subkey_with_flags(&path, winreg::enums::KEY_READ | winreg::enums::KEY_WRITE) {
         if restore_default {
             if let Ok(previous) = key.get_value::<String, _>("LunaLauncher.App_backup") {
                 key.set_value("", &previous)?;
@@ -542,24 +554,67 @@ fn find_visible_window(pid: u32) -> Option<windows_sys::Win32::Foundation::HWND>
     search.hwnd
 }
 
-/// Apply the launcher's existing portable-data and instance-store conventions.
-/// The launcher reads these files from its working directory, which is also the
-/// installation directory used by shortcuts and `launch` above.
+pub fn default_data_directory() -> Result<PathBuf> {
+    Ok(directories::BaseDirs::new()
+        .context("locate user config directory")?
+        .config_dir()
+        .join("LunaLauncher"))
+}
+
+pub fn validate_data_directory(path: &Path, install_dir: &Path) -> Result<()> {
+    if !path.is_absolute() || path.parent().is_none() {
+        bail!("请选择绝对路径的数据文件夹（不能是磁盘根目录）。 / Choose an absolute data folder, not a filesystem root.");
+    }
+    if path.components().any(|part| matches!(part, std::path::Component::ParentDir)) {
+        bail!("数据目录不能包含 .. / The data folder cannot contain ..");
+    }
+    if path.to_str().is_none_or(|text| text.contains(['\r', '\n'])) {
+        bail!("数据目录包含无效字符。 / The data folder contains invalid characters.");
+    }
+    // Ordinary uninstall removes the program tree. Keep custom data outside it;
+    // portable mode already has an explicit preserved UserData directory.
+    let data_key = normalized_path(path);
+    let install_key = normalized_path(install_dir);
+    // canonicalize adds the Windows extended-path prefix only for paths that
+    // already exist. Compare new and existing directories in the same form.
+    let data_key = data_key.strip_prefix("//?/").unwrap_or(&data_key);
+    let install_key = install_key.strip_prefix("//?/").unwrap_or(&install_key);
+    if data_key == install_key || data_key.starts_with(&format!("{install_key}/")) {
+        bail!("数据目录须位于程序安装目录之外；如需随程序保存，请选择便携模式。 / Keep data outside the install folder, or use portable mode.");
+    }
+    Ok(())
+}
+
+pub fn prepare_data_directory(path: &Path, install_dir: &Path) -> Result<()> {
+    validate_data_directory(path, install_dir)?;
+    fs::create_dir_all(path).with_context(|| format!("create data folder: {}", path.display()))?;
+    validate_data_directory(path, install_dir)?;
+    tempfile::NamedTempFile::new_in(path)
+        .with_context(|| format!("data folder is not writable: {}", path.display()))?;
+    Ok(())
+}
+
+/// Apply the data location and register instances in that same data directory.
+/// The per-install marker is also read when launching directly or through a URL.
 pub fn configure_launcher(
     install_dir: &Path,
     portable: bool,
     register_instance_store: bool,
     instance_store_path: Option<&Path>,
     instance_store_format: InstanceStoreFormat,
+    data_dir: Option<&Path>,
 ) -> Result<()> {
     let registry_path = if portable {
         install_dir.join("UserData").join("instance-stores.json")
     } else {
-        directories::BaseDirs::new()
-            .context("locate user config directory")?
-            .config_dir()
-            .join("LunaLauncher")
-            .join("instance-stores.json")
+        let directory = match data_dir {
+            Some(path) => {
+                prepare_data_directory(path, install_dir)?;
+                path.to_path_buf()
+            }
+            None => default_data_directory()?,
+        };
+        directory.join("instance-stores.json")
     };
     configure_launcher_at(
         install_dir,
@@ -568,6 +623,7 @@ pub fn configure_launcher(
         instance_store_path,
         instance_store_format,
         registry_path,
+        data_dir,
     )
 }
 
@@ -578,13 +634,21 @@ fn configure_launcher_at(
     instance_store_path: Option<&Path>,
     instance_store_format: InstanceStoreFormat,
     registry_path: PathBuf,
+    data_dir: Option<&Path>,
 ) -> Result<()> {
     let portable_marker = install_dir.join("portable.txt");
     let system_marker = install_dir.join(".luna-use-system-data");
+    let data_marker = install_dir.join(".luna-data-dir");
     if portable {
+        remove_if_exists(data_marker)?;
         fs::write(&portable_marker, "LunaLauncher portable mode\n")?;
         remove_if_exists(system_marker)?;
     } else {
+        if let Some(path) = data_dir {
+            fs::write(&data_marker, path.to_str().context("data folder must be UTF-8")?)?;
+        } else {
+            remove_if_exists(data_marker)?;
+        }
         fs::write(
             &system_marker,
             "Use the user data directory; ignore portable UserData.\n",
@@ -1057,6 +1121,82 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_registration_and_uninstall_restore_file_associations() {
+        use winreg::{RegKey, enums::HKEY_CURRENT_USER};
+        struct RegistryCleanup(String);
+        impl Drop for RegistryCleanup {
+            fn drop(&mut self) {
+                let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(&self.0);
+            }
+        }
+        let directory = tempdir().unwrap();
+        let key_path = format!("Software\\LunaLauncherInstallerTests\\{}", directory.path().file_name().unwrap().to_string_lossy());
+        let cleanup = RegistryCleanup(key_path.clone());
+        let root = RegKey::predef(HKEY_CURRENT_USER).create_subkey(&key_path).unwrap().0;
+        let install = directory.path().join("Program with spaces");
+        fs::create_dir_all(&install).unwrap();
+        for extension in [".mrpack", ".zip"] {
+            root.create_subkey(format!("Software\\Classes\\{extension}")).unwrap().0
+                .set_value("", &"Previous.Handler").unwrap();
+        }
+        register_windows_installation_at(&install, &root).unwrap();
+        let value = |path: &str, name: &str| -> String { root.open_subkey(path).unwrap().get_value(name).unwrap() };
+        let uninstall = value("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\LunaLauncher", "UninstallString");
+        assert_eq!(uninstall, format!("\"{}\" --uninstall \"{}\"", launcher_path(&install, "luna-installer-shell").display(), install.display()));
+        for protocol in ["curseforge", "lunalauncher"] {
+            assert_eq!(value(&format!("Software\\Classes\\{protocol}"), "URL Protocol"), "");
+            assert_eq!(value(&format!("Software\\Classes\\{protocol}\\shell\\open\\command"), ""), format!("\"{}\" \"%1\"", launcher_path(&install, "lunalauncher").display()));
+        }
+        assert_eq!(value("Software\\Classes\\.zip", ""), "Previous.Handler");
+        assert_eq!(value("Software\\Classes\\.mrpack", ""), "LunaLauncher.App");
+        unregister_windows_installation_at(&directory.path().join("another"), &root).unwrap();
+        assert!(root.open_subkey("Software\\LunaLauncher").is_ok());
+        unregister_windows_installation_at(&install, &root).unwrap();
+        assert!(root.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\LunaLauncher").is_err());
+        assert!(root.open_subkey("Software\\Classes\\lunalauncher").is_err());
+        assert_eq!(value("Software\\Classes\\.mrpack", ""), "Previous.Handler");
+        assert_eq!(value("Software\\Classes\\.zip", ""), "Previous.Handler");
+        drop(root);
+        drop(cleanup);
+    }
+
+    #[test]
+    fn custom_data_directory_owns_registry_and_portable_switch_clears_override() {
+        let root = tempdir().unwrap();
+        let install = root.path().join("program");
+        let data = root.path().join("数据 with spaces");
+        let game = root.path().join("game");
+        fs::create_dir_all(&install).unwrap();
+        fs::create_dir_all(&data).unwrap();
+        fs::write(data.join("accounts.json"), "keep existing accounts").unwrap();
+        fs::create_dir_all(install.join("UserData")).unwrap();
+        configure_launcher(&install, false, true, Some(&game), InstanceStoreFormat::VanillaCompatible, Some(&data)).unwrap();
+        assert_eq!(fs::read_to_string(install.join(".luna-data-dir")).unwrap(), data.to_str().unwrap());
+        let registry: Value = serde_json::from_str(&fs::read_to_string(data.join("instance-stores.json")).unwrap()).unwrap();
+        assert_eq!(registry["InstanceStores"][0]["path"], normalized_path(&game));
+        assert_eq!(fs::read_to_string(data.join("accounts.json")).unwrap(), "keep existing accounts");
+        configure_launcher(&install, true, false, None, InstanceStoreFormat::Prism, Some(&data)).unwrap();
+        assert!(!install.join(".luna-data-dir").exists());
+        assert!(install.join("portable.txt").exists());
+        assert!(data.join("instance-stores.json").is_file());
+    }
+
+    #[test]
+    fn data_directory_validation_rejects_invalid_targets() {
+        let root = tempdir().unwrap();
+        let install = root.path().join("program");
+        fs::create_dir_all(&install).unwrap();
+        assert!(validate_data_directory(Path::new("relative"), &install).is_err());
+        assert!(validate_data_directory(&install.join("data"), &install).is_err());
+        assert!(validate_data_directory(&root.path().join(".."), &install).is_err());
+        let file = root.path().join("file");
+        fs::write(&file, "existing").unwrap();
+        assert!(prepare_data_directory(&file, &install).is_err());
+        assert_eq!(fs::read_to_string(file).unwrap(), "existing");
+    }
+
     #[test]
     fn vanilla_setup_enables_portable_mode_and_registers_store() {
         let directory = tempdir().unwrap();
@@ -1070,6 +1210,7 @@ mod tests {
                 .path()
                 .join("UserData")
                 .join("instance-stores.json"),
+            None,
         )
         .unwrap();
 
@@ -1105,6 +1246,7 @@ mod tests {
             Some(directory.path()),
             InstanceStoreFormat::VanillaCompatible,
             directory.path().join("test-registry.json"),
+            None,
         )
         .unwrap();
         configure_launcher_at(
@@ -1114,6 +1256,7 @@ mod tests {
             None,
             InstanceStoreFormat::Prism,
             directory.path().join("test-registry.json"),
+            None,
         )
         .unwrap();
 
@@ -1141,6 +1284,7 @@ mod tests {
             Some(&install),
             InstanceStoreFormat::VanillaCompatible,
             install.join("UserData").join("instance-stores.json"),
+            None,
         )
         .unwrap();
         configure_launcher_at(
@@ -1150,6 +1294,7 @@ mod tests {
             Some(root.path()),
             InstanceStoreFormat::VanillaCompatible,
             install.join("UserData").join("instance-stores.json"),
+            None,
         )
         .unwrap();
 

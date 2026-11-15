@@ -26,6 +26,7 @@ pub(crate) struct LauncherSetup {
     pub(crate) migration: Option<luna_installer_shell::migration::Plan>,
     pub(crate) instance_layout: config::InstanceLayoutMode,
     pub(crate) portable_mode: bool,
+    pub(crate) data_dir: Option<PathBuf>,
     pub(crate) register_instance_store: bool,
     pub(crate) instance_store_path: Option<PathBuf>,
     pub(crate) instance_store_format: config::InstanceStoreFormat,
@@ -47,7 +48,12 @@ struct LunaInstallBackend {
 }
 
 impl InstallBackend for LunaInstallBackend {
-    fn before_install(&self, _destination: &Path) -> Result<()> {
+    fn before_install(&self, destination: &Path) -> Result<()> {
+        if !self.setup.portable_mode {
+            if let Some(path) = &self.setup.data_dir {
+                platform::prepare_data_directory(path, destination)?;
+            }
+        }
         if let Some(plan) = &self.setup.migration { plan.validate()?; }
         platform::stop_running_launchers()
     }
@@ -72,6 +78,7 @@ impl InstallBackend for LunaInstallBackend {
             self.setup.register_instance_store,
             self.setup.instance_store_path.as_deref(),
             self.setup.instance_store_format,
+            self.setup.data_dir.as_deref(),
         )?;
         platform::configure_windows_installation(destination, self.setup.portable_mode)?;
         if self.launch_after && self.entry_point != config::EntryPoint::Both {
@@ -86,6 +93,7 @@ impl InstallBackend for LunaInstallBackend {
             keep_user_data: true,
             instance_layout: self.setup.instance_layout,
             portable_mode: self.setup.portable_mode,
+            data_dir: self.setup.data_dir.clone(),
             register_instance_store: self.setup.register_instance_store,
             instance_store_path: self.setup.instance_store_path.clone(),
             instance_store_format: self.setup.instance_store_format,
@@ -114,6 +122,7 @@ impl InstallBackend for LunaExtractBackend {
                 false,
                 None,
                 config::InstanceStoreFormat::Prism,
+                None,
             )?;
         }
         platform::create_shortcuts(

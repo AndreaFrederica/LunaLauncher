@@ -96,6 +96,7 @@ fn main() -> Result<()> {
             keep_user_data: true,
             instance_layout: config::InstanceLayoutMode::Mmc,
             portable_mode: false,
+            data_dir: None,
             register_instance_store: false,
             instance_store_path: None,
             instance_store_format: config::InstanceStoreFormat::Prism,
@@ -111,6 +112,7 @@ fn main() -> Result<()> {
             migration: None,
             instance_layout: existing.instance_layout,
             portable_mode: existing.portable_mode,
+            data_dir: existing.data_dir,
             register_instance_store: existing.register_instance_store,
             instance_store_path: if existing.instance_layout == config::InstanceLayoutMode::Vanilla
             {

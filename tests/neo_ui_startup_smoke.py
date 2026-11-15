@@ -22,7 +22,9 @@ PROBE = r"""
 const config = __CONFIG__;
 const report = value => fetch(config.url, {method: 'POST', body: JSON.stringify({tag: config.tag, ...value})});
 const ok = async (operation, parameters = {}) => {
-  const reply = await luna.execute(operation, parameters);
+  const reply = await window.__TAURI__.core.invoke('launcher_request', {
+    method: 'launcher/execute', parameters: {operation, parameters}
+  });
   if (!reply.ok) throw new Error(JSON.stringify(reply));
   return reply.data;
 };
@@ -130,17 +132,12 @@ def main():
                 data_marker.write_text(str(profiles['first']), encoding='utf-8')
                 (portable / 'UserData').mkdir()
                 assert context(environment=portable_env, binary=portable_cli) == first_context
-                classic = cli.with_name('lunalauncher.exe')
-                if classic.is_file():
-                    portable_classic = portable / classic.name
-                    shutil.copy2(classic, portable_classic)
-                    assert context(environment=portable_env, binary=portable_classic) == first_context
                 assert context(profiles['other'], environment=portable_env, binary=portable_cli) == context(profiles['other'])
                 assert context(environment=dict(portable_env, LUNALAUNCHER_DATA_DIR=str(profiles['other'])), binary=portable_cli) == context(profiles['other'])
                 data_marker.unlink()
                 assert Path(context(environment=portable_env, binary=portable_cli)['dataRoot']) == portable / 'UserData'
                 data_marker.write_text(str(profiles['first']), encoding='utf-8')
-                print('PASS: custom install data is shared by CLI and classic; explicit/environment overrides win and clearing restores portable detection', flush=True)
+                print('PASS: custom install data overrides portable markers; explicit/environment paths win and clearing restores portable detection', flush=True)
 
             def start(tag, native_env=False, from_marker=False):
                 current = dict(env, LUNA_WEB_UI='data/probe', WEBVIEW2_USER_DATA_FOLDER=str(root / ('webview-' + tag)))

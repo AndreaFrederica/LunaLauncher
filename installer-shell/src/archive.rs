@@ -241,7 +241,7 @@ fn is_runtime_state_marker(path: &Path) -> bool {
     }
     matches!(
         path.file_name().and_then(|name| name.to_str()),
-        Some(".luna-use-system-data") | Some("portable.txt") | Some("portable.txt.disabled")
+        Some(".luna-use-system-data") | Some(".luna-data-dir") | Some("portable.txt") | Some("portable.txt.disabled")
     )
 }
 
@@ -358,6 +358,7 @@ mod tests {
         fs::write(source.join("资源/启动器.txt"), "内容").unwrap();
         fs::write(source.join("ascii.txt"), "ascii").unwrap();
         fs::write(source.join(".luna-use-system-data"), "stale state").unwrap();
+        fs::write(source.join(".luna-data-dir"), "private local path").unwrap();
 
         assert_eq!(create_zip(&source, &output).unwrap(), 3);
         let bytes = fs::read(&output).unwrap();

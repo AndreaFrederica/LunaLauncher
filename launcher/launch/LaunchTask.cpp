@@ -186,6 +186,7 @@ bool LaunchTask::abort()
         case LaunchTask::Finished:
             return true;
         case LaunchTask::NotStarted: {
+            m_userAborted = true;
             state = LaunchTask::Aborted;
             emitAborted();
             return true;
@@ -196,10 +197,14 @@ bool LaunchTask::abort()
             if (!step->canAbort()) {
                 return false;
             }
+            // Some steps finish synchronously inside abort(). Mark intent first
+            // so observers do not mistake an intentional stop for a crash.
+            m_userAborted = true;
             if (step->abort()) {
                 state = LaunchTask::Aborted;
                 return true;
             }
+            m_userAborted = false;
         }
         default:
             break;

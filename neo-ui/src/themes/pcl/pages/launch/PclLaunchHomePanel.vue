@@ -20,6 +20,7 @@
                   <option v-for="item in consoleMonitorOptions" :key="item.id" :value="item.id">{{ item.name }}{{ item.running ? ` · ${t('launch.runningStatus')}` : '' }}</option>
                 </select>
               </label>
+              <DiagnosticExportButton v-if="props.execute" :instance="consoleMonitorId || selected?.id || ''" :console="logLines.join('\n')" :execute="props.execute" pcl />
               <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" :label="t('launch.autoScroll')" />
               <PclIconButton icon="copy" :label="t('common.copyLog')" :size="24" :disabled="!logLines.length" @click="copyLog" />
               <PclIconButton icon="trash-2" :label="t('common.clearLog')" :size="24" :disabled="!logLines.length" @click="emit('clear-log')" />
@@ -119,6 +120,7 @@ import PclExtraButton from '../../components/PclExtraButton.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclIcon from '../../components/PclIcon.vue';
 import InstanceFormatBadge from '../../../../components/InstanceFormatBadge.vue';
+import DiagnosticExportButton from '../../../../components/DiagnosticExportButton.vue';
 import PclIconButton from '../../components/PclIconButton.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclListItem from '../../components/PclListItem.vue';

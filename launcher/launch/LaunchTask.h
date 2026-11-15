@@ -39,6 +39,7 @@
 #include <QObjectPtr.h>
 #include "BaseInstance.h"
 #include <QProcess>
+#include <QDateTime>
 #include "LaunchStep.h"
 #include "LogModel.h"
 #include "MessageLevel.h"
@@ -65,7 +66,14 @@ class LaunchTask : public Task {
 
     QList<Task*> getSubTasks() const override;
 
-    void setPid(qint64 pid) { m_pid = pid; }
+    void setPid(qint64 pid) { m_pid = pid; if (pid > 0) m_gameStarted = true; }
+
+    QDateTime launchStartedAt() const { return m_launchStartedAt; }
+    bool wasAbortedByUser() const { return m_userAborted; }
+    bool gameStarted() const { return m_gameStarted; }
+    void setGameExitCode(int code) { m_gameExitCode = code; m_hasGameExitCode = true; }
+    bool hasGameExitCode() const { return m_hasGameExitCode; }
+    int gameExitCode() const { return m_gameExitCode; }
 
     qint64 pid() { return m_pid; }
 
@@ -127,6 +135,9 @@ class LaunchTask : public Task {
     int currentStep = -1;
     State state = NotStarted;
     qint64 m_pid = -1;
+    QDateTime m_launchStartedAt = QDateTime::currentDateTimeUtc();
+    bool m_userAborted = false, m_gameStarted = false, m_hasGameExitCode = false;
+    int m_gameExitCode = 0;
     LogParser m_stdoutParser;
     LogParser m_stderrParser;
 };

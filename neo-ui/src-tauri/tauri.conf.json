@@ -39,6 +39,8 @@
             "core:webview:allow-internal-toggle-devtools",
             "core:window:allow-close",
             "core:window:allow-minimize",
+            "core:window:allow-show",
+            "core:window:allow-unminimize",
             "core:window:allow-maximize",
             "core:window:allow-unmaximize",
             "core:window:allow-is-maximized",

@@ -207,10 +207,11 @@ QJsonObject installAccountSkin(const QJsonObject& parameters)
     if (path.isEmpty())
         return OperationService::failure(QObject::tr("A skin PNG path is required."), 2);
     SkinList skins(nullptr, skinDirectory(), account);
-    const auto error = skins.installSkin(path, parameters.value("name").toString().trimmed());
+    QString installedPath;
+    const auto error = skins.installSkin(path, parameters.value("name").toString().trimmed(), &installedPath);
     if (!error.isEmpty())
         return OperationService::failure(error, 2);
-    return OperationService::success(QJsonObject{ { "path", path }, { "installed", true } });
+    return OperationService::success(QJsonObject{ { "path", installedPath }, { "name", QFileInfo(installedPath).completeBaseName() }, { "installed", true } });
 }
 
 QJsonObject deleteAccountSkin(const QJsonObject& parameters)

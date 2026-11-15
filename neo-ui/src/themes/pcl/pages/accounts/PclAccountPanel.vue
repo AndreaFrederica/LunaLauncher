@@ -44,7 +44,7 @@
             <div class="pcl-field-row">
               <PclInput v-model="skinPath" placeholder="D:\skins\skin.png" />
               <PclIconButton icon="folder-open" :label="t('account.chooseSkin')" :size="28" :disabled="busy" @click="chooseSkinFile" />
-              <PclButton icon="file-input" :disabled="busy || !skinPath" @click="installSkin">{{ t('account.import') }}</PclButton>
+              <PclButton icon="file-input" :disabled="busy || importing || !skinPath" @click="installSkin">{{ t(importing ? 'skinLibrary.importing' : 'account.import') }}</PclButton>
             </div>
           </label>
 
@@ -93,6 +93,7 @@
       </div>
     </PclCard>
 
+    <PclHint v-if="skinNotice" theme="blue" closable @close="skinNotice = ''">{{ skinNotice }}</PclHint>
     <PclHint v-if="error" theme="red" closable @close="error = ''">{{ error }}</PclHint>
   </div>
 </template>
@@ -120,10 +121,11 @@ const launcherSession = useLauncherSessionStore();
 
 const selected = ref<any>(''), profile = ref<any>(null), skins = ref<any[]>([]);
 const skinPath = ref<any>(''), skinName = ref<any>(''), variant = ref<any>('classic'), error = ref<any>('');
+const importing = ref(false), skinNotice = ref('');
 const skinNames = ref<string[]>([]);
 const variantOptions = [{ label: 'Classic', value: 'classic' }, { label: 'Slim', value: 'slim' }];
 
-function accountRef(account: any) { return String(account?.internalId || account?.id || account?.profileName || ''); }
+function accountRef(account: any) { return typeof account === 'string' ? account : String(account?.internalId || account?.id || account?.profileName || ''); }
 function resolveAccount(referenceOrAccount: any) {
   const reference = accountRef(referenceOrAccount);
   return props.accounts.find(account => accountRef(account) === reference) || (typeof referenceOrAccount === 'object' ? referenceOrAccount : null);
@@ -198,12 +200,15 @@ async function select(account: any) {
   profile.value = profileFallback(resolved || account);
   skins.value = [];
   skinNames.value = [];
+  skinName.value = '';
+  skinNotice.value = '';
   error.value = '';
   try {
-    const [nextProfile, nextSkins] = await Promise.all([
-      props.execute('account.profile', { account: reference }),
-      props.execute('account.skin.list', { account: reference }),
-    ]);
+    // The shell serializes these operations; parallel calls reject the skin
+    // list as busy and leave the library empty even when files exist.
+    const nextProfile = await props.execute('account.profile', { account: reference });
+    if (generation !== selectionGeneration || selected.value !== reference) return;
+    const nextSkins = await props.execute('account.skin.list', { account: reference });
     if (generation !== selectionGeneration || selected.value !== reference) return;
     profile.value = nextProfile;
     skins.value = Array.isArray(nextSkins) ? nextSkins : [];
@@ -250,7 +255,27 @@ async function selectByReference(reference: string) {
   const account = resolveAccount(reference);
   if (account) await select(account);
 }
-async function installSkin() { await attempt(async () => { const reference = selected.value; await props.execute('account.skin.install', { account: reference, path: skinPath.value }); skinPath.value = ''; await selectByReference(reference); }); }
+async function installSkin() {
+  if (importing.value || props.busy || !skinPath.value || !selected.value) return;
+  const reference = selected.value, path = skinPath.value;
+  importing.value = true; skinNotice.value = '';
+  try {
+    await attempt(async () => {
+      const installed = await props.execute('account.skin.install', { account: reference, path });
+      // Account selection can change while the backend copies the file.
+      if (selected.value !== reference) return;
+      skinPath.value = '';
+      await selectByReference(reference);
+      if (selected.value !== reference || error.value) return;
+      const imported = skins.value.find(skin => skin.path === installed?.path || skin.name === installed?.name);
+      if (imported) {
+        skinName.value = imported.name;
+        variant.value = String(imported.model || 'classic').toLowerCase();
+        skinNotice.value = t('skinLibrary.imported');
+      }
+    });
+  } finally { importing.value = false; }
+}
 async function uploadSkin() { await attempt(async () => { const reference = selected.value; await props.execute('account.skin.upload', { account: reference, skin: skinName.value, variant: variant.value }); await selectByReference(reference); }); }
 async function resetSkin() { await attempt(async () => { const reference = selected.value; await props.execute('account.skin.reset', { account: reference, confirm: true }); await selectByReference(reference); }); }
 async function deleteSkin(skin: any) { await attempt(async () => { const reference = selected.value; await props.execute('account.skin.delete', { account: reference, skin: skin.name || skin.path, confirm: true }); await selectByReference(reference); }); }

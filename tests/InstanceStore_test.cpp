@@ -12,6 +12,7 @@ class InstanceStoreTest : public QObject {
     void upgradesLegacyPortableStoreAndCreatesDirectory();
     void deduplicatesStoresByCanonicalPath();
     void roundTripsRegistry();
+    void discardsForeignDerivedStoresButKeepsExplicitStores();
 };
 
 void InstanceStoreTest::normalizesPortableCandidateWithoutEnablingInUserMode()
@@ -22,12 +23,7 @@ void InstanceStoreTest::normalizesPortableCandidateWithoutEnablingInUserMode()
     InstanceStoreRegistry registry;
     registry.normalize(launcher.path(), false);
 
-    QCOMPARE(registry.stores().size(), 1);
-    const auto& store = registry.stores().constFirst();
-    QCOMPARE(store.path, InstanceStoreRegistry::portableInstancesPath(launcher.path()));
-    QVERIFY(!store.enabled);
-    QVERIFY(store.autoEnableWhenPortable);
-    QVERIFY(store.isPrism());
+    QVERIFY(registry.stores().isEmpty());
 }
 
 void InstanceStoreTest::enablesPortableCandidateInPortableMode()
@@ -124,6 +120,26 @@ void InstanceStoreTest::roundTripsRegistry()
     QCOMPARE(actual.path, store.path);
     QVERIFY(actual.isVanillaCompatible());
     QVERIFY(!actual.writable);
+}
+
+void InstanceStoreTest::discardsForeignDerivedStoresButKeepsExplicitStores()
+{
+    QTemporaryDir first, second;
+    InstanceStoreRegistry registry;
+    registry.normalize(first.path(), true);
+    InstanceStore explicitStore;
+    explicitStore.id = "explicit-external";
+    explicitStore.path = QDir(first.path()).filePath("shared-games");
+    explicitStore.origin = InstanceStoreOrigin::User;
+    registry.addOrUpdate(explicitStore);
+    registry.normalize(second.path(), true);
+    QCOMPARE(registry.stores().size(), 2);
+    QVERIFY(registry.find("explicit-external"));
+    QCOMPARE(registry.find("portable-userdata")->path, InstanceStoreRegistry::portableInstancesPath(second.path()));
+    registry.normalize(second.path(), false);
+    QCOMPARE(registry.stores().size(), 1);
+    QVERIFY(registry.find("explicit-external"));
+    QVERIFY(QDir(InstanceStoreRegistry::portableInstancesPath(first.path())).exists());
 }
 
 QTEST_GUILESS_MAIN(InstanceStoreTest)

@@ -408,13 +408,14 @@ class InstanceObject {
                                             { "settings", true } } } };
         if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance)) {
             const auto profile = minecraft->getPackProfile();
+            const bool profileLoaded = bool(profile->ensureLoaded());
             result.insert("runtime", QJsonObject{ { "minecraftVersion", profile->getComponentVersion("net.minecraft") } });
             // Native MMC/Prism instances keep their loader in the component
             // graph rather than in a vanilla version JSON. Expose the same
             // compact loader fields used by vanilla-compatible instances so
             // the shared instance cards do not mistake every MMC pack for
             // plain Vanilla.
-            QString loaderType = QStringLiteral("vanilla");
+            QString loaderType = profileLoaded ? QStringLiteral("vanilla") : QStringLiteral("unknown");
             QString loaderVersion;
             for (const auto& entry : { QPair<QString, QString>{ QStringLiteral("com.cleanroommc.cleanroom"), QStringLiteral("cleanroom") },
                                        QPair<QString, QString>{ QStringLiteral("net.neoforged"), QStringLiteral("neoforge") },

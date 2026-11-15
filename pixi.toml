@@ -224,3 +224,7 @@ depends-on = [
   { task = "build-test-offline", args = ["debug"] },
 ]
 cmd = "python scripts/pixi_meson.py test debug"
+
+[tasks.install-webui-portable]
+description = "Build and deploy an isolated portable Web UI release tree"
+cmd = "python scripts/pixi_portable.py"

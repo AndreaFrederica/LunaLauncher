@@ -174,10 +174,17 @@ void InstanceStoreRegistry::normalize(const QString& launcherRoot, bool portable
             previous.name = store.name;
     };
 
-    for (const auto& store : m_stores)
+    const auto currentPortablePath = launcherRoot.isEmpty() ? QString{} : normalizePath(portableInstancesPath(launcherRoot));
+    for (const auto& store : m_stores) {
+        // Derived candidates belong to this executable, not to a shared data
+        // directory or to a copied portable profile. Explicit user stores stay.
+        if (!launcherRoot.isEmpty() && store.origin == InstanceStoreOrigin::PortableDerived
+            && (!portable || normalizePath(store.path) != currentPortablePath))
+            continue;
         mergeStore(store);
+    }
 
-    if (!launcherRoot.isEmpty()) {
+    if (portable && !launcherRoot.isEmpty()) {
         const auto portablePath = portableInstancesPath(launcherRoot);
         // The portable UserData store is part of the launcher layout. Create
         // it while portable mode is active so the registry never exposes a

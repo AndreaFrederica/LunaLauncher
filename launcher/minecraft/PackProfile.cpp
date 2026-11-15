@@ -284,6 +284,11 @@ void PackProfile::buildingFromScratch()
     d->dirty = true;
 }
 
+PackProfile::Result PackProfile::ensureLoaded()
+{
+    return d->loaded ? Result::Success() : load();
+}
+
 bool PackProfile::isLoaded() const
 {
     return d->loaded;

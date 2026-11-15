@@ -88,8 +88,8 @@ QJsonObject lunaChangesFor(const VanillaInstanceDescriptor& descriptor)
 QPair<QString, QString> nativeLoaderFor(const MinecraftInstance* instance)
 {
     const auto profile = instance ? instance->getPackProfile() : nullptr;
-    if (!profile)
-        return { QStringLiteral("vanilla"), {} };
+    if (!profile || !profile->ensureLoaded())
+        return { QStringLiteral("unknown"), {} };
     for (const auto& entry : { QPair<QString, QString>{ QStringLiteral("com.cleanroommc.cleanroom"), QStringLiteral("cleanroom") },
                                QPair<QString, QString>{ QStringLiteral("net.neoforged"), QStringLiteral("neoforge") },
                                QPair<QString, QString>{ QStringLiteral("net.minecraftforge"), QStringLiteral("forge") },
@@ -912,6 +912,7 @@ QJsonObject OperationService::listInstances()
                 const auto loader = nativeLoaderFor(minecraft);
                 object.insert("loaderType", loader.first);
                 object.insert("loaderVersion", loader.second);
+                object.insert("minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft"));
             }
         }
         instances.append(object);
@@ -1009,8 +1010,10 @@ QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
                       { "managedVersionId", instance->getManagedPackVersionID() },
                       { "lastLaunch", instance->lastLaunch() },
                       { "playTimeSeconds", static_cast<qint64>(instance->totalTimePlayed()) } };
-    if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance))
+    if (const auto minecraft = dynamic_cast<MinecraftInstance*>(instance)) {
+        minecraft->getPackProfile()->ensureLoaded();
         data.insert("minecraftVersion", minecraft->getPackProfile()->getComponentVersion("net.minecraft"));
+    }
     if (const auto vanilla = dynamic_cast<VanillaInstance*>(instance)) {
         const auto& descriptor = vanilla->descriptor();
         // Keep the legacy instance.info response in lockstep with

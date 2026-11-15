@@ -159,9 +159,9 @@ const homeInstanceUsesBelow = computed(() => preferences.pclHomeInstanceLayout =
 function instanceSubtitle(instance: any) {
   const version = String(instance?.runtime?.minecraftVersion || instance?.runtime?.minecraft || instance?.minecraftVersion || '').trim();
   const loaderType = String(instance?.loaderType || '').trim();
-  const loader = loaderType && loaderType !== 'vanilla'
+  const loader = loaderType && loaderType !== 'vanilla' && loaderType !== 'unknown'
     ? `${loaderType.toUpperCase()}${instance?.loaderVersion ? ` ${instance.loaderVersion}` : ''}`
-    : 'Vanilla';
+    : loaderType === 'vanilla' ? 'Vanilla' : 'Minecraft';
   return version ? `${version} · ${loader}` : loader;
 }
 function homeCardOrder(key: string) {
@@ -869,7 +869,7 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
 
 .pcl-home-instance:hover { background: var(--pcl-c8); }
 .pcl-home-instance.active { border-color: var(--pcl-c3); background: var(--pcl-c8); }
-.pcl-home-instance img,
+.pcl-home-instance__icon-wrap > img,
 .pcl-home-instance__fallback { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 3px; object-fit: cover; }
 .pcl-home-instance__fallback { display: flex; align-items: center; justify-content: center; color: var(--pcl-muted); background: var(--pcl-c7); }
 .pcl-home-instance__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
@@ -930,7 +930,7 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
   text-align: center;
 }
 
-.pcl-home-instance.text-below img,
+.pcl-home-instance.text-below .pcl-home-instance__icon-wrap > img,
 .pcl-home-instance.text-below .pcl-home-instance__fallback {
   flex: 0 0 32px;
   width: 32px;
@@ -957,6 +957,8 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
 }
 
 .pcl-home-instance.text-below .pcl-home-instance__copy small {
+  max-width: 100%;
+  text-align: start;
   margin-top: 1px;
 }
 

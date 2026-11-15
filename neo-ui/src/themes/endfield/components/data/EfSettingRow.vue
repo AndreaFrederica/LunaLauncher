@@ -62,10 +62,13 @@ const { t, te } = useI18n();
 const draft = ref<any>('');
 const meta = computed(() => settingMetadata[props.setting.key]);
 const label = computed(() => {
+  if (props.setting.key === 'PclDownloadSmartConcurrency') return '智能并发上限';
   const key = meta.value?.label;
   return key && te(key) ? t(key) : props.setting.key;
 });
 const description = computed(() => {
+  if (props.setting.key === 'PclDownloadSmartConcurrency') return '仅适用于 PCL 下载：小文件（≤256 KiB）优先，总并发最多 32；大文件及大小未知文件最多 8。开启后替代手动并发上限，关闭后恢复。';
+  if (props.setting.key === 'PclDownloadThreadLimit') return '所有 PCL 下载任务共享的手动文件并发上限，仅在关闭智能并发时生效。';
   const key = `${meta.value?.label || ''}.description`;
   return key && te(key) ? t(key) : '';
 });

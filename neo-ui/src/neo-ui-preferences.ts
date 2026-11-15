@@ -41,6 +41,8 @@ export interface NeoUiPreferences {
   /** Shared width of PCL page navigation columns, in CSS pixels. */
   pclPageNavWidth: number;
   pclNavLayout: 'pcl' | 'mmc-classic';
+  pclVerticalNavigation: boolean;
+  pclMainNavigationText: boolean;
   pclClassicSide: 'left' | 'right';
   pclClassicIconSize: number;
   /** Enable the PCL launch-page transition and launching panel animation. */
@@ -86,6 +88,7 @@ export interface NeoUiPreferences {
   pclHomeInstanceRows: number;
   pclHomeInstanceWidth: number;
   pclHomeInstanceFontSize: number;
+  pclHomeInstanceShowSubtitle: boolean;
   pclHomeInstanceTextPosition: 'beside' | 'below';
   pclHomeInstanceGrouping: 'flat' | 'grouped';
   pclHomeInstanceSort: 'manual' | 'name' | 'version';
@@ -115,6 +118,8 @@ const defaults: NeoUiPreferences = {
   pclBaseFontSize: 14,
   pclPageNavWidth: 220,
   pclNavLayout: 'mmc-classic',
+  pclVerticalNavigation: false,
+  pclMainNavigationText: true,
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
   pclLaunchAnimation: false,
@@ -150,6 +155,7 @@ const defaults: NeoUiPreferences = {
   pclHomeInstanceRows: 4,
   pclHomeInstanceWidth: 100,
   pclHomeInstanceFontSize: 14,
+  pclHomeInstanceShowSubtitle: true,
   pclHomeInstanceTextPosition: 'below',
   pclHomeInstanceGrouping: 'grouped',
   pclHomeInstanceSort: 'name',
@@ -171,6 +177,8 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFont: 'system',
     pclBaseFontSize: 14,
     pclNavLayout: 'mmc-classic',
+    pclVerticalNavigation: false,
+    pclMainNavigationText: true,
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
@@ -191,6 +199,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 14,
+    pclHomeInstanceShowSubtitle: true,
     pclHomeInstanceTextPosition: 'below',
     pclHomeInstanceGrouping: 'grouped',
     pclHomeInstanceSort: 'name',
@@ -202,6 +211,8 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFont: 'system',
     pclBaseFontSize: 13,
     pclNavLayout: 'pcl',
+    pclVerticalNavigation: false,
+    pclMainNavigationText: true,
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: true,
@@ -222,6 +233,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 13,
+    pclHomeInstanceShowSubtitle: true,
     pclHomeInstanceTextPosition: 'beside',
     pclHomeInstanceGrouping: 'flat',
     pclHomeInstanceSort: 'manual',
@@ -258,8 +270,18 @@ function normalizeLoaded(value: any): NeoUiPreferences {
     if (typeof merged.pclLaunchLogAutoScroll !== 'boolean') {
       merged.pclLaunchLogAutoScroll = defaults.pclLaunchLogAutoScroll;
     }
+    if (typeof merged.pclMainNavigationText !== 'boolean') {
+      merged.pclMainNavigationText = defaults.pclMainNavigationText;
+    }
+    if (typeof merged.pclVerticalNavigation !== 'boolean') {
+      merged.pclVerticalNavigation = defaults.pclVerticalNavigation;
+    }
     if (typeof merged.pclTitleIcon !== 'boolean') {
       merged.pclTitleIcon = defaults.pclTitleIcon;
+    }
+
+    if (typeof merged.pclHomeInstanceShowSubtitle !== 'boolean') {
+      merged.pclHomeInstanceShowSubtitle = defaults.pclHomeInstanceShowSubtitle;
     }
 
     merged.pclHomeCardOrder = Array.isArray(merged.pclHomeCardOrder)
@@ -408,6 +430,8 @@ export function applyNeoUiPreferences() {
   root.dataset.neoDensity = neoUiPreferences.density;
   root.dataset.neoBackground = neoUiPreferences.background;
   root.dataset.neoAnimations = neoUiPreferences.animations ? 'on' : 'off';
+  root.dataset.pclMainNavigation = neoUiPreferences.shell === 'pcl' && neoUiPreferences.pclVerticalNavigation ? 'vertical' : 'horizontal';
+  root.dataset.pclMainNavigationText = neoUiPreferences.pclMainNavigationText ? 'on' : 'off';
   root.dataset.pclTitleLogo = neoUiPreferences.pclTitleLogo ? 'on' : 'off';
   root.dataset.pclTitleBadge = neoUiPreferences.pclTitleBadge ? 'on' : 'off';
   root.dataset.pclTitleIcon = neoUiPreferences.pclTitleIcon ? 'on' : 'off';

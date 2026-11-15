@@ -79,7 +79,7 @@
                     <span class="pcl-home-instance__icon-wrap"><img v-if="icons[item.id]" :src="icons[item.id]" alt="" /><span v-else class="pcl-home-instance__fallback"><PclIcon name="box" :size="20" /></span><InstanceFormatBadge :instance="item" /></span>
                     <span class="pcl-home-instance__copy">
                       <strong>{{ item.name }}</strong>
-                      <small v-if="instanceSubtitle(item)">{{ instanceSubtitle(item) }}</small>
+                      <small v-if="preferences.pclHomeInstanceShowSubtitle && instanceSubtitle(item)">{{ instanceSubtitle(item) }}</small>
                     </span>
                     <span v-if="item.running" class="pcl-home-instance__running">{{ t('launch.runningStatus') }}</span>
                     <span v-else class="pcl-home-instance__hint">{{ preferences.pclHomeInstanceSort === 'manual' ? t('launch.dragLaunch') : t('launch.doubleLaunch') }}</span>

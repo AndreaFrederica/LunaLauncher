@@ -1317,6 +1317,8 @@
 
 :is(:root[data-neo-shell="pcl"], :root.melody-document) .pcl-hint {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: flex-start;
   gap: 8px;
   border: 0;
@@ -1326,6 +1328,16 @@
   color: var(--pcl-hint-text, var(--pcl-hint-red-text));
   font: 400 calc(13px * var(--pcl-font-scale, 1))/16px var(--pcl-font);
   padding: 9px 12px;
+}
+
+:is(:root[data-neo-shell="pcl"], :root.melody-document) .pcl-hint__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: min(240px, 35vh);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  overscroll-behavior: contain;
 }
 
 :is(:root[data-neo-shell="pcl"], :root.melody-document) .pcl-hint--blue {

@@ -151,11 +151,16 @@ function formatRate(value: unknown) {
 
 <style scoped>
 .pcl-launch-dialog {
+  display: flex;
+  flex-direction: column;
   width: 520px;
   max-width: 94vw;
+  max-height: calc(100dvh - 48px);
+  overflow: hidden !important;
 }
 
 .pcl-launch-dialog__head {
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -178,7 +183,7 @@ function formatRate(value: unknown) {
 .pcl-launch-dialog__head h3 { margin: 3px 0; color: var(--pcl-text); font-size: calc(16px * var(--pcl-font-scale, 1)); font-weight: 500; }
 .pcl-launch-dialog__head p { margin: 0; overflow: hidden; color: var(--pcl-muted); font-size: calc(10px * var(--pcl-font-scale, 1)); text-overflow: ellipsis; white-space: nowrap; }
 .pcl-launch-dialog__percent { color: var(--pcl-c2); font-size: calc(20px * var(--pcl-font-scale, 1)); font-weight: 600; }
-.pcl-launch-dialog__body { padding-top: 0; }
+.pcl-launch-dialog__body { min-height: 0; overflow: auto; padding-top: 0; overflow-wrap: anywhere; }
 .pcl-launch-dialog__track { margin: 4px 0 10px; }
 
 .pcl-launch-dialog__stage {
@@ -204,9 +209,12 @@ function formatRate(value: unknown) {
 .pcl-launch-dialog__info div { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
 .pcl-launch-dialog__info span { color: var(--pcl-muted); font-size: calc(9px * var(--pcl-font-scale, 1)); }
 .pcl-launch-dialog__info strong { overflow: hidden; color: var(--pcl-text); font-size: calc(9px * var(--pcl-font-scale, 1)); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.pcl-launch-dialog__actions { padding-top: 2px; }
+.pcl-launch-dialog__actions { flex: 0 0 auto; padding-top: 2px; }
 
 .pcl-launch-dialog__details {
+  max-height: min(160px, 25vh);
+  overflow: auto;
+  white-space: pre-wrap;
   margin: 6px 0 0;
   color: var(--pcl-muted);
   font-size: calc(10px * var(--pcl-font-scale, 1));
@@ -252,9 +260,10 @@ function formatRate(value: unknown) {
   margin: 2px 0 0;
 }
 
-.pcl-launch-dialog__failures { border-color: color-mix(in srgb, #fb7185 55%, var(--pcl-border)); }
+.pcl-launch-dialog__failures { max-height: min(200px, 30vh); overflow: auto; border-color: color-mix(in srgb, #fb7185 55%, var(--pcl-border)); }
+.pcl-launch-dialog__failures .pcl-launch-dialog__download { grid-template-columns: minmax(0, 1fr); }
 .pcl-launch-dialog__failures .pcl-launch-dialog__downloads-head { color: #fb7185; }
-.pcl-launch-dialog__failures .pcl-launch-dialog__download-meta { color: #fecdd3; white-space: normal; }
+.pcl-launch-dialog__failures .pcl-launch-dialog__download-meta { color: var(--pcl-hint-red-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .pcl-launch-dialog__step { grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; }
 .pcl-launch-dialog__step-mark { color: var(--pcl-muted); font-size: 10px; line-height: 1; }

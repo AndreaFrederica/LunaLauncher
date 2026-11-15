@@ -36,6 +36,20 @@ unknown Windows locales, and provides an English/简体中文 switch in the wind
 The install page is organized as four beginner-friendly steps: location, UI,
 data/instance mode, and shortcuts.
 
+The normal MMC/Prism installation location follows the existing Windows
+installer convention: `%LOCALAPPDATA%\\Programs\\LunaLauncher`. This launcher
+installation directory is independent from the Prism data and instance
+directories. Switching back to MMC/Prism restores this installation default;
+the original shell directory is only used by the explicit vanilla/HMCL/PCL
+portable mode.
+
+On Windows, MMC/Prism mode also installs the per-user integration provided by
+the original NSIS package: uninstall metadata, `curseforge:` and
+`lunalauncher:` URL handlers, `.mrpack`/`.zip` open-with entries, and the
+registered application capabilities. The copied `luna-installer-shell.exe`
+is the uninstaller and removes those entries while preserving launcher user
+data unless `--purge` is requested.
+
 The install wizard also configures the launcher's existing data conventions:
 MMC mode selects non-portable data and leaves the current directory
 unregistered; 原版/HMCL/PCL mode keeps the shell in the current directory,

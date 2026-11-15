@@ -100,6 +100,349 @@ pub fn launch_with_monitor(
     Ok(())
 }
 
+/// Open the current installer file in an archive manager when one is
+/// available. The SFX is a valid executable as well as a ZIP-backed package,
+/// so launching it normally would start the installer again; this explicitly
+/// prefers 7-Zip/WinRAR/PeaZip and falls back to the file manager.
+pub fn open_with_archive_manager(path: &Path) -> Result<()> {
+    if !path.is_file() {
+        bail!("installer file does not exist: {}", path.display());
+    }
+    #[cfg(windows)]
+    {
+        let mut candidates = Vec::new();
+        for variable in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
+            if let Ok(root) = std::env::var(variable) {
+                let root = PathBuf::from(root);
+                candidates.extend([
+                    root.join(r"7-Zip\7zFM.exe"),
+                    root.join(r"WinRAR\WinRAR.exe"),
+                    root.join(r"PeaZip\peazip.exe"),
+                    root.join(r"Bandizip\Bandizip.exe"),
+                    root.join(r"Bandizip\Bandizip64.exe"),
+                ]);
+            }
+        }
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let root = PathBuf::from(local_app_data);
+            candidates.push(root.join(r"Programs\7-Zip\7zFM.exe"));
+        }
+        if let Some(manager) = candidates.into_iter().find(|candidate| candidate.is_file()) {
+            Command::new(&manager)
+                .arg(path)
+                .spawn()
+                .with_context(|| format!("open {} with {}", path.display(), manager.display()))?;
+            return Ok(());
+        }
+        Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(path)
+            .spawn()
+            .context("open installer location")?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .context("open installer with the system archive handler")?;
+        Ok(())
+    }
+}
+
+/// Stop launcher processes before replacing an existing installation. This is
+/// the same update safety behavior provided by the NSIS package's TaskKill
+/// step, while ignoring processes that are not running.
+pub fn stop_running_launchers() -> Result<()> {
+    #[cfg(windows)]
+    {
+        for image in [
+            "lunalauncher.exe",
+            "luna-neo-ui.exe",
+            "lunalauncher-cli.exe",
+            "lunalauncher_updater.exe",
+        ] {
+            let status = Command::new("taskkill")
+                .args(["/IM", image, "/F", "/T"])
+                .status()
+                .with_context(|| format!("stop running {image}"))?;
+            if !status.success() {
+                // taskkill returns an error when the image is not running. The
+                // installer can safely continue in that case.
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Register the per-user Windows integration used by the normal MMC/Prism
+/// installation. Portable vanilla/HMCL/PCL installs intentionally skip this
+/// so copying the directory remains self-contained.
+pub fn configure_windows_installation(install_dir: &Path, portable: bool) -> Result<()> {
+    #[cfg(windows)]
+    {
+        if !portable {
+            register_windows_installation(install_dir)?;
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (install_dir, portable);
+    }
+    Ok(())
+}
+
+/// Remove the registry integration owned by the normal installation. This is
+/// called by the copied uninstaller before its own directory is removed.
+pub fn remove_windows_installation(install_dir: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        unregister_windows_installation(install_dir)?;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = install_dir;
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn register_windows_installation(install_dir: &Path) -> Result<()> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let launcher = launcher_path(install_dir, "lunalauncher");
+    let shell = launcher_path(install_dir, "luna-installer-shell");
+    let launcher_command = format!("\"{}\" \"%1\"", launcher.display());
+    let import_command = format!("\"{}\" -I \"%1\"", launcher.display());
+
+    let (product, _) = hkcu.create_subkey("Software\\LunaLauncher")?;
+    product.set_value("InstallDir", &install_dir.display().to_string())?;
+
+    let (uninstall, _) = hkcu
+        .create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\LunaLauncher")?;
+    uninstall.set_value("DisplayName", &"Luna Launcher")?;
+    uninstall.set_value("DisplayIcon", &launcher.display().to_string())?;
+    uninstall.set_value(
+        "UninstallString",
+        &format!(
+            "\"{}\" --uninstall \"{}\"",
+            shell.display(),
+            install_dir.display()
+        ),
+    )?;
+    uninstall.set_value(
+        "QuietUninstallString",
+        &format!(
+            "\"{}\" --uninstall \"{}\"",
+            shell.display(),
+            install_dir.display()
+        ),
+    )?;
+    uninstall.set_value("InstallLocation", &install_dir.display().to_string())?;
+    uninstall.set_value("Publisher", &"Luna Launcher Contributors")?;
+    uninstall.set_value("Version", &env!("LUNA_LAUNCHER_VERSION"))?;
+    uninstall.set_value("DisplayVersion", &env!("LUNA_LAUNCHER_VERSION"))?;
+    uninstall.set_value("EstimatedSize", &estimated_size_kb(install_dir))?;
+    uninstall.set_value("NoModify", &1u32)?;
+    uninstall.set_value("NoRepair", &1u32)?;
+
+    let (curseforge, _) = hkcu.create_subkey("Software\\Classes\\curseforge")?;
+    curseforge.set_value("URL Protocol", &"")?;
+    let (curseforge_open, _) =
+        hkcu.create_subkey("Software\\Classes\\curseforge\\shell\\open\\command")?;
+    curseforge_open.set_value("", &launcher_command)?;
+
+    let (launcher_url, _) = hkcu.create_subkey("Software\\Classes\\lunalauncher")?;
+    launcher_url.set_value("URL Protocol", &"")?;
+    let (launcher_url_open, _) =
+        hkcu.create_subkey("Software\\Classes\\lunalauncher\\shell\\open\\command")?;
+    launcher_url_open.set_value("", &launcher_command)?;
+
+    let (app, _) = hkcu.create_subkey("Software\\Classes\\LunaLauncher.App")?;
+    app.set_value("", &"Luna Launcher")?;
+    let (icon, _) = hkcu.create_subkey("Software\\Classes\\LunaLauncher.App\\DefaultIcon")?;
+    icon.set_value("", &format!("{},0", launcher.display()))?;
+    let (app_open, _) =
+        hkcu.create_subkey("Software\\Classes\\LunaLauncher.App\\shell\\open\\command")?;
+    app_open.set_value("", &import_command)?;
+    let (application, _) =
+        hkcu.create_subkey("Software\\Classes\\Applications\\lunalauncher.exe")?;
+    application.set_value("FriendlyAppName", &"Luna Launcher")?;
+    let (application_open, _) = hkcu
+        .create_subkey("Software\\Classes\\Applications\\lunalauncher.exe\\shell\\open\\command")?;
+    application_open.set_value("", &import_command)?;
+
+    let (capabilities, _) =
+        hkcu.create_subkey("Software\\Classes\\Applications\\lunalauncher.exe\\Capabilities")?;
+    capabilities.set_value("ApplicationDescription", &"Luna Launcher")?;
+    let (associations, _) = hkcu.create_subkey(
+        "Software\\Classes\\Applications\\lunalauncher.exe\\Capabilities\\FileAssociations",
+    )?;
+    associations.set_value(".mrpack", &"LunaLauncher.App")?;
+    let registered = hkcu.create_subkey("Software\\RegisteredApplications")?.0;
+    registered.set_value(
+        "Luna Launcher",
+        &"Software\\Classes\\Applications\\lunalauncher.exe\\Capabilities",
+    )?;
+
+    register_extension(&hkcu, ".mrpack", true)?;
+    register_extension(&hkcu, ".zip", false)?;
+
+    notify_shell_association_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn register_extension(hkcu: &winreg::RegKey, extension: &str, replace_default: bool) -> Result<()> {
+    let (key, _) = hkcu.create_subkey(format!("Software\\Classes\\{extension}"))?;
+    if replace_default {
+        let current = key.get_value::<String, _>("").ok();
+        if let Some(current) =
+            current.filter(|value| !value.is_empty() && value != "LunaLauncher.App")
+        {
+            key.set_value("LunaLauncher.App_backup", &current)?;
+        }
+        key.set_value("", &"LunaLauncher.App")?;
+    }
+    let (open_with, _) =
+        hkcu.create_subkey(format!("Software\\Classes\\{extension}\\OpenWithList"))?;
+    open_with.set_value("lunalauncher.exe", &"")?;
+    let (progids, _) =
+        hkcu.create_subkey(format!("Software\\Classes\\{extension}\\OpenWithProgids"))?;
+    progids.set_value("LunaLauncher.App", &"")?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn unregister_windows_installation(install_dir: &Path) -> Result<()> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let registered_dir = hkcu
+        .open_subkey("Software\\LunaLauncher")
+        .ok()
+        .and_then(|key| key.get_value::<String, _>("InstallDir").ok());
+    if registered_dir.as_deref().map(normalized_path_string)
+        != Some(normalized_path_string(&install_dir.display().to_string()))
+    {
+        // A portable install, or a second installation, must not remove the
+        // per-user integration owned by another install tree.
+        return Ok(());
+    }
+    for key in [
+        "Software\\LunaLauncher",
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\LunaLauncher",
+        "Software\\Classes\\curseforge",
+        "Software\\Classes\\lunalauncher",
+        "Software\\Classes\\LunaLauncher.App",
+        "Software\\Classes\\Applications\\lunalauncher.exe",
+    ] {
+        delete_registry_tree(&hkcu, key)?;
+    }
+    delete_registry_value(&hkcu, "Software\\RegisteredApplications", "Luna Launcher")?;
+    unregister_extension(&hkcu, ".mrpack", true)?;
+    unregister_extension(&hkcu, ".zip", false)?;
+    notify_shell_association_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn normalized_path_string(path: &str) -> String {
+    path.replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_ascii_lowercase()
+}
+
+#[cfg(windows)]
+fn unregister_extension(
+    hkcu: &winreg::RegKey,
+    extension: &str,
+    restore_default: bool,
+) -> Result<()> {
+    let path = format!("Software\\Classes\\{extension}");
+    if let Ok(key) = hkcu.open_subkey_with_flags(&path, winreg::enums::KEY_WRITE) {
+        if restore_default {
+            if let Ok(previous) = key.get_value::<String, _>("LunaLauncher.App_backup") {
+                key.set_value("", &previous)?;
+                let _ = key.delete_value("LunaLauncher.App_backup");
+            } else if key.get_value::<String, _>("").ok().as_deref() == Some("LunaLauncher.App") {
+                let _ = key.delete_value("");
+            }
+        }
+    }
+    if let Ok(key) =
+        hkcu.open_subkey_with_flags(format!("{path}\\OpenWithList"), winreg::enums::KEY_WRITE)
+    {
+        let _ = key.delete_value("lunalauncher.exe");
+    }
+    if let Ok(key) =
+        hkcu.open_subkey_with_flags(format!("{path}\\OpenWithProgids"), winreg::enums::KEY_WRITE)
+    {
+        let _ = key.delete_value("LunaLauncher.App");
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn notify_shell_association_change() {
+    use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_FLUSH, SHChangeNotify};
+
+    unsafe {
+        SHChangeNotify(
+            SHCNE_ASSOCCHANGED as i32,
+            SHCNF_FLUSH,
+            std::ptr::null(),
+            std::ptr::null(),
+        );
+    }
+}
+
+#[cfg(windows)]
+fn delete_registry_tree(hkcu: &winreg::RegKey, path: &str) -> Result<()> {
+    match hkcu.delete_subkey_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(windows)]
+fn delete_registry_value(hkcu: &winreg::RegKey, path: &str, name: &str) -> Result<()> {
+    let key = match hkcu.open_subkey_with_flags(path, winreg::enums::KEY_WRITE) {
+        Ok(key) => key,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    match key.delete_value(name) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(windows)]
+fn estimated_size_kb(path: &Path) -> u32 {
+    fn size(path: &Path) -> u64 {
+        let Ok(metadata) = fs::metadata(path) else {
+            return 0;
+        };
+        if metadata.is_file() {
+            return metadata.len();
+        }
+        fs::read_dir(path)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| size(&entry.path()))
+            .sum()
+    }
+    (size(path).saturating_add(1023) / 1024).min(u32::MAX as u64) as u32
+}
+
 #[cfg(windows)]
 fn monitor_for_hwnd(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<LaunchMonitor> {
     use windows_sys::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromWindow};

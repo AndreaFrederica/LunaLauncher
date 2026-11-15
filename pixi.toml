@@ -4,6 +4,7 @@ name = "LunaLauncher"
 platforms = ["win-64", "linux-64", "osx-arm64"]
 version = "0.1.0"
 channels = [
+  "conda-forge/label/sysroot_dev",
   "conda-forge",
   "https://conda.anaconda.org/conda-forge/label/m2w64-experimental"
 ]

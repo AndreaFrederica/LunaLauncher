@@ -170,9 +170,10 @@ const classicIconOptions = [
   { label: '160 px', value: 160 },
 ];
 const shellOptions = [
+  { label: '终末地', value: 'endfield' },
   { label: '忘却的旋律', value: 'melody' },
   { label: t('pcl.auto2.k67cf30199a'), value: 'pcl' },
-  { label: t('pcl.auto2.k453b088186'), value: 'neo' },
+  { label: 'Demo', value: 'neo' },
 ];
 const themeOptions = [
   { label: t('pcl.auto2.k30b2c979ac'), value: 'dark' },
@@ -284,6 +285,8 @@ function reset() {
     pclBaseFontSize: 14,
     pclPageNavWidth: 220,
     pclNavLayout: 'mmc-classic',
+    pclVerticalNavigation: false,
+    pclMainNavigationText: true,
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
@@ -313,6 +316,7 @@ function reset() {
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 14,
+    pclHomeInstanceShowSubtitle: true,
     pclHomeInstanceTextPosition: 'below',
     pclHomeInstanceGrouping: 'grouped',
     pclHomeInstanceSort: 'name',
@@ -504,6 +508,46 @@ provide(PclAppearanceContextKey, { t, lunaLogo, preferences, error, backgroundFi
   display: flex;
   min-height: 92px;
 }
+
+.pcl-appearance-preview.is-vertical { position: relative; }
+.pcl-appearance-preview.is-vertical .pcl-appearance-preview__bar { position: static; }
+.pcl-appearance-preview.is-vertical .pcl-appearance-preview__navs {
+  top: 48px;
+  bottom: 0;
+  left: 0;
+  width: 112px;
+  height: auto;
+  padding: 10px 6px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  transform: none;
+  background: var(--pcl-nav-bg);
+  border-right: 1px solid var(--pcl-border);
+}
+.pcl-appearance-preview.is-vertical .pcl-appearance-preview__nav {
+  justify-content: flex-start;
+  margin: 0;
+  min-height: 32px;
+  border-radius: 5px;
+  color: var(--pcl-text);
+}
+.pcl-appearance-preview.is-vertical .pcl-appearance-preview__nav.active {
+  background: var(--pcl-selected);
+  color: var(--pcl-c2);
+}
+.pcl-appearance-preview.is-vertical .pcl-appearance-preview__body {
+  margin-left: 112px;
+  min-height: 210px;
+}
+
+.pcl-appearance-preview.is-icon-only .pcl-appearance-preview__nav {
+  justify-content: center;
+  gap: 0;
+}
+.pcl-appearance-preview.is-vertical.is-icon-only .pcl-appearance-preview__navs { width: 56px; }
+.pcl-appearance-preview.is-vertical.is-icon-only .pcl-appearance-preview__body { margin-left: 56px; }
 
 .pcl-appearance-preview__side {
   display: flex;

@@ -44,6 +44,10 @@
 
 class QTextCharFormat;
 class SettingsObject;
+class QGroupBox;
+class QLabel;
+class QRadioButton;
+class QPushButton;
 
 namespace Ui {
 class LauncherPage;
@@ -68,7 +72,6 @@ class LauncherPage : public QWidget, public BasePage {
     void loadSettings();
 
    private slots:
-    void on_instDirBrowseBtn_clicked();
     void on_modsDirBrowseBtn_clicked();
     void on_iconsDirBrowseBtn_clicked();
     void on_downloadsDirBrowseBtn_clicked();
@@ -78,5 +81,15 @@ class LauncherPage : public QWidget, public BasePage {
     void on_metadataEnableBtn_clicked();
 
    private:
+    void refreshDataLocation();
+    void switchDataLocation(bool portable);
+
+   private:
     Ui::LauncherPage* ui;
+    QGroupBox* m_dataLocationBox = nullptr;
+    QLabel* m_dataLocationPath = nullptr;
+    QLabel* m_dataLocationHint = nullptr;
+    QRadioButton* m_portableRadio = nullptr;
+    QRadioButton* m_userDataRadio = nullptr;
+    QPushButton* m_switchDataLocationButton = nullptr;
 };

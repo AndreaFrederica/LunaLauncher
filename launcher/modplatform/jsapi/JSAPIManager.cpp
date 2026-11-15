@@ -15,8 +15,14 @@
 #include "net/HttpMetaCache.h"
 #include "Application.h"
 #include "LauncherResources.h"
+#include "settings/SettingsObject.h"
+#include <algorithm>
 #include <QDir>
+#include <QFile>
 #include <QDirIterator>
+#include <QJsonDocument>
+#include <QJsonParseError>
+#include <QSet>
 
 JSAPIManager& JSAPIManager::instance()
 {
@@ -43,6 +49,8 @@ void JSAPIManager::initialize(const QStringList& apiDirectories)
         }
     }
 
+    loadConfiguration();
+
     qDebug() << "[JSAPIManager] Loaded" << m_apis.size() << "APIs";
 }
 
@@ -53,7 +61,7 @@ void JSAPIManager::loadAPIsFromDirectory(const QString& directory)
     // 检查是否是 qrc 路径
     if (directory.startsWith(":/")) {
         // Qt 资源系统路径
-        QDirIterator it(directory, QStringList() << "*.js", QDir::Files, QDirIterator::Subdirectories);
+        QDirIterator it(directory, QStringList() << "*.js" << "*.json", QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             QString filePath = it.next();
             qDebug() << "[JSAPIManager] Found qrc file:" << filePath;
@@ -61,7 +69,7 @@ void JSAPIManager::loadAPIsFromDirectory(const QString& directory)
         }
     } else {
         // 文件系统路径
-        QDirIterator it(directory, QStringList() << "*.js", QDir::Files, QDirIterator::Subdirectories);
+        QDirIterator it(directory, QStringList() << "*.js" << "*.json", QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             QString filePath = it.next();
             loadAPIFromFile(filePath);
@@ -81,7 +89,11 @@ bool JSAPIManager::loadAPIFromFile(const QString& filePath)
 
     qDebug() << "[JSAPIManager] Loading API from:" << filePath;
 
-    auto api = JSResourceAPI::fromFile(filePath, apiName);
+    std::shared_ptr<JSResourceAPI> api;
+    if (fileInfo.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) == 0)
+        api = JSResourceAPI::fromRuleFile(filePath, apiName);
+    else
+        api = JSResourceAPI::fromFile(filePath, apiName);
     if (!api) {
         qWarning() << "[JSAPIManager] Failed to load API from:" << filePath;
         return false;
@@ -99,10 +111,10 @@ bool JSAPIManager::loadAPIFromFile(const QString& filePath)
 
     emit apiLoaded(api->getMetadata().id);
 
-    if (APPLICATION->metacache()) {
-        const auto registerCache = [](const QString& cacheBase) {
+    if (auto* app = APPLICATION_DYN; app && app->metacache()) {
+        const auto registerCache = [app](const QString& cacheBase) {
             const QString cachePath = "cache/" + cacheBase;
-            APPLICATION->metacache()->addBase(cacheBase, QDir(cachePath).absolutePath());
+            app->metacache()->addBase(cacheBase, QDir(cachePath).absolutePath());
             qDebug() << "[JSAPIManager] Registered cache base:" << cacheBase << "at" << cachePath;
         };
         if (api->getMetadata().supportedTypes.contains(static_cast<int>(ModPlatform::ResourceType::Mod)))
@@ -122,22 +134,96 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAllAPIs() const
     return m_apis;
 }
 
+void JSAPIManager::loadConfiguration()
+{
+    m_orderedIds.clear();
+    m_disabledIds.clear();
+    m_disabledCategories.clear();
+    if (auto* application = qobject_cast<Application*>(QCoreApplication::instance()); application && application->settings()) {
+        m_orderedIds = application->settings()->get("JSAPIOrder").toStringList();
+        m_disabledIds = application->settings()->get("JSAPIDisabled").toStringList();
+        const auto encoded = application->settings()->get("JSAPIMirrorCategoryDisabled").toStringList();
+        for (const auto& value : encoded) {
+            const auto parts = value.split('|');
+            if (parts.size() == 2 && !parts[0].isEmpty() && !parts[1].isEmpty())
+                m_disabledCategories[parts[0]].append(parts[1]);
+        }
+    }
+}
+
+bool JSAPIManager::isApiEnabled(const QString& id) const
+{
+    const auto api = getAPIById(id);
+    return api && api->getMetadata().enabled && !m_disabledIds.contains(id);
+}
+
+QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getOrderedAPIs(bool includeDisabled) const
+{
+    auto result = m_apis;
+    std::stable_sort(result.begin(), result.end(), [this](const auto& left, const auto& right) {
+        const auto& leftMeta = left->getMetadata();
+        const auto& rightMeta = right->getMetadata();
+        const int leftRank = m_orderedIds.indexOf(leftMeta.id);
+        const int rightRank = m_orderedIds.indexOf(rightMeta.id);
+        const bool leftConfigured = leftRank >= 0;
+        const bool rightConfigured = rightRank >= 0;
+        if (leftConfigured != rightConfigured)
+            return leftConfigured;
+        if (leftConfigured && leftRank != rightRank)
+            return leftRank < rightRank;
+        if (leftMeta.priority != rightMeta.priority)
+            return leftMeta.priority > rightMeta.priority;
+        return leftMeta.id < rightMeta.id;
+    });
+
+    if (!includeDisabled) {
+        result.erase(std::remove_if(result.begin(), result.end(), [this](const auto& api) { return !isApiEnabled(api->getMetadata().id); }), result.end());
+    }
+    return result;
+}
+
+void JSAPIManager::setConfiguration(const QStringList& order, const QStringList& disabled,
+                                    const QHash<QString, QStringList>& disabledCategories)
+{
+    m_orderedIds.clear();
+    for (const auto& id : order) {
+        if (!id.isEmpty() && !m_orderedIds.contains(id))
+            m_orderedIds.append(id);
+    }
+    m_disabledIds.clear();
+    for (const auto& id : disabled) {
+        if (!id.isEmpty() && !m_disabledIds.contains(id))
+            m_disabledIds.append(id);
+    }
+    m_disabledCategories.clear();
+    for (auto it = disabledCategories.cbegin(); it != disabledCategories.cend(); ++it) {
+        auto categories = it.value();
+        categories.removeDuplicates();
+        if (!it.key().isEmpty() && !categories.isEmpty())
+            m_disabledCategories.insert(it.key(), categories);
+    }
+    if (auto* application = qobject_cast<Application*>(QCoreApplication::instance()); application && application->settings()) {
+        application->settings()->set("JSAPIOrder", m_orderedIds);
+        application->settings()->set("JSAPIDisabled", m_disabledIds);
+        QStringList encoded;
+        for (auto it = m_disabledCategories.cbegin(); it != m_disabledCategories.cend(); ++it)
+            for (const auto& category : it.value())
+                encoded.append(it.key() + QStringLiteral("|") + category);
+        application->settings()->set("JSAPIMirrorCategoryDisabled", encoded);
+    }
+}
+
 QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsForType(ModPlatform::ResourceType type) const
 {
     QList<std::shared_ptr<JSResourceAPI>> result;
     int typeInt = static_cast<int>(type);
 
-    for (const auto& api : m_apis) {
+    for (const auto& api : getOrderedAPIs()) {
         const auto& metadata = api->getMetadata();
         if (metadata.enabled && metadata.supportedTypes.contains(typeInt)) {
             result.append(api);
         }
     }
-
-    // 按优先级排序
-    std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
-        return a->getMetadata().priority > b->getMetadata().priority;
-    });
 
     return result;
 }
@@ -156,7 +242,7 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsByProvider(const QStr
 {
     QList<std::shared_ptr<JSResourceAPI>> result;
 
-    for (const auto& api : m_apis) {
+    for (const auto& api : getOrderedAPIs()) {
         if (api->getMetadata().provider.compare(provider, Qt::CaseInsensitive) == 0) {
             result.append(api);
         }
@@ -165,17 +251,48 @@ QList<std::shared_ptr<JSResourceAPI>> JSAPIManager::getAPIsByProvider(const QStr
     return result;
 }
 
+QString JSAPIManager::rewriteUrl(const QString& url, const QJsonObject& context) const
+{
+    const auto candidates = rewriteUrls(url, context);
+    if (!candidates.isEmpty())
+        return candidates.constFirst().url;
+    return url;
+}
+
+QList<MirrorUrlCandidate> JSAPIManager::rewriteUrls(const QString& url, const QJsonObject& context) const
+{
+    QList<MirrorUrlCandidate> advanced;
+    QList<MirrorUrlCandidate> base;
+    QSet<QString> seen;
+    for (const auto& api : getOrderedAPIs()) {
+        const auto& metadata = api->getMetadata();
+        if (!metadata.enabled || metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
+            continue;
+        for (const auto& candidate : api->rewriteUrls(url, context)) {
+            if (candidate.url.isEmpty() || seen.contains(candidate.url))
+                continue;
+            if (!candidate.category.isEmpty() && m_disabledCategories.value(metadata.id).contains(candidate.category))
+                continue;
+            seen.insert(candidate.url);
+            (metadata.baseRule ? base : advanced).append(candidate);
+        }
+    }
+    // A user rule that claims this particular URL takes over from the
+    // corresponding packaged/basic rule. This still allows different user
+    // mirrors to contribute candidates for the same resource.
+    return advanced.isEmpty() ? base : advanced;
+}
+
 void JSAPIManager::reloadAll()
 {
     qDebug() << "[JSAPIManager] Reloading all APIs...";
 
     m_apis.clear();
-    QStringList files = m_loadedFiles;
     m_loadedFiles.clear();
 
-    for (const QString& file : files) {
-        loadAPIFromFile(file);
-    }
+    // Re-scan every configured directory so newly copied user APIs and
+    // removed or replaced files are reflected by the refresh action.
+    initialize(getDefaultAPIDirectories());
 
     emit apisReloaded();
 

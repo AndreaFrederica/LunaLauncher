@@ -201,6 +201,12 @@ jobs:
       - name: Show Meson build configuration
         run: pixi run meson introspect build-meson-release --buildoptions
 
+      - name: Build standalone installer shell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          pixi run installer-shell-build
+
       - name: Package Windows build
         if: runner.os == 'Windows'
         shell: pwsh
@@ -209,9 +215,25 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force release-assets | Out-Null
           $archive = "release-assets/LunaLauncher-Windows-x64-$env:ASSET_VERSION.zip"
-          Compress-Archive -Path "install-release\*" -DestinationPath $archive -CompressionLevel Optimal
-          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
-          "$hash  $([IO.Path]::GetFileName($archive))" | Set-Content "$archive.sha256"
+          $setup = "release-assets/LunaLauncher-Windows-x64-$env:ASSET_VERSION-Setup.exe"
+          $stub = "installer-shell/target/release/luna-installer-shell.exe"
+          if (-not (Test-Path $stub)) {
+              throw "Installer shell was not built: $stub"
+          }
+          # These files are per-installation state. A stale marker here would
+          # force every fresh release into the system data directory and make
+          # the portable setting appear broken on first launch.
+          foreach ($marker in @(".luna-use-system-data", "portable.txt", "portable.txt.disabled")) {
+              Remove-Item -LiteralPath (Join-Path "install-release" $marker) -Force -ErrorAction SilentlyContinue
+          }
+          New-Item -ItemType Directory -Force install-release/licenses | Out-Null
+          Copy-Item installer-shell/LICENSE-MPL-2.0 install-release/licenses/installer-shell-MPL-2.0.txt -Force
+          pixi run cargo run --manifest-path installer-shell/Cargo.toml --release --bin create-zip -- --source install-release --output $archive
+          pixi run cargo run --manifest-path installer-shell/Cargo.toml --release --bin assemble-sfx -- --stub $stub --payload $archive --output $setup
+          foreach ($artifact in @($archive, $setup)) {
+              $hash = (Get-FileHash -Algorithm SHA256 $artifact).Hash.ToLowerInvariant()
+              "$hash  $([IO.Path]::GetFileName($artifact))" | Set-Content "$artifact.sha256"
+          }
 
       - name: Package Linux build
         if: runner.os == 'Linux'

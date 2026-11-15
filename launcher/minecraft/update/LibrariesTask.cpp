@@ -15,6 +15,11 @@ void LibrariesTask::executeTask()
     setStatus(tr("Downloading required library files..."));
     qDebug() << m_inst->name() << ": downloading libraries";
     MinecraftInstance* inst = (MinecraftInstance*)m_inst;
+    QString clientError;
+    if (!inst->validateClientArtifact(&clientError)) {
+        emitFailed(clientError);
+        return;
+    }
 
     // Build a list of URLs that will need to be downloaded.
     auto components = inst->getPackProfile();
@@ -47,7 +52,10 @@ void LibrariesTask::executeTask()
     for (const auto& agent : profile->getAgents()) {
         libArtifactPool.append(agent.library);
     }
-    libArtifactPool.append(profile->getMainJar());
+    // External versions/<id> clients are authoritative. Their official cache
+    // counterpart is neither the launch input nor a repair source.
+    if (!inst->clientArtifactRoute().has_value())
+        libArtifactPool.append(profile->getMainJar());
     if (!processArtifactPool(libArtifactPool, failedLocalLibraries, inst->getLocalLibraryPath())) {
         downloadJob.reset();
         return;

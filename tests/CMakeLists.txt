@@ -6,6 +6,14 @@ target_include_directories(AccountSnapshot PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
 ecm_add_test(FileSystem_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME FileSystem)
 
+ecm_add_test(InstanceStore_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME InstanceStore)
+
+ecm_add_test(VanillaInstanceLayout_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME VanillaInstanceLayout)
+ecm_add_test(VanillaProviderSync_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME VanillaProviderSync)
+
 ecm_add_test(GZip_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME GZip)
 

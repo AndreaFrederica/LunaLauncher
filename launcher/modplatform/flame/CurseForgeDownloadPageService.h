@@ -10,6 +10,7 @@
 #include <QVector>
 
 #include "modplatform/flame/CurseForgeExternalTool.h"
+#include "net/NetJob.h"
 
 struct CurseForgeDownloadPage {
     QString url;
@@ -57,6 +58,8 @@ class CurseForgeDownloadPageService final : public QObject {
    private:
     bool writeRequest(const QVector<CurseForgeDownloadPage>& pages, int startIndex, int totalItems);
     bool startHelper();
+    bool startLauncherDownload(const QString& url, const QString& fileName, int fileIndex, int fileCount);
+    void stopLauncherDownload();
     bool restartCurrentDownload();
     void handleOutputLine(const QByteArray& line);
     void reportFailure(const QString& reason);
@@ -73,6 +76,8 @@ class CurseForgeDownloadPageService final : public QObject {
     QByteArray m_stdoutBuffer;
     QVector<CurseForgeDownloadPage> m_pages;
     QSet<int> m_acceptedIndexes;
+    NetJob::Ptr m_downloadJob;
+    Net::Download::Ptr m_activeDownload;
     int m_currentIndex = 1;
     bool m_restartRequested = false;
     bool m_failureReported = false;

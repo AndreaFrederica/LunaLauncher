@@ -7,6 +7,7 @@
       <XmclSettingsCategorySection v-show="isCategorySection" />
       <XmclSettingsRuntimeSection v-show="section === 'runtime'" />
       <XmclSettingsAppearanceSection v-show="section === 'tools'" />
+      <InstanceStoreWorkspace v-if="section === 'instance-stores' && !isInstance" :execute="props.execute" variant="xmcl" />
       <XmclSettingsQtSection v-show="section === 'qt'" />
       <XmclSettingsAboutSection v-show="section === 'about'" />
     </main>
@@ -21,6 +22,7 @@ import XmclSettingsRuntimeSection from './XmclSettingsRuntimeSection.vue';
 import XmclSettingsAppearanceSection from './XmclSettingsAppearanceSection.vue';
 import XmclSettingsQtSection from './XmclSettingsQtSection.vue';
 import XmclSettingsAboutSection from './XmclSettingsAboutSection.vue';
+import InstanceStoreWorkspace from '../../../components/InstanceStoreWorkspace.vue';
 import { XmclSettingsContextKey } from './XmclSettingsContext';
 import { settingCategoryIcons, settingCategoryOrder } from '../../../settings-categories';
 import { settingMetadata } from '../../../settings-schema';
@@ -48,8 +50,9 @@ const sections=computed(()=>[
   ...categorySections.value,
   {id:'runtime',label:t('xmcl.settings.runtime'),icon:'code',count:0},
   ...(!isInstance.value ? [{id:'tools',label:t('xmcl.settings.appearance'),icon:'palette',count:0},{id:'qt',label:t('xmcl.settings.qt'),icon:'desktop_windows',count:0},{id:'about',label:t('xmcl.settings.about'),icon:'info',count:0}] : []),
+  ...(!isInstance.value ? [{id:'instance-stores',label:'实例目录',icon:'layers',count:0}] : []),
 ]);
-const isCategorySection=computed(()=>section.value !== 'all' && section.value !== 'runtime' && section.value !== 'tools' && section.value !== 'qt' && section.value !== 'about');
+const isCategorySection=computed(()=>section.value !== 'all' && section.value !== 'runtime' && section.value !== 'tools' && section.value !== 'qt' && section.value !== 'about' && section.value !== 'instance-stores');
 const categoryLabel=computed(()=>t(`settings.categories.${section.value}`));
 const categoryIcon=computed(()=>settingCategoryIcons[section.value] || 'tune');
 const categoryDescription=computed(()=>section.value === 'qt-ui' ? t('xmcl.settings.qtCategoryHint') : t('xmcl.settings.categoryHint'));

@@ -969,6 +969,15 @@ void Terracotta::stopProcess()
 
 void Terracotta::forceKillProcess()
 {
+    // HMCL mode deliberately lets the helper detach after publishing its port,
+    // so m_process can be null while the server still owns files and sockets.
+    // Ask that detached server to perform its emergency stop before falling
+    // back to terminating a QProcess that is still attached to this launcher.
+    if (m_wasStartedSuccessfully || (m_process && m_process->state() == QProcess::Running)) {
+        qDebug() << "Requesting Terracotta emergency stop...";
+        panic(false);
+    }
+
     if (m_process) {
         qDebug() << "Force killing Terracotta process...";
         if (m_process->state() == QProcess::Running) {

@@ -1,0 +1,21 @@
+// Copy this file to the user jsapi directory and rename it to my-mirror.js.
+// Files ending in .js are loaded automatically; keep this .txt suffix while editing.
+var api = {
+    metadata: {
+        id: "my-mirror",
+        kind: "mirror",
+        displayName: "My mirror",
+        version: "1.0.0",
+        enabled: true,
+        priority: 200
+    },
+
+    rewriteUrl(url, context) {
+        if (!context || context.mirrorTypeId !== 2)
+            return null;
+        const upstream = "https://resources.download.minecraft.net/";
+        if (!url.startsWith(upstream) || !context.assetsBase)
+            return null;
+        return context.assetsBase + url.slice(upstream.length);
+    }
+};

@@ -424,6 +424,28 @@ def copy_runtime_dlls(root: Path, profile: str) -> None:
         shutil.copy2(source, destination)
         print(f"Copied {source.name} to {destination}")
 
+    # tomlplusplus is built as a shared fallback dependency in debug builds,
+    # but its Meson subproject does not install the runtime DLL.  Keep the
+    # installed launcher self-contained so it can be started outside the
+    # build environment.
+    toml_candidates = sorted(
+        build_dir(root, profile).glob("subprojects/tomlplusplus-*/src/tomlplusplus-3.dll")
+    )
+    if toml_candidates:
+        source = toml_candidates[0]
+        destination = install_root / source.name
+        shutil.copy2(source, destination)
+        print(f"Copied {source.name} to {destination}")
+
+    # Meson installs fallback shared libraries below ``bin`` while the
+    # launcher executables live at the install prefix root. Windows resolves
+    # DLLs beside the executable, so mirror the runtime DLLs there for a
+    # self-contained external deployment.
+    for source in sorted((install_root / "bin").glob("*.dll")):
+        destination = install_root / source.name
+        shutil.copy2(source, destination)
+        print(f"Copied runtime {source.name} to {destination}")
+
 
 def deploy(root: Path, profile: str) -> None:
     validate_profile(profile)

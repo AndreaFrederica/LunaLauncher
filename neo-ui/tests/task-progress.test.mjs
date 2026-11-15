@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 
-const source = readFileSync(new URL('../src/pcl/composables/useTaskProgress.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/themes/pcl/composables/useTaskProgress.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { flattenTaskItems, taskActiveItems, taskProgressStats, taskItemProgressText, isTaskItemFinished } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
@@ -67,7 +67,7 @@ test('completion during initial status read cannot strand the launch dialog', as
       return { taskId: 'launch', state: 'running' }; // An older in-flight snapshot.
     },
   };
-  const eventSource = readFileSync(new URL('../src/pcl/composables/useTaskEvents.ts', import.meta.url), 'utf8')
+  const eventSource = readFileSync(new URL('../src/themes/pcl/composables/useTaskEvents.ts', import.meta.url), 'utf8')
     .replace("import { launcher } from '../../boot/launcher-api';", 'const launcher = globalThis.__taskEventsTestApi;');
   const eventJs = ts.transpileModule(eventSource, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
   const { waitForTask } = await import(`data:text/javascript;base64,${Buffer.from(eventJs).toString('base64')}`);

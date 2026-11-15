@@ -84,6 +84,8 @@ public static class FileDownloader
             {
                 await DownloadSingleAsync(url, localPath, useBrowserUserAgent, customUserAgent,
                     cancellationToken, enableParallelChunks, trackedFile).ConfigureAwait(false);
+                if (trackedFile?.Check?.Check(localPath) is string validationError)
+                    throw new IOException($"下载文件校验失败：{validationError}");
                 return;
             }
             catch (OperationCanceledException)
@@ -94,6 +96,9 @@ public static class FileDownloader
             catch (Exception ex)
             {
                 lastException = ex;
+                // A failed source must not leave resumable bytes for a different
+                // source, especially after a checksum mismatch.
+                CleanupTempFiles(localPath);
                 LogHelper.Log(ex, $"[Download] 下载失败，尝试下一个源：{url}");
             }
         }

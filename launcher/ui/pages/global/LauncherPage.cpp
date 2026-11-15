@@ -48,16 +48,23 @@
 
 #include <FileSystem.h>
 #include "Application.h"
-#include "BuildConfig.h"
-#include "DesktopServices.h"
+#include "DataMigrationTask.h"
 #include "settings/SettingsObject.h"
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 #include "updater/ExternalUpdater.h"
 
 #include <QApplication>
+#include <QButtonGroup>
+#include <QGroupBox>
+#include <QLabel>
 #include <QProcess>
+#include <QPushButton>
+#include <QRadioButton>
 #include <QStyle>
+#include <QVBoxLayout>
+
+#include "ui/dialogs/ProgressDialog.h"
 
 // FIXME: possibly move elsewhere
 enum InstSortMode {
@@ -75,6 +82,31 @@ LauncherPage::LauncherPage(QWidget* parent) : QWidget(parent), ui(new Ui::Launch
     ui->sortingModeGroup->setId(ui->sortByNameBtn, Sort_Name);
     ui->sortingModeGroup->setId(ui->sortLastLaunchedBtn, Sort_LastLaunch);
 
+    m_dataLocationBox = new QGroupBox(tr("Data Location"), ui->scrollAreaWidgetContents);
+    auto* dataLocationLayout = new QVBoxLayout(m_dataLocationBox);
+    m_dataLocationPath = new QLabel(m_dataLocationBox);
+    m_dataLocationPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_dataLocationPath->setWordWrap(true);
+    m_dataLocationHint = new QLabel(m_dataLocationBox);
+    m_dataLocationHint->setWordWrap(true);
+    m_portableRadio = new QRadioButton(tr("Portable (UserData next to the launcher)"), m_dataLocationBox);
+    m_userDataRadio = new QRadioButton(tr("User data directory"), m_dataLocationBox);
+    auto* dataLocationGroup = new QButtonGroup(m_dataLocationBox);
+    dataLocationGroup->addButton(m_portableRadio);
+    dataLocationGroup->addButton(m_userDataRadio);
+    m_switchDataLocationButton = new QPushButton(tr("Copy data and switch"), m_dataLocationBox);
+    dataLocationLayout->addWidget(m_dataLocationPath);
+    dataLocationLayout->addWidget(m_portableRadio);
+    dataLocationLayout->addWidget(m_userDataRadio);
+    dataLocationLayout->addWidget(m_dataLocationHint);
+    dataLocationLayout->addWidget(m_switchDataLocationButton);
+    if (auto* layout = qobject_cast<QVBoxLayout*>(ui->scrollAreaWidgetContents->layout()))
+        layout->insertWidget(0, m_dataLocationBox);
+    connect(m_switchDataLocationButton, &QPushButton::clicked, this, [this] {
+        switchDataLocation(m_portableRadio->isChecked());
+    });
+    refreshDataLocation();
+
     loadSettings();
 
     ui->updateSettingsBox->setHidden(!APPLICATION->updater());
@@ -89,49 +121,6 @@ bool LauncherPage::apply()
 {
     applySettings();
     return true;
-}
-
-void LauncherPage::on_instDirBrowseBtn_clicked()
-{
-    QString raw_dir = QFileDialog::getExistingDirectory(this, tr("Instance Folder"), ui->instDirTextBox->text());
-
-    // do not allow current dir - it's dirty. Do not allow dirs that don't exist
-    if (!raw_dir.isEmpty() && QDir(raw_dir).exists()) {
-        QString cooked_dir = FS::NormalizePath(raw_dir);
-        if (FS::checkProblemticPathJava(QDir(cooked_dir))) {
-            QMessageBox warning;
-            warning.setText(
-                tr("You're trying to specify an instance folder which\'s path "
-                   "contains at least one \'!\'. "
-                   "Java is known to cause problems if that is the case, your "
-                   "instances (probably) won't start!"));
-            warning.setInformativeText(
-                tr("Do you really want to use this path? "
-                   "Selecting \"No\" will close this and not alter your instance path."));
-            warning.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
-            int result = warning.exec();
-            if (result == QMessageBox::Ok) {
-                ui->instDirTextBox->setText(cooked_dir);
-            }
-        } else if (DesktopServices::isFlatpak() && raw_dir.startsWith("/run/user")) {
-            QMessageBox warning;
-            warning.setText(tr("You're trying to specify an instance folder "
-                               "which was granted temporarily via Flatpak.\n"
-                               "This is known to cause problems. "
-                               "After a restart the launcher might break, "
-                               "because it will no longer have access to that directory.\n\n"
-                               "Granting %1 access to it via Flatseal is recommended.")
-                                .arg(BuildConfig.LAUNCHER_DISPLAYNAME));
-            warning.setInformativeText(tr("Do you want to proceed anyway?"));
-            warning.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
-            int result = warning.exec();
-            if (result == QMessageBox::Ok) {
-                ui->instDirTextBox->setText(cooked_dir);
-            }
-        } else {
-            ui->instDirTextBox->setText(cooked_dir);
-        }
-    }
 }
 
 void LauncherPage::on_iconsDirBrowseBtn_clicked()
@@ -222,6 +211,75 @@ void LauncherPage::on_metadataEnableBtn_clicked()
     ui->metadataWarningLabel->setHidden(ui->metadataEnableBtn->isChecked());
 }
 
+void LauncherPage::refreshDataLocation()
+{
+    if (!m_dataLocationBox) return;
+    const auto status = APPLICATION->dataLocationStatus();
+    const bool portable = status.value("portable").toBool();
+    m_portableRadio->setChecked(portable);
+    m_userDataRadio->setChecked(!portable);
+    const auto target = portable ? status.value("systemPath").toString() : status.value("portablePath").toString();
+    m_dataLocationPath->setText(tr("Current: %1").arg(QDir::toNativeSeparators(status.value("current").toString())));
+    m_dataLocationHint->setText(tr("Switching changes the launcher data profile to:\n%1\nInstances remain in their configured stores. A restart is required.")
+                                    .arg(QDir::toNativeSeparators(target)));
+    m_switchDataLocationButton->setEnabled(true);
+}
+
+void LauncherPage::switchDataLocation(bool portable)
+{
+    const auto status = APPLICATION->dataLocationStatus();
+    if (status.value("portable").toBool() == portable) {
+        QMessageBox::information(this, tr("Data Location"), tr("The launcher is already using this data location."));
+        return;
+    }
+    if (QCoreApplication::arguments().contains("--dir")) {
+        QMessageBox::warning(this, tr("Data Location"),
+                             tr("The launcher was started with --dir, which overrides this setting. Restart without --dir to use the selected data location."));
+    }
+    QMessageBox choice(this);
+    choice.setWindowTitle(tr("Switch Data Location"));
+    choice.setText(tr("Choose how to switch the launcher data profile."));
+    choice.setInformativeText(tr("Instance stores stay in place and can be enabled independently after the restart."));
+    auto* switchOnly = choice.addButton(tr("Switch only"), QMessageBox::AcceptRole);
+    auto* copyData = choice.addButton(tr("Copy launcher data"), QMessageBox::ActionRole);
+    choice.addButton(QMessageBox::Cancel);
+    choice.exec();
+    if (choice.clickedButton() != switchOnly && choice.clickedButton() != copyData) return;
+    const bool shouldCopyData = choice.clickedButton() == copyData;
+
+    QString error;
+    if (shouldCopyData) {
+        auto task = APPLICATION->createDataLocationTask(portable, &error);
+        if (!task) {
+            QMessageBox::critical(this, tr("Data Location"), error);
+            return;
+        }
+        ProgressDialog dialog(this);
+        if (!dialog.execWithTask(task.get())) {
+            QMessageBox::critical(this, tr("Data Location"), tr("The data copy failed. The current data location has not been changed."));
+            return;
+        }
+    }
+    if (!APPLICATION->finishDataLocationSwitch(portable, &error)) {
+        QMessageBox::critical(this, tr("Data Location"), error);
+        return;
+    }
+    m_portableRadio->setChecked(portable);
+    m_userDataRadio->setChecked(!portable);
+    const auto statusAfter = APPLICATION->dataLocationStatus();
+    m_dataLocationPath->setText(tr("Current: %1").arg(QDir::toNativeSeparators(statusAfter.value("current").toString())));
+    m_dataLocationHint->setText(tr("Data will be loaded from %1 after restart.")
+                                    .arg(QDir::toNativeSeparators(portable ? statusAfter.value("portablePath").toString()
+                                                                           : statusAfter.value("systemPath").toString())));
+    const auto restart = QMessageBox::question(this, tr("Restart Required"),
+                                                tr("The data location has been switched. Restart the launcher now?"),
+                                                QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (restart == QMessageBox::Yes) {
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), QCoreApplication::arguments().mid(1));
+        qApp->quit();
+    }
+}
+
 void LauncherPage::applySettings()
 {
     auto s = APPLICATION->settings();
@@ -245,7 +303,6 @@ void LauncherPage::applySettings()
 
     // Folders
     // TODO: Offer to move instances to new instance folder.
-    s->set("InstanceDir", ui->instDirTextBox->text());
     s->set("CentralModsDir", ui->modsDirTextBox->text());
     s->set("IconsDir", ui->iconsDirTextBox->text());
     s->set("DownloadsDir", ui->downloadsDirTextBox->text());
@@ -267,6 +324,8 @@ void LauncherPage::applySettings()
     }
     // New UI layout toggle (applied on next restart)
     s->set("UseNewUI", ui->useNewUICheckBox->isChecked());
+    s->set("InstanceToolbarFixedWidth", ui->fixedInstanceToolbarWidthCheckBox->isChecked());
+    s->set("McModSearchEnabled", ui->mcmodSearchEnabledCheckBox->isChecked());
     s->set("ShowNewsBar", ui->showNewsBarCheckBox->isChecked());
     s->set("StatusBarVisible", ui->showStatusBarCheckBox->isChecked());
 
@@ -303,6 +362,8 @@ void LauncherPage::loadSettings()
 
     ui->preferMenuBarCheckBox->setChecked(s->get("MenuBarInsteadOfToolBar").toBool());
     ui->useNewUICheckBox->setChecked(s->get("UseNewUI").toBool());
+    ui->fixedInstanceToolbarWidthCheckBox->setChecked(s->get("InstanceToolbarFixedWidth").toBool());
+    ui->mcmodSearchEnabledCheckBox->setChecked(s->get("McModSearchEnabled").toBool());
     ui->showNewsBarCheckBox->setChecked(s->get("ShowNewsBar").toBool());
     ui->showStatusBarCheckBox->setChecked(s->get("StatusBarVisible").toBool());
 
@@ -324,7 +385,6 @@ void LauncherPage::loadSettings()
     ui->checkStopLogging->setChecked(s->get("ConsoleOverflowStop").toBool());
 
     // Folders
-    ui->instDirTextBox->setText(s->get("InstanceDir").toString());
     ui->modsDirTextBox->setText(s->get("CentralModsDir").toString());
     ui->iconsDirTextBox->setText(s->get("IconsDir").toString());
     ui->downloadsDirTextBox->setText(s->get("DownloadsDir").toString());
@@ -357,4 +417,10 @@ void LauncherPage::loadSettings()
 void LauncherPage::retranslate()
 {
     ui->retranslateUi(this);
+    if (!m_dataLocationBox) return;
+    m_dataLocationBox->setTitle(tr("Data Location"));
+    m_portableRadio->setText(tr("Portable (UserData next to the launcher)"));
+    m_userDataRadio->setText(tr("User data directory"));
+    m_switchDataLocationButton->setText(tr("Copy data and switch"));
+    refreshDataLocation();
 }

@@ -37,6 +37,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QComboBox>
 #include "JavaSettingsWidget.h"
 #include "minecraft/MinecraftInstance.h"
 
@@ -66,5 +67,6 @@ class MinecraftSettingsWidget : public QWidget {
     MinecraftInstance* m_instance;
     Ui::MinecraftSettingsWidget* m_ui;
     JavaSettingsWidget* m_javaSettings = nullptr;
+    QComboBox* m_vanillaDirectoryMode = nullptr;
     bool m_quickPlaySingleplayer = false;
 };

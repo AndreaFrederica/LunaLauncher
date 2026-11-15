@@ -44,6 +44,11 @@
 #include "BuildConfig.h"
 #include "FileSystem.h"
 
+#include "api/LauncherApi.h"
+#include "api/LauncherApiInstances.h"
+#include "cli/UserInteraction.h"
+#include "InstanceImportTask.h"
+#include <QInputDialog>
 #include "MainWindow.h"
 #include "minecraft/online/Terracotta.h"
 #include "minecraft/online/YukariConnect.h"
@@ -76,12 +81,16 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QWidgetAction>
+#include <QUuid>
 #include <memory>
 
 #include <BaseInstance.h>
 #include <BuildConfig.h>
 #include <DesktopServices.h>
 #include <InstanceList.h>
+#include "InstanceStore.h"
+#include "VanillaConversion.h"
+#include "VanillaConversionTask.h"
 #include <MMCZip.h>
 #include <icons/IconList.h>
 #include <java/JavaInstallList.h>
@@ -196,6 +205,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         instanceToolbarSetting = APPLICATION->settings()->getOrRegisterSetting(setting_name);
 
         ui->instanceToolBar->setVisibilityState(QByteArray::fromBase64(instanceToolbarSetting->get().toString().toUtf8()));
+        updateInstanceToolbarWidth();
 
         ui->instanceToolBar->addContextMenuAction(ui->newsToolBar->toggleViewAction());
         ui->instanceToolBar->addContextMenuAction(ui->instanceToolBar->toggleViewAction());
@@ -643,6 +653,119 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
         connect(actionVerifyAssets, &QAction::triggered, this, &MainWindow::on_actionVerifyAssets_triggered);
         actions.append(actionSep2);
         actions.append(actionVerifyAssets);
+
+        // Keep physical Store migration discoverable from the desktop UI.
+        // The source is copied transactionally and the original is retained;
+        // the CLI/API additionally exposes an explicit move mode.
+        QAction* actionTransfer = new QAction(tr("Copy to another instance directory..."), this);
+        actionTransfer->setEnabled(instance && !instance->isRunning() && QFileInfo::exists(QDir(instance->instanceRoot()).filePath("instance.cfg")));
+        connect(actionTransfer, &QAction::triggered, this, [this, instance] {
+            if (!instance) return;
+            QStringList labels;
+            QStringList ids;
+            for (const auto& value : APPLICATION->instanceStoresStatus()) {
+                const auto store = value.toObject();
+                if (store.value("format").toString() != QStringLiteral("prism") || !store.value("enabled").toBool() || !store.value("writable").toBool())
+                    continue;
+                const auto path = QDir::cleanPath(store.value("path").toString());
+                if (QDir::cleanPath(QFileInfo(instance->instanceRoot()).absolutePath()) == path) continue;
+                labels.append(QStringLiteral("%1 — %2").arg(store.value("name").toString(), QDir::toNativeSeparators(path)));
+                ids.append(store.value("id").toString());
+            }
+            if (labels.isEmpty()) {
+                QMessageBox::information(this, tr("Instance directories"), tr("No other enabled writable Prism instance directory is available."));
+                return;
+            }
+            bool accepted = false;
+            const auto selected = QInputDialog::getItem(this, tr("Copy instance"), tr("Destination instance directory:"), labels, 0, false, &accepted);
+            if (!accepted) return;
+            const auto row = labels.indexOf(selected);
+            if (row < 0) return;
+            const auto store = APPLICATION->instanceStores()->find(ids.at(row));
+            if (!store) return;
+            const auto source = QFileInfo(instance->instanceRoot()).absoluteFilePath();
+            const auto destination = QDir(store->path).filePath(QFileInfo(source).fileName());
+            if (QFileInfo::exists(destination)) {
+                QMessageBox::warning(this, tr("Copy instance"), tr("The destination already contains an instance with this name."));
+                return;
+            }
+            if (!QDir().mkpath(store->path)) {
+                QMessageBox::critical(this, tr("Copy instance"), tr("Could not create the destination instance directory."));
+                return;
+            }
+            const auto staging = destination + QStringLiteral(".transfer-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+            FS::copy copier(source, staging);
+            copier.overwrite(false);
+            if (!copier() || !QDir().rename(staging, destination)) {
+                FS::deletePath(staging);
+                QMessageBox::critical(this, tr("Copy instance"), tr("Could not complete the instance copy."));
+                return;
+            }
+            APPLICATION->instances()->loadList();
+        });
+        actions.append(actionTransfer);
+        if (instance && instance->traits().contains(QStringLiteral("vanilla-compatible"))) {
+            QAction* actionConvert = new QAction(tr("Convert to Prism copy..."), this);
+            connect(actionConvert, &QAction::triggered, this, [this, instance] {
+                QStringList labels;
+                QStringList ids;
+                for (const auto& value : APPLICATION->instanceStoresStatus()) {
+                    const auto store = value.toObject();
+                    if (store.value("format").toString() != QStringLiteral("prism") || !store.value("enabled").toBool() || !store.value("writable").toBool()) continue;
+                    labels.append(QStringLiteral("%1 — %2").arg(store.value("name").toString(), QDir::toNativeSeparators(store.value("path").toString())));
+                    ids.append(store.value("id").toString());
+                }
+                if (labels.isEmpty()) {
+                    QMessageBox::warning(this, tr("Convert instance"), tr("No enabled writable Prism instance directory is available."));
+                    return;
+                }
+                bool accepted = false;
+                const auto selected = QInputDialog::getItem(this, tr("Convert instance"), tr("Destination instance directory:"), labels, 0, false, &accepted);
+                if (!accepted) return;
+                const auto row = labels.indexOf(selected);
+                if (row < 0) return;
+                const auto store = APPLICATION->instanceStores()->find(ids.at(row));
+                if (!store) return;
+                bool nameAccepted = false;
+                const auto name = QInputDialog::getText(this, tr("Convert instance"), tr("New instance name:"), QLineEdit::Normal,
+                                                        instance->name(), &nameAccepted).trimmed();
+                if (!nameAccepted || name.isEmpty()) return;
+                bool groupAccepted = false;
+                const auto group = QInputDialog::getText(this, tr("Convert instance"), tr("Group (optional):"), QLineEdit::Normal,
+                                                         QString(), &groupAccepted).trimmed();
+                if (!groupAccepted) return;
+
+                QJsonObject parameters{
+                    { "source", instance->instanceRoot() },
+                    { "targetStoreId", store->id },
+                    { "name", name },
+                    { "group", group },
+                    { "copyGameContent", true },
+                };
+                auto task = std::make_unique<VanillaConversionTask>(VanillaConversionTask::Mode::Import, std::move(parameters));
+                ProgressDialog progress(this);
+                progress.execWithTask(static_cast<Task*>(task.get()));
+                const auto report = task->report();
+                if (!report.succeeded) {
+                    const auto message = report.error.isEmpty() ? report.blockers.join('\n') : report.error;
+                    QMessageBox::critical(this, tr("Convert instance"), message.isEmpty() ? tr("The conversion failed.") : message);
+                    return;
+                }
+                APPLICATION->instances()->loadList();
+                if (!group.isEmpty() && !report.destination.isEmpty()) {
+                    for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                        auto* converted = APPLICATION->instances()->at(i);
+                        if (QDir::cleanPath(converted->instanceRoot()) == QDir::cleanPath(report.destination)) {
+                            APPLICATION->instances()->setInstanceGroup(converted->id(), group);
+                            break;
+                        }
+                    }
+                }
+                if (!report.warnings.isEmpty())
+                    CustomMessageBox::selectable(this, tr("Conversion warnings"), report.warnings.join('\n'), QMessageBox::Warning)->exec();
+            });
+            actions.append(actionConvert);
+        }
     } else {
         auto group = view->groupNameAt(pos);
 
@@ -685,6 +808,26 @@ void MainWindow::updateMainToolBar()
 {
     ui->menuBar->setVisible(APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
     ui->mainToolBar->setVisible(ui->menuBar->isNativeMenuBar() || !APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
+}
+
+void MainWindow::updateInstanceToolbarWidth()
+{
+    const bool fixedWidth = APPLICATION->settings()->get("InstanceToolbarFixedWidth").toBool();
+    if (fixedWidth == m_instanceToolbarFixedWidth)
+        return;
+
+    // Do not let the currently selected instance name determine the width we
+    // are trying to lock. It is restored after the fixed width is calculated
+    // and will wrap inside the button when it is longer than the toolbar.
+    const auto currentName = renameButton->text();
+    if (fixedWidth && !currentName.isEmpty())
+        renameButton->setText(ui->actionRenameInstance->text());
+
+    ui->instanceToolBar->setUniformWidths(fixedWidth);
+
+    if (fixedWidth && !currentName.isEmpty())
+        renameButton->setText(currentName);
+    m_instanceToolbarFixedWidth = fixedWidth;
 }
 
 void MainWindow::updateLaunchButton()
@@ -970,9 +1113,64 @@ void MainWindow::runModalTask(Task* task)
     loadDialog.execWithTask(task);
 }
 
-void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask)
+void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask, const QString& instanceDirectory)
 {
-    unique_qobject_ptr<Task> task(APPLICATION->instances()->wrapInstanceTask(rawTask));
+    if (dynamic_cast<InstanceImportTask*>(rawTask)) {
+        class ImportInteraction final : public UserInteraction {
+        public:
+            explicit ImportInteraction(MainWindow* owner) : owner(owner) {}
+            void status(const QString& message) override { owner->statusBar()->showMessage(message); }
+            void deviceCode(const QString&, const QString&, int) override {}
+            std::optional<QString> input(const QString& prompt, bool secret) override {
+                bool accepted = false;
+                const auto value = QInputDialog::getText(owner, QObject::tr("Import instance"), prompt,
+                    secret ? QLineEdit::Password : QLineEdit::Normal, {}, &accepted);
+                return accepted ? std::optional<QString>(value) : std::nullopt;
+            }
+            std::optional<int> select(const QString& prompt, const QJsonArray& choices) override {
+                QStringList labels;
+                for (const auto& choice : choices) labels.append(choice.isString() ? choice.toString() : choice.toObject().value("name").toString());
+                bool accepted = false;
+                const auto value = QInputDialog::getItem(owner, QObject::tr("Import instance"), prompt, labels, 0, false, &accepted);
+                return accepted ? std::optional<int>(labels.indexOf(value)) : std::nullopt;
+            }
+            MainWindow* owner;
+        } interaction(this);
+        LauncherApi api;
+        QProgressDialog progress(tr("Importing instance…"), tr("Abort"), 0, 0, this);
+        progress.setWindowTitle(tr("Import instance"));
+        progress.setWindowModality(Qt::WindowModal);
+        progress.setMinimumDuration(0);
+        progress.setAutoClose(false);
+        progress.setAutoReset(false);
+        progress.hide();
+        connect(&progress, &QProgressDialog::canceled, &api, &LauncherApi::cancelCurrent);
+        QTimer progressTimer;
+        connect(&progressTimer, &QTimer::timeout, &progress, [&] {
+            auto* current = api.currentTask();
+            if (!current || !current->isRunning()) return;
+            progress.setLabelText(current->getStatus());
+            const auto total = current->getTotalProgress();
+            progress.setRange(0, total > 0 ? 1000 : 0);
+            if (total > 0) progress.setValue(qBound(0, int(1000.0 * current->getProgress() / total), 1000));
+            if (!progress.wasCanceled()) progress.show();
+        });
+        progressTimer.start(100);
+        const auto result = installInstanceTaskToStore(api, rawTask, {{"source","directory-pack"}}, interaction);
+        progressTimer.stop();
+        progress.hide();
+        statusBar()->clearMessage();
+        if (!result.value("ok").toBool())
+            CustomMessageBox::selectable(this, tr("Import failed"), result.value("error").toString(), QMessageBox::Warning)->show();
+        else {
+            QStringList warnings;
+            for (const auto& warning : result.value("data").toObject().value("warnings").toArray()) warnings.append(warning.toString());
+            if (!warnings.isEmpty()) CustomMessageBox::selectable(this, tr("Warnings"), warnings.join('\n'), QMessageBox::Warning)->show();
+        }
+        return;
+    }
+    unique_qobject_ptr<Task> task(instanceDirectory.isEmpty() ? APPLICATION->instances()->wrapInstanceTask(rawTask)
+                                                               : APPLICATION->instances()->wrapInstanceTask(rawTask, instanceDirectory));
     runModalTask(task.get());
 }
 
@@ -1021,7 +1219,7 @@ void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& e
 
     InstanceTask* creationTask = newInstDlg.extractTask();
     if (creationTask) {
-        instanceFromInstanceTask(creationTask);
+        instanceFromInstanceTask(creationTask, newInstDlg.targetStorePath());
     }
 }
 
@@ -1396,6 +1594,8 @@ void MainWindow::globalSettingsClosed()
     updateThemeMenu();
     updateStatusCenter();
     updateMultiplayerFeatureVisibility();
+
+    updateInstanceToolbarWidth();
 
     ui->actionToggleStatusBar->setChecked(APPLICATION->settings()->get("StatusBarVisible").toBool());
     ui->newsToolBar->setVisible(APPLICATION->settings()->get("ShowNewsBar").toBool());

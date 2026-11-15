@@ -173,6 +173,26 @@
              </widget>
              </item>
           <item>
+           <widget class="QCheckBox" name="fixedInstanceToolbarWidthCheckBox">
+            <property name="toolTip">
+             <string>Keep the instance sidebar at a fixed width. Long instance names will wrap instead of changing the sidebar width.</string>
+            </property>
+            <property name="text">
+             <string>Use fixed width for instance sidebar</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="mcmodSearchEnabledCheckBox">
+            <property name="toolTip">
+             <string>Use MCMod's localized names to improve mod search and show reverse lookup links in the native download dialog.</string>
+            </property>
+            <property name="text">
+             <string>Use MCMod names to improve mod search</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QCheckBox" name="showNewsBarCheckBox">
             <property name="text">
              <string>Show News Bar</string>
@@ -401,32 +421,12 @@
           <item row="1" column="1">
            <widget class="QLineEdit" name="modsDirTextBox"/>
           </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="labelInstDir">
-            <property name="text">
-             <string>I&amp;nstances:</string>
-            </property>
-            <property name="buddy">
-             <cstring>instDirTextBox</cstring>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QPushButton" name="instDirBrowseBtn">
-            <property name="text">
-             <string>Browse</string>
-            </property>
-           </widget>
-          </item>
           <item row="5" column="2">
            <widget class="QPushButton" name="downloadsDirBrowseBtn">
             <property name="text">
              <string>Browse</string>
             </property>
            </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLineEdit" name="instDirTextBox"/>
           </item>
           <item row="1" column="2">
            <widget class="QPushButton" name="modsDirBrowseBtn">
@@ -763,8 +763,6 @@
   <tabstop>preferMenuBarCheckBox</tabstop>
   <tabstop>autoUpdateCheckBox</tabstop>
   <tabstop>updateIntervalSpinBox</tabstop>
-  <tabstop>instDirTextBox</tabstop>
-  <tabstop>instDirBrowseBtn</tabstop>
   <tabstop>modsDirTextBox</tabstop>
   <tabstop>modsDirBrowseBtn</tabstop>
   <tabstop>iconsDirTextBox</tabstop>

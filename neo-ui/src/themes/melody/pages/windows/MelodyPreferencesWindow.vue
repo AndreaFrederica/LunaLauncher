@@ -78,7 +78,7 @@ const { appearance, backgroundUrl, imageName, imageCount, loading: backgroundLoa
 const section = ref('theme'), settings = ref<any[]>([]), accounts = ref<any[]>([]), error = ref(''), loading = ref(false), uploading = ref(false);
 const fileInput = ref<HTMLInputElement>();
 const directoryInput = ref<HTMLInputElement>();
-const shellOptions = [{ value: 'neo', label: 'NeoUI' }, { value: 'pcl', label: 'PCL Style' }, { value: 'melody', label: '忘却的旋律' }];
+const shellOptions = [{ value: 'pcl', label: 'PCL Style（Luna Neo）' }, { value: 'neo', label: 'Demo' }, { value: 'endfield', label: '终末地' }, { value: 'melody', label: '忘却的旋律' }];
 const backgroundOptions = [{ value: 'builtin', label: '原版背景' }, { value: 'single', label: '指定图片' }, { value: 'random', label: '目录随机背景' }];
 const groups = [
   { label: '个性化', items: [{ id: 'theme', label: '主题与背景' }, { id: 'accounts', label: '账户' }, { id: 'language', label: '语言' }] },

@@ -20,10 +20,13 @@
 
 #include <QHash>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QMutex>
 #include <QObject>
 #include <QString>
 #include <memory>
+#include <optional>
 
 /**
  * API 元数据结构
@@ -38,8 +41,21 @@ struct ApiMetadata {
     QString icon;                    // 图标名称
     QString description;             // 描述
     QString homepage;                // 主页 URL
+    QString kind = QStringLiteral("resource"); // resource or mirror
     bool enabled = true;             // 是否启用
     int priority = 0;                // 优先级
+    // Packaged compatibility rules provide the basic mirror presets. User
+    // rules can opt into a resource and suppress these defaults for that URL.
+    bool baseRule = false;
+    QStringList categories;
+};
+
+/** A URL produced by a mirror rule, optionally carrying a health probe URL. */
+struct MirrorUrlCandidate {
+    QString url;
+    QString probeUrl;
+    int priority = 0;
+    QString category;
 };
 
 /**
@@ -73,6 +89,9 @@ public:
      */
     static std::shared_ptr<JSResourceAPI> fromString(const QString& jsCode, const QString& apiName);
 
+    /** Load a declarative mirror/resource rule file without evaluating JavaScript. */
+    static std::shared_ptr<JSResourceAPI> fromRuleFile(const QString& jsonFilePath, const QString& apiName);
+
     ~JSResourceAPI() override;
 
     // ResourceAPI 接口实现
@@ -95,6 +114,15 @@ public:
     QString getApiName() const { return m_apiName; }
     const ApiMetadata& getMetadata() const { return m_metadata; }
 
+    /** Execute a mirror API's URL rewrite hook. Null means unhandled. */
+    std::optional<QString> rewriteUrl(const QString& url, const QJsonObject& context) const;
+
+    /** Execute a mirror hook and return all declared candidates. */
+    QList<MirrorUrlCandidate> rewriteUrls(const QString& url, const QJsonObject& context) const;
+
+    /** Whether this API came from a declarative rule file. */
+    bool isRuleBased() const { return m_ruleBased; }
+
     /**
      * 获取所有已注册的 JS API
      */
@@ -112,6 +140,8 @@ private:
     void setupJSBindings();
     void cleanup();
     bool loadMetadata();
+    bool loadMetadata(const QJsonObject& metadata);
+    QList<MirrorUrlCandidate> rewriteRuleUrls(const QString& url, const QJsonObject& context) const;
 
     // JavaScript 执行辅助函数
     JSValue callJSFunction(const char* funcName, int argc, JSValueConst* argv) const;
@@ -128,7 +158,10 @@ private:
 
     QString m_apiName;
     ApiMetadata m_metadata;
+    bool m_ruleBased = false;
+    QJsonArray m_rules;
     mutable QString m_lastError;
+    mutable QMutex m_jsMutex;
 
     // 全局注册表
     static QList<std::shared_ptr<JSResourceAPI>> s_registeredAPIs;

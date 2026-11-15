@@ -43,6 +43,10 @@ class ModrinthAPI : public ResourceAPI {
     static auto getModLoaderStrings(const ModPlatform::ModLoaderTypes types) -> QStringList
     {
         QStringList l;
+        // Cleanroom is a Forge 1.12 fork. Modrinth does not expose a
+        // separate Cleanroom category, so query its Forge projects while
+        // retaining Cleanroom in the launcher instance metadata.
+        const bool cleanroom = (types & ModPlatform::Cleanroom) != 0;
         for (auto loader : { ModPlatform::NeoForge, ModPlatform::Forge, ModPlatform::Fabric, ModPlatform::Quilt, ModPlatform::LiteLoader,
                              ModPlatform::DataPack, ModPlatform::Babric, ModPlatform::BTA, ModPlatform::LegacyFabric, ModPlatform::Ornithe,
                              ModPlatform::Rift }) {
@@ -50,6 +54,7 @@ class ModrinthAPI : public ResourceAPI {
                 l << getModLoaderAsString(loader);
             }
         }
+        if (cleanroom && !l.contains(QStringLiteral("forge"))) l << QStringLiteral("forge");
         return l;
     }
 
@@ -215,7 +220,7 @@ class ModrinthAPI : public ResourceAPI {
     {
         return (loaders & (ModPlatform::NeoForge | ModPlatform::Forge | ModPlatform::Fabric | ModPlatform::Quilt | ModPlatform::LiteLoader |
                            ModPlatform::DataPack | ModPlatform::Babric | ModPlatform::BTA | ModPlatform::LegacyFabric |
-                           ModPlatform::Ornithe | ModPlatform::Rift)) != 0;
+                           ModPlatform::Ornithe | ModPlatform::Rift | ModPlatform::Cleanroom)) != 0;
     }
 
     std::optional<QString> getDependencyURL(const DependencySearchArgs& args) const override

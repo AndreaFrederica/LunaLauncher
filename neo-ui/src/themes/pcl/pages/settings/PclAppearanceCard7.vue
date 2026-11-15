@@ -1,15 +1,23 @@
 <template>
 <PclCard :title="t('pcl.auto2.ke8bef90efb')">
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">{{ t('pcl.appearance.launcherName') }}</span>
+        <div class="pcl-form-row__control">
+          <PclInput v-model="preferences.pclTitleText" placeholder="LunaLauncher" />
+        </div>
+        <span class="pcl-form-row__hint">{{ t('pcl.appearance.launcherNameHint') }}</span>
+      </div>
       <div class="pcl-check-grid">
         <PclCheckbox v-model="preferences.pclTitleIcon" :label="t('pcl.appearance.titleIcon')" />
         <PclCheckbox v-model="preferences.pclTitleLogo" :label="t('pcl.appearance.titleText')" />
         <PclCheckbox v-model="preferences.pclTitleBadge" :label="t('pcl.appearance.titleBadge')" />
+        <PclCheckbox v-model="preferences.pclShowLunaBadge" :label="t('pcl.appearance.showLunaBadge')" />
         <PclCheckbox v-model="preferences.pclLaunchAnimation" :label="t('pcl.auto2.k8eb55365e3')" />
         <PclCheckbox v-model="preferences.pclClearLaunchLogOnStart" :label="t('pcl.auto2.ke51a90b26f')" />
         <PclCheckbox v-model="preferences.pclLaunchLogAutoScroll" :label="t('pcl.auto2.k731cff1a1b')" />
         <PclCheckbox v-model="preferences.pclEditCurrentInWindow" :label="t('pcl.auto2.k61a28ec924')" />
       </div>
-      <PclHint theme="blue">{{ t('pcl.auto2.ke51c7fd2cd') }}</PclHint>
+      <PclHint theme="blue">{{ t('pcl.appearance.titleTextWhiteHint') }}</PclHint>
     </PclCard>
 </template>
 <script setup lang="ts">

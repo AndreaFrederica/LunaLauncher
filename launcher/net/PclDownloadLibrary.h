@@ -20,6 +20,7 @@
 #include <cstdint>
 
 #include <QByteArray>
+#include <QJsonArray>
 #include <QHash>
 #include <QLibrary>
 #include <QMutex>
@@ -94,6 +95,13 @@ class PclDownloadLibrary {
     int startFileDownload(const QUrl& url, const QString& localPath, const QString& hash = QString(), qint64 expectedSize = -1);
     /// Start a multi-source single-file download (URLs tried in order). Returns task id (> 0) or -1 on error.
     int startFileDownload(const QStringList& urls, const QString& localPath, const QString& hash = QString(), qint64 expectedSize = -1);
+    /// Start a batch of files. Each entry is {urls, localPath, hash, expectedSize}.
+    int startBatchDownload(const QJsonArray& files);
+    int batchState(int batchId);
+    double batchProgress(int batchId);
+    QByteArray batchProgressDetailJson(int batchId);
+    QString batchErrorString(int batchId);
+    void abortBatch(int batchId);
     void abortDownload(int taskId);
     void releaseTask(int taskId);
 
@@ -112,6 +120,7 @@ class PclDownloadLibrary {
     int globalActiveThreads();
 
     void setThreadLimit(int limit);
+    void setSmartConcurrency(bool enabled);
     /// Speed limit in bytes/sec. <= 0 means unlimited.
     void setSpeedLimit(qint64 bytesPerSec);
     void setProxy(const QString& type, const QString& host, int port, const QString& user, const QString& password);
@@ -137,6 +146,7 @@ class PclDownloadLibrary {
     const char* (*pcl_download_get_error)(int) = nullptr;
     void (*pcl_free_string)(const char*) = nullptr;
     void (*pcl_download_set_thread_limit)(int) = nullptr;
+    void (*pcl_download_set_smart_concurrency)(int) = nullptr;
     void (*pcl_download_set_speed_limit)(long long) = nullptr;
     void (*pcl_download_set_proxy)(const char*, const char*, int, const char*, const char*) = nullptr;
     void (*pcl_download_set_event_callback)(void*) = nullptr;

@@ -254,6 +254,7 @@ void registerLauncherApiMultiplayerOperations(LauncherApi& api)
     const auto mode = stringProperty("host or guest.");
     const auto mirror = boolProperty("Use the configured mirror for downloads.");
     const auto fetchState = boolProperty("Also fetch the current P2P state. Defaults to true.");
+    const auto force = boolProperty("Force terminate the backend process immediately. This may disconnect active peers.");
 
     api.registerOperation({ "multiplayer.backends",
         "List the two bundled P2P multiplayer backends, their installed versions and process state.",
@@ -322,12 +323,15 @@ void registerLauncherApiMultiplayerOperations(LauncherApi& api)
 
     api.registerOperation({ "multiplayer.stop",
         "Stop the current room, or panic the whole backend process.",
-        objectSchema({ { "backend", backend }, { "panic", boolProperty("Stop the backend process itself.") } }, { "backend" }),
+        objectSchema({ { "backend", backend }, { "panic", boolProperty("Stop the backend process itself gracefully.") }, { "force", force } }, { "backend" }),
         "multiplayer", true },
         [](const QJsonObject& p, UserInteraction&) {
             const auto id = p.value("backend").toString();
             if (!isTerracotta(id) && !isYukari(id)) return OperationService::failure("Unknown multiplayer backend.", 2);
-            if (p.value("panic").toBool()) {
+            if (p.value("force").toBool()) {
+                if (isTerracotta(id)) Terracotta::instance().forceKillProcess();
+                else YukariConnect::instance().forceKillProcess();
+            } else if (p.value("panic").toBool()) {
                 if (isTerracotta(id)) Terracotta::instance().panic(true);
                 else YukariConnect::instance().panic(true);
             } else if (isTerracotta(id)) {

@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QPointer>
 #include <QTimer>
+#include <QSet>
 #include <QUuid>
 
 #include "Application.h"
@@ -20,6 +21,7 @@
 #include "minecraft/auth/AccountList.h"
 #include "cli/OperationService.h"
 #include "launch/LaunchTask.h"
+#include "minecraft/online/YukariConnect.h"
 #include "server/ServerLaunchTask.h"
 #include "ui/themes/AppearanceService.h"
 #include "ui/themes/ThemeManager.h"
@@ -131,6 +133,93 @@ QJsonObject LauncherApiStreams::subscribeConsole(const QJsonObject& p)
         if (const auto sub = weak.lock()) append(sub, { { "kind", "instance.removed" } });
     });
     attachConsole(sub, instance->getLaunchTask());
+    return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
+}
+
+QJsonObject LauncherApiStreams::subscribeLifecycle()
+{
+    auto sub = create("instance-lifecycle", {});
+    if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+    const auto weak = std::weak_ptr<Subscription>(sub);
+    auto instances = std::make_shared<QSet<BaseInstance*>>();
+    auto tasks = std::make_shared<QSet<LaunchTask*>>();
+    const auto attach = [this, weak, tasks](LaunchTask* task) {
+        auto sub = weak.lock();
+        // Finished historical tasks must never produce a new crash popup.
+        if (!sub || !task || task->isFinished() || tasks->contains(task)) return;
+        tasks->insert(task);
+        QObject::connect(task, &QObject::destroyed, &sub->context, [tasks, task] { tasks->remove(task); });
+        QObject::connect(task, &Task::finished, &sub->context, [this, weak, task] {
+            auto sub = weak.lock();
+            if (!sub) return;
+            QString console;
+            bool consoleTruncated = false;
+            const auto model = task->getLogModel();
+            // Use the task's own log, independent of selected instance, cleared
+            // frontend consoles or subscriptions to other running instances.
+            int row = model->rowCount() - 1;
+            for (; row >= 0 && console.size() < 65536; --row) {
+                const auto line = model->index(row, 0).data().toString();
+                consoleTruncated |= line.size() > 16384;
+                console.prepend(line.right(16384) + '\n');
+            }
+            consoleTruncated |= row >= 0 || console.size() > 65536;
+            QJsonObject data{ { "instance", task->instance()->id() }, { "name", task->instance()->name() },
+                { "launchId", task->getUid().toString() }, { "startedAt", task->launchStartedAt().toString(Qt::ISODateWithMs) },
+                { "finishedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs) },
+                { "succeeded", task->wasSuccessful() }, { "aborted", task->wasAbortedByUser() || task->getState() == Task::State::AbortedByUser },
+                { "gameStarted", task->gameStarted() }, { "reason", task->failReason() },
+                { "consoleTruncated", consoleTruncated }, { "console", console.right(65536) } };
+            if (task->hasGameExitCode()) data.insert("exitCode", task->gameExitCode());
+            append(sub, { { "kind", "instance.finished" }, { "data", data } });
+        });
+    };
+    const auto scan = [weak, instances, attach] {
+        auto sub = weak.lock();
+        if (!sub) return;
+        const auto list = APPLICATION->instances();
+        for (int index = 0; index < list->count(); ++index) {
+            auto instance = list->at(index);
+            if (instances->contains(instance)) continue;
+            instances->insert(instance);
+            QObject::connect(instance, &QObject::destroyed, &sub->context, [instances, instance] { instances->remove(instance); });
+            QObject::connect(instance, &BaseInstance::launchTaskChanged, &sub->context, attach);
+            attach(instance->getLaunchTask());
+        }
+    };
+    QObject::connect(APPLICATION->instances(), &InstanceList::instancesChanged, &sub->context, scan);
+    scan();
+    return OperationService::success(subscriptionJson(sub->id, sub->type, {}));
+}
+
+QJsonObject LauncherApiStreams::subscribeMultiplayerLog(const QJsonObject& p)
+{
+    const auto requested = p.value("backend").toString().trimmed().toLower();
+    if (requested != "yukari" && requested != "yukari-connect" && requested != "yukariconnect") {
+        return OperationService::failure(
+            "Only YukariConnect provides a native pushed log stream; use multiplayer.log for this backend.", 2);
+    }
+
+    auto sub = create("multiplayer-log", "yukari");
+    if (!sub) return OperationService::failure("At most 16 subscriptions may be active.", 2);
+
+    const auto weak = std::weak_ptr<Subscription>(sub);
+    auto& yukari = YukariConnect::instance();
+    append(sub, { { "kind", "multiplayer.log.reset" },
+                  { "backend", "yukari" },
+                  { "text", QString::fromUtf8(yukari.fetchLog(false)) } });
+    QObject::connect(&yukari, &YukariConnect::logOutput, &sub->context,
+        [this, weak](const QString& message) {
+            if (const auto sub = weak.lock())
+                append(sub, { { "kind", "multiplayer.log.data" }, { "backend", "yukari" }, { "text", message } });
+        });
+    QObject::connect(&yukari, &YukariConnect::availabilityChanged, &sub->context,
+        [this, weak](bool available) {
+            if (const auto sub = weak.lock())
+                append(sub, { { "kind", "multiplayer.log.availability" },
+                              { "backend", "yukari" },
+                              { "available", available } });
+        });
     return OperationService::success(subscriptionJson(sub->id, sub->type, sub->instance));
 }
 
@@ -364,9 +453,15 @@ LauncherApiStreams::LauncherApiStreams(LauncherApi& api)
             changed();
             return OperationService::success(subscriptionJson(sub->id, sub->type, {}));
         });
+    api.registerOperation({ "instance.lifecycle.subscribe", "Observe future launch completions across all instances without replaying old failures.",
+        schema({}), "streams" }, [this](const QJsonObject&, UserInteraction&) { return subscribeLifecycle(); });
     api.registerOperation({ "instance.console.subscribe", "Subscribe to launch state and console output, including future launches.",
         schema({ { "instance", instance } }, { "instance" }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeConsole(p); });
+    api.registerOperation({ "multiplayer.log.subscribe",
+        "Subscribe to the native YukariConnect WebSocket log stream.",
+        schema({ { "backend", string("Multiplayer backend; YukariConnect is required.") } }, { "backend" }), "streams" },
+        [this](const QJsonObject& p, UserInteraction&) { return subscribeMultiplayerLog(p); });
     api.registerOperation({ "neo.task.subscribe", "Replay current task snapshots and push later Neo task updates.",
         schema({ { "taskId", string("Optional task UUID to watch; omit for all tasks.") } }), "streams" },
         [this](const QJsonObject& p, UserInteraction&) { return subscribeTasks(p); });

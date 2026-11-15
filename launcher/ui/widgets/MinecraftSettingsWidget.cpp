@@ -45,16 +45,54 @@
 #include "BuildConfig.h"
 #include "Json.h"
 #include "minecraft/PackProfile.h"
+#include "VanillaInstance.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/auth/AccountList.h"
 #include "minecraft/update/AssetUpdateTask.h"
 #include "settings/Setting.h"
 #include "ui/dialogs/ProgressDialog.h"
+#include <DesktopServices.h>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QLabel>
+#include <QPushButton>
 
 MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QWidget* parent)
     : QWidget(parent), m_instance(std::move(instance)), m_ui(new Ui::MinecraftSettingsWidget)
 {
     m_ui->setupUi(this);
+
+    if (auto vanilla = dynamic_cast<VanillaInstance*>(m_instance)) {
+        const auto& descriptor = vanilla->descriptor();
+        auto info = new QGroupBox(tr("Detected game profile"), m_ui->scrollAreaWidgetContents);
+        auto form = new QFormLayout(info);
+        auto minecraft = new QLabel(descriptor.minecraftVersion.isEmpty() ? descriptor.versionId : descriptor.minecraftVersion, info);
+        auto loader = new QLabel(info);
+        const auto loaderName = descriptor.loaderType.isEmpty() || descriptor.loaderType == QStringLiteral("vanilla") ? tr("Vanilla")
+            : descriptor.loaderType.toUpper();
+        loader->setText(descriptor.loaderVersion.isEmpty() ? loaderName : tr("%1 %2").arg(loaderName, descriptor.loaderVersion));
+        auto profile = new QLabel(descriptor.profileVersionId.isEmpty() ? descriptor.versionId : descriptor.profileVersionId, info);
+        auto folderButton = new QPushButton(tr("Open instance folder"), info);
+        connect(folderButton, &QPushButton::clicked, this, [root = descriptor.root] { DesktopServices::openPath(root, true); });
+        form->addRow(tr("Minecraft version"), minecraft);
+        form->addRow(tr("Loader"), loader);
+        form->addRow(tr("Foreign profile"), profile);
+        m_vanillaDirectoryMode = new QComboBox(info);
+        m_vanillaDirectoryMode->addItem(tr("Auto-detect existing launcher settings (default: isolated)"), "auto");
+        m_vanillaDirectoryMode->addItem(tr("Isolated: versions/<version>"), "isolated");
+        m_vanillaDirectoryMode->addItem(tr("Shared: .minecraft"), "shared");
+        m_vanillaDirectoryMode->setEnabled(!vanilla->isRunning());
+        form->addRow(tr("Game directory mode"), m_vanillaDirectoryMode);
+        auto directory = new QLabel(vanilla->gameRoot(), info);
+        directory->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        directory->setWordWrap(true);
+        form->addRow(tr("Current game directory"), directory);
+        auto hint = new QLabel(tr("Changing mode does not move saves, mods or settings. Applies to the next launch."), info);
+        hint->setWordWrap(true);
+        form->addRow(hint);
+        form->addRow(QString(), folderButton);
+        m_ui->verticalLayout_5->insertWidget(0, info);
+    }
 
     if (m_instance == nullptr) {
         m_ui->settingsTabs->removeTab(1);
@@ -168,6 +206,8 @@ MinecraftSettingsWidget::~MinecraftSettingsWidget()
 
 void MinecraftSettingsWidget::loadSettings()
 {
+    if (m_vanillaDirectoryMode)
+        m_vanillaDirectoryMode->setCurrentIndex(m_vanillaDirectoryMode->findData(m_instance->settings()->get("VanillaGameDirectoryMode")));
     SettingsObject* settings;
 
     if (m_instance != nullptr)
@@ -335,6 +375,8 @@ void MinecraftSettingsWidget::loadSettings()
 
 void MinecraftSettingsWidget::saveSettings()
 {
+    if (m_vanillaDirectoryMode && !m_instance->isRunning())
+        m_instance->settings()->set("VanillaGameDirectoryMode", m_vanillaDirectoryMode->currentData());
     SettingsObject* settings;
 
     if (m_instance != nullptr)

@@ -153,6 +153,9 @@ class Library {
     QString getCompatibleNative(const RuntimeContext& runtimeContext) const;
 
    private: /* methods */
+    /// Valid bundled Maven artifact in this instance (including native classifiers).
+    QString bundledFile(const QString& storage, const QString& overridePath) const;
+
     /// the default storage prefix used by Prism Launcher
     static QString defaultStoragePrefix();
 

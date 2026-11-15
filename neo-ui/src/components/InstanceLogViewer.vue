@@ -18,6 +18,7 @@
           <div class="instance-logs__actions">
             <label><input v-model="wrap" type="checkbox" />{{ t('neo.auto2.kfce1b42c8b') }}</label>
             <button type="button" :disabled="!selectedPath || loading" @click="read(selectedPath)">{{ t('neo.auto2.k7784972fc8') }}</button>
+            <DiagnosticExportButton :instance="instance" :execute="execute" :pcl="pcl" />
             <LogUploadButton :instance="instance" :name="selectedFile?.name || t('neo.auto2.k4de50894b8')" :file="selectedPath" :pcl="pcl"
               :execute="execute" :disabled="!selectedPath || loading || !!error || !content" />
           </div>
@@ -35,6 +36,7 @@ import { useI18n } from "vue-i18n";
 const { t } = useI18n();
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import LogUploadButton from './LogUploadButton.vue';
+import DiagnosticExportButton from './DiagnosticExportButton.vue';
 
 const props = defineProps<{
   instance: string; logFiles: any[]; pcl?: boolean;

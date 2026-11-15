@@ -125,6 +125,22 @@ static LoadResult loadComponent(ComponentPtr component, Task::Ptr& loadTask, Net
         component->m_loaded = true;
         result = LoadResult::LoadedLocal;
     } else {
+        component->m_foreignFile.reset();
+        // HMCL/PCL/Mojang instances keep the authoritative game and loader
+        // profiles in versions/<id>/<id>.json rather than Prism patch files.
+        // Let the instance adapter parse those profiles into the same
+        // VersionFile representation used by PackProfile. This prevents an
+        // external Forge/Fabric/NeoForge instance from falling back to a
+        // remote metadata request (which can fail even though all local
+        // loader libraries and arguments are present).
+        if (auto foreign = component->m_parent->instance()->loadForeignComponent(component->m_uid, component->m_version)) {
+            component->m_file.reset();
+            component->m_metaVersion.reset();
+            component->m_foreignFile = std::move(foreign);
+            component->m_loaded = true;
+            result = LoadResult::LoadedLocal;
+            return result;
+        }
         auto metaVersion = APPLICATION->metadataIndex()->get(component->m_uid, component->m_version);
         component->m_metaVersion = metaVersion;
         if (metaVersion->isLoaded()) {

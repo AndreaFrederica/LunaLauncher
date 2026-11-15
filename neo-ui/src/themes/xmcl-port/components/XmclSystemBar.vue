@@ -1,13 +1,14 @@
 <template>
   <div class="system-bar" :class="{ inner: isPclInner }" role="toolbar" :aria-label="t('xmcl.system.toolbar')">
     <button class="system-bar-back" :aria-label="t('xmcl.system.refreshInstances')" @click="emit('refresh')"><span class="material-icons">arrow_back</span></button><button v-if="isPclInner" class="system-bar-inner-back" :aria-label="t('xmcl.system.backToLaunch')" @click="emit('navigate', 'instances')"><span class="material-icons">arrow_back</span></button>
-    <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging"><strong class="system-bar-inner-title" v-if="isPclInner">{{ instanceName || t('xmcl.system.instanceManagement') }}</strong><span class="system-bar-brand"><img v-if="isPclShell && neoUiPreferences.pclTitleIcon" class="system-bar-brand-icon" :src="lunaLogo" alt="" aria-hidden="true" /><strong class="system-bar-title-default">Luna Launcher</strong><strong class="system-bar-title-pcl">LunaLauncher</strong></span><small class="system-bar-title-default-subtitle">NEO UI</small><small class="system-bar-title-pcl-subtitle">NEOUI</small></div>
+    <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging"><strong class="system-bar-inner-title" v-if="isPclInner">{{ instanceName || t('xmcl.system.instanceManagement') }}</strong><span class="system-bar-brand"><img v-if="isPclShell && neoUiPreferences.pclTitleIcon" class="system-bar-brand-icon" :src="lunaLogo" alt="" aria-hidden="true" /><strong class="system-bar-title-default">{{ neoUiPreferences.pclTitleText || 'Luna Launcher' }}</strong><strong class="system-bar-title-pcl">{{ neoUiPreferences.pclTitleText || 'LunaLauncher' }}</strong></span><small class="system-bar-title-default-subtitle">NEO UI</small><small class="system-bar-title-pcl-subtitle">NEOUI</small></div>
     <nav ref="pclTabsRef" class="system-bar-pcl-tabs" :aria-label="t('xmcl.system.mainNavigation')">
       <span class="system-bar-pcl-tabs__indicator" aria-hidden="true" :style="pclTabIndicatorStyle" />
-      <button :ref="el => setTabRef('launch', el)" :class="{ active: activePclTab === 'launch' }" @click="emit('navigate', 'instances')"><PclIcon name="play" :size="16" />{{ t('xmcl.system.launch') }}</button>
-      <button :ref="el => setTabRef('download', el)" :class="{ active: activePclTab === 'download' }" @click="emit('navigate', 'pcl-download')"><PclIcon name="download" :size="16" />{{ t('xmcl.system.download') }}</button>
-      <button :ref="el => setTabRef('settings', el)" :class="{ active: activePclTab === 'settings' }" @click="emit('navigate', 'pcl-settings')"><PclIcon name="settings" :size="16" />{{ t('xmcl.system.settings') }}</button>
-      <button :ref="el => setTabRef('tools', el)" :class="{ active: activePclTab === 'tools' }" @click="emit('navigate', 'pcl-tools')"><PclIcon name="wrench" :size="16" />{{ t('xmcl.system.tools') }}</button>
+      <button :ref="el => setTabRef('home', el)" :aria-label="t('xmcl.system.home')" :title="t('xmcl.system.home')" :class="{ active: activePclTab === 'home' }" @click="emit('navigate', 'instances')"><PclIcon name="layout-dashboard" :size="16" /><span v-if="neoUiPreferences.pclMainNavigationText">{{ t('xmcl.system.home') }}</span></button>
+      <button :ref="el => setTabRef('instance', el)" :aria-label="t('xmcl.system.instance')" :class="{ active: activePclTab === 'instance' }" :title="`${t('xmcl.system.instance')}：${instanceName || t('xmcl.system.noInstance')}`" :disabled="busy" @click="emit('navigate', 'manage')"><PclIcon name="box" :size="16" /><span v-if="neoUiPreferences.pclMainNavigationText">{{ t('xmcl.system.instance') }}</span></button>
+      <button :ref="el => setTabRef('download', el)" :aria-label="t('xmcl.system.download')" :title="t('xmcl.system.download')" :class="{ active: activePclTab === 'download' }" @click="emit('navigate', 'pcl-download')"><PclIcon name="download" :size="16" /><span v-if="neoUiPreferences.pclMainNavigationText">{{ t('xmcl.system.download') }}</span></button>
+      <button :ref="el => setTabRef('settings', el)" :aria-label="t('xmcl.system.settings')" :title="t('xmcl.system.settings')" :class="{ active: activePclTab === 'settings' }" @click="emit('navigate', 'pcl-settings')"><PclIcon name="settings" :size="16" /><span v-if="neoUiPreferences.pclMainNavigationText">{{ t('xmcl.system.settings') }}</span></button>
+      <button :ref="el => setTabRef('tools', el)" :aria-label="t('xmcl.system.tools')" :title="t('xmcl.system.tools')" :class="{ active: activePclTab === 'tools' }" @click="emit('navigate', 'pcl-tools')"><PclIcon name="wrench" :size="16" /><span v-if="neoUiPreferences.pclMainNavigationText">{{ t('xmcl.system.tools') }}</span></button>
     </nav>
     <div class="system-bar-spacer" data-tauri-drag-region @mousedown="startDragging" />
     <button class="system-bar-badge" :aria-label="t('xmcl.system.webManager')" :title="t('xmcl.system.webManagerTitle')" @click="openWebUiManager"><span class="material-icons">web</span></button>
@@ -49,16 +50,18 @@ async function openRuntimeDebug() {
 const props = defineProps<{ connected: boolean; busy: boolean; page?: string; instanceName?: string }>();
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
 const page = computed(() => props.page || '');
-const isPclInner = computed(() => page.value === 'manage');
+const isPclInner = computed(() => !isPclShell.value && page.value === 'manage');
 const activePclTab = computed(() => {
+  if (page.value === 'manage') return 'instance';
   if (page.value === 'store' || page.value === 'create' || page.value === 'pcl-download') return 'download';
   if (page.value === 'settings' || page.value === 'pcl-settings') return 'settings';
   if (page.value === 'pcl-tools') return 'tools';
-  return 'launch';
+  return 'home';
 });
 const pclTabsRef = ref<HTMLElement | null>(null);
 const tabRefs = new Map<string, HTMLElement>();
-const indicator = ref({ left: 0, width: 0, ready: false });
+const indicator = ref({ left: 0, top: 0, width: 0, height: 0, ready: false });
+let tabsResizeObserver: ResizeObserver | undefined;
 function setTabRef(id: string, element: unknown) {
   if (element instanceof HTMLElement) tabRefs.set(id, element);
   else tabRefs.delete(id);
@@ -70,22 +73,37 @@ function updatePclTabIndicator() {
     if (!nav || !tab) return;
     const navRect = nav.getBoundingClientRect();
     const tabRect = tab.getBoundingClientRect();
-    indicator.value = { left: tabRect.left - navRect.left, width: tabRect.width, ready: true };
+    indicator.value = {
+      left: tabRect.left - navRect.left - nav.clientLeft + nav.scrollLeft,
+      top: tabRect.top - navRect.top - nav.clientTop + nav.scrollTop,
+      width: tabRect.width,
+      height: tabRect.height,
+      ready: tabRect.width > 0 && tabRect.height > 0,
+    };
   });
 }
 const pclTabIndicatorStyle = computed(() => ({
   width: `${indicator.value.width}px`,
-  transform: `translateX(${indicator.value.left}px)`,
+  height: `${indicator.value.height}px`,
+  transform: `translate(${indicator.value.left}px, ${indicator.value.top}px)`,
   opacity: indicator.value.ready ? '1' : '0',
 }));
 function onPclTabsResize() { updatePclTabIndicator(); }
 watch(activePclTab, updatePclTabIndicator, { flush: 'post' });
 watch(() => neoUiPreferences.shell, updatePclTabIndicator, { flush: 'post' });
+watch(() => neoUiPreferences.pclMainNavigationText, updatePclTabIndicator, { flush: 'post' });
+watch(() => neoUiPreferences.pclVerticalNavigation, updatePclTabIndicator, { flush: 'post' });
 onMounted(() => {
   updatePclTabIndicator();
+  tabsResizeObserver = new ResizeObserver(updatePclTabIndicator);
+  if (pclTabsRef.value) tabsResizeObserver.observe(pclTabsRef.value);
+  tabRefs.forEach(tab => tabsResizeObserver?.observe(tab));
   window.addEventListener('resize', onPclTabsResize);
 });
-onBeforeUnmount(() => window.removeEventListener('resize', onPclTabsResize));
+onBeforeUnmount(() => {
+  tabsResizeObserver?.disconnect();
+  window.removeEventListener('resize', onPclTabsResize);
+});
 const emit = defineEmits<{ refresh: []; tasks: []; search: []; navigate: [page: string] }>();
 async function minimize() { try { await getCurrentWindow().minimize(); } catch { /* Web preview has no native window. */ } }
 async function toggleMaximize() { try { const window = getCurrentWindow(); if (await window.isMaximized()) await window.unmaximize(); else await window.maximize(); } catch { /* Web preview has no native window. */ } }

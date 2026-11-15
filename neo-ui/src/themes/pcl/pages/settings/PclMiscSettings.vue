@@ -42,6 +42,8 @@
                 <PclCheckbox :model-value="bool('DownloadsDirWatchRecursive')" :label="t('pcl.auto2.kbdd3825058')" @update:model-value="save('DownloadsDirWatchRecursive', $event)" />
               </div>
             </PclCard>
+
+            <PclDataLocationSettings v-if="!isInstance" />
           </div>
 </template>
 
@@ -54,6 +56,7 @@ import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclHint from '../../components/PclHint.vue';
 import PclInput from '../../components/PclInput.vue';
 import PclSelect from '../../components/PclSelect.vue';
+import PclDataLocationSettings from './PclDataLocationSettings.vue';
 
 const context = inject(PclSetupContextKey);
 if (!context) throw new Error('PclSetupContext is missing');

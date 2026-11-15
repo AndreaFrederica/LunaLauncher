@@ -40,18 +40,33 @@
 #include "ui_APIPage.h"
 
 #include <QFileDialog>
+#include <QDir>
+#include <QFile>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QCheckBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QTabBar>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QValidator>
 #include <QVariant>
+#include <QVBoxLayout>
 
 #include "Application.h"
 #include "BuildConfig.h"
+#include "DesktopServices.h"
+#include "LauncherResources.h"
 #include "minecraft/MirrorDownload.h"
 #include "modplatform/ModApiMirror.h"
+#include "modplatform/jsapi/JSAPIManager.h"
 #include "modplatform/flame/CurseForgeDownloadPageService.h"
 #include "net/PasteUpload.h"
 #include "net/PclDownloadLibrary.h"
@@ -77,7 +92,7 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     }
 
     // Add mirror type dropdown
-    int mirrorTypes[] = { MirrorDownload::Official, MirrorDownload::BMCLAPI, MirrorDownload::Custom };
+    int mirrorTypes[] = { MirrorDownload::Official, MirrorDownload::BMCLAPI, MirrorDownload::Custom, MirrorDownload::FastMCMirror, MirrorDownload::HKMC };
     for (auto mirrorType : mirrorTypes) {
         ui->mirrorTypeComboBox->addItem(tr(MirrorDownload::MirrorTypes.at(mirrorType).name.toUtf8()), mirrorType);
     }
@@ -159,6 +174,151 @@ APIPage::APIPage(QWidget* parent) : QWidget(parent), ui(new Ui::APIPage)
     resetBaseURLNote();
     connect(ui->pasteTypeComboBox, currentIndexChangedSignal, this, &APIPage::updateBaseURLNote);
     connect(ui->baseURLEntry, &QLineEdit::textEdited, this, &APIPage::resetBaseURLNote);
+    connect(ui->openMirrorConfigButton, &QPushButton::clicked, this, [this] {
+        const auto path = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("jsapi"));
+        bool docsReady = QDir().mkpath(path);
+        const auto copyPackagedFile = [&path, &docsReady](const QString& fileName) {
+            const auto destination = QDir(path).filePath(fileName);
+            if (QFileInfo::exists(destination))
+                return;
+            const auto source = LauncherResources::locateFile(QStringLiteral("jsapi/") + fileName);
+            if (source.isEmpty() || !QFile::copy(source, destination))
+                docsReady = false;
+        };
+        copyPackagedFile(QStringLiteral("MIRROR_TUTORIAL.md"));
+        copyPackagedFile(QStringLiteral("mirror-example.json"));
+        copyPackagedFile(QStringLiteral("mirror-example.js.txt"));
+
+        if (!docsReady)
+            QMessageBox::information(this, tr("Mirror configuration"),
+                                     tr("The directory was opened, but the tutorial files could not be created. "
+                                        "You can find the same documentation in the install directory's resource/jsapi folder."));
+        if (!DesktopServices::openPath(path))
+            QMessageBox::warning(this, tr("Open mirror configuration"), tr("Could not open the mirror configuration directory."));
+    });
+    connect(ui->manageMirrorScriptsButton, &QPushButton::clicked, this, [this] {
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Advanced JavaScript Mirror Management"));
+        dialog.setMinimumSize(560, 420);
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* intro = new QLabel(tr("Combine multiple mirrors by resource category. A user rule that handles a category takes precedence over the matching basic mirror rule; failed downloads continue through the remaining candidates and then the official URL."),
+                                 &dialog);
+        intro->setWordWrap(true);
+        layout->addWidget(intro);
+
+        const QStringList categories{ "launcher", "libraries", "assets", "java", "modrinth", "forge", "fabric", "quilt", "authlib" };
+        const QStringList categoryLabels{ tr("Launcher"), tr("Libraries"), tr("Assets"), tr("Java"), tr("Modrinth"),
+                                          tr("Forge"), tr("Fabric"), tr("Quilt"), tr("Authlib") };
+        auto* table = new QTableWidget(&dialog);
+        table->setColumnCount(3 + categories.size());
+        QStringList headers{ tr("Order"), tr("Mirror source") };
+        headers.append(categoryLabels);
+        headers.append(tr("Move"));
+        table->setHorizontalHeaderLabels(headers);
+        table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setSelectionMode(QAbstractItemView::SingleSelection);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->verticalHeader()->setVisible(false);
+        table->horizontalHeader()->setStretchLastSection(true);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+        const auto apis = JSAPIManager::instance().getOrderedAPIs(true);
+        int row = 0;
+        for (const auto& api : apis) {
+            const auto& metadata = api->getMetadata();
+            if (metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
+                continue;
+            table->insertRow(row);
+            table->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
+            table->item(row, 0)->setData(Qt::UserRole, metadata.id);
+            auto* source = new QCheckBox(QStringLiteral("%1  (%2, priority %3)")
+                                             .arg(metadata.displayName.isEmpty() ? metadata.id : metadata.displayName)
+                                             .arg(metadata.id)
+                                             .arg(metadata.priority),
+                                         table);
+            source->setChecked(JSAPIManager::instance().isApiEnabled(metadata.id));
+            table->setCellWidget(row, 1, source);
+            for (int column = 0; column < categories.size(); ++column) {
+                auto* check = new QCheckBox(table);
+                const auto category = categories.at(column);
+                const bool available = metadata.categories.isEmpty() || metadata.categories.contains(category);
+                check->setEnabled(available && source->isChecked());
+                check->setChecked(!JSAPIManager::instance().disabledCategories(metadata.id).contains(category));
+                QObject::connect(source, &QCheckBox::toggled, check, [check, available](bool enabled) {
+                    check->setEnabled(available && enabled);
+                });
+                table->setCellWidget(row, 2 + column, check);
+            }
+            auto* move = new QWidget(table);
+            auto* moveLayout = new QHBoxLayout(move);
+            moveLayout->setContentsMargins(2, 0, 2, 0);
+            auto* upButton = new QPushButton(tr("↑"), move);
+            auto* downButton = new QPushButton(tr("↓"), move);
+            moveLayout->addWidget(upButton);
+            moveLayout->addWidget(downButton);
+            table->setCellWidget(row, 2 + categories.size(), move);
+            QObject::connect(upButton, &QPushButton::clicked, table, [table, upButton] {
+                const auto current = table->indexAt(upButton->parentWidget()->pos()).row();
+                if (current <= 0) return;
+                for (int column = 0; column < table->columnCount(); ++column) {
+                    auto* item = table->takeItem(current, column);
+                    auto* other = table->takeItem(current - 1, column);
+                    table->setItem(current, column, other);
+                    table->setItem(current - 1, column, item);
+                    auto* widget = table->cellWidget(current, column);
+                    auto* otherWidget = table->cellWidget(current - 1, column);
+                    if (widget) table->removeCellWidget(current, column);
+                    if (otherWidget) table->removeCellWidget(current - 1, column);
+                    if (widget) table->setCellWidget(current - 1, column, widget);
+                    if (otherWidget) table->setCellWidget(current, column, otherWidget);
+                }
+                table->setCurrentCell(current - 1, 0);
+            });
+            QObject::connect(downButton, &QPushButton::clicked, table, [table, downButton] {
+                const auto current = table->indexAt(downButton->parentWidget()->pos()).row();
+                if (current < 0 || current + 1 >= table->rowCount()) return;
+                for (int column = 0; column < table->columnCount(); ++column) {
+                    auto* item = table->takeItem(current, column);
+                    auto* other = table->takeItem(current + 1, column);
+                    table->setItem(current, column, other);
+                    table->setItem(current + 1, column, item);
+                    auto* widget = table->cellWidget(current, column);
+                    auto* otherWidget = table->cellWidget(current + 1, column);
+                    if (widget) table->removeCellWidget(current, column);
+                    if (otherWidget) table->removeCellWidget(current + 1, column);
+                    if (widget) table->setCellWidget(current + 1, column, widget);
+                    if (otherWidget) table->setCellWidget(current, column, otherWidget);
+                }
+                table->setCurrentCell(current + 1, 0);
+            });
+            ++row;
+        }
+        layout->addWidget(table, 1);
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+
+        QStringList order;
+        QStringList disabled;
+        QHash<QString, QStringList> categoryDisabled;
+        for (int i = 0; i < table->rowCount(); ++i) {
+            const auto id = table->item(i, 0)->data(Qt::UserRole).toString();
+            order.append(id);
+            auto* source = qobject_cast<QCheckBox*>(table->cellWidget(i, 1));
+            if (!source || !source->isChecked())
+                disabled.append(id);
+            QStringList off;
+            for (int column = 0; column < categories.size(); ++column) {
+                auto* check = qobject_cast<QCheckBox*>(table->cellWidget(i, 2 + column));
+                if (check && !check->isChecked()) off.append(categories.at(column));
+            }
+            if (!off.isEmpty()) categoryDisabled.insert(id, off);
+        }
+        JSAPIManager::instance().setConfiguration(order, disabled, categoryDisabled);
+    });
 }
 
 APIPage::~APIPage()
@@ -252,6 +412,24 @@ void APIPage::updateMirrorSelection()
             ui->fmlLibsURL->setPlaceholderText(BuildConfig.LEGACY_FMLLIBS_BASE_URL);
             ui->mojangDownloadsMirrorURL->setText("");
             ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("BMCLAPI (auto)"));
+        } else if (mirrorType == MirrorDownload::FastMCMirror) {
+            // FastMinecraftMirror uses separate hosts for Mojang, assets,
+            // libraries and Forge. The JS provider performs the mapping.
+            ui->metaURL->setText("");
+            ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+            ui->resourceURL->setText(mirrorInfo.defaultAssetsUrl);
+            ui->libraryURL->setText(mirrorInfo.defaultLibrariesUrl);
+            ui->fmlLibsURL->setText(mirrorInfo.defaultFMLLibsUrl);
+            ui->mojangDownloadsMirrorURL->setText("");
+            ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("FastMinecraftMirror (auto)"));
+        } else if (mirrorType == MirrorDownload::HKMC) {
+            ui->metaURL->setText("");
+            ui->metaURL->setPlaceholderText(BuildConfig.META_URL);
+            ui->resourceURL->setText(mirrorInfo.defaultAssetsUrl);
+            ui->libraryURL->setText(mirrorInfo.defaultLibrariesUrl);
+            ui->fmlLibsURL->setText(mirrorInfo.defaultFMLLibsUrl);
+            ui->mojangDownloadsMirrorURL->setText("");
+            ui->mojangDownloadsMirrorURL->setPlaceholderText(tr("HKMC Mirror (auto)"));
         }
     }
 }
@@ -436,6 +614,20 @@ void APIPage::applySettings()
         s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
         s->set("LegacyFMLLibsURLOverride", mirrorInfo.defaultFMLLibsUrl);
         s->set("MojangDownloadsMirrorURL", "");  // BMCLAPI URL is handled in code, not stored
+    } else if (mirrorType == MirrorDownload::FastMCMirror) {
+        const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::FastMCMirror);
+        s->set("MetaURLOverride", "");
+        s->set("ResourceURLOverride", mirrorInfo.defaultAssetsUrl);
+        s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
+        s->set("LegacyFMLLibsURLOverride", mirrorInfo.defaultFMLLibsUrl);
+        s->set("MojangDownloadsMirrorURL", "");
+    } else if (mirrorType == MirrorDownload::HKMC) {
+        const auto& mirrorInfo = MirrorDownload::MirrorTypes.at(MirrorDownload::HKMC);
+        s->set("MetaURLOverride", "");
+        s->set("ResourceURLOverride", mirrorInfo.defaultAssetsUrl);
+        s->set("LibrariesURL", mirrorInfo.defaultLibrariesUrl);
+        s->set("LegacyFMLLibsURLOverride", mirrorInfo.defaultFMLLibsUrl);
+        s->set("MojangDownloadsMirrorURL", "");
     }
 
     // Save other settings (independent of mirror mode)

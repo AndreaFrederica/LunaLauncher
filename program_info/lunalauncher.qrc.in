@@ -1,6 +1,10 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/">
-        <file>../program_info/@Launcher_AppID@.svg</file>
+        <!-- Keep the icon at the resource path used by Application::logo().
+             Without an explicit alias Qt preserves the source directory and
+             exposes this as :/program_info/<file>, which leaves custom title
+             bars with a null icon. -->
+        <file alias="@Launcher_AppID@.svg">../program_info/@Launcher_AppID@.svg</file>
     </qresource>
 </RCC>

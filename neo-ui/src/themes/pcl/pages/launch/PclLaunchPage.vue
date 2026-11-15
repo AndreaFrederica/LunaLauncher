@@ -157,7 +157,12 @@ const homeCards = computed(() => (neoUiPreferences.pclHomeCards || []).filter(ca
 const preferences = neoUiPreferences;
 const homeInstanceUsesBelow = computed(() => preferences.pclHomeInstanceLayout === 'grid' && preferences.pclHomeInstanceTextPosition === 'below');
 function instanceSubtitle(instance: any) {
-  return String(instance?.runtime?.minecraftVersion || instance?.runtime?.minecraft || instance?.minecraftVersion || '').trim();
+  const version = String(instance?.runtime?.minecraftVersion || instance?.runtime?.minecraft || instance?.minecraftVersion || '').trim();
+  const loaderType = String(instance?.loaderType || '').trim();
+  const loader = loaderType && loaderType !== 'vanilla' && loaderType !== 'unknown'
+    ? `${loaderType.toUpperCase()}${instance?.loaderVersion ? ` ${instance.loaderVersion}` : ''}`
+    : loaderType === 'vanilla' ? 'Vanilla' : 'Minecraft';
+  return version ? `${version} · ${loader}` : loader;
 }
 function homeCardOrder(key: string) {
   const index = (preferences.pclHomeCardOrder || []).indexOf(key);
@@ -257,7 +262,7 @@ function openContextMenu(instance: any, event: MouseEvent) {
 }
 function closeContextMenu() { contextMenu.value = null; }
 function contextActions(instance: any) {
-  return [
+  const actions = [
     { id: 'launch', label: t('pcl.sidebar.launch'), icon: 'play', disabled: Boolean(instance?.running) },
     { id: 'stop', label: t('pcl.sidebar.stopProcess'), icon: 'power', disabled: !instance?.running },
     { id: 'edit', label: t('common.edit'), icon: 'settings', disabled: false },
@@ -268,6 +273,9 @@ function contextActions(instance: any) {
     { id: 'delete', label: t('common.delete'), icon: 'trash-2', disabled: false, danger: true },
     { id: 'shortcut', label: t('pcl.sidebar.shortcut'), icon: 'external-link', disabled: false },
   ];
+  if (instance?.format === 'vanilla-compatible' || instance?.vanillaCompatible === true)
+    actions.splice(8, 0, { id: 'convert', label: t('pcl.conversion.action'), icon: 'copy', disabled: false });
+  return actions;
 }
 function runContextMenu(action: string) {
   const item = contextMenu.value?.item;
@@ -814,12 +822,12 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
     grid-template-columns: 1fr;
   }
   .pcl-launch-left {
-    height: calc(100vh - 48px);
-    min-height: calc(100vh - 48px);
+    height: 100%;
+    min-height: 0;
     padding: 20px;
   }
   .pcl-launching-panel {
-    min-height: calc(100vh - 96px);
+    min-height: 0;
   }
   .pcl-launch-right {
     padding: 16px;
@@ -861,7 +869,7 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
 
 .pcl-home-instance:hover { background: var(--pcl-c8); }
 .pcl-home-instance.active { border-color: var(--pcl-c3); background: var(--pcl-c8); }
-.pcl-home-instance img,
+.pcl-home-instance__icon-wrap > img,
 .pcl-home-instance__fallback { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 3px; object-fit: cover; }
 .pcl-home-instance__fallback { display: flex; align-items: center; justify-content: center; color: var(--pcl-muted); background: var(--pcl-c7); }
 .pcl-home-instance__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
@@ -922,7 +930,7 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
   text-align: center;
 }
 
-.pcl-home-instance.text-below img,
+.pcl-home-instance.text-below .pcl-home-instance__icon-wrap > img,
 .pcl-home-instance.text-below .pcl-home-instance__fallback {
   flex: 0 0 32px;
   width: 32px;
@@ -949,6 +957,8 @@ provide(PclLaunchContextKey, { props, emit, selected, busy, notice, error, insta
 }
 
 .pcl-home-instance.text-below .pcl-home-instance__copy small {
+  max-width: 100%;
+  text-align: start;
   margin-top: 1px;
 }
 

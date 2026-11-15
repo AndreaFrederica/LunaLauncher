@@ -36,13 +36,54 @@
 #include "Library.h"
 #include "MinecraftInstance.h"
 #include "MirrorDownload.h"
+#include "LibraryDownloadPatches.h"
 #include "net/NetRequest.h"
+
+#include <QCryptographicHash>
 
 #include "Application.h"
 #include <BuildConfig.h>
 #include <FileSystem.h>
 #include <net/ApiDownload.h>
 #include <net/ChecksumValidator.h>
+
+QString Library::bundledFile(const QString& storage, const QString& overridePath) const
+{
+    if (overridePath.isEmpty() || (isAlwaysStale() && !isLocal()))
+        return {};
+    const auto relative = QDir::cleanPath(QDir::fromNativeSeparators(storage));
+    if (QDir::isAbsolutePath(relative) || relative == ".." || relative.startsWith("../"))
+        return {};
+    const auto path = QDir(overridePath).absoluteFilePath(relative);
+    if (!QFileInfo(path).isFile() || QFileInfo(path).size() == 0)
+        return {};
+
+    // Use the same checksum for selecting the launch file and skipping its
+    // download. A damaged bundled file must never shadow a repaired cache file.
+    QString sha1;
+    if (m_mojangDownloads) {
+        if (!isNative() && m_mojangDownloads->artifact)
+            sha1 = m_mojangDownloads->artifact->sha1;
+        if (isNative()) {
+            for (auto it = m_mojangDownloads->classifiers.cbegin(); it != m_mojangDownloads->classifiers.cend(); ++it) {
+                auto spec = m_name;
+                spec.setClassifier(it.key());
+                if (spec.toPath(m_filename) == storage && it.value()) {
+                    sha1 = it.value()->sha1;
+                    break;
+                }
+            }
+        }
+    }
+    if (!sha1.isEmpty()) {
+        QFile file(path);
+        QCryptographicHash hash(QCryptographicHash::Sha1);
+        if (!file.open(QIODevice::ReadOnly) || !hash.addData(&file)
+            || hash.result().toHex().compare(sha1.toLatin1(), Qt::CaseInsensitive) != 0)
+            return {};
+    }
+    return path;
+}
 
 /**
  * @brief Collect applicable files for the library.
@@ -68,6 +109,9 @@ void Library::getApplicableFiles(const RuntimeContext& runtimeContext,
     bool local = isLocal();
     // Lambda function to get the absolute file path
     auto actualPath = [this, local, overridePath](QString relPath) {
+        const auto bundled = bundledFile(relPath, overridePath);
+        if (!bundled.isEmpty())
+            return bundled;
         relPath = FS::RemoveInvalidPathChars(relPath);
         QFileInfo out(FS::PathCombine(storagePrefix(), relPath));
         if (local && !overridePath.isEmpty()) {
@@ -118,14 +162,29 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
     bool local = isLocal();
 
     // Lambda function to check if a local file exists
-    auto check_local_file = [overridePath, &failedLocalFiles](QString storage) {
+    auto check_local_file = [this, overridePath, &failedLocalFiles](QString storage) {
+        if (!bundledFile(storage, overridePath).isEmpty())
+            return true;
         QFileInfo fileinfo(storage);
         QString fileName = fileinfo.fileName();
         auto fullPath = FS::PathCombine(overridePath, fileName);
         QFileInfo localFileInfo(fullPath);
-        if (!localFileInfo.exists()) {
+        if (!localFileInfo.isFile()) {
             failedLocalFiles.append(localFileInfo.filePath());
             return false;
+        }
+        // Imported clients carry the checksum of the preserved bytes, rather
+        // than the official client. A broken local artifact is an error; it
+        // must not silently become an official download.
+        if (m_name.groupId() == "org.lunalauncher.imported" && m_name.artifactId() == "client"
+            && m_mojangDownloads && m_mojangDownloads->artifact && !m_mojangDownloads->artifact->sha1.isEmpty()) {
+            QFile file(fullPath);
+            QCryptographicHash hash(QCryptographicHash::Sha1);
+            if (!file.open(QIODevice::ReadOnly) || !hash.addData(&file)
+                || hash.result().toHex().compare(m_mojangDownloads->artifact->sha1.toLatin1(), Qt::CaseInsensitive) != 0) {
+                failedLocalFiles.append(fullPath + QStringLiteral(" (checksum mismatch)"));
+                return false;
+            }
         }
         return true;
     };
@@ -134,22 +193,33 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
     // through the shared implementation so Custom mirrors get the same coverage
     // as the built-in BMCLAPI preset.
     MirrorDownload::ResolvedMirror mirror;
+    LibraryDownloadPatches patches;
     {
         auto app = APPLICATION_DYN;
         auto s = settings ? settings.get() : (app ? app->settings() : nullptr);
         if (s)
             mirror = MirrorDownload::resolve(s);
+        if (s && s->get("LibraryDownloadPatchesEnabled").toBool())
+            patches = LibraryDownloadPatches::current();
     }
-    auto rewrite_url = [mirror](const QString& url) -> QString { return MirrorDownload::rewriteUrl(url, mirror); };
-
     // Lambda function to add a download request
-    auto add_download = [this, local, check_local_file, cache, stale, &out, &rewrite_url](QString storage, QString url, QString sha1) {
+    auto add_download = [this, local, check_local_file, cache, stale, &out, mirror, patches, overridePath](QString storage, QString url, QString sha1, QString classifier = {}) {
         if (local) {
             return check_local_file(storage);
         }
+        if (!bundledFile(storage, overridePath).isEmpty())
+            return true;
         // Rewrite URL for mirror support, keeping the official URL for 429 fallback.
         const QString officialUrl = url;
-        url = rewrite_url(url);
+        auto urls = MirrorDownload::downloadUrls(url, mirror);
+        if (!isNative()) classifier = m_name.classifier();
+        QStringList matched;
+        urls = patches.apply(rawName().serialize(), classifier, officialUrl, urls, &matched);
+        if (urls.isEmpty()) urls.append(officialUrl);
+        if (!matched.isEmpty()) qInfo() << "Library download patch" << matched << rawName().serialize() << "->" << urls;
+        url = urls.constFirst();
+        QList<QUrl> fallbacks;
+        for (const auto& candidate : urls) fallbacks.append(QUrl(candidate));
 
         auto entry = cache->resolveEntry("libraries", storage);
         if (stale) {
@@ -167,15 +237,13 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
 
         if (sha1.size()) {
             auto dl = Net::ApiDownload::makeCached(url, entry, options);
-            dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, sha1));
-            if (officialUrl != url)
-                dl->setFallbackUrl(QUrl(officialUrl));
+            dl->setExpectedIntegrity(QStringLiteral("sha1"), sha1);
+            dl->setFallbackUrls(fallbacks);
             qDebug() << "Checksummed Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
             out.append(dl);
         } else {
             auto dl = Net::ApiDownload::makeCached(url, entry, options);
-            if (officialUrl != url)
-                dl->setFallbackUrl(QUrl(officialUrl));
+            dl->setFallbackUrls(fallbacks);
             out.append(dl);
             qDebug() << "Download for:" << rawName().serialize() << "storage:" << storage << "url:" << url;
         }
@@ -196,18 +264,18 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
                     if (nat32info) {
                         auto cooked_storage = raw_storage;
                         cooked_storage.replace("${arch}", "32");
-                        add_download(cooked_storage, nat32info->url, nat32info->sha1);
+                        add_download(cooked_storage, nat32info->url, nat32info->sha1, nat32Classifier);
                     }
                     auto nat64info = m_mojangDownloads->getDownloadInfo(nat64Classifier);
                     if (nat64info) {
                         auto cooked_storage = raw_storage;
                         cooked_storage.replace("${arch}", "64");
-                        add_download(cooked_storage, nat64info->url, nat64info->sha1);
+                        add_download(cooked_storage, nat64info->url, nat64info->sha1, nat64Classifier);
                     }
                 } else {
                     auto info = m_mojangDownloads->getDownloadInfo(nativeClassifier);
                     if (info) {
-                        add_download(raw_storage, info->url, info->sha1);
+                        add_download(raw_storage, info->url, info->sha1, nativeClassifier);
                     }
                 }
             } else {
@@ -247,12 +315,12 @@ QList<Net::NetRequest::Ptr> Library::getDownloads(const RuntimeContext& runtimeC
         if (raw_storage.contains("${arch}")) {
             QString cooked_storage = raw_storage;
             QString cooked_dl = raw_dl;
-            add_download(cooked_storage.replace("${arch}", "32"), cooked_dl.replace("${arch}", "32"), QString());
+            add_download(cooked_storage.replace("${arch}", "32"), cooked_dl.replace("${arch}", "32"), QString(), QString(getCompatibleNative(runtimeContext)).replace("${arch}", "32"));
             cooked_storage = raw_storage;
             cooked_dl = raw_dl;
-            add_download(cooked_storage.replace("${arch}", "64"), cooked_dl.replace("${arch}", "64"), QString());
+            add_download(cooked_storage.replace("${arch}", "64"), cooked_dl.replace("${arch}", "64"), QString(), QString(getCompatibleNative(runtimeContext)).replace("${arch}", "64"));
         } else {
-            add_download(raw_storage, raw_dl, QString());
+            add_download(raw_storage, raw_dl, QString(), getCompatibleNative(runtimeContext));
         }
     }
     return out;

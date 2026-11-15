@@ -1,6 +1,7 @@
 <template>
 <PclCard :title="t('pcl.auto2.kf1da7b1ad5')">
       <div class="pcl-check-grid">
+        <PclCheckbox v-model="preferences.pclHomeInstanceShowSubtitle" :label="t('pcl.homeInstanceShowSubtitle')" />
         <PclCheckbox v-model="preferences.pclHomeShowInstances" :label="t('pcl.auto2.k408dd99bac')" />
         <PclCheckbox v-model="preferences.pclHomeShowServers" :label="t('pcl.auto2.ka071286fa0')" />
         <PclCheckbox v-model="preferences.pclHomeSwitchOnQuickLaunch" :label="t('pcl.auto2.k9369dff72a')" />

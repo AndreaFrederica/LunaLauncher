@@ -19,9 +19,11 @@
 #pragma once
 
 #include <QString>
+#include <QList>
 #include <array>
 
 class SettingsObject;
+namespace Net { class NetRequest; }
 
 class MirrorDownload {
 public:
@@ -29,8 +31,10 @@ public:
         Official,  // Use Mojang's official servers
         BMCLAPI,   // Use BMCLAPI mirror
         Custom,    // User-specified URLs
+        FastMCMirror,  // Use FastMinecraftMirror
+        HKMC,  // Use the HKMC BMCLAPI-compatible mirror
         First = Official,
-        Last = Custom
+        Last = HKMC
     };
 
     struct MirrorTypeInfo {
@@ -75,7 +79,7 @@ public:
         bool isEmpty() const { return mojangBase.isEmpty() && librariesBase.isEmpty() && assetsBase.isEmpty(); }
     };
 
-    static const std::array<MirrorTypeInfo, 3> MirrorTypes;
+    static const std::array<MirrorTypeInfo, 5> MirrorTypes;
 
     /// Build the effective mirror configuration from settings. A null settings object
     /// resolves to the official servers.
@@ -83,6 +87,19 @@ public:
 
     /// Rewrite a download URL according to the given mirror configuration.
     static QString rewriteUrl(const QString& url, const ResolvedMirror& mirror);
+
+    /// Return mirror candidates ordered by the configured priority and cached
+    /// health measurements. The first item is the URL used for a download.
+    static QList<QString> rewriteUrls(const QString& url, const ResolvedMirror& mirror);
+
+    /// Return the complete ordered download chain, including the original
+    /// upstream URL as the final fallback. An empty mirror match therefore
+    /// still produces the official URL.
+    static QList<QString> downloadUrls(const QString& url, const ResolvedMirror& mirror);
+
+    /// Install every remaining URL from downloadUrls() as fallbacks on a
+    /// request whose current URL is the first item in that list.
+    static void configureFallbacks(Net::NetRequest* request, const QString& officialUrl, const ResolvedMirror& mirror);
 
     /// Convenience overload that resolves the mirror from the given settings first.
     static QString rewriteUrl(const QString& url, SettingsObject* settings);

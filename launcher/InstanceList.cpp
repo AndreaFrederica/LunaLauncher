@@ -56,8 +56,10 @@
 #include "NullInstance.h"
 #include "WatchLock.h"
 #include "minecraft/MinecraftInstance.h"
+#include "VanillaInstance.h"
 #include "server/ServerInstance.h"
 #include "settings/INISettingsObject.h"
+#include "settings/JSONSettingsObject.h"
 #include "settings/Setting.h"
 
 #ifdef Q_OS_WIN32
@@ -67,24 +69,70 @@
 const static int GROUP_FILE_FORMAT_VERSION = 1;
 
 InstanceList::InstanceList(SettingsObject* settings, const QString& instDir, QObject* parent)
+    : InstanceList(settings, QStringList{ instDir }, parent)
+{
+}
+
+InstanceList::InstanceList(SettingsObject* settings, const QStringList& instDirs, QObject* parent)
     : QAbstractListModel(parent), m_globalSettings(settings)
 {
     resumeWatch();
-    // Create aand normalize path
-    if (!QDir::current().exists(instDir)) {
-        QDir::current().mkpath(instDir);
+
+    // Create and normalize every configured root. The first root remains the
+    // primary root for staging and the legacy group file.
+    for (const auto& instDir : instDirs) {
+        if (instDir.trimmed().isEmpty())
+            continue;
+        if (!QDir::current().exists(instDir))
+            QDir::current().mkpath(instDir);
+        const auto normalized = QDir(instDir).canonicalPath();
+        if (!normalized.isEmpty() && !m_instDirs.contains(normalized))
+            m_instDirs.append(normalized);
+    }
+    if (m_instDirs.isEmpty()) {
+        const auto fallback = QDir::current().absoluteFilePath(QStringLiteral("instances"));
+        QDir::current().mkpath(fallback);
+        m_instDirs.append(QDir(fallback).canonicalPath());
     }
 
     connect(this, &InstanceList::instancesChanged, this, &InstanceList::providerUpdated);
 
-    // NOTE: canonicalPath requires the path to exist. Do not move this above the creation block!
-    m_instDir = QDir(instDir).canonicalPath();
+    m_instDir = m_instDirs.constFirst();
     m_watcher = new QFileSystemWatcher(this);
     connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &InstanceList::instanceDirContentsChanged);
-    m_watcher->addPath(m_instDir);
+    for (const auto& root : m_instDirs)
+        m_watcher->addPath(root);
 }
 
 InstanceList::~InstanceList() {}
+
+void InstanceList::setVanillaStores(const QList<QPair<QString, QString>>& stores)
+{
+    m_vanillaStores = stores;
+    m_dirty = true;
+}
+
+void InstanceList::setPrismStores(const QStringList& stores)
+{
+    QStringList normalized;
+    for (const auto& path : stores) {
+        if (path.trimmed().isEmpty())
+            continue;
+        QDir().mkpath(path);
+        const auto canonical = QDir(path).canonicalPath();
+        if (!canonical.isEmpty() && !normalized.contains(canonical))
+            normalized.append(canonical);
+    }
+    if (normalized.isEmpty() || normalized == m_instDirs)
+        return;
+    for (const auto& path : m_instDirs)
+        m_watcher->removePath(path);
+    m_instDirs = normalized;
+    m_instDir = m_instDirs.constFirst();
+    for (const auto& path : m_instDirs)
+        m_watcher->addPath(path);
+    loadList();
+}
 
 Qt::DropActions InstanceList::supportedDragActions() const
 {
@@ -219,7 +267,10 @@ Qt::ItemFlags InstanceList::flags(const QModelIndex& index) const
 {
     Qt::ItemFlags f;
     if (index.isValid()) {
-        f |= (Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
+        f |= (Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        auto* instance = static_cast<BaseInstance*>(index.internalPointer());
+        if (instance->canEdit())
+            f |= Qt::ItemIsEditable;
     }
     return f;
 }
@@ -234,6 +285,9 @@ GroupId InstanceList::getInstanceGroup(const InstanceId& id) const
     if (iter != m_instanceGroupIndex.end()) {
         return *iter;
     }
+    const auto foreign = m_foreignGroupIndex.constFind(inst->id());
+    if (foreign != m_foreignGroupIndex.constEnd())
+        return *foreign;
     return GroupId();
 }
 
@@ -471,28 +525,53 @@ static QMap<InstanceId, InstanceLocator> getIdMapping(const std::vector<std::uni
 
 QList<InstanceId> InstanceList::discoverInstances()
 {
-    qInfo() << "Discovering instances in" << m_instDir;
     QList<InstanceId> out;
-    QDirIterator iter(m_instDir, QDir::Dirs | QDir::NoDot | QDir::NoDotDot | QDir::Readable | QDir::Hidden, QDirIterator::FollowSymlinks);
-    while (iter.hasNext()) {
-        QString subDir = iter.next();
-        QFileInfo dirInfo(subDir);
-        if (!QFileInfo(FS::PathCombine(subDir, "instance.cfg")).exists())
-            continue;
-        // if it is a symlink, ignore it if it goes to the instance folder
-        if (dirInfo.isSymLink()) {
-            QFileInfo targetInfo(dirInfo.symLinkTarget());
-            QFileInfo instDirInfo(m_instDir);
-            if (targetInfo.canonicalPath() == instDirInfo.canonicalFilePath()) {
-                qDebug() << "Ignoring symlink" << subDir << "that leads into the instances folder";
+    m_instanceRoots.clear();
+    m_instancePaths.clear();
+    m_foreignGroupIndex.clear();
+    instanceSet.clear();
+    for (const auto& root : m_instDirs) {
+        qInfo() << "Discovering instances in" << root;
+        QDirIterator iter(root, QDir::Dirs | QDir::NoDot | QDir::NoDotDot | QDir::Readable | QDir::Hidden, QDirIterator::FollowSymlinks);
+        while (iter.hasNext()) {
+            QString subDir = iter.next();
+            QFileInfo dirInfo(subDir);
+            if (!QFileInfo(FS::PathCombine(subDir, "instance.cfg")).exists())
+                continue;
+            // if it is a symlink, ignore it if it goes to the instance folder
+            if (dirInfo.isSymLink()) {
+                QFileInfo targetInfo(dirInfo.symLinkTarget());
+                QFileInfo instDirInfo(root);
+                if (targetInfo.canonicalPath() == instDirInfo.canonicalFilePath()) {
+                    qDebug() << "Ignoring symlink" << subDir << "that leads into the instances folder";
+                    continue;
+                }
+            }
+            auto id = dirInfo.fileName();
+            if (m_instanceRoots.contains(id)) {
+                qWarning() << "Ignoring duplicate instance ID" << id << "in" << subDir;
                 continue;
             }
+            out.append(id);
+            m_instanceRoots.insert(id, root);
+            instanceSet.insert(id);
+            qInfo() << "Found instance ID" << id << "in" << root;
         }
-        auto id = dirInfo.fileName();
-        out.append(id);
-        qInfo() << "Found instance ID" << id;
     }
-    instanceSet = QSet<QString>(out.begin(), out.end());
+    for (const auto& [storeId, storeRoot] : m_vanillaStores) {
+        for (const auto& descriptor : VanillaCompatibleProvider::scan(storeId, storeRoot)) {
+            if (instanceSet.contains(descriptor.stableId)) {
+                qWarning() << "Ignoring duplicate vanilla instance ID" << descriptor.stableId;
+                continue;
+            }
+            out.append(descriptor.stableId);
+            m_instanceRoots.insert(descriptor.stableId, storeRoot);
+            m_instancePaths.insert(descriptor.stableId, descriptor.root);
+            if (!descriptor.group.isEmpty())
+                m_foreignGroupIndex.insert(descriptor.stableId, descriptor.group);
+            instanceSet.insert(descriptor.stableId);
+        }
+    }
     m_instancesProbed = true;
     return out;
 }
@@ -508,7 +587,7 @@ InstanceList::InstListError InstanceList::loadList()
             existingIds.remove(id);
             qInfo() << "Should keep and soft-reload" << id;
         } else {
-            std::unique_ptr<BaseInstance> instPtr = loadInstance(id);
+            std::unique_ptr<BaseInstance> instPtr = loadInstance(id, m_instanceRoots.value(id));
             if (instPtr) {
                 newList.push_back(std::move(instPtr));
             }
@@ -659,14 +738,25 @@ void InstanceList::propertiesChanged(BaseInstance* inst)
     }
 }
 
-std::unique_ptr<BaseInstance> InstanceList::loadInstance(const InstanceId& id)
+std::unique_ptr<BaseInstance> InstanceList::loadInstance(const InstanceId& id, const QString& instanceRoot)
 {
     if (!m_groupsLoaded) {
         loadGroupList();
     }
 
-    auto instanceRoot = FS::PathCombine(m_instDir, id);
-    auto instanceSettings = std::make_unique<INISettingsObject>(FS::PathCombine(instanceRoot, "instance.cfg"));
+    const auto root = instanceRoot.isEmpty() ? m_instanceRoots.value(id, m_instDir) : instanceRoot;
+    auto instancePath = m_instancePaths.value(id, FS::PathCombine(root, id));
+    if (m_instancePaths.contains(id)) {
+        for (const auto& [storeId, storeRoot] : m_vanillaStores) {
+            for (const auto& descriptor : VanillaCompatibleProvider::scan(storeId, storeRoot)) {
+                if (descriptor.stableId != id) continue;
+                const auto settingsPath = QDir(instancePath).filePath(QStringLiteral("luna.settings.json"));
+                auto settings = std::make_unique<JSONSettingsObject>(settingsPath);
+                return std::make_unique<VanillaInstance>(m_globalSettings, std::move(settings), descriptor);
+            }
+        }
+    }
+    auto instanceSettings = std::make_unique<INISettingsObject>(FS::PathCombine(instancePath, "instance.cfg"));
     std::unique_ptr<BaseInstance> inst;
 
     instanceSettings->registerSetting("InstanceType", "");
@@ -676,12 +766,12 @@ std::unique_ptr<BaseInstance> InstanceList::loadInstance(const InstanceId& id)
     // NOTE: Some launcher versions didn't save the InstanceType properly. We will just bank on the probability that this is probably a
     // OneSix instance
     if (inst_type == "OneSix" || inst_type.isEmpty()) {
-        inst.reset(new MinecraftInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
+        inst.reset(new MinecraftInstance(m_globalSettings, std::move(instanceSettings), instancePath));
     } else if (inst_type == "Server") {
         // Luna feature: keep server instances loadable after upstream syncs.
-        inst.reset(new ServerInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
+        inst.reset(new ServerInstance(m_globalSettings, std::move(instanceSettings), instancePath));
     } else {
-        inst.reset(new NullInstance(m_globalSettings, std::move(instanceSettings), instanceRoot));
+        inst.reset(new NullInstance(m_globalSettings, std::move(instanceSettings), instancePath));
     }
     qDebug() << "Loaded instance" << inst->name() << "from" << inst->instanceRoot();
 
@@ -902,6 +992,8 @@ void InstanceList::on_InstFolderChanged(const Setting& setting, QVariant value)
             m_watcher->removePath(m_instDir);
         }
         m_instDir = newInstDir;
+        if (!m_instDirs.isEmpty())
+            m_instDirs[0] = newInstDir;
         if (m_watcher && !m_watcher->addPath(m_instDir)) {
             qWarning() << "Could not watch new instance folder" << m_instDir;
         }
@@ -939,9 +1031,10 @@ class InstanceStaging : public Task {
     const unsigned maxBackoff = 16;
 
    public:
-    InstanceStaging(InstanceList* parent, InstanceTask* child, SettingsObject* settings) : m_parent(parent), backoff(minBackoff, maxBackoff)
+    InstanceStaging(InstanceList* parent, InstanceTask* child, SettingsObject* settings, QString instanceDirectory = {})
+        : m_parent(parent), m_instanceDirectory(std::move(instanceDirectory)), backoff(minBackoff, maxBackoff)
     {
-        m_stagingPath = parent->getStagedInstancePath();
+        m_stagingPath = m_instanceDirectory.isEmpty() ? parent->getStagedInstancePath() : parent->getStagedInstancePath(m_instanceDirectory);
 
         m_child.reset(child);
 
@@ -999,7 +1092,10 @@ class InstanceStaging : public Task {
     void childSucceeded()
     {
         unsigned sleepTime = backoff();
-        if (m_parent->commitStagedInstance(m_stagingPath, *m_child, m_child->group(), *m_child)) {
+        const bool committed = m_instanceDirectory.isEmpty()
+            ? m_parent->commitStagedInstance(m_stagingPath, *m_child, m_child->group(), *m_child)
+            : m_parent->commitStagedInstance(m_stagingPath, *m_child, m_child->group(), *m_child, m_instanceDirectory);
+        if (committed) {
             m_backoffTimer.stop();
             emitSucceeded();
             return;
@@ -1029,6 +1125,7 @@ class InstanceStaging : public Task {
 
    private:
     InstanceList* m_parent;
+    QString m_instanceDirectory;
     /*
      * WHY: the whole reason why this uses an exponential backoff retry scheme is antivirus on Windows.
      * Basically, it starts messing things up while the launcher is extracting/creating instances
@@ -1045,9 +1142,20 @@ Task* InstanceList::wrapInstanceTask(InstanceTask* task)
     return new InstanceStaging(this, task, m_globalSettings);
 }
 
+Task* InstanceList::wrapInstanceTask(InstanceTask* task, const QString& instanceDirectory)
+{
+    const auto normalized = QDir(instanceDirectory).absolutePath();
+    return new InstanceStaging(this, task, m_globalSettings, normalized);
+}
+
 QString InstanceList::getStagedInstancePath()
 {
-    const QString tempRoot = FS::PathCombine(m_instDir, ".tmp");
+    return getStagedInstancePath(m_instDir);
+}
+
+QString InstanceList::getStagedInstancePath(const QString& instanceDirectory)
+{
+    const QString tempRoot = FS::PathCombine(instanceDirectory, ".tmp");
 
     QString result;
     int tries = 0;
@@ -1076,6 +1184,19 @@ bool InstanceList::commitStagedInstance(const QString& path,
     if (groupName.isEmpty() && !groupName.isNull())
         groupName = QString();
 
+    return commitStagedInstance(path, instanceName, std::move(groupName), commiting, m_instDir);
+}
+
+bool InstanceList::commitStagedInstance(const QString& path,
+                                        const InstanceName& instanceName,
+                                        QString groupName,
+                                        const InstanceTask& commiting,
+                                        const QString& instanceDirectory)
+{
+    const auto targetRoot = QDir(instanceDirectory).absolutePath();
+    if (targetRoot.isEmpty() || !QDir().mkpath(targetRoot))
+        return false;
+
     QString instID;
 
     auto should_override = commiting.shouldOverride();
@@ -1083,14 +1204,16 @@ bool InstanceList::commitStagedInstance(const QString& path,
     if (should_override) {
         instID = commiting.originalInstanceID();
     } else {
-        instID = FS::DirNameFromString(instanceName.modifiedName(), m_instDir);
+        instID = FS::DirNameFromString(instanceName.modifiedName(), targetRoot);
     }
 
     Q_ASSERT(!instID.isEmpty());
 
     {
-        WatchLock lock(m_watcher, m_instDir);
-        QString destination = FS::PathCombine(m_instDir, instID);
+        std::unique_ptr<WatchLock> lock;
+        if (targetRoot == m_instDir)
+            lock = std::make_unique<WatchLock>(m_watcher, m_instDir);
+        QString destination = FS::PathCombine(targetRoot, instID);
 
         if (should_override) {
             if (!FS::overrideFolder(destination, path)) {
@@ -1108,12 +1231,22 @@ bool InstanceList::commitStagedInstance(const QString& path,
         }
 
         instanceSet.insert(instID);
+        if (targetRoot != m_instDir)
+            m_instanceRoots.insert(instID, targetRoot);
 
         emit instancesChanged();
         emit instanceSelectRequest(instID);
     }
 
-    saveGroupList();
+    if (targetRoot == m_instDir)
+        saveGroupList();
+    else {
+        // A destination selected in the creation dialog may not be one of
+        // the watched roots yet. Reload the model immediately so the newly
+        // committed instance becomes visible without waiting for a watcher.
+        m_dirty = true;
+        loadList();
+    }
     return true;
 }
 

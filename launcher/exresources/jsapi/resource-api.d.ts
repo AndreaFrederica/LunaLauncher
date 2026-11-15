@@ -329,6 +329,15 @@ interface ApiMetadata {
 
     /** 优先级（用于排序，数字越大优先级越高） */
     priority?: number;
+
+    /** API 类别；mirror API may implement rewriteUrl instead of a resource API. */
+    kind?: "resource" | "mirror" | string;
+
+    /** Mirror rules marked as basic are used only when no advanced rule handles the URL. */
+    baseRule?: boolean;
+
+    /** Resource categories handled by a mirror rule. An empty list means all categories. */
+    categories?: string[];
 }
 
 // ============================================================================
@@ -409,6 +418,21 @@ interface ResourceAPI {
      * @returns 排序方法数组
      */
     getSortingMethods(): SortingMethod[];
+
+    /** Rewrite a download URL, or return null when this API does not handle it. */
+    rewriteUrl?(url: string, context: {
+        mirrorType: string;
+        mirrorTypeId: number;
+        mojangBase?: string;
+        librariesBase?: string;
+        assetsBase?: string;
+        fabricMetaBase?: string;
+        quiltMetaBase?: string;
+        fmlLibsBase?: string;
+        authlibInjectorBase?: string;
+        modrinthCdnBase?: string;
+        [key: string]: any;
+    }): string | null | string[] | { url: string; probeUrl?: string; priority?: number; category?: string }[];
 }
 
 // ============================================================================

@@ -47,6 +47,8 @@ class InstanceImportTask : public InstanceTask {
    public:
     explicit InstanceImportTask(const QUrl& sourceUrl, QWidget* parent = nullptr, QMap<QString, QString>&& extra_info = {});
     virtual ~InstanceImportTask() = default;
+    void preserveVanillaSource(bool value) { m_preserveVanillaSource = value; }
+    QString vanillaSource() const { return m_vanillaSource; }
     bool abort() override;
     QList<Task*> getSubTasks() const override;
 
@@ -65,6 +67,7 @@ class InstanceImportTask : public InstanceTask {
    private slots:
     void processZipPack();
     void extractFinished();
+    void extractedFilesPrepared();
 
    private: /* data */
     QUrl m_sourceUrl;
@@ -74,6 +77,8 @@ class InstanceImportTask : public InstanceTask {
     bool m_pclWrapperDetected = false;
     QString m_archivePassphrase;
     QString m_pclPlainVersion;
+    bool m_preserveVanillaSource = false;
+    QString m_vanillaSource;
     Task::Ptr m_task;
     enum class ModpackType {
         Unknown,

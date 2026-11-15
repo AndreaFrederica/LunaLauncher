@@ -48,6 +48,10 @@
 #include "net/Download.h"
 #include "net/HttpMetaCache.h"
 
+namespace Net {
+class PclDownloadTask;
+}
+
 class NetJob : public ConcurrentTask {
     Q_OBJECT
 
@@ -85,6 +89,7 @@ class NetJob : public ConcurrentTask {
 
    private:
     bool canDelegateWholeQueueToAria2() const;
+    bool canDelegateWholeQueueToPcl() const;
     void updateDownloadSpeed(const QUuid& taskId, qint64 downloadedBytes);
     void refreshConfiguredConcurrency();
 
@@ -99,6 +104,8 @@ class NetJob : public ConcurrentTask {
     qint64 m_lastSpeedSampleBytes = 0;
     bool m_dynamicMaxConcurrent = false;
     bool m_aria2Delegated = false;
+    bool m_pclDelegated = false;
+    QList<Net::PclDownloadTask*> m_pclBatchTasks;
 
     static QSet<NetJob*> s_dynamicJobs;
 };

@@ -48,6 +48,9 @@ class ResourcePage : public QWidget, public BasePage {
     //: The singular version of 'resources'
     virtual inline QString resourceString() const { return tr("resource"); }
 
+    /** Whether this page represents mods and should expose MC百科 metadata. */
+    virtual bool supportsMcModLinks() const { return false; }
+
     /* Features this resource's page supports */
     virtual bool supportsFiltering() const = 0;
 

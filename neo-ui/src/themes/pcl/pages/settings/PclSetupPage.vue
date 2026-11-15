@@ -19,6 +19,10 @@
             <PclAccountPage :accounts="accounts || []" :busy="busy" :execute="execute" embedded @changed="emit('changed')" />
           </div>
 
+          <div v-show="section === 'instance-stores'" class="pcl-settings-section">
+            <InstanceStoreWorkspace :execute="execute" variant="pcl" />
+          </div>
+
           <PclLaunchSettings v-show="section === 'launch'" :active="section === 'launch'" :t="t" :window-mode="windowMode" :window-options="windowOptions" :drafts="drafts" :val="val" :bool="bool" :num="num" :set-window-mode="setWindowMode" :save="save" />
 
           <PclMemorySettings v-show="section === 'memory'" :active="section === 'memory'" :t="t" :max-mem="maxMem" :memory-mode="memoryMode" :memory-used-percent="memoryUsedPercent" :memory-alloc-after-percent="memoryAllocAfterPercent" :memory-used-gib="memoryUsedGiB" :memory-total-gib="memoryTotalGiB" :drafts="drafts" :draft-number="draftNumber" :format-mib="formatMib" :on-memory-mode="onMemoryMode" :save="save" />
@@ -103,6 +107,7 @@ import PclIcon from '../../components/PclIcon.vue';
 import PclAccountPage from '../accounts/PclAccountPage.vue';
 import PclJavaPanel from './PclJavaPanel.vue';
 import PclAppearancePanel from './PclAppearancePanel.vue';
+import InstanceStoreWorkspace from '../../../../components/InstanceStoreWorkspace.vue';
 import type { PclNavGroup } from '../../types';
 import { hiddenPclFeatures, isPclFeatureHidden } from '../../composables/usePclFeatures';
 import { useRuntimeLifecycle } from '../../../../common/runtime/lifecycle-debug';
@@ -153,6 +158,7 @@ const launcherGroups: PclNavGroup[] = [
   ] },
   { label: t('pcl.auto2.ka992a7f81a'), items: [
     { id: 'accounts', label: t('pcl.auto2.k9823d89dbc'), icon: 'user', refresh: true },
+    { id: 'instance-stores', label: '实例目录', icon: 'layers', refresh: true },
     { id: 'ui', label: t('pcl.auto2.kcd4994e503'), icon: 'palette', refresh: true },
     { id: 'language', label: t('pcl.auto2.kcd99b225a0'), icon: 'earth', refresh: true },
     { id: 'misc', label: t('pcl.auto2.kb046fe277d'), icon: 'monitor-cog', refresh: true },
@@ -198,6 +204,8 @@ const mirrorOptions = [
   { label: t('pcl.auto2.k212e81e6d0'), value: 0 },
   { label: t('pcl.auto2.kf0aba8a42d'), value: 1 },
   { label: t('pcl.auto2.kfe7276cd17'), value: 2 },
+  { label: 'FastMinecraftMirror', value: 3 },
+  { label: 'HKMC Mirror (Main)', value: 4 },
 ];
 const downloadBackendOptions = [
   { label: t('pcl.auto2.ka626fe7700'), value: 0 },
@@ -1026,11 +1034,11 @@ provide(PclSetupContextKey, {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background: var(--pcl-c3);
-  color: #fff;
+  width: 56px;
+  height: 56px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pcl-text);
   font-size: calc(28px * var(--pcl-font-scale, 1));
   font-weight: 800;
 }

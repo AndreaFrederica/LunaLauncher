@@ -65,6 +65,7 @@ class QFile;
 class HttpMetaCache;
 class SettingsObject;
 class InstanceList;
+class InstanceStoreRegistry;
 class AccountList;
 class IconList;
 class QNetworkAccessManager;
@@ -139,6 +140,8 @@ class Application : public QApplication {
 
     InstanceList* instances() const { return m_instances.get(); }
 
+    InstanceStoreRegistry* instanceStores() const { return m_instanceStores.get(); }
+
     IconList* icons() const { return m_icons.get(); }
 
     MCEditTool* mcedit() const { return m_mcedit.get(); }
@@ -186,6 +189,14 @@ class Application : public QApplication {
     std::unique_ptr<DataMigrationTask> createDataMigrationTask(const QString& name, QString* errorMessage = nullptr) const;
     bool finishDataMigration(const QString& name, QString* errorMessage = nullptr);
     bool declineDataMigration(const QString& name, QString* errorMessage = nullptr);
+
+    /** Current and target directories for the portable/user data-location switch. */
+    QJsonObject dataLocationStatus() const;
+    QJsonArray instanceStoresStatus() const;
+    bool addOrUpdateInstanceStore(const QJsonObject& value, QString* errorMessage = nullptr);
+    bool removeInstanceStore(const QString& id, QString* errorMessage = nullptr);
+    std::unique_ptr<DataMigrationTask> createDataLocationTask(bool portable, QString* errorMessage = nullptr) const;
+    bool finishDataLocationSwitch(bool portable, QString* errorMessage = nullptr);
 
     /// this is the root of the 'installation'. Used for automatic updates
     const QString& root() { return m_rootPath; }
@@ -250,6 +261,9 @@ class Application : public QApplication {
 
    private:
     bool handleDataMigration(const QString& currentData, const QString& oldData, const QString& name, const QString& configFile) const;
+    QString defaultDataPath() const;
+    QString portableDataPath() const;
+    QString dataPathForMode(bool portable) const;
     bool createSetupWizard();
     void performMainStartupAction();
 
@@ -278,6 +292,7 @@ class Application : public QApplication {
 
     std::unique_ptr<SettingsObject> m_settings;
     std::unique_ptr<InstanceList> m_instances;
+    std::unique_ptr<InstanceStoreRegistry> m_instanceStores;
     std::unique_ptr<IconList> m_icons;
     std::unique_ptr<JavaInstallList> m_javalist;
     std::unique_ptr<TranslationsModel> m_translations;

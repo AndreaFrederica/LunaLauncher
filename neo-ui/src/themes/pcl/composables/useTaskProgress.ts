@@ -72,6 +72,9 @@ export function taskItemProgressText(item: any): string {
   if (state !== 'running') return states[state] || state;
   const total = taskItemTotal(item), current = taskItemCurrent(item);
   if (taskItemIsBytes(item)) return total > 0 ? `${formatTaskSize(current)} / ${formatTaskSize(total)}` : `${formatTaskSize(current)} / ${i18n.global.t('pcl.tasks.unknownSize')}`;
+  if (item?.progressUnit === 'files') return total > 0
+    ? `${current} / ${total} · ${Math.round(Math.min(1, current / total) * 100)}%`
+    : `${current} · ${i18n.global.t('tasks.states.running')}`;
   return total > 0 ? `${Math.round(Math.min(1, current / total) * 100)}%` : i18n.global.t('tasks.states.running');
 }
 export function taskProgressStats(task: any, inputRows?: any[]) {

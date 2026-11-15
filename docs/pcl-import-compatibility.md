@@ -135,15 +135,9 @@ Legacy Fabric 实例：主类为 `net.xiaoyu233.fml.relaunch.client.Main`，且�
 `net.xiaoyu233.fishmodloader:fishmodloader:<版本>`。FishModLoader 虽然内嵌了 Fabric Loader 与 Mixin 的衍生实现，
 但它不是可替换为标准 `net.fabricmc.fabric-loader` 组件的普通 Legacy Fabric 加载器。
 
-转换后组件按启动覆盖顺序拆分为：
+客户端核心保留现在属于[共用导入流程](foreign-instance-import.md)，不再依赖 MITE/FishModLoader 的名称。基础版本、实例 ID、客户端 JAR、加载器身份和完整运行配置分别解析。转换成 MMC 后，完整运行配置存入本地基础组件，修改后的客户端使用实例本地 `mainJar`，附带源字节的哈希；加载器组件记录识别出的身份。缺失或损坏的本地客户端会报错，不使用官方 JAR 自动替换。
 
-1. `net.minecraft`：使用 `Setup.ini` 的 `VersionOriginal`（例如 1.6.4）接入 Luna/Prism 的标准 Minecraft 元数据与下载。
-2. `org.lunalauncher.mite`：保留整合包提供的已修改 Minecraft 核心 JAR 和旧式游戏参数；MITE 是核心替换，不只是加载器。
-3. `net.xiaoyu233.fishmodloader`：保留 FishModLoader 入口类、运行库、Mixin/Fabric 运行时字段和 Java 约束。
-
-若版本 JSON 没有 `javaVersion`，Luna 会读取实际启动主类的 class 文件版本。例如 class major 61 会生成 Java 17 约束，
-不会沿用 Minecraft 1.6.4 通常使用的 Java 8。无法同时确认主类和 Maven 坐标时不做专用拆分，继续使用普通 ZIP 的单组件
-兼容路径，避免把其他自定义核心误识别成 MITE。
+若版本 JSON 没有 `javaVersion`，共用层检查实际入口类在客户端和包内库中的 class 文件版本。FishModLoader 的入口 class major 61 会保留 Java 17 要求，不沿用 Minecraft 1.6.4 的旧 Java 默认设置；这项检测也适用于其他自定义入口。
 
 PCL Logo 转换遵循 MMC/Prism 的普通自定义实例图标机制：导入时按图像内容生成稳定的 `iconKey`，把图片作为
 文件型图标安装，而不是让实例继续引用 PCL 的 WPF `pack://` URI。之后从 Luna 导出 MMC zip 时，现有导出器会把

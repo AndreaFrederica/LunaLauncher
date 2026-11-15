@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
   <div class="instance-settings-panel">
+    <section v-if="setting('VanillaGameDirectoryMode')" class="settings-card q-mb-md">
+      <h6>原版实例 · 游戏目录</h6>
+      <q-select dark outlined :model-value="text('VanillaGameDirectoryMode')" :options="[{label:'自动识别已有设置（无设置时默认隔离）',value:'auto'},{label:'隔离 · versions/版本名',value:'isolated'},{label:'非隔离 · 共享 .minecraft',value:'shared'}]" emit-value map-options label="目录模式" :disable="busy" @update:model-value="save('VanillaGameDirectoryMode',$event)"/>
+      <p>隔离模式独立保存存档、模组与设置；非隔离模式与同目录其他版本共享。切换不会搬动文件，游戏运行时不可修改。</p>
+    </section>
     <q-tabs v-model="tab" align="left" outside-arrows mobile-arrows>
       <q-tab name="runtime" :label="t('neo.auto2.kcffec64a65')" icon="memory"/><q-tab name="launch" :label="t('neo.auto2.kb7e6ed7cee')" icon="play_arrow"/><q-tab name="commands" :label="t('neo.auto2.k097a9395a2')" icon="terminal"/><q-tab name="console" :label="t('neo.auto2.k5bd086d22a')" icon="article"/><q-tab name="compat" :label="t('neo.auto2.kd3970a40c7')" icon="speed"/><q-tab name="downloads" :label="t('neo.auto2.k2c57ba02b3')" icon="download"/><q-tab name="advanced" :label="t('neo.auto2.ka087f65ef9')" icon="tune"/>
     </q-tabs>

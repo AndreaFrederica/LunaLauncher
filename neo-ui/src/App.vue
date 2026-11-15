@@ -1,9 +1,16 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
-<div v-if="editorInstanceId" class="pcl-standalone-root"><PclStandaloneInstanceEditor :instance-id="editorInstanceId" /></div>
-<div v-else-if="resourceDownloadInstance" class="pcl-standalone-root"><PclResourceDownloadWindow :instance-id="resourceDownloadInstance" :instance-name="resourceDownloadName" :kind="resourceDownloadKind" /></div>
+<div v-if="editorInstanceId" class="pcl-standalone-root">
+ <EndfieldStandaloneEditor v-if="isEndfieldShell" :instance-id="editorInstanceId" />
+ <PclStandaloneInstanceEditor v-else :instance-id="editorInstanceId" />
+</div>
+<div v-else-if="resourceDownloadInstance" class="pcl-standalone-root">
+ <EndfieldResourceDownloadWindow v-if="isEndfieldShell" :instance-id="resourceDownloadInstance" :instance-name="resourceDownloadName" :kind="resourceDownloadKind" />
+ <PclResourceDownloadWindow v-else :instance-id="resourceDownloadInstance" :instance-name="resourceDownloadName" :kind="resourceDownloadKind" />
+</div>
 <div v-else class="xmcl-app text-white">
-<NeoUiChrome :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
+<EndfieldShell v-if="isEndfieldShell" />
+<NeoUiChrome v-else :connected="connected" :busy="busy" :page="page" :instance-name="selected?.name" :is-pcl-shell="isPclShell" :instances="instances" :selected="selected" :icons="icons" @refresh="refresh" @tasks="taskCenterOpen=true" @search="openGlobalSearch" @navigate="navigate" @select="openInstance" @launch="launch" @back="()=>navigate('instances')" @add="addDialog=true">
 <div class="xmcl-content neo-page">
  <NeoPclPageHost v-show="isPclShell" :page="page" :route-animation="pclRouteAnimation" :instances="instances" :icons="icons" :selected="selected" :busy="busy" :notice="notice" :error="error" :accounts="accounts" :account-id="launchAccountId" :launch-state="launchUiState" :launch-progress="launchProgress" :launch-stage="launchStage" :launch-login-method="launchLoginMethod" :launch-speed="launchSpeed" :launch-details="launchDetails" :launch-children="launchChildren" :launch-error="launchError" :log-lines="consoleLines" :console-monitor-id="consoleMonitorId" :console-monitor-options="consoleMonitorOptions" :execute="catalogExecute" :settings="settings" :scope="settingScope()" :details="instanceDetails" :icon="selected ? icons[selected.id] : undefined" :components="components" :component-error="componentError" :notes="notes" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" :download-component-uid="downloadComponentUid" @select="selectPclInstance" @quick-launch="quickLaunchHome" @connect-server="quickConnect" @launch-instance="menuLaunch" @edit-instance="editInstance" @open-instance-folder="openInstanceFolder" @instance-action="instanceSelectionAction" @launch="selected && launch(selected, launchAccountId)" @cancel="cancel" @download="navigate('pcl-download')" @account-change="selectLaunchAccount" @account-page="navigate('accounts')" @open-folder="openFolder" @settings="openPclInstancePage" @refresh="refresh" @tasks="taskCenterOpen=true" @clear-log="clearConsole" @select-console-instance="selectConsoleInstance" @download-launch="navigate('instances')" @installed="onPclInstalled" @install-start="beginInstallProgress" @install-progress="installTask = $event" @install-done="endInstallProgress" @open-instance="openInstance" @changed="refresh" @cancel-login="cancelDeviceLogin" @manage-launch="selected && launch(selected)" @manage-open-folder="openFolder" @manage-settings="scope='instance';page='pcl-settings';refresh()" @delete="selected && askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @connect-console="selected && connectConsole(selected)" @clear-console="clearConsole" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(component,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:component.id,enabled})" @component-version="(component,version)=>installComponentVersion(component,version)" @browse="openComponentDownload" @export="exportInstance" @save-setting="(key,value)=>run('settings.set',{scope:'instance',instance:selected.id,key,value})" @action="workspaceAction" />
  <NeoXmclPageHost v-if="!isPclShell" :page="page" :instances="instances" :icons="icons" :selected="selected" :busy="busy" :execute="catalogExecute" :launch-queue="launchQueue" :details="instanceDetails" :icon="selected ? icons[selected.id] : undefined" :components="components" :component-error="componentError" :notes="notes" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" :creation="creation" :create-mode="createMode" :accounts="accounts" :settings="settings" :scope="settingScope()" @select="openInstance" @launch="launch" @batch-launch="launchMany" @add="addDialog=true" @refresh="refresh" @clear-queue="launchQueue=[]" @open-folder="openFolder" @settings="scope='instance';page='settings';refresh()" @delete="selected && askDelete('instance.delete',{instance:selected.id},selected.name)" @change-icon="changeIcon" @save-notes="run('instance.set-notes',{instance:selected.id,notes:$event})" @connect-console="selected && connectConsole(selected)" @clear-console="clearConsole" @read-log="(file)=>{logFile=file;readLogFile()}" @component-enabled="(component,enabled)=>run('instance.component.set-enabled',{instance:selected.id,component:component.id,enabled})" @component-version="(component,version)=>run('instance.component.set-version',{instance:selected.id,component:component.id,version})" @action="workspaceAction" @create="create" @installed="refresh" @changed="refresh" />
@@ -21,12 +28,12 @@
  @close="editWindows = editWindows.filter(item => item.key !== editWindow.key)"
  @changed="refresh"
 />
-<PclTaskCenter v-if="isPclShell" v-model="taskCenterOpen" :execute="call" />
+<PclTaskCenter v-if="isPclShell && !isEndfieldShell" v-model="taskCenterOpen" :execute="call" />
 <PclInstallProgressDialog v-model="installProgressOpen" :title="installProgressTitle" :task="installTask" :cancelling="installCancelling" @cancel="cancelInstallProgress" @close="closeInstallProgress" />
 <PclToastHost />
-<TaskInteractionDialog v-if="!editorInstanceId && !resourceDownloadInstance" :execute="call" :pcl="isPclShell" :legacy="legacyTaskInteraction" @legacy-finished="legacyTaskInteraction = null" />
+<TaskInteractionDialog v-if="!editorInstanceId && !resourceDownloadInstance && !isEndfieldShell" :execute="call" :pcl="isPclShell" :legacy="legacyTaskInteraction" @legacy-finished="legacyTaskInteraction = null" />
 <NeoUiSetupWizard v-if="startupState?.needsSetup && !editorInstanceId && !resourceDownloadInstance" :status="startupState" :execute="call" @changed="refresh" @complete="finishStartupSetup" />
-<NeoUiOverlays :add-dialog="addDialog" :busy="busy" :execute="catalogExecute" :call="call" :is-pcl-shell="isPclShell" :status="status" :task-snapshot="taskSnapshot" :task-center-open="taskCenterOpen" :search-shown="searchShown" :global-search="globalSearch" :search-results="searchResults" :icons="icons" :dialog="dialog" :prompt="prompt" :answer="answer" :choices="choices" :confirmation="confirmation" :secret="secret" @update:add-dialog="addDialog=$event" @created="refresh" @cancel="cancel" @task-updated="handleTaskUpdate" @update:task-center-open="taskCenterOpen=$event" @update:search-shown="searchShown=$event" @update:global-search="globalSearch=$event" @search-result="openSearchResult" @dialog-finish="finishDialog" @update:answer="answer=$event" />
+<NeoUiOverlays v-if="!isEndfieldShell" :add-dialog="addDialog" :busy="busy" :execute="catalogExecute" :call="call" :is-pcl-shell="isPclShell" :status="status" :task-snapshot="taskSnapshot" :task-center-open="taskCenterOpen" :search-shown="searchShown" :global-search="globalSearch" :search-results="searchResults" :icons="icons" :dialog="dialog" :prompt="prompt" :answer="answer" :choices="choices" :confirmation="confirmation" :secret="secret" @update:add-dialog="addDialog=$event" @created="refresh" @cancel="cancel" @task-updated="handleTaskUpdate" @update:task-center-open="taskCenterOpen=$event" @update:search-shown="searchShown=$event" @update:global-search="globalSearch=$event" @search-result="openSearchResult" @dialog-finish="finishDialog" @update:answer="answer=$event" />
 </div>
 </template>
 <script setup lang="ts">
@@ -46,6 +53,9 @@ import PclToastHost from './themes/pcl/components/PclToastHost.vue';
 import { showPclToast } from './themes/pcl/composables/usePclToast';
 import { initPclMusic } from './themes/pcl/composables/usePclMusic';
 import NeoUiChrome from './themes/xmcl-port/components/NeoUiChrome.vue';
+import EndfieldShell from './themes/endfield/pages/EndfieldShell.vue';
+import EndfieldStandaloneEditor from './themes/endfield/pages/EndfieldStandaloneEditor.vue';
+import EndfieldResourceDownloadWindow from './themes/endfield/pages/EndfieldResourceDownloadWindow.vue';
 import TaskInteractionDialog from './components/TaskInteractionDialog.vue';
 import NeoUiSetupWizard from './components/NeoUiSetupWizard.vue';
 import NeoUiOverlays from './themes/xmcl-port/components/NeoUiOverlays.vue';
@@ -65,8 +75,9 @@ const resourceDownloadInstance = launchQuery.get('resourceDownload') || '';
 const resourceDownloadKind = launchQuery.get('kind') || 'mods';
 const resourceDownloadName = launchQuery.get('name') || '';
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
+const isEndfieldShell = computed(() => neoUiPreferences.shell === 'endfield');
 useThemeRuntime('pcl', isPclShell);
-useThemeRuntime('xmcl', () => !isPclShell.value);
+useThemeRuntime('xmcl', () => !isPclShell.value && !isEndfieldShell.value);
 const downloadComponentUid = ref('');
 const quasar=useQuasar(),connected=ref(false);
 const launcherSession = useLauncherSessionStore();
@@ -307,9 +318,15 @@ let resourceRequest=0;
 let refreshGeneration=0;
 async function loadResources(refreshToken = refreshGeneration){const request=++resourceRequest;const id=selected.value.id,kind=resourceKind.value;resourceError.value='';resourcesLoading.value=true;try{const data=await call('resource.list',{instance:id,kind,includeIcons:false});if(request===resourceRequest&&refreshToken===refreshGeneration){if(!Array.isArray(data))throw new Error(t('app.resourceFormatError'));if(replaceArrayIfChanged(resources,data))recordRuntimeDebug('store','app.resources','resource list patched',{instance:id,kind,count:data.length});}}catch(e){if(request===resourceRequest&&refreshToken===refreshGeneration)resourceError.value=message(e);}finally{if(request===resourceRequest&&refreshToken===refreshGeneration)resourcesLoading.value=false;}}
 async function loadLogFiles(refreshToken = refreshGeneration){try{const files=await call('instance.log.list',{instance:selected.value.id});if(refreshToken===refreshGeneration&&replaceArrayIfChanged(logFiles,Array.isArray(files)?files:[]))recordRuntimeDebug('store','app.logs','log file list patched',{count:files?.length||0});}catch(e){if(refreshToken===refreshGeneration)error.value=message(e);}}
-async function refresh(){const refreshToken=++refreshGeneration;recordRuntimeDebug('refresh','App','refresh requested',{page:page.value,token:refreshToken});error.value='';try{if(page.value==='accounts'){const value=await call('account.list');if(refreshToken===refreshGeneration)launcherSession.replaceAccounts(value);}else if(page.value==='settings' || page.value==='pcl-settings'){const value=await call('settings.list',settingScope());if(refreshToken===refreshGeneration&&Array.isArray(value)&&!sameSnapshot(settings.value,value))replaceArrayIfChanged(settings,value);}else if(page.value==='manage'){await loadResources(refreshToken);await loadComponents(refreshToken);await loadLogFiles(refreshToken);if(selected.value){const value=await call('settings.list',{scope:'instance',instance:selected.value.id});if(refreshToken===refreshGeneration&&Array.isArray(value)&&!sameSnapshot(settings.value,value))replaceArrayIfChanged(settings,value);}}else {const value=await call('instance.list');if(refreshToken!==refreshGeneration)return;launcherSession.replaceInstances(value);await launcherSession.refreshIcons();if(refreshToken!==refreshGeneration)return;const accountValue=await call('account.list');if(refreshToken!==refreshGeneration)return;launcherSession.replaceAccounts(accountValue);if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value)launcherSession.selectInstance(rememberedInstance || instances.value[0] || null);if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}recordRuntimeDebug('refresh','App','refresh completed',{page:page.value,token:refreshToken});}catch(e){if(refreshToken===refreshGeneration){error.value=message(e);recordRuntimeDebug('error','App','refresh failed',message(e));}}}
+async function refresh(){const refreshToken=++refreshGeneration;recordRuntimeDebug('refresh','App','refresh requested',{page:page.value,token:refreshToken});error.value='';try{if(page.value==='accounts'){const value=await call('account.list');if(refreshToken===refreshGeneration)launcherSession.replaceAccounts(value);}else if(page.value==='settings' || page.value==='pcl-settings'){const [value,accountValue]=await Promise.all([call('settings.list',settingScope()),call('account.list')]);if(refreshToken===refreshGeneration){if(Array.isArray(value)&&!sameSnapshot(settings.value,value))replaceArrayIfChanged(settings,value);if(Array.isArray(accountValue))launcherSession.replaceAccounts(accountValue);}}else if(page.value==='manage'){await loadResources(refreshToken);await loadComponents(refreshToken);await loadLogFiles(refreshToken);if(selected.value){const value=await call('settings.list',{scope:'instance',instance:selected.value.id});if(refreshToken===refreshGeneration&&Array.isArray(value)&&!sameSnapshot(settings.value,value))replaceArrayIfChanged(settings,value);}}else {const value=await call('instance.list');if(refreshToken!==refreshGeneration)return;launcherSession.replaceInstances(value);await launcherSession.refreshIcons();if(refreshToken!==refreshGeneration)return;const accountValue=await call('account.list');if(refreshToken!==refreshGeneration)return;launcherSession.replaceAccounts(accountValue);if(isPclShell.value){const remembered=rememberedInstanceId();const rememberedInstance=instances.value.find((item:any)=>String(item.id)===remembered);if(!selected.value)launcherSession.selectInstance(rememberedInstance || instances.value[0] || null);if(selected.value)rememberInstance(selected.value);else clearRememberedInstance();}if(!launchInFlight && !['launched','failed','cancelled'].includes(launchUiState.value))setLaunchState(instances.value.length ? (selected.value ? 'launch' : 'disabled') : 'download');}recordRuntimeDebug('refresh','App','refresh completed',{page:page.value,token:refreshToken});}catch(e){if(refreshToken===refreshGeneration){error.value=message(e);recordRuntimeDebug('error','App','refresh failed',message(e));}}}
 async function navigate(id:string){
  if(preparingLaunch)return;
+ if(isPclShell.value && id==='manage'){
+  if(busy.value)return;
+  if(selected.value)await openInstance(selected.value);
+  else {page.value='manage';error.value='';notice.value='';}
+  return;
+ }
  if(id==='pcl-download')downloadComponentUid.value='';
  const target=!isPclShell.value && id==='pcl-download'?'store':!isPclShell.value && id==='pcl-tools'?'accounts':!isPclShell.value && id==='pcl-settings'?'settings':id;
  const persistentPclTabs = new Set(['instances','pcl-download','pcl-settings','pcl-tools']);
@@ -337,7 +354,21 @@ function openGlobalSearch(){globalSearch.value='';searchShown.value=true;}
 function openSearchResult(instance:any){searchShown.value=false;void openInstance(instance);}
 function xmclTab(tab:string){if(busy.value)return;if(tab==='home'){page.value='manage';return;}if(tab==='mods'||tab==='resourcepacks'||tab==='shaderpacks'){resourceKind.value=tab;page.value='manage';void loadResources();return;}if(tab==='save'){page.value='manage';return;}if(tab==='settings'){scope.value='instance';page.value='settings';void refresh();}}
 async function run(op:string,p:Record<string,unknown>={}){if(busy.value)return;busy.value=true;error.value='';notice.value='';device.value=null;try{await call(op,p);notice.value=t('app.operationDone');await refresh();}catch(e){error.value=message(e);}finally{busy.value=false;status.value='';device.value=null;taskSnapshot.value=null;taskCenterOpen.value=false;}}
-async function create(value: NeoCreationDraft & { type?: string }){const p:any={...value};for(const k of Object.keys(p))if(!p[k])delete p[k];await run(value.type==='import'?'instance.import':'instance.create',p);if(!error.value){page.value='instances';await refresh();}}
+async function create(value: NeoCreationDraft & { type?: string; url?: string; fileName?: string; sha1?: string; minecraftVersion?: string }){
+ const p:any={...value};for(const k of Object.keys(p))if(!p[k])delete p[k];
+ let operation=value.type==='import'?'instance.import':'instance.create';
+ if(value.type==='server' && p.url && p.fileName){
+  operation='server.distribution.create';
+  const serverParams:any={provider:p.serverProvider,url:p.url,fileName:p.fileName,sha1:p.sha1,minecraftVersion:p.minecraftVersion || p.version,name:p.name,group:p.group,icon:'server',arguments:['nogui']};
+  for(const k of Object.keys(serverParams))if(!serverParams[k])delete serverParams[k];
+  await run(operation,serverParams);
+ } else if(value.type==='server'){
+  if(!p.source){error.value='请选择服务端文件或使用 FastMirror 下载。';return;}
+  delete p.source;p.executable=value.source;p.arguments=['nogui'];
+  await run(operation,p);
+ } else await run(operation,p);
+ if(!error.value){page.value='instances';await refresh();}
+}
 async function onPclInstalled(result:any){
  await refresh();
  const created=instances.value.find((item:any)=>String(item.id)===String(result?.id || '')) || instances.value.find((item:any)=>item.name===result?.name);
@@ -386,8 +417,51 @@ async function changeIcon(iconKey?: string){
 }
 async function instanceAction(op:string,field:string|undefined,label:string){const p:any={instance:selected.value.id};if(field){const v=await ask(label,field==='group'?(selected.value.group||''):selected.value.name);if(v===null)return;p[field]=v;}await run('instance.'+op,p);}
 async function workspaceAction(op:string){const labels:Record<string,string>={rename:t('xmcl.instance.rename'),copy:t('xmcl.instance.copy'),group:t('xmcl.instance.group')};if(labels[op]){await instanceAction(op,op==='group'?'group':'name',labels[op]);return;}await instanceAction(op,undefined,op);}
+async function convertInstanceToPrism(instance:any){
+ if(!instance?.id)return;
+ try{
+  const info=await call('instance.info',{instance:instance.id});
+  const source=String(info?.root || instance.root || '').trim();
+  if(!source)throw new Error(t('app.operationFailed'));
+  const storeData=await call('instance-store.list');
+  const stores=(Array.isArray(storeData?.stores)?storeData.stores:[]).filter((store:any)=>
+   store?.format==='prism' && store.enabled===true && store.writable===true,
+  );
+  if(!stores.length){error.value=t('pcl.conversion.noStore');return;}
+  const storeId=await ask(
+   t('pcl.conversion.target'),
+   stores[0].id,
+   false,
+   stores.map((store:any)=>({label:`${store.name || store.id} — ${store.path}`,value:store.id})),
+  );
+  if(storeId===null)return;
+  const name=await ask(t('pcl.conversion.name'),instance.name || '');
+  if(name===null || !String(name).trim())return;
+  const group=await ask(t('pcl.conversion.group'),instance.group || '');
+  if(group===null)return;
+
+  busy.value=true;
+  status.value=t('app.executing');
+  let task:any=await call('neo.task.start',{
+   operation:'instance.convert.import',
+   priority:'normal',
+   parameters:{source,targetStoreId:storeId,name:String(name).trim(),group:String(group).trim(),copyGameContent:true},
+  });
+  window.dispatchEvent(new CustomEvent('luna-neo-task-started',{detail:task}));
+  while(task && !task.finished){
+   status.value=task.status || task.state || t('app.executing');
+   await new Promise(resolve=>setTimeout(resolve,350));
+   task=await call('neo.task.status',{taskId:task.taskId});
+  }
+  if(!task || task.state!=='succeeded')throw new Error(task?.error || t('app.operationFailed'));
+  notice.value=t('pcl.conversion.success');
+  await refresh();
+ }catch(exception){error.value=message(exception);}
+ finally{busy.value=false;status.value='';taskSnapshot.value=null;taskCenterOpen.value=false;}
+}
 async function instanceSelectionAction(instance:any,op:string){
  if(!instance?.id)return;
+ if(op==='convert'){await convertInstanceToPrism(instance);return;}
  if(op==='delete'){if(await ask(t('app.confirmRemove', { name: instance.name }),'',true))await run('instance.delete',{instance:instance.id,confirm:true});return;}
  const labels:Record<string,string>={rename:t('xmcl.instance.rename'),group:t('app.moveGroup'),copy:t('xmcl.instance.copy')};
  if(labels[op]){const field=op==='group'?'group':'name';const value=await ask(labels[op],field==='group'?(instance.group||''):(instance.name||''));if(value===null)return;await run(`instance.${op}`,{instance:instance.id,[field]:value});return;}
@@ -484,8 +558,9 @@ async function cancelDeviceLogin(){
 async function openDeviceBrowser(){const url=String(device.value?.url || '');if(!url)return;try{await call('desktop.open-url',{url});}catch(e){error.value=message(e);}}
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
- onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleMonitorId.value='';consoleState.value=t('app.backendExited');for(const item of instances.value)item.running=false;if(selected.value)selected.value.running=false;error.value=reason.message || t('app.backendDisconnected');});unlisten=await launcher.onEvent(async(raw:any)=>{recordRuntimeDebug('event','launcher-event','event received',{kind:raw?.kind,operation:raw?.operation});if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:t('app.executing'));if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole(`[${t('app.launchPrefix')}] ${messageText}`,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
- onUnmounted(()=>{stopLaunchProgressAnimation();if(pclRouteAnimationTimer)clearTimeout(pclRouteAnimationTimer);unlisten?.();unlistenStream?.();unlistenExit?.();});
+const openConversionTaskCenter = () => { taskCenterOpen.value = true; };
+ onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;window.addEventListener('luna-neo-task-started', openConversionTaskCenter);void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleMonitorId.value='';consoleState.value=t('app.backendExited');for(const item of instances.value)item.running=false;if(selected.value)selected.value.running=false;error.value=reason.message || t('app.backendDisconnected');});unlisten=await launcher.onEvent(async(raw:any)=>{recordRuntimeDebug('event','launcher-event','event received',{kind:raw?.kind,operation:raw?.operation});if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:t('app.executing'));if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole(`[${t('app.launchPrefix')}] ${messageText}`,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
+ onUnmounted(()=>{stopLaunchProgressAnimation();if(pclRouteAnimationTimer)clearTimeout(pclRouteAnimationTimer);window.removeEventListener('luna-neo-task-started', openConversionTaskCenter);unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>
 <style scoped>
 .pcl-device-dialog{width:520px;max-width:94vw;background:var(--pcl-c6)!important}

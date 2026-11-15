@@ -1,0 +1,42 @@
+[package]
+name = "luna-installer-shell"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MPL-2.0"
+description = "Standalone egui installer and self-extracting archive shell for LunaLauncher"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+directories = "6.0"
+eframe = "0.33"
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3.23"
+zip = { version = "2.4", default-features = false, features = ["deflate", "time"] }
+raw-window-handle = "0.6"
+rfd = "0.16"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+winreg = "0.56"
+
+[build-dependencies]
+embed-resource = "3.0"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "z"
+panic = "abort"
+strip = true

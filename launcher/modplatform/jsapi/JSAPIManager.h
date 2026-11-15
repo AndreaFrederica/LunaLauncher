@@ -9,6 +9,7 @@
 #include "JSResourceAPI.h"
 #include "modplatform/ModIndex.h"
 #include <QObject>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <memory>
@@ -48,6 +49,21 @@ public:
      */
     QList<std::shared_ptr<JSResourceAPI>> getAllAPIs() const;
 
+    /** Return APIs in the user-configured order. Disabled APIs are omitted by default. */
+    QList<std::shared_ptr<JSResourceAPI>> getOrderedAPIs(bool includeDisabled = false) const;
+
+    /** Whether an API is enabled after applying user overrides. */
+    bool isApiEnabled(const QString& id) const;
+
+    /** User-configured order and disabled IDs, used by settings UIs. */
+    QStringList configuredOrder() const { return m_orderedIds; }
+    QStringList disabledIds() const { return m_disabledIds; }
+    QStringList disabledCategories(const QString& id) const { return m_disabledCategories.value(id); }
+
+    /** Persist and apply user overrides without requiring a restart. */
+    void setConfiguration(const QStringList& order, const QStringList& disabled,
+                          const QHash<QString, QStringList>& disabledCategories = {});
+
     /**
      * 根据资源类型获取可用的 API
      */
@@ -62,6 +78,12 @@ public:
      * 根据提供商获取 API
      */
     QList<std::shared_ptr<JSResourceAPI>> getAPIsByProvider(const QString& provider) const;
+
+    /** Let registered mirror APIs rewrite a URL. APIs are tried by priority. */
+    QString rewriteUrl(const QString& url, const QJsonObject& context) const;
+
+    /** Return every candidate declared by the enabled mirror APIs. */
+    QList<MirrorUrlCandidate> rewriteUrls(const QString& url, const QJsonObject& context) const;
 
     /**
      * 重新加载所有 API
@@ -87,4 +109,9 @@ private:
 
     QList<std::shared_ptr<JSResourceAPI>> m_apis;
     QStringList m_loadedFiles;
+    QStringList m_orderedIds;
+    QStringList m_disabledIds;
+    QHash<QString, QStringList> m_disabledCategories;
+
+    void loadConfiguration();
 };

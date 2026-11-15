@@ -71,6 +71,9 @@
 #include "Exception.h"
 #include "icons/IconList.h"
 #include "minecraft/PackProfile.h"
+#include "minecraft/OneSixVersionFormat.h"
+#include "minecraft/update/LibrariesTask.h"
+#include "VanillaInstance.h"
 #include "minecraft/auth/AccountList.h"
 
 #include "meta/CleanroomMeta.h"
@@ -143,9 +146,35 @@ QMenu* VersionPage::createPopupMenu()
     return filteredMenu;
 }
 
-VersionPage::VersionPage(MinecraftInstance* inst, QWidget* parent) : QMainWindow(parent), ui(new Ui::VersionPage), m_inst(inst)
+VersionPage::VersionPage(MinecraftInstance* inst, bool readOnly, QWidget* parent)
+    : QMainWindow(parent), ui(new Ui::VersionPage), m_inst(inst), m_vanilla(dynamic_cast<VanillaInstance*>(inst)), m_readOnly(readOnly)
 {
     ui->setupUi(this);
+
+    if (m_vanilla) {
+        // Foreign HMCL/PCL instances expose two safe mutations through the
+        // Luna sidecar: enabling/disabling the detected standard loader and
+        // changing that loader's version. Custom patches, manual JAR
+        // replacement and component ordering remain launcher-owned data.
+        for (auto* action : { ui->actionInstall_Loader, ui->actionAdd_Empty,
+                              ui->actionMove_up, ui->actionMove_down,
+                              ui->actionAdd_to_Minecraft_jar, ui->actionReplace_Minecraft_jar,
+                              ui->actionImport_Components, ui->actionAdd_Agents,
+                              ui->actionEdit, ui->actionCustomize, ui->actionRevert })
+            action->setEnabled(false);
+    } else if (m_readOnly) {
+        // External HMCL/PCL/Mojang instances expose their resolved component
+        // graph for inspection. Mutating Prism component metadata would only
+        // affect the component graph stored beside the external instance, so
+        // keep those controls disabled only while the page is read-only.
+        for (auto* action : { ui->actionChange_version, ui->actionInstall_Loader, ui->actionAdd_Empty,
+                              ui->actionRemove, ui->actionMove_up, ui->actionMove_down,
+                              ui->actionAdd_to_Minecraft_jar, ui->actionReplace_Minecraft_jar,
+                              ui->actionImport_Components, ui->actionAdd_Agents,
+                              ui->actionEdit, ui->actionCustomize, ui->actionRevert,
+                              ui->actionDownload_All })
+            action->setEnabled(false);
+    }
 
     ui->toolBar->insertSpacer(ui->actionReload);
 
@@ -176,7 +205,19 @@ VersionPage::VersionPage(MinecraftInstance* inst, QWidget* parent) : QMainWindow
     preselect(0);
     connect(ui->packageView, &ModListView::customContextMenuRequested, this, &VersionPage::showContextMenu);
     connect(ui->packageView, &QAbstractItemView::activated, this, [this](const QModelIndex& index) {
+        if (m_readOnly)
+            return;
         auto component = m_profile->getComponent(index.row());
+        if (m_vanilla && component->getID() != QStringLiteral("net.minecraft") && component->isKnownModloader()) {
+            QString error;
+            if (!m_vanilla->setForeignLoaderEnabled(!component->isEnabled(), &error)) {
+                QMessageBox::warning(this, tr("Loader"), error);
+                return;
+            }
+            reloadPackProfile();
+            m_container->refreshContainer();
+            return;
+        }
         component->setEnabled(!component->isEnabled());
     });
     connect(ui->filterEdit, &QLineEdit::textChanged, this, &VersionPage::onFilterTextChanged);
@@ -247,13 +288,21 @@ void VersionPage::updateButtons(int row)
                     Qt::UniqueConnection);
         }
     }
-    ui->actionRemove->setEnabled(patch && patch->isRemovable());
-    ui->actionMove_down->setEnabled(patch && patch->isMoveable());
-    ui->actionMove_up->setEnabled(patch && patch->isMoveable());
-    ui->actionChange_version->setEnabled(patch && patch->isVersionChangeable(false));
-    ui->actionEdit->setEnabled(patch && patch->isCustom());
-    ui->actionCustomize->setEnabled(patch && patch->isCustomizable());
-    ui->actionRevert->setEnabled(patch && patch->isRevertible());
+    const bool foreignLoader = m_vanilla && patch && patch->getID() != QStringLiteral("net.minecraft") && patch->isKnownModloader();
+    ui->actionRemove->setEnabled(!m_readOnly && patch && (m_vanilla ? foreignLoader : patch->isRemovable()));
+    ui->actionMove_down->setEnabled(!m_readOnly && !m_vanilla && patch && patch->isMoveable());
+    ui->actionMove_up->setEnabled(!m_readOnly && !m_vanilla && patch && patch->isMoveable());
+    // The version list for a foreign loader is created lazily and may still
+    // be empty while its asynchronous metadata request is pending.  The
+    // version dialog owns that load lifecycle, so only require the list to
+    // exist here; otherwise the external Forge/Fabric/NeoForge row remains
+    // permanently disabled until some unrelated metadata request happened.
+    const bool canChangeVersion = patch && (!m_vanilla || foreignLoader)
+        && (foreignLoader ? patch->getVersionList() != nullptr : patch->isVersionChangeable(false));
+    ui->actionChange_version->setEnabled(!m_readOnly && canChangeVersion);
+    ui->actionEdit->setEnabled(!m_readOnly && patch && patch->isCustom());
+    ui->actionCustomize->setEnabled(!m_readOnly && patch && patch->isCustomizable());
+    ui->actionRevert->setEnabled(!m_readOnly && patch && patch->isRevertible());
 }
 
 bool VersionPage::reloadPackProfile()
@@ -286,6 +335,22 @@ void VersionPage::on_actionRemove_triggered()
     }
     int index = ui->packageView->currentIndex().row();
     auto component = m_profile->getComponent(index);
+    if (m_vanilla && component->getID() != QStringLiteral("net.minecraft") && component->isKnownModloader()) {
+        const auto response = QMessageBox::question(this, tr("Disable loader"),
+                                                    tr("Disable %1 for this HMCL/PCL instance? The original launcher profile will remain unchanged.")
+                                                        .arg(component->getName()),
+                                                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (response != QMessageBox::Yes)
+            return;
+        QString error;
+        if (!m_vanilla->setForeignLoaderEnabled(false, &error)) {
+            QMessageBox::critical(this, tr("Disable loader"), error);
+            return;
+        }
+        reloadPackProfile();
+        m_container->refreshContainer();
+        return;
+    }
     if (component->isCustom()) {
         auto response = CustomMessageBox::selectable(this, tr("Confirm Removal"),
                                                      tr("You are about to remove \"%1\".\n"
@@ -405,10 +470,10 @@ void VersionPage::on_actionChange_version_triggered()
         return;
     }
     auto list = patch->getVersionList();
-    list->clearExternalRecommends();
     if (!list) {
         return;
     }
+    list->clearExternalRecommends();
     auto uid = list->uid();
 
     // recommend the correct lwjgl version for the current minecraft version
@@ -439,6 +504,46 @@ void VersionPage::on_actionChange_version_triggered()
         return;
 
     qDebug() << "Change" << uid << "to" << vselect.selectedVersion()->descriptor();
+
+    // Foreign HMCL/PCL instances keep their authoritative version metadata in
+    // the original directory. The shared compatibility writer updates that
+    // JSON in the standard patch format so HMCL, PCL and Luna all see the same
+    // loader profile.
+    if (m_vanilla && patch->isKnownModloader() && uid != QStringLiteral("net.minecraft")) {
+        const auto selectedVersion = vselect.selectedVersion()->descriptor();
+        auto metaVersion = APPLICATION->metadataIndex()->getLoadedVersion(uid, selectedVersion);
+        if (!metaVersion || !metaVersion->data()) {
+            QMessageBox::critical(this, tr("Error"), tr("Could not load the selected loader profile."));
+            return;
+        }
+
+        const auto profile = OneSixVersionFormat::versionFileToJson(metaVersion->data()).object();
+        QString error;
+        if (!m_vanilla->setForeignLoaderProfile(selectedVersion, profile, &error)) {
+            QMessageBox::critical(this, tr("Error"),
+                                  error.isEmpty() ? tr("Could not save the loader override.") : error);
+            return;
+        }
+
+        reloadPackProfile();
+        // HMCL/PCL use ForgeWrapper, which locates the Forge installer in the
+        // external instance's libraries directory. Resolve/download the
+        // selected profile first, then materialize its mavenFiles beside the
+        // foreign JSON so another launcher can start it immediately.
+        {
+            auto task = makeShared<LibrariesTask>(m_vanilla);
+            ProgressDialog dialog(this);
+            if (dialog.execWithTask(task.get()) != QDialog::Accepted) {
+                if (!task->failReason().isEmpty())
+                    QMessageBox::warning(this, tr("Loader dependencies"), task->failReason());
+            } else if (!m_vanilla->materializeForeignMavenFiles(&error) && !error.isEmpty()) {
+                QMessageBox::warning(this, tr("Loader dependencies"), error);
+            }
+        }
+        m_container->refreshContainer();
+        return;
+    }
+
     bool important = false;
     if (uid == "net.minecraft") {
         important = true;

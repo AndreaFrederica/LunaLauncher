@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <template>
  <section class="catalog">
-  <div class="row q-col-gutter-sm q-my-sm"><q-select class="col-12 col-sm-4" dark outlined v-model="provider" :options="providers" :label="t('neo.auto2.kf92ab4a0b5')" :disable="busy" @update:model-value="reset"/><q-input class="col" dark outlined v-model="query" :label="t('neo.auto2.ka5b1e00f8a')" @keyup.enter="search(0)"/><q-btn class="q-ml-sm" color="primary" :label="t('neo.auto2.kf04090805c')" :disable="busy" @click="search(0)"/></div>
+  <div class="row q-col-gutter-sm q-my-sm"><q-select class="col-12 col-sm-4" dark outlined v-model="provider" :options="providers" :label="t('neo.auto2.kf92ab4a0b5')" :disable="busy || providerRefreshing" @update:model-value="reset"/><q-input class="col" dark outlined v-model="query" :label="t('neo.auto2.ka5b1e00f8a')" @keyup.enter="search(0)"/><q-btn class="q-ml-sm" color="primary" :label="t('neo.auto2.kf04090805c')" :disable="busy" @click="search(0)"/><q-btn flat icon="folder_open" :label="t('resource.providerDirectory')" :disable="busy || providerRefreshing" @click="openProviderDirectory"/><q-btn flat icon="refresh" :label="providerRefreshing ? t('resource.providerRefreshing') : t('resource.providerRefresh')" :disable="busy || providerRefreshing" @click="refreshProviders"/></div>
   <div v-if="packs && provider==='atlauncher'" class="row q-gutter-sm q-mb-md"><q-input class="col" dark outlined v-model="shareCode" :label="t('neo.auto2.k65d42e4d5e')"/><q-btn :label="t('neo.auto2.ke0f621190f')" :disable="busy || !shareCode" @click="resolveShare"/></div>
   <div v-if="packs && provider==='ftb'" class="row q-gutter-sm q-mb-md"><q-input class="col" dark outlined v-model="ftbPath" :label="t('neo.auto2.ke3216abf49')"/><q-btn :label="t('neo.auto2.kd375d8fa13')" :disable="busy" @click="loadFtbLocal"/></div>
   <div v-if="packs && provider==='legacy-ftb'" class="row q-gutter-sm q-mb-md"><q-input class="col" dark outlined v-model="privateCode" :label="t('neo.auto2.k4a959c4137')"/><q-btn :label="t('neo.auto2.kd06848a2cf')" :disable="busy || !privateCode" @click="savePrivateCode"/></div>
@@ -27,21 +27,36 @@ const { t } = useI18n();
 import { ref, watch, computed } from 'vue';
 const props=defineProps<{packs?:boolean;instance?:string;kind?:string;minecraftVersion?:string;busy:boolean;execute:(op:string,p:Record<string,unknown>)=>Promise<any>;defaultProvider?:string;sort?:string;tag?:string}>();
 const emit=defineEmits<{installed:[]}>();
-const providers=computed(()=>props.packs?['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb']:['modrinth','curseforge']);
+const staticProviders=props.packs?['modrinth','curseforge','atlauncher','ftb','technic','legacy-ftb']:['modrinth','curseforge'];
+const providers=ref<string[]>(staticProviders), providerCatalog=ref<any[]>([]), providerRefreshing=ref(false);
 const provider=ref<any>(props.defaultProvider||'modrinth'),query=ref<any>(''),results=ref<any[]>([]),project=ref<any>(null),versions=ref<any[]>([]),version=ref<any>(''),error=ref<any>(''),gameVersion=ref<any>(props.minecraftVersion||''),loader=ref<any>(''),instanceName=ref<any>(''),optional=ref(false),offset=ref(0),searched=ref(false),shareCode=ref<any>(''),ftbPath=ref<any>(''),privateCode=ref<any>('');
 watch(()=>[props.instance,props.kind,props.packs],reset);watch(()=>props.defaultProvider,v=>{if(v){provider.value=v;reset();}});
 function reset(){results.value=[];project.value=null;versions.value=[];version.value='';searched.value=false;error.value='';gameVersion.value=props.minecraftVersion||'';}
+function providerMeta(source = provider.value) { return providerCatalog.value.find(entry => String(entry?.id) === String(source)) || null; }
 function imageUrl(value:any, id:string){const raw=value?.raw||{};const candidate=value?.iconUrl||value?.icon||value?.logoUrl||value?.logo?.url||value?.logo||raw.iconUrl||raw.logoUrl||raw.logo?.url||raw.logo||raw.icon?.url||raw.icon; if(typeof candidate==='string'&&candidate.trim())return candidate;return provider.value==='modrinth'&&id?`https://cdn.modrinth.com/data/${encodeURIComponent(id)}/icon.png`:'';}
 function normalize(value:any){const id=String(value?.projectId||value?.slug||value?.id||'');return {...value,projectId:id,provider:provider.value,name:value.displayName||value.name||value.title||id,description:value.description||value.synopsis||value.summary||'',iconUrl:imageUrl(value,id)};}
 function versionLabel(value:any){const game=Array.isArray(value.minecraftVersions)?value.minecraftVersions.slice(0,2).join(', '):(value.minecraftVersion||'');return `${value.name||value.version||value.versionId}${game?` · ${game}`:''}`;}
 function params(){const p:Record<string,unknown>={provider:provider.value};if(!props.packs){p.kind=props.kind||'mods';if(gameVersion.value)p.minecraftVersion=gameVersion.value;if(loader.value)p.loaders=[loader.value];if(props.sort)p.sort=props.sort;}return p;}
 async function search(start:number){if(props.busy)return;error.value='';project.value=null;try{const queryText=[query.value,props.tag&&props.tag!==t('neo.auto2.k778fc8f994')?props.tag:''].filter(Boolean).join(' ');const r=await props.execute(props.packs?'modpack.search':'resource.search',{...params(),query:queryText,offset:start});const list=Array.isArray(r)?r:(r.results||r.projects||r.modpacks||[]);results.value=list.map(normalize);offset.value=start;searched.value=true;}catch(e){error.value=String(e);}}
 async function select(item:any){if(props.busy)return;error.value='';project.value=normalize(item);versions.value=[];version.value='';instanceName.value=item.name;try{const detail=await props.execute(props.packs?'modpack.project':'resource.project',{...params(),projectId:item.projectId});project.value={...project.value,...normalize(detail)};const r=await props.execute(props.packs?'modpack.versions':'resource.versions',{...params(),projectId:item.projectId});versions.value=Array.isArray(r)?r:(r.versions||[]);}catch(e){error.value=String(e);}}
-async function install(){if(props.busy)return;error.value='';try{await props.execute(props.packs?'modpack.install':'resource.install-with-dependencies',{...params(),projectId:project.value.projectId,versionId:version.value,...(props.packs?{name:instanceName.value}:{instance:props.instance,includeOptional:optional.value})});emit('installed');}catch(e){error.value=String(e);}}
+async function install(){if(props.busy)return;error.value='';try{const recursive=!props.packs && providerMeta()?.dependencyResolution === true;await props.execute(props.packs?'modpack.install':recursive?'resource.install-with-dependencies':'resource.install-version',{...params(),projectId:project.value.projectId,versionId:version.value,...(props.packs?{name:instanceName.value}:{instance:props.instance,includeOptional:optional.value})});emit('installed');}catch(e){error.value=String(e);}}
 async function resolveShare(){if(!shareCode.value)return;error.value='';try{const r=await props.execute('modpack.atlauncher.share-code',{code:shareCode.value});results.value=(r.packs||r.results||[r]).map(normalize);searched.value=true;}catch(e){error.value=String(e);}}
 async function loadFtbLocal(){error.value='';try{const r=await props.execute('modpack.ftb-local.list',{path:ftbPath.value});results.value=(r.instances||r||[]).map(normalize);searched.value=true;}catch(e){error.value=String(e);}}
 async function savePrivateCode(){error.value='';try{await props.execute('modpack.legacy-ftb.private-codes',{codes:[privateCode.value]});error.value=t('neo.auto2.kfb875f75e9');}catch(e){error.value=String(e);}}
 async function openExternal(url:string){try{await props.execute('desktop.open-url',{url});}catch{window.open(url,'_blank','noopener,noreferrer');}}
+async function loadProviders() {
+ try {
+  const result:any=await props.execute('resource.providers',{});
+  const list=Array.isArray(result)?result:[]; providerCatalog.value=list;
+  const kind=props.packs?'modpacks':(props.kind||'mods');
+  const dynamic=list.filter(entry=>Array.isArray(entry?.kinds)&&entry.kinds.includes(kind)).map(entry=>String(entry.id));
+  providers.value=[...new Set([...staticProviders,...dynamic])];
+  if(!providers.value.includes(provider.value)) provider.value=providers.value[0]||'';
+ } catch { /* Static providers remain available if discovery fails. */ }
+}
+async function openProviderDirectory(){try{await props.execute('resource.providers.open-directory',{});}catch(e){error.value=String(e);}}
+async function refreshProviders(){if(providerRefreshing.value)return;providerRefreshing.value=true;try{await props.execute('resource.providers.reload',{});await loadProviders();await search(0);}catch(e){error.value=String(e);}finally{providerRefreshing.value=false;}}
+watch(()=>[props.packs,props.kind],()=>{void loadProviders();},{immediate:true});
 </script>
 <style scoped>.catalog-project-hero{display:flex;align-items:center;gap:16px;margin:18px 0 10px}.catalog-project-hero h6{margin:3px 0;font-size:24px}.catalog-provider{color:#a5b4fc;font-size:11px;letter-spacing:.12em;text-transform:uppercase}.catalog-project-id,.catalog-result-meta{color:rgba(255,255,255,.4);font-size:11px}.catalog-description{color:rgba(255,255,255,.72);white-space:pre-wrap}.catalog-authors{color:rgba(255,255,255,.55);font-size:12px;margin-bottom:12px}.catalog-body{padding:14px;border-radius:10px;background:rgba(255,255,255,.045);color:rgba(255,255,255,.7);white-space:pre-wrap;max-height:240px;overflow:auto;margin-bottom:14px}.catalog-result-icon{background:rgba(255,255,255,.07)}
 </style>

@@ -37,7 +37,7 @@ class FlameAPI : public ResourceAPI {
 
     static inline bool validateModLoaders(ModPlatform::ModLoaderTypes loaders)
     {
-        return loaders & (ModPlatform::NeoForge | ModPlatform::Forge | ModPlatform::Fabric | ModPlatform::Quilt);
+        return loaders & (ModPlatform::NeoForge | ModPlatform::Forge | ModPlatform::Fabric | ModPlatform::Quilt | ModPlatform::Cleanroom);
     }
 
    private:
@@ -81,7 +81,9 @@ class FlameAPI : public ResourceAPI {
             case ModPlatform::Ornithe:
             case ModPlatform::Rift:
             case ModPlatform::Cleanroom:
-                break;  // not supported
+                // CurseForge has no Cleanroom loader ID; Cleanroom is a
+                // Forge-compatible 1.12 fork and uses Forge's category.
+                return 1;
         }
         return 0;
     }
@@ -89,7 +91,7 @@ class FlameAPI : public ResourceAPI {
     static const QStringList getModLoaderStrings(const ModPlatform::ModLoaderTypes types)
     {
         QStringList l;
-        for (auto loader : { ModPlatform::NeoForge, ModPlatform::Forge, ModPlatform::Fabric, ModPlatform::Quilt }) {
+        for (auto loader : { ModPlatform::NeoForge, ModPlatform::Forge, ModPlatform::Fabric, ModPlatform::Quilt, ModPlatform::Cleanroom }) {
             if (types & loader) {
                 l << QString::number(getMappedModLoader(loader));
             }

@@ -18,8 +18,19 @@
 
 #include "MirrorDownload.h"
 
+#include "Application.h"
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QJsonObject>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QElapsedTimer>
+#include <QHash>
+#include <QSet>
+#include <algorithm>
 
+#include "modplatform/jsapi/JSAPIManager.h"
+#include "net/NetRequest.h"
 #include "settings/SettingsObject.h"
 
 namespace {
@@ -41,47 +52,71 @@ QString joinBase(const QString& base, const QString& path)
     return base + path;
 }
 
-/**
- * Replace a host (and optionally a path prefix below it) with another base.
- *
- * The original URL keeps everything after the matched part, including the query
- * string. `pathPrefix` must not start with a slash, because a single leading
- * slash after the host is always consumed.
- */
-bool replaceHost(QString& url, const QString& host, const QString& base, const QString& pathPrefix = {})
+struct ProbeScore {
+    qint64 milliseconds = 0;
+    qint64 measuredAt = 0;
+};
+
+QHash<QString, ProbeScore> probeScores;
+QSet<QString> probesInFlight;
+
+QString probeKey(const QString& url)
 {
-    if (base.isEmpty() || url.isEmpty())
-        return false;
+    const QUrl parsed(url);
+    if (!parsed.isValid() || parsed.host().isEmpty())
+        return {};
+    return parsed.scheme().toLower() + QStringLiteral("://") + parsed.host().toLower() +
+           (parsed.port() > 0 ? QStringLiteral(":%1").arg(parsed.port()) : QString());
+}
 
-    for (const auto& scheme : { QStringLiteral("https://"), QStringLiteral("http://") }) {
-        const QString prefix = scheme + host;
-        if (!url.startsWith(prefix, Qt::CaseInsensitive))
-            continue;
+void scheduleProbe(const MirrorUrlCandidate& candidate)
+{
+    auto* application = APPLICATION_DYN;
+    if (!application)
+        return;
 
-        QString rest = url.mid(prefix.size());
-        // Guard against matching a longer host name (e.g. "example.com.evil").
-        if (!rest.isEmpty() && !rest.startsWith('/'))
-            continue;
+    const bool hasExplicitProbe = !candidate.probeUrl.isEmpty();
+    const auto sourceUrl = hasExplicitProbe ? candidate.probeUrl : candidate.url;
+    const auto key = probeKey(sourceUrl);
+    if (key.isEmpty())
+        return;
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    if (probeScores.contains(key) && now - probeScores.value(key).measuredAt < 10 * 60 * 1000)
+        return;
+    if (probesInFlight.contains(key))
+        return;
 
-        while (rest.startsWith('/'))
-            rest = rest.mid(1);
+    QUrl url(sourceUrl);
+    if (!hasExplicitProbe)
+        url.setPath(QStringLiteral("/"));
+    url.setQuery({});
+    url.setFragment({});
+    if (!url.isValid())
+        return;
 
-        if (!pathPrefix.isEmpty()) {
-            if (!rest.startsWith(pathPrefix, Qt::CaseInsensitive))
-                continue;
-            rest = rest.mid(pathPrefix.size());
-        }
+    auto network = application->network();
+    if (!network)
+        return;
 
-        url = base + rest;
-        return true;
-    }
-
-    return false;
+    probesInFlight.insert(key);
+    auto timer = std::make_shared<QElapsedTimer>();
+    timer->start();
+    QNetworkRequest request(url);
+    request.setTransferTimeout(3000);
+    auto reply = network->head(request);
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, key, timer]() {
+        const auto elapsed = timer->elapsed();
+        const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool reachable = reply->error() == QNetworkReply::NoError || status > 0;
+        probeScores.insert(key, { reachable ? elapsed : 60000, QDateTime::currentMSecsSinceEpoch() });
+        probesInFlight.remove(key);
+        reply->deleteLater();
+    });
 }
 
 }  // namespace
 
-const std::array<MirrorDownload::MirrorTypeInfo, 3> MirrorDownload::MirrorTypes = {
+const std::array<MirrorDownload::MirrorTypeInfo, 5> MirrorDownload::MirrorTypes = {
     {
         // Official - Empty strings mean use BuildConfig defaults
         {
@@ -106,6 +141,22 @@ const std::array<MirrorDownload::MirrorTypeInfo, 3> MirrorDownload::MirrorTypes 
             "",  // User-provided
             "",  // User-provided
             ""   // User-provided
+        },
+        // FastMinecraftMirror - https://fastmcmirror.org/CN.html
+        {
+            QT_TRANSLATE_NOOP("APIPage", "FastMinecraftMirror"),
+            "https://launchermeta.fastmcmirror.org/",
+            "https://resources.fastmcmirror.org/",
+            "https://libraries.fastmcmirror.org/",
+            "https://forge.fastmcmirror.org/"
+        },
+        // HKMC Mirror - https://bsmirror.hkmc.online (BMCLAPI-compatible)
+        {
+            QT_TRANSLATE_NOOP("APIPage", "HKMC Mirror (Main)"),
+            "https://bsmirror.hkmc.online/",
+            "https://bsmirror.hkmc.online/assets/",
+            "https://bsmirror.hkmc.online/maven/",
+            "https://bsmirror.hkmc.online/maven/"
         }
     }
 };
@@ -131,6 +182,30 @@ MirrorDownload::ResolvedMirror MirrorDownload::resolve(SettingsObject* settings)
 
     if (mirror.type == BMCLAPI) {
         const QString base = normalizeBase(QStringLiteral("https://bmclapi2.bangbang93.com"));
+        mirror.mojangBase = base;
+        mirror.librariesBase = joinBase(base, QStringLiteral("maven/"));
+        mirror.assetsBase = joinBase(base, QStringLiteral("assets/"));
+        mirror.fabricMetaBase = joinBase(base, QStringLiteral("fabric-meta/"));
+        mirror.quiltMetaBase = joinBase(base, QStringLiteral("quilt-meta/"));
+        mirror.fmlLibsBase = mirror.librariesBase;
+        mirror.authlibInjectorBase = joinBase(base, QStringLiteral("mirrors/authlib-injector/"));
+        return mirror;
+    }
+
+    if (mirror.type == FastMCMirror) {
+        // FastMinecraftMirror uses separate hosts for each upstream service.
+        // The JS mirror provider performs the host-specific rewrite; these
+        // bases also cover callers that consume assets/libraries directly.
+        mirror.mojangBase = QStringLiteral("https://launcher.fastmcmirror.org/");
+        mirror.librariesBase = QStringLiteral("https://libraries.fastmcmirror.org/");
+        mirror.assetsBase = QStringLiteral("https://resources.fastmcmirror.org/");
+        mirror.fabricMetaBase = QStringLiteral("https://fabricmeta.fastmcmirror.org/");
+        mirror.fmlLibsBase = QStringLiteral("https://forge.fastmcmirror.org/");
+        return mirror;
+    }
+
+    if (mirror.type == HKMC) {
+        const QString base = normalizeBase(QStringLiteral("https://bsmirror.hkmc.online"));
         mirror.mojangBase = base;
         mirror.librariesBase = joinBase(base, QStringLiteral("maven/"));
         mirror.assetsBase = joinBase(base, QStringLiteral("assets/"));
@@ -167,50 +242,92 @@ MirrorDownload::ResolvedMirror MirrorDownload::resolve(SettingsObject* settings)
 
 QString MirrorDownload::rewriteUrl(const QString& url, const ResolvedMirror& mirror)
 {
+    const auto candidates = rewriteUrls(url, mirror);
+    return candidates.isEmpty() ? url : candidates.constFirst();
+}
+
+QList<QString> MirrorDownload::rewriteUrls(const QString& url, const ResolvedMirror& mirror)
+{
+    QList<QString> empty;
     if (url.isEmpty())
-        return url;
+        return empty;
 
-    QString rewritten = url;
+    QJsonObject context{
+        { QStringLiteral("mirrorType"), mirror.isOfficial() ? QStringLiteral("official") :
+          (mirror.type == BMCLAPI ? QStringLiteral("bmclapi") :
+           (mirror.type == FastMCMirror ? QStringLiteral("fastmcmirror") :
+            (mirror.type == HKMC ? QStringLiteral("hkmc") : QStringLiteral("custom")))) },
+        { QStringLiteral("mirrorTypeId"), static_cast<int>(mirror.type) },
+        { QStringLiteral("mojangBase"), mirror.mojangBase },
+        { QStringLiteral("librariesBase"), mirror.librariesBase },
+        { QStringLiteral("assetsBase"), mirror.assetsBase },
+        { QStringLiteral("fabricMetaBase"), mirror.fabricMetaBase },
+        { QStringLiteral("quiltMetaBase"), mirror.quiltMetaBase },
+        { QStringLiteral("fmlLibsBase"), mirror.fmlLibsBase },
+        { QStringLiteral("authlibInjectorBase"), mirror.authlibInjectorBase },
+        { QStringLiteral("modrinthCdnBase"), mirror.modrinthCdnBase },
+    };
+    auto& jsApis = JSAPIManager::instance();
+    // Tests and small command-line tools can use MirrorDownload without going
+    // through Application::initialize(). Load the packaged/user JS hooks on
+    // first use in that case.
+    if (jsApis.getAllAPIs().isEmpty())
+        jsApis.initialize();
+    const auto candidates = jsApis.rewriteUrls(url, context);
+    if (candidates.isEmpty())
+        return empty;
 
-    // Mod file CDN override (e.g. the Modrinth fallback for blocked CurseForge
-    // mods). Configured independently of the Mojang mirror selection.
-    replaceHost(rewritten, QStringLiteral("cdn.modrinth.com"), mirror.modrinthCdnBase);
+    struct RankedCandidate {
+        MirrorUrlCandidate candidate;
+        qsizetype index = 0;
+        bool measured = false;
+        qint64 score = 0;
+    };
+    QList<RankedCandidate> ranked;
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    for (qsizetype i = 0; i < candidates.size(); ++i) {
+        const auto& candidate = candidates.at(i);
+        scheduleProbe(candidate);
+        const auto key = probeKey(candidate.probeUrl.isEmpty() ? candidate.url : candidate.probeUrl);
+        const auto score = probeScores.value(key);
+        const bool measured = !key.isEmpty() && score.measuredAt > 0 && now - score.measuredAt < 10 * 60 * 1000;
+        ranked.append({ candidate, i, measured, measured ? score.milliseconds : 0 });
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto& left, const auto& right) {
+        if (left.measured != right.measured)
+            return left.measured;
+        if (left.measured && left.score != right.score)
+            return left.score < right.score;
+        if (left.candidate.priority != right.candidate.priority)
+            return left.candidate.priority > right.candidate.priority;
+        return left.index < right.index;
+    });
 
-    if (mirror.isOfficial())
-        return rewritten;
+    QList<QString> result;
+    for (const auto& item : ranked)
+        result.append(item.candidate.url);
+    return result;
+}
 
-    // Assets objects. AssetUpdateTask also supplies the assets base directly, but
-    // absolute asset URLs can appear in other version metadata as well.
-    replaceHost(rewritten, QStringLiteral("resources.download.minecraft.net"), mirror.assetsBase);
+QList<QString> MirrorDownload::downloadUrls(const QString& url, const ResolvedMirror& mirror)
+{
+    QList<QString> result = rewriteUrls(url, mirror);
+    if (!result.contains(url))
+        result.append(url);
+    if (result.isEmpty())
+        result.append(url);
+    return result;
+}
 
-    // Maven repositories. They all share a single Maven root and only differ in
-    // the path prefix that the official URL uses.
-    replaceHost(rewritten, QStringLiteral("libraries.minecraft.net"), mirror.librariesBase);
-    replaceHost(rewritten, QStringLiteral("files.minecraftforge.net"), mirror.librariesBase, QStringLiteral("maven/"));
-    replaceHost(rewritten, QStringLiteral("maven.minecraftforge.net"), mirror.librariesBase);
-    replaceHost(rewritten, QStringLiteral("maven.fabricmc.net"), mirror.librariesBase);
-    replaceHost(rewritten, QStringLiteral("maven.neoforged.net"), mirror.librariesBase, QStringLiteral("releases/"));
-    replaceHost(rewritten, QStringLiteral("maven.quiltmc.org"), mirror.librariesBase, QStringLiteral("repository/release/"));
-
-    // Mod loader metadata.
-    replaceHost(rewritten, QStringLiteral("meta.fabricmc.net"), mirror.fabricMetaBase);
-    replaceHost(rewritten, QStringLiteral("meta.quiltmc.org"), mirror.quiltMetaBase);
-
-    // LiteLoader is served from BMCLAPI's Maven tree under a fixed path.
-    replaceHost(rewritten, QStringLiteral("dl.liteloader.com"), joinBase(mirror.librariesBase, QStringLiteral("com/mumfrey/liteloader/")),
-                QStringLiteral("versions/"));
-
-    // Misc Mojang-hosted files.
-    replaceHost(rewritten, QStringLiteral("authlib-injector.yushi.moe"), mirror.authlibInjectorBase);
-
-    // Mojang's download CDNs keep their path below the mirror root.
-    replaceHost(rewritten, QStringLiteral("launcher.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("launchermeta.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("piston-data.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("piston-meta.mojang.com"), mirror.mojangBase);
-    replaceHost(rewritten, QStringLiteral("s3.amazonaws.com"), mirror.mojangBase, QStringLiteral("Minecraft.Download/"));
-
-    return rewritten;
+void MirrorDownload::configureFallbacks(Net::NetRequest* request, const QString& officialUrl, const ResolvedMirror& mirror)
+{
+    if (!request)
+        return;
+    const auto urls = downloadUrls(officialUrl, mirror);
+    QList<QUrl> fallbacks;
+    for (const auto& value : urls)
+        fallbacks.append(QUrl(value));
+    request->setFallbackUrls(fallbacks);
 }
 
 QString MirrorDownload::rewriteUrl(const QString& url, SettingsObject* settings)

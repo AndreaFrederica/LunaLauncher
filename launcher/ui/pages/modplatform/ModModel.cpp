@@ -10,6 +10,7 @@
 #include "minecraft/mod/ModFolderModel.h"
 #include "mcmod/McModIndex.h"
 #include "modplatform/ModIndex.h"
+#include "ui/widgets/ProjectItem.h"
 
 #include <QMessageBox>
 #include <algorithm>
@@ -17,9 +18,42 @@
 
 namespace ResourceDownload {
 
+namespace {
+std::optional<McMod::Match> mcmodMatchForPack(const ModPlatform::IndexedPack& pack)
+{
+    const auto provider = pack.provider == ModPlatform::ResourceProvider::MODRINTH
+                              ? QStringLiteral("modrinth")
+                              : pack.provider == ModPlatform::ResourceProvider::FLAME ? QStringLiteral("curseforge") : QString{};
+    auto match = McMod::Index::instance().findByProviderId(provider, pack.addonId.toString());
+    if (!match && provider == QStringLiteral("curseforge"))
+        match = McMod::Index::instance().findByProviderId(provider, pack.slug);
+    if (!match)
+        match = McMod::Index::instance().find({}, pack.name);
+    return match;
+}
+}  // namespace
+
 ModModel::ModModel(BaseInstance& base_inst, ResourceAPI* api, QString debugName, QString metaEntryBase, bool api_owned)
     : ResourceModel(api, api_owned), m_base_instance(base_inst), m_debugName(debugName + " (Model)"), m_metaEntryBase(metaEntryBase)
 {}
+
+QVariant ModModel::data(const QModelIndex& index, int role) const
+{
+    auto value = ResourceModel::data(index, role);
+    if (role != UserDataTypes::TITLE || !APPLICATION->settings()->get("McModSearchEnabled").toBool())
+        return value;
+
+    const auto pack = ResourceModel::data(index, Qt::UserRole).value<ModPlatform::IndexedPack::Ptr>();
+    if (!pack)
+        return value;
+
+    const auto match = mcmodMatchForPack(*pack);
+    if (!match || match->project.mainName.trimmed().isEmpty() ||
+        pack->name.trimmed().compare(match->project.mainName.trimmed(), Qt::CaseInsensitive) == 0)
+        return value;
+
+    return QStringLiteral("%1 · %2").arg(value.toString(), match->project.mainName);
+}
 
 /******** Make data requests ********/
 

@@ -21,6 +21,20 @@
         </div>
         <span class="pcl-form-row__hint">{{ t('pcl.auto2.k019755f952') }}</span>
       </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">{{ t('pcl.mainNavigationLayout') }}</span>
+        <div class="pcl-form-row__control">
+          <PclCheckbox v-model="preferences.pclVerticalNavigation" :label="t('pcl.verticalNavigation')" />
+        </div>
+        <span class="pcl-form-row__hint">{{ t('pcl.verticalNavigationHint') }}</span>
+      </div>
+      <div class="pcl-form-row">
+        <span class="pcl-form-row__label">{{ t('pcl.mainNavigationText') }}</span>
+        <div class="pcl-form-row__control">
+          <PclCheckbox v-model="preferences.pclMainNavigationText" :label="t('pcl.showMainNavigationText')" />
+        </div>
+        <span class="pcl-form-row__hint">{{ t('pcl.mainNavigationTextHint') }}</span>
+      </div>
       <template v-if="preferences.pclNavLayout === 'mmc-classic'">
         <div class="pcl-form-row">
           <span class="pcl-form-row__label">{{ t('pcl.auto2.kc9d3af0140') }}</span>
@@ -87,7 +101,7 @@
         <span class="pcl-form-row__hint">{{ t('pcl.auto2.k9bef92f3a5') }}</span>
       </div>
 
-      <div class="pcl-appearance-preview" :class="{ light: preferences.theme === 'light' }">
+      <div class="pcl-appearance-preview" :class="{ light: preferences.theme === 'light', 'is-vertical': preferences.pclVerticalNavigation, 'is-icon-only': !preferences.pclMainNavigationText }">
         <div class="pcl-appearance-preview__bar">
           <div class="pcl-appearance-preview__brand">
             <img v-if="preferences.pclTitleIcon" class="pcl-appearance-preview__logo" :src="lunaLogo" alt="Luna Launcher" />
@@ -95,10 +109,11 @@
             <small v-if="preferences.pclTitleBadge">NEOUI</small>
           </div>
           <nav class="pcl-appearance-preview__navs">
-            <span class="pcl-appearance-preview__nav"><PclIcon name="play" :size="13" />{{ t('pcl.auto2.kebd26da421') }}</span>
-            <span class="pcl-appearance-preview__nav active"><PclIcon name="download" :size="13" />{{ t('pcl.auto2.k2b9d013177') }}</span>
-            <span class="pcl-appearance-preview__nav"><PclIcon name="settings" :size="13" />{{ t('pcl.auto2.k7debf9cb03') }}</span>
-            <span class="pcl-appearance-preview__nav"><PclIcon name="wrench" :size="13" />{{ t('xmcl.system.tools') }}</span>
+            <span class="pcl-appearance-preview__nav"><PclIcon name="layout-dashboard" :size="13" /><span v-if="preferences.pclMainNavigationText">{{ t('xmcl.system.home') }}</span></span>
+            <span class="pcl-appearance-preview__nav"><PclIcon name="box" :size="13" /><span v-if="preferences.pclMainNavigationText">{{ t('xmcl.system.instance') }}</span></span>
+            <span class="pcl-appearance-preview__nav active"><PclIcon name="download" :size="13" /><span v-if="preferences.pclMainNavigationText">{{ t('pcl.auto2.k2b9d013177') }}</span></span>
+            <span class="pcl-appearance-preview__nav"><PclIcon name="settings" :size="13" /><span v-if="preferences.pclMainNavigationText">{{ t('pcl.auto2.k7debf9cb03') }}</span></span>
+            <span class="pcl-appearance-preview__nav"><PclIcon name="wrench" :size="13" /><span v-if="preferences.pclMainNavigationText">{{ t('xmcl.system.tools') }}</span></span>
           </nav>
           <div class="pcl-appearance-preview__window-actions" aria-hidden="true"><i>−</i><i>□</i><i class="close">×</i></div>
         </div>

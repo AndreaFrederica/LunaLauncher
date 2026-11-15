@@ -9,8 +9,11 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
 #include <QSaveFile>
 #include <QTimer>
+#include <QUrl>
 #include <QJsonDocument>
 #include <QStandardPaths>
 
@@ -27,12 +30,27 @@ inline bool resolveHeadlessBlockedMods(QList<BlockedMod>& mods, const QString& a
         QCryptographicHash hash(hashType);
         return hash.addData(&file) && !expected.isEmpty() && QString::fromLatin1(hash.result().toHex()).compare(expected, Qt::CaseInsensitive) == 0;
     };
-    // Keep the existing automatic external helper path, without constructing a dialog.
+    // NeoUI's native interaction channel may use the embedded browser even
+    // though its launcher sidecar is technically headless. Terminal and MCP
+    // tool-call interactions stay manual unless they use a headless external
+    // tool.
+    const auto configuredBrowser = APPLICATION->settings()->get("CurseForgeDownloadBrowser").toString();
+    auto provider = CurseForgeDownloadPageService::Provider::Embedded;
+    bool useDownloadProvider = false;
     bool supportsHeadless = false;
     QString probeError;
-    if (APPLICATION->settings()->get("CurseForgeDownloadBrowser").toString() == "External" &&
-        CurseForgeDownloadPageService::probeExternalTool(APPLICATION->settings()->get("CurseForgeExternalToolPath").toString(), &probeError, &supportsHeadless) && supportsHeadless) {
-        CurseForgeDownloadPageService service(CurseForgeDownloadPageService::Provider::External);
+    if (configuredBrowser == "Embedded" && interaction->supportsEmbeddedDownloadPage() &&
+        CurseForgeDownloadPageService::isAvailable(CurseForgeDownloadPageService::Provider::Embedded)) {
+        provider = CurseForgeDownloadPageService::Provider::Embedded;
+        useDownloadProvider = true;
+    } else if (configuredBrowser == "External" &&
+               CurseForgeDownloadPageService::probeExternalTool(APPLICATION->settings()->get("CurseForgeExternalToolPath").toString(), &probeError, &supportsHeadless) &&
+               supportsHeadless) {
+        provider = CurseForgeDownloadPageService::Provider::External;
+        useDownloadProvider = true;
+    }
+    if (useDownloadProvider) {
+        CurseForgeDownloadPageService service(provider);
         QVector<CurseForgeDownloadPage> pages;
         for (const auto& mod : mods) if (!mod.matched && CurseForgeDownloadPageService::isSupportedUrl(mod.websiteUrl))
             pages.append({ mod.websiteUrl, mod.name, algorithm, mod.hash });

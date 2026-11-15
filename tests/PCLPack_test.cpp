@@ -6,11 +6,54 @@
 
 #include "modplatform/pcl/PCLPack.h"
 #include "modplatform/pcl/PCLPlainPack.h"
+#include "minecraft/LibraryDownloadPatches.h"
 
 class PCLPackTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void libraryDownloadPatches()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto base = temp.filePath("base.json5"), overlay = temp.filePath("overlay.json5");
+        auto write = [](const QString& path, const QByteArray& bytes) {
+            QFile file(path);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        QVERIFY(write(base, R"(
+          // JSON5: comments, unquoted keys, single quotes, trailing commas.
+          {formatVersion: 1, rules: [
+            {id: 'native', match: {library: 'gtnh.natives:lwjgl3:3.4.3', classifier: 'natives-windows'},
+             mode: 'fallback', urls: ['https://example.org/native.jar',],},
+            {id: 'url', match: {url: 'https://old.example/a.jar'}, mode: 'replace', urls: ['https://new.example/a.jar']},
+          ],}
+        )"));
+        auto config = LibraryDownloadPatches::load(base, overlay);
+        QVERIFY2(config.errors.isEmpty(), qPrintable(config.errors.join('\n')));
+        const QStringList original{"https://old.example/a.jar"};
+        QCOMPARE(config.apply("gtnh.natives:lwjgl3:3.4.3", "natives-windows", "", {}), QStringList{"https://example.org/native.jar"});
+        QCOMPARE(config.apply("gtnh.natives:lwjgl3:3.4.3", "natives-linux", "", original), original);
+        QCOMPARE(config.apply("gtnh.natives:lwjgl3:3.4.4", "natives-windows", "", original), original);
+        QCOMPARE(config.apply("other:lib:1", "", original.first(), original), QStringList{"https://new.example/a.jar"});
+        QVERIFY(write(overlay, R"({formatVersion: 1, rules: [
+          {id: 'native', enabled: false},
+          {id: 'url', match: {url: 'https://old.example/a.jar'}, mode: 'fallback', urls: ['https://overlay.example/a.jar']},
+        ]})"));
+        config = LibraryDownloadPatches::load(base, overlay);
+        QVERIFY(config.errors.isEmpty());
+        QCOMPARE(config.rules.size(), 2);
+        QCOMPARE(config.apply("gtnh.natives:lwjgl3:3.4.3", "natives-windows", "", original), original);
+        QCOMPARE(config.apply("other:lib:1", "", original.first(), original), (QStringList{original.first(), "https://overlay.example/a.jar"}));
+        // Reject executable expressions: JSON5 files remain data.
+        QVERIFY(write(overlay, "{formatVersion:1,rules:[],pwn:(function(){return 1})()}"));
+        config = LibraryDownloadPatches::load(base, overlay);
+        QCOMPARE(config.errors.size(), 1);
+        QCOMPARE(config.rules.size(), 2); // Invalid overlay is not partially applied.
+        QVERIFY(write(overlay, R"({formatVersion:1,rules:[{id:'bad',match:{libary:'typo'},urls:['file:///C:/test.jar']}]})"));
+        QVERIFY(!LibraryDownloadPatches::load(base, overlay).errors.isEmpty());
+    }
+
     void parseSetup()
     {
         const auto setup = PCL::parseSetup("VersionServerEnter:example.org:25565\r\n"
@@ -107,7 +150,9 @@ class PCLPackTest : public QObject {
                                  "MyPack/.minecraft/versions/custom/custom.json",
                                  "MITE 1.6.4 Installation Files/1.6.4-MITE/1.6.4-MITE.json",
                                  "versions/wrong/not-wrong.json",
-                                 "versions/almost/almost.json.bak" };
+                                 "versions/almost/almost.json.bak",
+                                 ".minecraft/assets/asset_director/versions/1.21/1.21.json",
+                                 ".minecraft/libraries/example/versions/fake/fake.json" };
         const auto candidates = PCL::findPlainPackCandidates(files);
         QCOMPARE(candidates.size(), 2);
         QCOMPARE(candidates.at(0).root, QString(".minecraft/"));

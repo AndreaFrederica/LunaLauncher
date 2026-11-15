@@ -51,11 +51,13 @@ namespace Ui {
 class VersionPage;
 }
 
+class VanillaInstance;
+
 class VersionPage : public QMainWindow, public BasePage {
     Q_OBJECT
 
    public:
-    explicit VersionPage(MinecraftInstance* inst, QWidget* parent = 0);
+    explicit VersionPage(MinecraftInstance* inst, bool readOnly = false, QWidget* parent = 0);
     virtual ~VersionPage();
     virtual QString displayName() const override { return tr("Version"); }
     virtual QIcon icon() const override;
@@ -107,6 +109,8 @@ class VersionPage : public QMainWindow, public BasePage {
     QSortFilterProxyModel* m_filterModel;
     PackProfile* m_profile;
     MinecraftInstance* m_inst;
+    VanillaInstance* m_vanilla = nullptr;
+    bool m_readOnly = false;
     int currentIdx = 0;
 
     std::shared_ptr<Setting> m_wide_bar_setting = nullptr;

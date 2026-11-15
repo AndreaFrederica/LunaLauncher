@@ -110,7 +110,7 @@ std::shared_ptr<class VersionFile> Component::getVersionFile() const
     if (m_metaVersion) {
         return m_metaVersion->data();
     } else {
-        return m_file;
+        return m_file ? m_file : m_foreignFile;
     }
 }
 
@@ -120,6 +120,16 @@ std::shared_ptr<class Meta::VersionList> Component::getVersionList() const
     // UIDs handled by metadata providers (e.g. Cleanroom) are pre-registered
     // at startup via registerBuiltinProviders(), so hasUid() returns true.
     if (APPLICATION->metadataIndex()->hasUid(m_uid)) {
+        return APPLICATION->metadataIndex()->get(m_uid);
+    }
+    // Foreign HMCL/PCL/Mojang profiles are loaded directly from their
+    // versions/<id>/<id>.json file.  That path intentionally bypasses the
+    // metadata resolver, so a standard loader UID may not have been inserted
+    // into the index yet.  Create the regular list lazily for known loaders;
+    // VersionSelectWidget will load it asynchronously when the dialog opens.
+    // This keeps external instances editable without registering arbitrary
+    // unknown component IDs as metadata lists.
+    if (isKnownModloader() || m_uid == QStringLiteral("net.minecraft")) {
         return APPLICATION->metadataIndex()->get(m_uid);
     }
     return nullptr;
@@ -152,12 +162,34 @@ QString Component::getName()
 {
     if (!m_cachedName.isEmpty())
         return m_cachedName;
+    // Foreign Mojang/HMCL/PCL profiles intentionally do not have Prism's
+    // metadata cache. Keep their standard components readable in the Version
+    // page instead of exposing internal UIDs.
+    static const QMap<QString, QString> standardNames{
+        { QStringLiteral("net.minecraft"), QStringLiteral("Minecraft") },
+        { QStringLiteral("net.minecraftforge"), QStringLiteral("Minecraft Forge") },
+        { QStringLiteral("net.neoforged"), QStringLiteral("NeoForge") },
+        { QStringLiteral("net.fabricmc.fabric-loader"), QStringLiteral("Fabric Loader") },
+        { QStringLiteral("org.quiltmc.quilt-loader"), QStringLiteral("Quilt Loader") },
+        { QStringLiteral("net.legacyfabric"), QStringLiteral("Legacy Fabric") },
+        { QStringLiteral("com.cleanroommc.cleanroom"), QStringLiteral("Cleanroom") },
+        { QStringLiteral("com.mumfrey.liteloader"), QStringLiteral("LiteLoader") },
+    };
+    if (const auto iter = standardNames.constFind(m_uid); iter != standardNames.cend())
+        return iter.value();
     return m_uid;
 }
 
 QString Component::getVersion()
 {
-    return m_cachedVersion;
+    // Components loaded from an mmc-pack.json can carry their version before
+    // the metadata provider has been loaded.  Foreign HMCL/PCL profiles use
+    // exactly that form: they intentionally have no local patch file, so
+    // m_cachedVersion remains empty while the persistent component version is
+    // already present in m_version.  Keep the cached value when available,
+    // but expose the persistent value as the deterministic fallback so the
+    // Version page never renders an empty version column.
+    return m_cachedVersion.isEmpty() ? m_version : m_cachedVersion;
 }
 
 QString Component::getFilename()
@@ -244,7 +276,7 @@ bool Component::isVersionChangeable(bool wait)
     return false;
 }
 
-bool Component::isKnownModloader()
+bool Component::isKnownModloader() const
 {
     auto iter = KNOWN_MODLOADERS.find(m_uid);
     return iter != KNOWN_MODLOADERS.cend();
@@ -317,6 +349,12 @@ void Component::setVersion(const QString& version)
         // we are loaded and potentially have state to invalidate
         if (m_file) {
             // we have a file... explicit version has been changed and there is nothing else to do.
+        } else if (m_foreignFile) {
+            // An external profile is authoritative for its current version;
+            // changing the version must force the normal metadata resolver to
+            // load the new component instead of retaining stale foreign data.
+            m_foreignFile.reset();
+            m_loaded = false;
         } else {
             // we don't have a file, therefore we are loaded with metadata
             m_cachedVersion = version;

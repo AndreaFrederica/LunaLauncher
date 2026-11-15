@@ -1,0 +1,6 @@
+{
+  "metadata": { "id": "adoptium-tuna-mirror", "kind": "mirror", "displayName": "TUNA Adoptium", "version": "2.0.0", "enabled": true, "priority": 50, "baseRule": true, "categories": ["java"] },
+  "rules": [
+    { "match": { "hosts": ["github.com"], "pathRegex": "^/adoptium/temurin([0-9]+)-binaries/releases/download/[^/]+/(OpenJDK[0-9]+U-(jdk|jre)_([a-z0-9]+)_(alpine-linux|windows|linux|mac)_.*)$" }, "rewrite": { "template": "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/$1/$3/$4/$5/$2" } }
+  ]
+}

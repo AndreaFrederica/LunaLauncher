@@ -246,6 +246,12 @@
         <file>scalable/instances/diamond.svg</file>
         <file>scalable/instances/dirt.svg</file>
         <file>scalable/instances/grass.svg</file>
+        <!-- HMCL logo, used as the source badge for HMCL-compatible instances. -->
+        <file>scalable/instances/hmcl.png</file>
+        <file>scalable/instances/pcl-badge.png</file>
+        <file>scalable/instances/luna-badge.png</file>
+        <file>scalable/instances/grass-badge.png</file>
+        <file>scalable/instances/mixed-badge.png</file>
         <file>scalable/instances/brick.svg</file>
         <file>scalable/instances/gold.svg</file>
         <file>scalable/instances/iron.svg</file>

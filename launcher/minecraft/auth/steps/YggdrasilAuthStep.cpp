@@ -258,14 +258,12 @@ void YggdrasilAuthStep::onRequestDone()
                       tr("Yggdrasil authentication was rejected by the provider (HTTP %1).").arg(status));
         return;
     }
+    if (status == 404 || status == 405) {
+        emit finished(AccountTaskState::STATE_FAILED_SOFT,
+                      tr("Yggdrasil authentication endpoint returned HTTP %1. Check the server URL and endpoint settings.").arg(status));
+        return;
+    }
     if (m_request->error() != QNetworkReply::NoError) {
-        if (m_request->error() == QNetworkReply::ContentNotFoundError) {
-            // Validate request returns 204 No Content on success
-            if (m_requestType == RequestType::Validate) {
-                emit finished(AccountTaskState::STATE_WORKING, tr("Token is valid"));
-                return;
-            }
-        }
         qWarning() << "Yggdrasil API request failed:" << m_request->errorString();
         emit finished(AccountTaskState::STATE_OFFLINE,
                      tr("Yggdrasil authentication server is unavailable: %1").arg(m_request->errorString()));

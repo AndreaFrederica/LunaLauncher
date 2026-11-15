@@ -271,6 +271,9 @@ public static class Exports
 
     // ========== 配置 ==========
 
+    [UnmanagedCallersOnly(EntryPoint = "pcl_download_set_smart_concurrency")]
+    public static void SetSmartConcurrency(int enabled) => DownloadConfig.SmartConcurrency = enabled != 0;
+
     /// <summary>Max concurrent file downloads per batch (clamped to 1..64).</summary>
     [UnmanagedCallersOnly(EntryPoint = "pcl_download_set_thread_limit")]
     public static void SetThreadLimit(int limit)

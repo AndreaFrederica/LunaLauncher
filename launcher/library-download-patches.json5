@@ -1,0 +1,26 @@
+// Library download compatibility patches. Disabled globally by default.
+// Enable explicitly in Settings > Downloads > Library download patches.
+// Existing valid bundled files always win. Original checksums are preserved.
+// User overrides: <launcher data>/library-download-patches.overlay.json5
+// The overlay replaces a whole rule by id; {id: '...', enabled: false} disables it.
+{
+  formatVersion: 1,
+  rules: [
+    {
+      id: 'gtnh-lwjgl3-3.4.3-windows',
+      // Disabled: the supplied GTNH pack uses a 16,483,083-byte merged JAR
+      // containing 23 DLLs. The URL below is core LWJGL only, NOT equivalent.
+      // Enable only after replacing urls with a verified complete bundle.
+      enabled: false,
+      match: {
+        library: 'gtnh.natives:lwjgl3:3.4.3',
+        classifier: 'natives-windows',
+      },
+      mode: 'fallback', // Try the declared URL/mirrors first.
+      // Pack-provided alternative: this contains the core LWJGL DLL only.
+      // It does NOT reconstruct a custom merged bundle's other native DLLs.
+      // Prefer the complete JAR included with the original pack when available.
+      urls: ['https://nexus.gtnewhorizons.com/repository/public/org/lwjgl/lwjgl/3.4.3/lwjgl-3.4.3-natives-windows.jar'],
+    },
+  ],
+}

@@ -46,12 +46,13 @@ void ManifestDownloadTask::executeTask()
     // Rewrite the manifest URL through the shared mirror implementation.
     QUrl manifestUrl = m_url;
     const QUrl officialManifestUrl = manifestUrl;
-    manifestUrl = QUrl(MirrorDownload::rewriteUrl(manifestUrl.toString(), APPLICATION->settings()));
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    const auto manifestUrls = MirrorDownload::downloadUrls(manifestUrl.toString(), mirror);
+    manifestUrl = QUrl(manifestUrls.constFirst());
 
     auto [action, response] = Net::Download::makeByteArray(manifestUrl);
     files = response;
-    if (officialManifestUrl != manifestUrl)
-        action->setFallbackUrl(officialManifestUrl);
+    MirrorDownload::configureFallbacks(action.get(), officialManifestUrl.toString(), mirror);
     if (!m_checksum_hash.isEmpty() && !m_checksum_type.isEmpty()) {
         auto hashType = QCryptographicHash::Algorithm::Sha1;
         if (m_checksum_type == "sha256") {
@@ -116,13 +117,12 @@ void ManifestDownloadTask::downloadJava(const QJsonDocument& doc)
 
     // Resolve the mirror once and reuse it for every runtime file.
     const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
-
     for (const auto& file : toDownload) {
         const QUrl officialDownloadUrl(file.url);
-        const QString downloadUrl = MirrorDownload::rewriteUrl(file.url, mirror);
+        const auto downloadUrls = MirrorDownload::downloadUrls(file.url, mirror);
+        const QString downloadUrl = downloadUrls.constFirst();
         auto dl = Net::Download::makeFile(downloadUrl, file.path);
-        if (officialDownloadUrl.toString() != downloadUrl)
-            dl->setFallbackUrl(officialDownloadUrl);
+        MirrorDownload::configureFallbacks(dl.get(), officialDownloadUrl.toString(), mirror);
         if (!file.hash.isEmpty()) {
             dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, file.hash));
         }

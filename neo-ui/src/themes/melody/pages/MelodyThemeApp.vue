@@ -8,10 +8,10 @@
         <MelodyGamesWindow v-else-if="entry.kind === 'games'" :instance-id="entry.instanceId" :component-uid="entry.componentUid" :inert="blocked(entry.id)" @close="close(entry.id)" @clients="openWindow('clients', entry.id)" />
         <MelodyClientsWindow v-else-if="entry.kind === 'clients'" :inert="blocked(entry.id)" :on-games="() => openWindow('games', entry.id)" :on-edit="id => openWindow('client', entry.id, id)" @close="close(entry.id)" />
         <MelodyClientWindow v-else-if="entry.kind === 'client' && entry.instanceId" :instance-id="entry.instanceId" :inert="blocked(entry.id)" @close="close(entry.id)" @browse="uid => openWindow('games', entry.id, entry.instanceId, uid)" />
-        <MelodySettingsWindow v-else-if="entry.kind === 'settings' && settingsReady" :model-value="{ ...settings, game: selected }" :games="versions" :busy="saving" :inert="blocked(entry.id)" @close="close(entry.id)" @message="text => message(text, entry.id)" @save="value => saveSettings(value, entry.id)" @action="(action, value) => settingsAction(action, value, entry.id)" />
+        <MelodySettingsWindow v-else-if="entry.kind === 'settings' && settingsReady" :model-value="{ ...settings, game: selected }" :games="versions" :busy="saving" :inert="blocked(entry.id)" :execute="call" @close="close(entry.id)" @message="text => message(text, entry.id)" @save="value => saveSettings(value, entry.id)" @action="(action, value) => settingsAction(action, value, entry.id)" />
         <MelodyManagerWindow v-else-if="entry.kind === 'manager'" :versions="versions" :inert="blocked(entry.id)" @close="close(entry.id)" @install="() => message('没有可用的整合列表。', entry.id)" @update-sounds="version => message(version ? '请选择游戏并启动，NeoUI 会检查缺失的声音文件。' : '请选择想要更新的游戏版本。', entry.id)" />
         <MelodyMessageWindow v-else-if="entry.kind === 'message'" :message="entry.message || ''" :title="entry.title" @close="close(entry.id)" />
-        <MelodyDownloadWindow v-else-if="entry.kind === 'download'" :file-name="task.stage" :progress="task.progress" :inert="blocked(entry.id)" @close="close(entry.id)" @manual="message('当前没有可用的下载链接。', entry.id)" />
+        <MelodyDownloadWindow v-else-if="entry.kind === 'download'" :file-name="task.stage" :file-size="task.fileSize" :speed="task.speed" :progress="task.progress" :download-url="task.url" :inert="blocked(entry.id)" @close="close(entry.id)" @manual="task.url ? message('请在浏览器中打开下载链接。', entry.id) : undefined" />
         <MelodySetupWindow v-else-if="entry.kind === 'setup'" :inert="blocked(entry.id)" @close="close(entry.id)" @message="text => message(text, entry.id)" @complete="value => saveSettings({ ...settings, ...value }, entry.id)" />
         <MelodyComponentGallery v-else-if="entry.kind === 'components'" @close="close(entry.id)" />
       </MelodyWindowHost>
@@ -21,7 +21,7 @@
       <nav ref="menuElement" class="melody-menu" aria-label="窗口与主题">
         <button v-for="kind in menuKinds" :key="kind" @click="menuOpen = false; openWindow(kind)">{{ windows[kind].title }}</button>
         <button @click="menuOpen = false; openRuntimeDebug()">打开 Runtime Debugger</button>
-        <button @click="leaveTheme()">返回 NeoUI</button>
+        <button @click="leaveTheme()">返回启动器</button>
       </nav>
     </div>
   </main>
@@ -88,7 +88,7 @@ const accountOptions = computed(() => session.accounts.map(account => ({
   value: String(account.internalId || account.id || account.profileName || ''),
   label: String(account.profileName || account.displayName || '未命名账户'),
 })).filter(option => option.value));
-const task = reactive({ stage: '', progress: 0 });
+const task = reactive({ stage: initialKind === 'download' ? '等待下载任务' : '', fileSize: '未知', speed: '0 KB/s', url: '', progress: 0 });
 let disposed = false;
 let taskId = '';
 async function openDevTools() {
@@ -278,7 +278,7 @@ async function leaveTheme(shell: NeoShell = 'pcl') {
     persistNeoUiPreferences();
     return;
   }
-  if (!['neo', 'pcl'].includes(shell)) return;
+  if (!['neo', 'pcl', 'endfield'].includes(shell)) return;
   neoUiPreferences.shell = shell;
   persistNeoUiPreferences();
   const url = new URL(location.href);

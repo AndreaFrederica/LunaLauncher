@@ -24,6 +24,7 @@
 class QCheckBox;
 class QLabel;
 class QSpinBox;
+class QPlainTextEdit;
 
 class PclDownloadPage : public QWidget, public BasePage {
     Q_OBJECT
@@ -41,10 +42,14 @@ class PclDownloadPage : public QWidget, public BasePage {
    private:
     void loadSettings();
     void applySettings();
+    void refreshPatches();
 
    private:
     QCheckBox* m_enabled = nullptr;
     QCheckBox* m_fallbackToQt = nullptr;
+    QCheckBox* m_smartConcurrency = nullptr;
+    QCheckBox* m_libraryPatches = nullptr;
+    QPlainTextEdit* m_patchStatus = nullptr;
     QSpinBox* m_threadLimit = nullptr;
     QSpinBox* m_speedLimit = nullptr;
     QLabel* m_status = nullptr;

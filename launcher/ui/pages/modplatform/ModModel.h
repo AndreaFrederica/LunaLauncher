@@ -26,6 +26,8 @@ class ModModel : public ResourceModel {
    public:
     ModModel(BaseInstance&, ResourceAPI* api, QString debugName, QString metaEntryBase, bool api_owned = true);
 
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+
     /* Ask the API for more information */
     void searchWithTerm(const QString& term, unsigned int sort, bool filter_changed);
 

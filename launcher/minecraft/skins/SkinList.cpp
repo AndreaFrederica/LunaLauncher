@@ -20,6 +20,7 @@
 
 #include <QFileInfo>
 #include <QMimeData>
+#include <QImageReader>
 
 #include "FileSystem.h"
 #include "Json.h"
@@ -288,7 +289,7 @@ QString getUniqueFile(const QString& root, const QString& file)
 
     return result;
 }
-QString SkinList::installSkin(const QString& file, const QString& name)
+QString SkinList::installSkin(const QString& file, const QString& name, QString* installedPath)
 {
     if (file.isEmpty())
         return tr("Path is empty.");
@@ -299,12 +300,28 @@ QString SkinList::installSkin(const QString& file, const QString& name)
         return tr("Not a file.");
     if (!fileinfo.isReadable())
         return tr("File is not readable.");
-    if (fileinfo.suffix() != "png" && !SkinModel(fileinfo.absoluteFilePath()).isValid())
+    QImageReader reader(fileinfo.absoluteFilePath());
+    const auto size = reader.size();
+    if (reader.format().toLower() != "png" || size.width() != 64 || (size.height() != 64 && size.height() != 32) || reader.read().isNull())
         return tr("Skin images must be 64x64 or 64x32 pixel PNG files.");
 
-    QString target = getUniqueFile(m_dir.absolutePath(), name.isEmpty() ? fileinfo.fileName() : name);
+    auto filename = name.isEmpty() ? fileinfo.fileName() : name;
+    // A custom display name is a filename, never a path. Normalize the PNG
+    // extension so indexed skins can be reopened on case-sensitive systems.
+    if (filename.contains('/') || filename.contains('\\') || filename == "." || filename == "..")
+        return tr("The skin name must not contain a directory path.");
+    if (filename.endsWith(".png", Qt::CaseInsensitive)) filename.chop(4);
+    if (filename.trimmed().isEmpty()) return tr("The skin name is empty.");
+    filename += ".png";
+    if (!FS::ensureFolderPathExists(m_dir.absolutePath())) return tr("Unable to create the skin library directory.");
+    const auto target = getUniqueFile(m_dir.absolutePath(), filename);
 
-    return QFile::copy(file, target) ? "" : tr("Unable to copy file");
+    if (target.isEmpty() || !QFile::copy(file, target)) return tr("Unable to copy file");
+    // API callers destroy this model immediately. Update it before save(),
+    // without relying on an asynchronous filesystem watcher notification.
+    update();
+    if (installedPath) *installedPath = target;
+    return {};
 }
 
 int SkinList::getSkinIndex(const QString& key) const

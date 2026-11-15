@@ -375,15 +375,12 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if window.label() == "main" {
-                match event {
-                    tauri::WindowEvent::CloseRequested { .. }
-                    | tauri::WindowEvent::Destroyed => {
-                        // CloseRequested is the last reliable point at which
-                        // the native client size is available. Destroyed is
-                        // retained as a fallback for platform shutdown.
-                        let _ = window_geometry::save_main(window);
-                    }
-                    _ => {}
+                if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                    // CloseRequested is the last reliable point at which the
+                    // native client size is available. Saving again from
+                    // Destroyed can observe a different transient client
+                    // rectangle on Windows and overwrite the stable value.
+                    let _ = window_geometry::save_main(window);
                 }
                 if matches!(event, tauri::WindowEvent::Destroyed) {
                     melody::close_children(window.app_handle());

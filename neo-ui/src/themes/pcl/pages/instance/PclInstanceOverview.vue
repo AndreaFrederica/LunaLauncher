@@ -17,6 +17,7 @@
 
     <PclCard :title="t('instance.info')">
       <div class="pcl-info-grid">
+        <div v-if="details?.vanillaCompatible"><span>原版目录模式</span><strong>{{ details?.isolated ? '隔离 · 版本独立目录' : '非隔离 · 共享目录' }}</strong></div>
         <div><span>{{ t('instance.instanceDir') }}</span><code>{{ details?.root || t('about.loadingRuntime') }}</code></div>
         <div><span>{{ t('instance.gameDir') }}</span><code>{{ details?.gameRoot || t('about.loadingRuntime') }}</code></div>
         <div><span>{{ t('instance.modsDir') }}</span><code>{{ details?.modsRoot || t('about.loadingRuntime') }}</code></div>

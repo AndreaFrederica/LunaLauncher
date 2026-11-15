@@ -5,12 +5,19 @@
     <PclToolsPage v-show="page === 'pcl-tools'" :active="page === 'pcl-tools'" :instances="instances" :selected="selected" :busy="busy" :execute="execute" @refresh="emit('refresh')" @open-instance="emit('open-instance', $event)" />
     <PclSetupPage v-show="page === 'pcl-settings'" :active="page === 'pcl-settings'" :settings="settings" :busy="busy" :scope="scope" :execute="execute" :accounts="accounts" @changed="emit('changed')" />
     <PclAccountPage v-show="page === 'accounts'" :accounts="accounts" :busy="busy" :execute="execute" @changed="emit('changed')" @cancel-login="emit('cancel-login')" />
-    <PclInstancePage v-if="selected" v-show="page === 'manage'" :instance="selected" :details="details" :icon="icon" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="execute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="emit('manage-launch')" @open-folder="emit('manage-open-folder')" @settings="emit('manage-settings')" @delete="emit('delete')" @change-icon="emit('change-icon', $event)" @save-notes="emit('save-notes', $event)" @refresh="emit('refresh')" @connect-console="emit('connect-console')" @clear-console="emit('clear-console')" @read-log="emit('read-log', $event)" @component-enabled="(component, enabled) => emit('component-enabled', component, enabled)" @component-version="(component, version) => emit('component-version', component, version)" @browse="emit('browse', $event)" @export="emit('export', $event)" @save-setting="(key, value) => emit('save-setting', key, value)" @install-start="emit('install-start', $event)" @install-progress="emit('install-progress', $event)" @install-done="emit('install-done', $event)" @action="emit('action', $event)" />
+    <PclInstancePage v-if="selected" :key="selected.id" v-show="page === 'manage'" :instance="selected" :details="details" :icon="icon" :components="components" :settings="settings" :component-error="componentError" :notes="notes" :busy="busy" :execute="execute" :console-lines="consoleLines" :console-state="consoleState" :log-files="logFiles" :file-log="fileLog" @launch="emit('manage-launch')" @open-folder="emit('manage-open-folder')" @settings="emit('manage-settings')" @delete="emit('delete')" @change-icon="emit('change-icon', $event)" @save-notes="emit('save-notes', $event)" @refresh="emit('refresh')" @connect-console="emit('connect-console')" @clear-console="emit('clear-console')" @read-log="emit('read-log', $event)" @component-enabled="(component, enabled) => emit('component-enabled', component, enabled)" @component-version="(component, version) => emit('component-version', component, version)" @browse="emit('browse', $event)" @export="emit('export', $event)" @save-setting="(key, value) => emit('save-setting', key, value)" @install-start="emit('install-start', $event)" @install-progress="emit('install-progress', $event)" @install-done="emit('install-done', $event)" @action="emit('action', $event)" />
+    <div v-if="page === 'manage' && !selected" class="pcl-instance-empty">
+      <p>{{ t('xmcl.system.noInstance') }}</p>
+      <PclButton icon="layout-dashboard" @click="emit('download-launch')">{{ t('xmcl.system.home') }}</PclButton>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, toRefs } from 'vue';
+import { useI18n } from 'vue-i18n';
+import PclButton from '../themes/pcl/components/PclButton.vue';
+const { t } = useI18n();
 import PclDownloadPage from '../themes/pcl/pages/download/PclDownloadPage.vue';
 import PclToolsPage from '../themes/pcl/pages/tools/PclToolsPage.vue';
 import PclSetupPage from '../themes/pcl/pages/settings/PclSetupPage.vue';
@@ -75,3 +82,7 @@ const launchProps = computed(() => ({
   logLines: props.logLines, consoleMonitorId: props.consoleMonitorId, consoleMonitorOptions: props.consoleMonitorOptions, execute: props.execute,
 }));
 </script>
+
+<style scoped>
+.pcl-instance-empty { display: grid; justify-items: center; align-content: center; gap: 16px; min-height: 300px; }
+</style>

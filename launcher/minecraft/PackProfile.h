@@ -91,6 +91,9 @@ class PackProfile : public QAbstractListModel {
     /// Returns whether the component list has been loaded from mmc-pack.json.
     bool isLoaded() const;
 
+    /// Load local component metadata without resolving or downloading dependencies.
+    Result ensureLoaded();
+
     /// install more jar mods
     void installJarMods(QStringList selectedFiles);
 

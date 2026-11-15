@@ -5,17 +5,18 @@
       <div class="instance-hero-copy"><div class="eyebrow">{{ t('ui.instanceWorkspace') }}</div><h1>{{ instance.name }}</h1><p>{{ details?.minecraftVersion || instance.runtime?.minecraft || 'Minecraft' }} · {{ instance.type || t('xmcl.instance.client') }}<span v-if="details?.root"> · {{ details.root }}</span></p></div>
       <div class="instance-hero-actions"><q-btn flat icon="folder_open" :label="t('xmcl.instance.openFolder')" :disable="busy" @click="emit('open-folder')" /><q-btn flat icon="tune" :label="t('xmcl.instance.settings')" :disable="busy" @click="emit('settings')" /><q-btn color="positive" icon="play_arrow" :label="t('xmcl.instance.launch')" :disable="busy || instance.running" @click="emit('launch')" /></div>
     </div>
-    <div v-if="!hideToolbar" class="workspace-toolbar"><q-btn-toggle v-model="section" flat toggle-color="primary" :options="[{label:t('xmcl.instance.overview'),value:'overview'},{label:t('xmcl.instance.resources'),value:'resources'},{label:t('xmcl.instance.components'),value:'components'},{label:t('xmcl.instance.console'),value:'console'}]" /><q-space/><q-btn flat icon="more_horiz" :label="t('xmcl.instance.moreActions')" @click="moreShown=true" /></div>
+    <div v-if="!hideToolbar" class="workspace-toolbar"><q-btn-toggle v-model="section" flat toggle-color="primary" :options="workspaceSections" /><q-space/><q-btn flat icon="more_horiz" :label="t('xmcl.instance.moreActions')" @click="moreShown=true" /></div>
         <XmclInstanceOverviewSection v-show="section === 'overview'" />
         <XmclInstanceResourcesSection v-show="section === 'resources'" />
         <XmclInstanceComponentsSection v-show="section === 'components'" />
         <XmclInstanceConsoleSection v-show="section === 'console'" />
+        <XmclInstanceProvenanceSection v-if="isExternal" v-show="section === 'provenance'" :instance="instance" />
     <XmclInstanceActionsDialog @delete="emit('delete')" @change-icon="emit('change-icon', $event)" />
     <XmclInstanceVersionDialog />
   </section>
 </template>
 <script setup lang="ts">
-import { provide, ref, toRef, watch } from 'vue';
+import { computed, provide, ref, toRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import XmclHomeGrid from './XmclHomeGrid.vue';
 import XmclResourceWorkspace from './XmclResourceWorkspace.vue';
@@ -31,10 +32,22 @@ import XmclInstanceOverviewSection from './XmclInstanceOverviewSection.vue';
 import XmclInstanceResourcesSection from './XmclInstanceResourcesSection.vue';
 import XmclInstanceComponentsSection from './XmclInstanceComponentsSection.vue';
 import XmclInstanceConsoleSection from './XmclInstanceConsoleSection.vue';
+import XmclInstanceProvenanceSection from './XmclInstanceProvenanceSection.vue';
 const props=defineProps<{instance:any;details:any;icon?:string;components:any[];componentError?:string;notes:string;busy:boolean;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>;consoleLines:string[];consoleState:string;logFiles:any[];fileLog:string;initialSection?:string;initialResourceKind?:string;hideToolbar?:boolean}>();
 const { t } = useI18n();
 const emit=defineEmits<{launch:[];'open-folder':[];settings:[];delete:[];'change-icon':[iconKey?:string];'save-notes':[notes:string];refresh:[];'connect-console':[];'clear-console':[];'read-log':[file:string];'component-enabled':[component:any,enabled:boolean];'component-version':[component:any,version:string];action:[op:string]}>();
 const section=ref(props.initialSection || 'overview'), resourceKind=ref(props.initialResourceKind || 'mods'), localNotes=ref(props.notes), follow=ref(true), moreShown=ref(false), versionShown=ref(false), editing=ref<any>(null), version=ref('');
+const isExternal = computed(() => props.instance?.format === 'vanilla-compatible' || props.instance?.vanillaCompatible === true);
+const workspaceSections = computed(() => {
+  const sections = [
+    { label: t('xmcl.instance.overview'), value: 'overview' },
+    { label: t('xmcl.instance.resources'), value: 'resources' },
+    { label: t('xmcl.instance.components'), value: 'components' },
+    { label: t('xmcl.instance.console'), value: 'console' },
+  ];
+  if (isExternal.value) sections.push({ label: '来源痕迹', value: 'provenance' });
+  return sections;
+});
 const resourceKinds=[{label:t('resource.kinds.mods'),value:'mods'},{label:t('resource.kinds.resourcepacks'),value:'resourcepacks'},{label:t('resource.kinds.shaderpacks'),value:'shaderpacks'},{label:t('resource.kinds.datapacks'),value:'datapacks'},{label:t('resource.kinds.schematics'),value:'schematics'}]; const actions=[{op:'rename',label:t('xmcl.instance.rename'),icon:'edit'},{op:'copy',label:t('xmcl.instance.copy'),icon:'content_copy'},{op:'group',label:t('xmcl.instance.group'),icon:'folder'},{op:'update',label:t('xmcl.instance.update'),icon:'system_update'},{op:'verify',label:t('xmcl.instance.verify'),icon:'verified'},{op:'stop',label:t('xmcl.instance.stop'),icon:'stop'}];
 watch(()=>props.notes,v=>localNotes.value=v);
 watch(()=>props.initialSection,v=>{if(v) section.value=v;});

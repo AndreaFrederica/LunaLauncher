@@ -5,18 +5,27 @@
 #include <QDir>
 #include <QBuffer>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QTemporaryDir>
 #include <QUrl>
+
+#include <optional>
 
 #include "Application.h"
 #include "BaseInstance.h"
+#include "FileSystem.h"
 #include "cli/OperationService.h"
 #include "cli/HeadlessBlockedMods.h"
 #include "DesktopServices.h"
 #include "InstanceImportTask.h"
 #include "InstanceList.h"
+#include "InstanceStore.h"
 #include "InstanceTask.h"
+#include "VanillaConversion.h"
+#include "VanillaConversionTask.h"
 #include "LaunchController.h"
 #include "LauncherApi.h"
 #include "api/LauncherApiSupport.h"
@@ -25,6 +34,11 @@
 #include "icons/IconUtils.h"
 #include "minecraft/ShortcutUtils.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/MinecraftLoadAndCheck.h"
+#include "minecraft/PackProfile.h"
+#include "minecraft/Component.h"
+#include "minecraft/OneSixVersionFormat.h"
+#include "settings/INISettingsObject.h"
 #include "minecraft/update/AssetUpdateTask.h"
 #include "minecraft/VanillaInstanceCreationTask.h"
 #include "meta/CleanroomMeta.h"
@@ -33,6 +47,8 @@
 #include "server/ServerInstance.h"
 #include "server/ServerInstanceCreationTask.h"
 #include "tasks/Task.h"
+#include "cli/UserInteraction.h"
+#include "cli/ScopedUserInteraction.h"
 
 namespace {
 
@@ -101,6 +117,139 @@ bool waitForTask(Task* task, UserInteraction& interaction, QString* error, Launc
     if (!task->wasSuccessful() && error)
         *error = task->failReason().isEmpty() ? QObject::tr("The operation was aborted.") : task->failReason();
     return task->wasSuccessful();
+}
+
+bool resolveVanillaExport(LauncherApi& api, const QString& root, VanillaExportOptions& options,
+                          UserInteraction& interaction, QString& error)
+{
+    // Temporary directories are intentionally outside the registered stores.
+    // Load directly instead of relying on InstanceList's configured-root scan.
+    auto settings = std::make_unique<INISettingsObject>(QDir(root).filePath("instance.cfg"));
+    MinecraftInstance instance(APPLICATION->settings(), std::move(settings), root);
+    instance.loadSpecificSettings();
+    MinecraftLoadAndCheck load(&instance, Net::Mode::Online);
+    if (!waitForTask(&load, interaction, &error, &api)) return false;
+    const auto components = instance.getPackProfile();
+    for (int i = 0; i < components->rowCount(); ++i) {
+        const auto component = components->getComponent(static_cast<size_t>(i));
+        if (!component->isEnabled()) continue;
+        const auto file = component->getVersionFile();
+        if (!file) {
+            error = QObject::tr("Missing resolved metadata for %1.").arg(component->getID());
+            return false;
+        }
+        // Preserve structured arguments, download rules and logging fields
+        // which the internal VersionFile model does not round-trip.
+        const auto meta = component->getMeta();
+        const auto path = component->isCustom() || !meta ? components->patchFilePathForUid(component->getID())
+                                                       : QDir("meta").filePath(meta->localFilename());
+        QFile raw(path);
+        auto profile = raw.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(raw.readAll()).object() : QJsonObject{};
+        if (profile.isEmpty()) profile = OneSixVersionFormat::versionFileToJson(file).object();
+        profile.insert("uid", component->getID());
+        profile.insert("version", component->getVersion());
+        options.componentProfiles.append(profile);
+    }
+    options.librariesRoot = QDir("libraries").absolutePath();
+    options.assetsRoot = instance.assetsRoot();
+    return true;
+}
+
+struct InstanceStoreTarget {
+    InstanceStore store;
+
+    bool isVanilla() const { return store.isVanillaCompatible(); }
+};
+
+std::optional<InstanceStoreTarget> chooseInstanceStoreTarget(const QJsonObject& parameters,
+                                                              UserInteraction& interaction,
+                                                              QString* error)
+{
+    const auto requestedId = parameters.value(QStringLiteral("targetStoreId")).toString().trimmed();
+    auto format = parameters.value("targetFormat").toString().trimmed();
+    if (!format.isEmpty() && format != "prism" && format != "vanilla-compatible") {
+        if (error) *error = QObject::tr("targetFormat must be prism or vanilla-compatible.");
+        return std::nullopt;
+    }
+    if (format.isEmpty() && requestedId.isEmpty() && !parameters.value("source").toString().isEmpty()) {
+        const auto selected = interaction.select(QObject::tr("请选择导入后的实例格式"), QJsonArray{
+            QJsonObject{{"id","prism"}, {"name",QObject::tr("Prism / MMC 格式")}},
+            QJsonObject{{"id","vanilla-compatible"}, {"name",QObject::tr("原版格式（HMCL / PCL，需要已配置原版存储位置）")}}});
+        if (!selected || *selected < 0 || *selected > 1) {
+            if (error) *error = QObject::tr("Instance import was cancelled."); return std::nullopt;
+        }
+        format = *selected == 0 ? "prism" : "vanilla-compatible";
+    }
+    const auto matches = [&format](const InstanceStore& store) {
+        return format.isEmpty() || (format == "vanilla-compatible" ? store.isVanillaCompatible() : store.isPrism());
+    };
+    auto* registry = APPLICATION->instanceStores();
+    if (!registry) {
+        if (error) *error = QObject::tr("Instance stores are not available.");
+        return std::nullopt;
+    }
+
+    if (!requestedId.isEmpty()) {
+        const auto* store = registry->find(requestedId);
+        if (!store || !store->enabled || !store->writable || !matches(*store)) {
+            if (error) *error = QObject::tr("The selected instance store is not enabled, writable, or compatible with the selected format.");
+            return std::nullopt;
+        }
+        return InstanceStoreTarget{ *store };
+    }
+
+    QList<InstanceStore> candidates;
+    for (const auto& store : registry->stores()) {
+        if (store.enabled && store.writable && matches(store))
+            candidates.append(store);
+    }
+    if (candidates.isEmpty()) {
+        if (error) *error = QObject::tr("No enabled writable instance store matches the selected format. Configure a matching storage location first.");
+        return std::nullopt;
+    }
+    if (candidates.size() == 1) {
+        interaction.status(QObject::tr("安装到：%1 · %2").arg(candidates.constFirst().path, candidates.constFirst().isVanillaCompatible() ? QObject::tr("原版格式") : QObject::tr("Prism / MMC 格式")));
+        return InstanceStoreTarget{ candidates.constFirst() };
+    }
+
+    QJsonArray choices;
+    for (const auto& store : candidates) {
+        const auto format = store.isVanillaCompatible() ? QObject::tr("原版格式") : QObject::tr("Prism / MMC 格式");
+        choices.append(QJsonObject{ { "id", store.id },
+                                    { "name", QStringLiteral("%1 — %2 · %3").arg(store.name.isEmpty() ? store.id : store.name, store.path, format) } });
+    }
+    const auto selected = interaction.select(QObject::tr("请选择实例安装目录"), choices);
+    if (!selected || *selected < 0 || *selected >= candidates.size()) {
+        if (error) *error = QObject::tr("Instance installation was cancelled because no target store was selected.");
+        return std::nullopt;
+    }
+    return InstanceStoreTarget{ candidates.at(*selected) };
+}
+
+QString versionIdFromPrismRoot(const QString& prismRoot, const QString& requested)
+{
+    if (!requested.trimmed().isEmpty())
+        return requested.trimmed();
+    QFile patch(QDir(prismRoot).filePath(QStringLiteral("patches/net.minecraft.json")));
+    if (patch.open(QIODevice::ReadOnly)) {
+        QJsonParseError parseError;
+        const auto object = QJsonDocument::fromJson(patch.readAll(), &parseError).object();
+        const auto version = object.value(QStringLiteral("version")).toString().trimmed();
+        if (!version.isEmpty()) return version;
+        const auto id = object.value(QStringLiteral("id")).toString().trimmed();
+        if (!id.isEmpty()) return id;
+    }
+    QFile pack(QDir(prismRoot).filePath(QStringLiteral("mmc-pack.json")));
+    if (pack.open(QIODevice::ReadOnly)) {
+        QJsonParseError parseError;
+        const auto components = QJsonDocument::fromJson(pack.readAll(), &parseError).object().value(QStringLiteral("components")).toArray();
+        for (const auto& value : components) {
+            const auto component = value.toObject();
+            if (component.value(QStringLiteral("uid")).toString() == QStringLiteral("net.minecraft"))
+                return component.value(QStringLiteral("version")).toString().trimmed();
+        }
+    }
+    return {};
 }
 
 QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& interaction, LauncherApi& api)
@@ -179,24 +328,8 @@ QJsonObject createInstance(const QJsonObject& parameters, UserInteraction& inter
     rawTask->setGroup(group);
     rawTask->setIcon(icon);
 
-    QSet<QString> previousIds;
-    for (int i = 0; i < APPLICATION->instances()->count(); ++i)
-        previousIds.insert(APPLICATION->instances()->at(i)->id());
-
-    auto task = APPLICATION->instances()->wrapInstanceTask(rawTask);
-    QString error;
-    if (!waitForTask(task, interaction, &error, &api))
-        return OperationService::failure(error);
-    APPLICATION->instances()->saveNow();
-
-    for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
-        auto instance = APPLICATION->instances()->at(i);
-        if (!previousIds.contains(instance->id()))
-            return OperationService::success(QJsonObject{ { "id", instance->id() },
-                                                           { "name", instance->name() },
-                                                           { "root", instance->instanceRoot() } });
-    }
-    return OperationService::success(QJsonObject{ { "name", name } });
+    /* target-store installation is handled by the shared writer below. */
+    return installInstanceTaskToStore(api, rawTask, parameters, interaction);
 }
 
 QJsonObject stopInstance(const QJsonObject& parameters, bool force)
@@ -210,8 +343,9 @@ QJsonObject stopInstance(const QJsonObject& parameters, bool force)
 
     bool stopped = false;
     if (auto server = dynamic_cast<ServerInstance*>(instance)) {
-        server->stopServer();
-        stopped = !server->isRunning();
+        // Server instances have a real graceful path (the configured console
+        // command) and a separate process-tree kill path for instance.kill.
+        stopped = server->stopServer(force);
     } else {
         // Use the controller when present, or the instance's launch task for
         // detached API launches.
@@ -390,7 +524,168 @@ QJsonObject iconPayload(BaseInstance* inst)
         { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) } });
 }
 
+QJsonObject iconLibraryPayload()
+{
+    // Keep the browser and Qt clients on the same source of truth.  IconList
+    // contains both the bundled launcher icons and user-installed icons, with
+    // user files already taking precedence through its normal directory scan.
+    APPLICATION->icons()->directoryChanged(APPLICATION->icons()->getDirectory());
+    QJsonArray icons;
+    const auto list = APPLICATION->icons();
+    for (int row = 0; row < list->rowCount(); ++row) {
+        const auto modelIndex = list->index(row, 0);
+        const auto key = list->data(modelIndex, Qt::UserRole).toString();
+        if (key.isEmpty()) continue;
+        const auto icon = list->getIcon(key);
+        const auto pixmap = icon.pixmap(64, 64);
+        QByteArray bytes;
+        QBuffer buffer(&bytes);
+        buffer.open(QIODevice::WriteOnly);
+        if (pixmap.isNull() || !pixmap.save(&buffer, "PNG")) continue;
+        icons.append(QJsonObject{
+            { "key", key },
+            { "name", list->data(modelIndex, Qt::DisplayRole).toString() },
+            { "dataUrl", "data:image/png;base64," + QString::fromLatin1(bytes.toBase64()) },
+        });
+    }
+    return OperationService::success(QJsonObject{ { "icons", icons } });
+}
+
 }  // namespace
+
+QJsonObject installInstanceTaskToStore(LauncherApi& api,
+                                       InstanceTask* task,
+                                       const QJsonObject& parameters,
+                                       UserInteraction& interaction,
+                                       QJsonArray warnings)
+{
+    ScopedUserInteraction interactionScope(interaction);
+    std::unique_ptr<InstanceTask> pending(task);
+    if (!pending)
+        return OperationService::failure(QObject::tr("Could not create an instance task."));
+
+    QString targetError;
+    const auto target = chooseInstanceStoreTarget(parameters, interaction, &targetError);
+    if (!target)
+        return OperationService::failure(targetError, 2);
+    if (parameters.value(QStringLiteral("type")).toString().trimmed().compare(QStringLiteral("server"), Qt::CaseInsensitive) == 0 && target->isVanilla())
+        return OperationService::failure(QObject::tr("Server instances can only be installed into a Prism / MMC store."), 2);
+
+    QSet<QString> previousIds;
+    for (int i = 0; i < APPLICATION->instances()->count(); ++i)
+        previousIds.insert(APPLICATION->instances()->at(i)->id());
+    const auto requestedName = pending->name();
+    const auto requestedGroup = pending->group();
+
+    if (target->isVanilla()) {
+        const auto install = [&]() -> QJsonObject {
+            QTemporaryDir staging;
+            if (!staging.isValid())
+                return OperationService::failure(QObject::tr("Could not create a temporary instance directory."));
+            // Run the ordinary installer privately. Only the converted vanilla
+            // profile is committed to the user's selected store.
+            std::unique_ptr<InstanceTask> stagedTask(pending.release());
+            stagedTask->setStagingPath(staging.path());
+            stagedTask->setParentSettings(APPLICATION->settings());
+            stagedTask->setConfirmUpdate(false);
+            auto* directoryImport = dynamic_cast<InstanceImportTask*>(stagedTask.get());
+            if (directoryImport) directoryImport->preserveVanillaSource(true);
+            QString error;
+            if (!waitForTask(stagedTask.get(), interaction, &error, &api))
+                return OperationService::failure(error);
+            for (const auto& warning : stagedTask->warnings()) warnings.append(warning);
+            if (directoryImport && !directoryImport->vanillaSource().isEmpty()) {
+                const auto source = directoryImport->vanillaSource();
+                const auto name = requestedName.isEmpty() ? QFileInfo(source).fileName() : requestedName;
+                const auto versions = QDir(VanillaConverter::gameRootForStore(target->store.path)).filePath("versions");
+                if (!QDir().mkpath(versions)) return OperationService::failure(QObject::tr("Could not create the selected versions directory."));
+                const auto destination = QDir(versions).filePath(FS::DirNameFromString(name, versions));
+                VanillaImportOptions options; options.name = name; options.group = parameters.value("group").toString(requestedGroup);
+                VanillaConversionTask conversion([source, destination, options, temporary = staging.path()](const VanillaConversionFeedback& feedback) mutable {
+                    options.feedback = feedback;
+                    auto report = VanillaConverter::importToVanilla(source, destination, options);
+                    feedback.update(QObject::tr("正在清理解压临时文件"));
+                    FS::deletePath(temporary);
+                    return report;
+                });
+                if (!waitForTask(&conversion, interaction, &error, &api)) return OperationService::failure(error);
+                const auto& report = conversion.report();
+                for (const auto& warning : report.warnings) warnings.append(warning);
+                return OperationService::success(QJsonObject{{"name",name},{"root",destination},{"format","vanilla-compatible"},{"warnings",warnings}});
+            }
+            const auto prismRoot = staging.path();
+            if (!QFileInfo::exists(QDir(prismRoot).filePath("instance.cfg")))
+                return OperationService::failure(QObject::tr("The temporary Minecraft instance was not created."));
+            const auto versionId = versionIdFromPrismRoot(prismRoot, parameters.value("version").toString());
+            if (versionId.isEmpty())
+                return OperationService::failure(QObject::tr("The created instance does not contain a Minecraft version profile."));
+            const auto instanceName = requestedName.isEmpty() ? stagedTask->name() : requestedName;
+            const auto name = instanceName.isEmpty() ? versionId : instanceName;
+            const auto versionsRoot = QDir(VanillaConverter::gameRootForStore(target->store.path)).filePath("versions");
+            if (!QDir().mkpath(versionsRoot))
+                return OperationService::failure(QObject::tr("Could not create the selected instance store."));
+            const auto instanceId = FS::DirNameFromString(name, versionsRoot);
+            const auto destination = QDir(versionsRoot).filePath(instanceId);
+            VanillaExportOptions options;
+            options.versionId = instanceId;
+            options.isolated = true;
+            options.name = name;
+            options.group = parameters.value("group").toString(requestedGroup);
+            if (!resolveVanillaExport(api, prismRoot, options, interaction, error))
+                return OperationService::failure(error);
+            VanillaConversionTask conversion([prismRoot, destination, options](const VanillaConversionFeedback& feedback) mutable {
+                options.feedback = feedback;
+                auto report = VanillaConverter::exportToVanilla(prismRoot, destination, options);
+                feedback.update(QObject::tr("正在清理解压临时文件"));
+                FS::deletePath(prismRoot);
+                return report;
+            });
+            if (!waitForTask(&conversion, interaction, &error, &api)) return OperationService::failure(error);
+            const auto& report = conversion.report();
+            for (const auto& warning : report.warnings) warnings.append(warning);
+            return OperationService::success(QJsonObject{ { "name", name }, { "root", destination },
+                                                           { "format", "vanilla-compatible" }, { "warnings", warnings } });
+        };
+        auto result = install();
+
+        // Discover the committed external profile after discarding temporary
+        // MMC data, then return its stable ID.
+        APPLICATION->instances()->loadList();
+        if (!result.value("ok").toBool())
+            return result;
+        const auto data = result.value("data").toObject();
+        const auto destination = data.value("root").toString();
+        for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+            auto* instance = APPLICATION->instances()->at(i);
+            if (!previousIds.contains(instance->id()) && QDir::cleanPath(instance->instanceRoot()) == QDir::cleanPath(destination)) {
+                auto updated = data;
+                updated.insert("id", instance->id());
+                updated.insert("name", instance->name());
+                return OperationService::success(updated);
+            }
+        }
+        return result;
+    }
+
+    Task::Ptr wrapped(APPLICATION->instances()->wrapInstanceTask(pending.release(), target->store.path));
+    QString error;
+    if (!waitForTask(wrapped.get(), interaction, &error, &api))
+        return OperationService::failure(error);
+    for (const auto& warning : wrapped->warnings()) warnings.append(warning);
+    APPLICATION->instances()->saveNow();
+    for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+        auto* instance = APPLICATION->instances()->at(i);
+        if (!previousIds.contains(instance->id()))
+            return OperationService::success(QJsonObject{ { "id", instance->id() },
+                                                           { "name", instance->name() },
+                                                           { "root", instance->instanceRoot() },
+                                                           { "format", "prism" },
+                                                           { "warnings", warnings } });
+    }
+    return OperationService::success(QJsonObject{ { "name", parameters.value(QStringLiteral("name")).toString() },
+                                                   { "format", "prism" },
+                                                   { "warnings", warnings } });
+}
 
 void registerInstanceApiOperations(LauncherApi& api)
 {
@@ -479,9 +774,20 @@ void registerInstanceApiOperations(LauncherApi& api)
                                            { "loader", stringProperty("Optional loader id or alias.") },
                                            { "loaderVersion", stringProperty("Optional loader version.") },
                                            { "source", stringProperty("Local path or URL to an instance pack.") },
+                                           { "targetStoreId", stringProperty("Optional enabled writable Prism or vanilla-compatible Store ID for the new instance.") },
+                                           { "targetFormat", stringProperty("prism or vanilla-compatible.") },
                                            { "name", stringProperty("Instance name.") }, { "group", stringProperty("Instance group.") },
                                            { "icon", stringProperty("Icon key.") }, { "executable", stringProperty("Server executable.") },
                                            { "arguments", QJsonObject{ { "description", "Server arguments." } } } }) },
+                         [&api](const QJsonObject& parameters, UserInteraction& interaction) { return createInstance(parameters, interaction, api); });
+    api.registerOperation({ "instance.import", "Import an instance pack into a selected Store.",
+                            objectSchema({ { "source", stringProperty("Local path or URL to an instance pack.") },
+                                           { "targetStoreId", stringProperty("Optional enabled writable Prism or vanilla-compatible Store ID.") },
+                                           { "targetFormat", stringProperty("prism or vanilla-compatible; interactive choice when omitted without targetStoreId.") },
+                                           { "name", stringProperty("Optional instance name.") },
+                                           { "group", stringProperty("Optional instance group.") },
+                                           { "icon", stringProperty("Optional instance icon key.") } },
+                                          { "source" }) },
                          [&api](const QJsonObject& parameters, UserInteraction& interaction) { return createInstance(parameters, interaction, api); });
     api.registerOperation({ "instance.stop", "Stop a running instance.", objectSchema({ { "instance", instance } }, { "instance" }) },
                            [](const QJsonObject& parameters, UserInteraction&) { return stopInstance(parameters, false); });
@@ -527,6 +833,9 @@ void registerInstanceApiOperations(LauncherApi& api)
                                }
                                return OperationService::success(QJsonObject{ { "icons", icons } });
                            });
+     api.registerOperation({ "instance.icon-library", "Read the launcher icon library, including bundled and installed icons.",
+                             objectSchema({}) },
+                            [](const QJsonObject&, UserInteraction&) { return iconLibraryPayload(); });
     api.registerOperation({ "instance.set-icon", "Assign a built-in or imported icon to an instance.",
                             objectSchema({ { "instance", instance }, { "icon", stringProperty("Icon key.") },
                                            { "path", stringProperty("Icon file to import.") },

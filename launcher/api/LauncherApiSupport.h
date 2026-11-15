@@ -21,7 +21,12 @@ inline QJsonObject schema(QJsonObject properties, QJsonArray required = {})
 inline bool wait(LauncherApi& api, const Task::Ptr& task, UserInteraction& interaction, QString& error)
 {
     if (!task) {
-        error = QStringLiteral("The operation did not create a task.");
+        // Some provider APIs report the reason through their callback before
+        // returning a null task (for example, when a filter cannot be mapped
+        // to a provider URL). Preserve that diagnostic instead of replacing
+        // it with the generic task-creation message.
+        if (error.isEmpty())
+            error = QStringLiteral("The operation did not create a task.");
         return false;
     }
     QEventLoop loop;

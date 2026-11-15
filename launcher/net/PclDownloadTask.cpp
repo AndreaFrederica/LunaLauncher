@@ -65,6 +65,41 @@ PclDownloadTask::PclDownloadTask(QString path) : Download(), m_targetPath(std::m
     connect(&m_stallTimer, &QTimer::timeout, this, &PclDownloadTask::checkStall);
 }
 
+QJsonObject PclDownloadTask::batchDescriptor() const
+{
+    QJsonArray urls;
+    for (const auto& url : downloadUrls()) urls.append(url.toString());
+    QJsonObject object{ { "urls", urls }, { "localPath", m_targetPath }, { "expectedSize", expectedSize() } };
+    const auto hash = expectedHash();
+    if (!hash.isEmpty())
+        object.insert("hash", hash);
+    return object;
+}
+
+void PclDownloadTask::startBatchProxy()
+{
+    m_batchProxy = true;
+    m_finished = false;
+    start();
+}
+
+bool PclDownloadTask::finishBatchProxy()
+{
+    if (!m_batchProxy || m_finished)
+        return wasSuccessful();
+    m_finished = true;
+    finishDownload();
+    return wasSuccessful();
+}
+
+void PclDownloadTask::failBatchProxy(const QString& reason)
+{
+    if (!m_batchProxy || m_finished)
+        return;
+    m_finished = true;
+    failOrAbort(reason);
+}
+
 bool PclDownloadTask::shouldUseFor(const QUrl& url)
 {
     if (!APPLICATION_DYN || !BuildConfig.PCL_DOWNLOAD_ENABLED) {
@@ -104,6 +139,8 @@ Download::Ptr PclDownloadTask::makeCached(QUrl url, MetaEntryPtr entry, Options 
 
 void PclDownloadTask::executeTask()
 {
+    if (m_batchProxy)
+        return;
     // NetJob retries a failed action by restarting the very same task object, so
     // every attempt has to start from a clean slate. Without this reset a retry
     // would ignore all native events (m_finished) and hang forever.
@@ -143,7 +180,9 @@ void PclDownloadTask::executeTask()
     // main thread, so m_taskId is always assigned before any handler runs.
     connect(bridge, &PclDownloadBridge::taskEvent, this, &PclDownloadTask::onTaskEvent);
 
-    m_taskId = lib.startFileDownload(m_url, m_targetPath, expectedHash(), expectedSize());
+    QStringList urls;
+    for (const auto& url : downloadUrls()) urls.append(url.toString());
+    m_taskId = lib.startFileDownload(urls, m_targetPath, expectedHash(), expectedSize());
     if (m_taskId < 0) {
         startQtFallback(tr("PCL.Download failed to start the download"));
         return;

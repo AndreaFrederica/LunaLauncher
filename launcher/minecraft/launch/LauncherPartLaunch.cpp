@@ -174,6 +174,7 @@ void LauncherPartLaunch::on_state(LoggedProcess::State state)
         }
         case LoggedProcess::Aborted:
         case LoggedProcess::Crashed: {
+            m_parent->setGameExitCode(m_process.exitCode());
             m_parent->setPid(-1);
             m_parent->instance()->setMinecraftRunning(false);
             emitFailed(tr("Game crashed."));
@@ -188,6 +189,7 @@ void LauncherPartLaunch::on_state(LoggedProcess::State state)
             m_parent->instance()->setMinecraftRunning(false);
             // if the exit code wasn't 0, report this as a crash
             auto exitCode = m_process.exitCode();
+            m_parent->setGameExitCode(exitCode);
             if (exitCode != 0) {
                 emitFailed(tr("Game crashed."));
                 return;

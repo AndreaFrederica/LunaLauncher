@@ -44,10 +44,12 @@
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QSet>
 #include <QTranslator>
+#include <QUrl>
 #include <locale>
 
 #include "BuildConfig.h"
@@ -309,14 +311,15 @@ void TranslationsModel::reloadLocalFiles()
         QString langCode;
         FileType fileType = FileType::NONE;
         if (completeSuffix == "qm") {
-            if (fileName.startsWith("mmc_")) {
-                langCode = fileName.mid(4);  // Remove "mmc_" prefix
+            const auto baseName = QFileInfo(fileName).completeBaseName();
+            if (baseName.startsWith("mmc_")) {
+                langCode = baseName.mid(4);  // Remove "mmc_" prefix and the .qm suffix
             } else {
                 return qMakePair(QString(), qMakePair(FileType::NONE, false));  // Invalid .qm file name
             }
             fileType = FileType::QM;
         } else if (completeSuffix == "po") {
-            langCode = fileName;  // .po files use the whole filename as langCode
+            langCode = QFileInfo(fileName).completeBaseName();  // .po files use the base filename as langCode
             fileType = FileType::PO;
         } else {
             return qMakePair(QString(), qMakePair(FileType::NONE, false));
@@ -533,6 +536,23 @@ bool TranslationsModel::selectLanguage(QString key)
     QString& langCode = key;
     auto langPtr = findLanguageAsOptional(key);
 
+    // Older builds could persist the translation filename (for example
+    // "zh.po") instead of its language key ("zh"). Normalize those values
+    // before looking up the language so they cannot trigger a download with
+    // an empty file name.
+    if (!langPtr.has_value() && (key.endsWith(".po", Qt::CaseInsensitive) || key.endsWith(".qm", Qt::CaseInsensitive))) {
+        auto normalized = QFileInfo(key).completeBaseName();
+        if (normalized.startsWith("mmc_")) {
+            normalized = normalized.mid(4);
+        }
+        auto normalizedLanguage = findLanguageAsOptional(normalized);
+        if (normalizedLanguage.has_value()) {
+            qWarning() << "Normalizing persisted translation key" << key << "to" << normalized;
+            key = normalized;
+            langPtr = normalizedLanguage;
+        }
+    }
+
     if (langCode.isEmpty()) {
         d->no_language_set = true;
     }
@@ -690,11 +710,24 @@ void TranslationsModel::downloadTranslation(QString key)
         return;
     }
 
+    if (lang->file_name.trimmed().isEmpty()) {
+        qWarning() << "Will not download translation" << key << "because its index entry has no file name";
+        return;
+    }
+
+    const QUrl baseUrl(BuildConfig.TRANSLATION_FILES_URL);
+    const QUrl fileUrl = baseUrl.resolved(QUrl(lang->file_name));
+    if (!baseUrl.isValid() || !fileUrl.isValid() || fileUrl == baseUrl || fileUrl.path().endsWith('/')) {
+        qWarning() << "Will not download translation" << key << "because its resolved URL is invalid" << fileUrl;
+        return;
+    }
+
     d->m_downloadingTranslation = key;
     MetaEntryPtr entry = APPLICATION->metacache()->resolveEntry("translations", "mmc_" + key + ".qm");
     entry->setStale(true);
 
-    auto dl = Net::Download::makeCached(QUrl(BuildConfig.TRANSLATION_FILES_URL + lang->file_name), entry);
+    qDebug() << "Downloading translation" << key << "from" << fileUrl;
+    auto dl = Net::Download::makeCached(fileUrl, entry);
     dl->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, lang->file_sha1));
     dl->setProgress(dl->getProgress(), lang->file_size);
 

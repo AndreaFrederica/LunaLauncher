@@ -5,12 +5,19 @@
 #include "ServerLaunchTask.h"
 #include "ServerInstance.h"
 #include "FileSystem.h"
+#include "minecraft/auth/AuthlibInjector.h"
 #include <QDir>
+#include <QCoreApplication>
+#include <QEventLoop>
 #include <QProcessEnvironment>
 #include <QDebug>
 #include <QProcess>
 #include <QFileInfo>
+#include <QThread>
+#include <QUrl>
+#include <QDateTime>
 #include <cerrno>
+#include <utility>
 #ifndef Q_OS_WIN
 #include <unistd.h>
 #include <signal.h>
@@ -93,6 +100,43 @@ void ServerLaunchTask::executeTask()
     parseCommandLine(fullCmd, workDir, cmd, args);
     args.append(extraArgs);
 
+    // Server instances do not have a Minecraft account session, so their
+    // authlib-injector settings are applied directly to the Java command.
+    // The injector jar is shared with the normal launcher cache.
+    if (m_instance->authlibInjectorEnabled()) {
+        const auto apiUrl = m_instance->authlibInjectorApiUrl().trimmed();
+        const QUrl api(apiUrl);
+        if (apiUrl.isEmpty() || !api.isValid() || (api.scheme() != "http" && api.scheme() != "https") || api.host().isEmpty()) {
+            emitFailed("Authlib Injector is enabled, but its API URL is invalid.");
+            return;
+        }
+        auto injectorPath = AuthlibInjector::instance().getLocalPath();
+        if (!AuthlibInjector::instance().checkCache())
+            injectorPath = AuthlibInjector::instance().downloadLatest();
+        if (injectorPath.isEmpty() || !QFileInfo::exists(injectorPath)) {
+            emitFailed("Authlib Injector is enabled, but authlib-injector.jar is unavailable.");
+            return;
+        }
+
+        QStringList injectorArgs;
+        injectorArgs << QString("-javaagent:%1=%2").arg(injectorPath, apiUrl);
+        const auto metadata = AuthlibInjector::instance().getYggdrasilMeta(apiUrl);
+        if (!metadata.isEmpty())
+            injectorArgs << QString("-Dauthlibinjector.yggdrasil.prefetched=%1").arg(metadata);
+
+        const bool javaCommand = cmd.contains("java", Qt::CaseInsensitive);
+        if (javaCommand) {
+            int jarPos = args.indexOf("-jar");
+            if (jarPos < 0)
+                jarPos = 0;
+            for (int i = injectorArgs.size() - 1; i >= 0; --i)
+                args.insert(jarPos, injectorArgs.at(i));
+        } else {
+            emitFailed("Authlib Injector requires a Java server executable.");
+            return;
+        }
+    }
+
     // Add JVM properties
     if (cmd.contains("java", Qt::CaseInsensitive) && args.contains("-jar", Qt::CaseInsensitive)) {
         int jarPos = args.indexOf("-jar");
@@ -143,11 +187,48 @@ void ServerLaunchTask::executeTask()
     qDebug() << "ServerLaunchTask::executeTask() - Server started successfully";
 }
 
-void ServerLaunchTask::stop()
+bool ServerLaunchTask::stop(bool force)
 {
     qDebug() << "ServerLaunchTask::stop() - Stopping server";
 
-    m_finished = true;
+    if (m_finished || !m_ptyProcess) {
+        if (m_instance && m_instance->isRunning())
+            m_instance->setRunning(false);
+        return true;
+    }
+
+    if (m_stopping)
+        return false;
+    m_stopping = true;
+
+    const qint64 pid = m_ptyProcess->pid();
+    bool exited = false;
+
+    // A normal stop is an actual server-console command. It intentionally
+    // does not kill the process when the command is empty or times out.
+    if (!force) {
+        const auto command = m_instance ? m_instance->stopCommand().trimmed() : QString();
+        if (!command.isEmpty()) {
+            auto data = command.toUtf8();
+            if (!data.endsWith('\n'))
+                data.append('\n');
+            writeToStdin(data);
+            exited = waitForProcessExit(pid, 10000);
+        }
+        if (!exited) {
+            m_stopping = false;
+            return false;
+        }
+        m_stopping = false;
+        return true;
+    }
+
+    exited = terminateProcessTree();
+    if (!exited) {
+        m_stopping = false;
+        qWarning() << "ServerLaunchTask::stop() - Process tree could not be terminated";
+        return false;
+    }
 
     // Stop timer first
     if (m_exitCheckTimer) {
@@ -155,17 +236,29 @@ void ServerLaunchTask::stop()
         m_exitCheckTimer->blockSignals(true);
     }
 
-    // Kill PTY process
+    // Release the PTY after the OS process tree has been terminated. The PTY
+    // implementations close handles, but do not provide process-tree kill
+    // semantics themselves.
     if (m_ptyProcess) {
         m_ptyProcess->kill();
+        m_ptyProcess.reset();
     }
+
+    m_finished = true;
 
     // Clear running state
     if (m_instance && m_instance->isRunning()) {
         m_instance->setRunning(false);
     }
 
-    qDebug() << "ServerLaunchTask::stop() - Server stopped";
+    // A forced stop is still a terminal Task result. This wakes controller
+    // and stream users that otherwise would retain a permanently-running task.
+    if (isRunning())
+        emitAborted();
+
+    m_stopping = false;
+    qDebug() << "ServerLaunchTask::stop() - Server stopped, process tree exited:" << exited;
+    return exited;
 }
 
 void ServerLaunchTask::cleanup()
@@ -183,6 +276,7 @@ void ServerLaunchTask::cleanup()
     if (m_ptyProcess) {
         if (!m_finished) {
             qDebug() << "ServerLaunchTask::cleanup() - Killing PTY process (abnormal termination)";
+            terminateProcessTree();
             m_ptyProcess->kill();
         } else {
             qDebug() << "ServerLaunchTask::cleanup() - PTY process already exited normally, just releasing";
@@ -323,16 +417,96 @@ void ServerLaunchTask::resizePty(int cols, int rows)
 
 bool ServerLaunchTask::canStop() const
 {
-    return m_ptyProcess != nullptr && !m_finished;
+    return m_ptyProcess != nullptr && !m_finished && !m_stopping;
 }
 
-bool ServerLaunchTask::stopServer()
+bool ServerLaunchTask::stopServer(bool force)
 {
-    if (!canStop()) {
+    if (!m_ptyProcess || m_finished) {
+        if (m_instance && !m_instance->isRunning())
+            return true;
         return false;
     }
-    stop();
-    return true;
+    return stop(force);
+}
+
+bool ServerLaunchTask::waitForProcessExit(qint64 pid, int timeoutMs)
+{
+    if (pid <= 0)
+        return true;
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < timeoutMs) {
+        if (m_finished || !m_ptyProcess || !isProcessRunning(pid))
+            return true;
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+        QThread::msleep(25);
+    }
+    return !isProcessRunning(pid);
+}
+
+void ServerLaunchTask::collectProcessTree(const IPtyProcess::pidTree_t &tree, QList<qint64> &pids)
+{
+    for (const auto &child : tree.children)
+        collectProcessTree(child, pids);
+    if (tree.pidInfo.pid > 0 && !pids.contains(tree.pidInfo.pid))
+        pids.append(tree.pidInfo.pid);
+}
+
+bool ServerLaunchTask::terminateProcessTree()
+{
+    if (!m_ptyProcess)
+        return true;
+
+    const qint64 rootPid = m_ptyProcess->pid();
+    if (rootPid <= 0)
+        return true;
+
+    QList<qint64> pids;
+    collectProcessTree(m_ptyProcess->processInfoTree(), pids);
+    if (!pids.contains(rootPid))
+        pids.append(rootPid);
+
+#ifdef Q_OS_WIN
+    // Children are terminated before their parent so cmd.exe/batch wrappers
+    // cannot leave the Java process detached from the PTY.
+    for (const auto pid : std::as_const(pids)) {
+        HANDLE process = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
+        if (!process)
+            continue;
+        TerminateProcess(process, 1);
+        WaitForSingleObject(process, 2000);
+        CloseHandle(process);
+    }
+#else
+    for (const auto pid : std::as_const(pids))
+        ::kill(static_cast<pid_t>(pid), SIGTERM);
+    const auto deadline = QDateTime::currentMSecsSinceEpoch() + 2000;
+    while (QDateTime::currentMSecsSinceEpoch() < deadline) {
+        bool anyRunning = false;
+        for (const auto pid : std::as_const(pids)) {
+            if (isProcessRunning(pid)) {
+                anyRunning = true;
+                break;
+            }
+        }
+        if (!anyRunning)
+            return true;
+        QThread::msleep(25);
+    }
+    for (const auto pid : std::as_const(pids))
+        if (isProcessRunning(pid))
+            ::kill(static_cast<pid_t>(pid), SIGKILL);
+#endif
+
+    bool running = false;
+    for (const auto pid : std::as_const(pids)) {
+        if (isProcessRunning(pid)) {
+            running = true;
+            break;
+        }
+    }
+    return !running;
 }
 
 void ServerLaunchTask::onPtyRead()
@@ -401,28 +575,23 @@ bool ServerLaunchTask::isProcessRunning(qint64 pid)
     }
     return false;
 #else
-    if (kill((pid_t)pid, 0) == 0) {
-        return true;
-    }
-    if (errno == ESRCH) {
+    const int probe = kill((pid_t)pid, 0);
+    if (probe < 0 && errno == ESRCH)
         return false;
-    }
-    if (errno == EPERM) {
-        return true;
-    }
+    if (probe < 0 && errno != EPERM)
+        return false;
 
-    // Try /proc as fallback
+    // Inspect /proc when available so a zombie is not reported as running.
     QString statPath = QString("/proc/%1/stat").arg(pid);
     QFile statFile(statPath);
     if (statFile.exists() && statFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QByteArray content = statFile.readAll();
         statFile.close();
         int commEnd = content.lastIndexOf(')');
-        if (commEnd > 0 && content[commEnd + 2] != 'Z') {
-            return true;
-        }
+        if (commEnd > 0)
+            return content.size() <= commEnd + 2 || content[commEnd + 2] != 'Z';
     }
-    return false;
+    return probe == 0 || errno == EPERM;
 #endif
 }
 

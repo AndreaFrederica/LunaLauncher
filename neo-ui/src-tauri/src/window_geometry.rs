@@ -6,8 +6,8 @@
 //! native window opens at the same size for every theme and every WebView.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use tauri::{LogicalSize, Manager, Window, WebviewWindow};
+use std::{path::PathBuf, sync::{Mutex, OnceLock}};
+use tauri::{LogicalSize, Manager, WebviewWindow, Window};
 
 const DEFAULT_MAIN_WIDTH: f64 = 1200.0;
 const DEFAULT_MAIN_HEIGHT: f64 = 800.0;
@@ -25,6 +25,15 @@ struct Size {
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct Geometry {
     main: Option<Size>,
+}
+
+// `set_size` can apply a platform-specific client-area offset for frameless
+// windows. Keep the offset observed during this process so save/restore stay
+// symmetric without assuming a particular DPI or window manager.
+static RESTORE_OFFSET: OnceLock<Mutex<Size>> = OnceLock::new();
+
+fn restore_offset() -> &'static Mutex<Size> {
+    RESTORE_OFFSET.get_or_init(|| Mutex::new(Size { width: 0.0, height: 0.0 }))
 }
 
 fn path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -56,16 +65,34 @@ pub fn restore_main(window: &WebviewWindow) -> Result<(), String> {
         .unwrap_or(Size { width: DEFAULT_MAIN_WIDTH, height: DEFAULT_MAIN_HEIGHT });
     window
         .set_size(LogicalSize::new(size.width, size.height))
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let actual = window.inner_size().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().unwrap_or(1.0).max(0.01);
+    let actual = Size {
+        width: f64::from(actual.width) / scale,
+        height: f64::from(actual.height) / scale,
+    };
+    if let Ok(mut offset) = restore_offset().lock() {
+        *offset = Size {
+            width: (actual.width - size.width).max(0.0).min(200.0),
+            height: (actual.height - size.height).max(0.0).min(200.0),
+        };
+    }
+    Ok(())
 }
 
 pub fn save_main(window: &Window) -> Result<(), String> {
     let physical = window.inner_size().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().unwrap_or(1.0).max(0.01);
-    let size = clamp_size(Size {
+    let mut size = Size {
         width: f64::from(physical.width) / scale,
         height: f64::from(physical.height) / scale,
-    });
+    };
+    if let Ok(offset) = restore_offset().lock() {
+        size.width = (size.width - offset.width).max(0.0);
+        size.height = (size.height - offset.height).max(0.0);
+    }
+    let size = clamp_size(size);
     let file_path = path(window.app_handle())?;
     let parent = file_path
         .parent()

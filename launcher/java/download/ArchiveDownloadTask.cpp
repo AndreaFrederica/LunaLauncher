@@ -21,6 +21,7 @@
 #include "Application.h"
 #include "archive/ArchiveReader.h"
 #include "archive/ExtractZipTask.h"
+#include "minecraft/MirrorDownload.h"
 #include "net/ChecksumValidator.h"
 #include "net/NetJob.h"
 #include "tasks/Task.h"
@@ -38,7 +39,12 @@ void ArchiveDownloadTask::executeTask()
     MetaEntryPtr entry = APPLICATION->metacache()->resolveEntry("java", m_url.fileName());
 
     auto download = makeShared<NetJob>(QString("JRE::DownloadJava"), APPLICATION->network());
-    auto action = Net::Download::makeCached(m_url, entry);
+    const QUrl officialUrl = m_url;
+    const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+    const auto urls = MirrorDownload::downloadUrls(officialUrl.toString(), mirror);
+    const QUrl downloadUrl(urls.constFirst());
+    auto action = Net::Download::makeCached(downloadUrl, entry);
+    MirrorDownload::configureFallbacks(action.get(), officialUrl.toString(), mirror);
     if (!m_checksum_hash.isEmpty() && !m_checksum_type.isEmpty()) {
         auto hashType = QCryptographicHash::Algorithm::Sha1;
         if (m_checksum_type == "sha256") {

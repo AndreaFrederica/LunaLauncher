@@ -90,7 +90,8 @@ class AccountSnapshotTest : public QObject {
         const auto snapshot = data.cachedSnapshot();
         QVERIFY(!snapshot.isEmpty());
         const auto encoded = QJsonDocument(snapshot).toJson();
-        QVERIFY(encoded.contains("cape-bytes"));
+        // Texture payloads are serialized as base64 in the account snapshot.
+        QVERIFY(encoded.contains(QByteArray("cape-bytes").toBase64()));
         QVERIFY(!encoded.contains("provider-password"));
         QVERIFY(!encoded.contains("provider-token"));
 

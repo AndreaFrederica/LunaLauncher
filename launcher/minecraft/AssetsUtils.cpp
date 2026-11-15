@@ -52,6 +52,7 @@
 #include "net/Download.h"
 
 #include "Application.h"
+#include "minecraft/MirrorDownload.h"
 #include "net/NetRequest.h"
 #include "update/AssetUpdateTask.h"
 
@@ -295,13 +296,12 @@ Net::NetRequest::Ptr AssetObject::getDownloadAction(bool verifyIntegrity)
         }
     }
     if (needsDownload) {
-        auto objectDL = Net::ApiDownload::makeFile(getUrl(), objectFile.filePath());
         const QUrl officialUrl(BuildConfig.DEFAULT_RESOURCE_BASE + getRelPath());
-        if (getUrl() != officialUrl)
-            objectDL->setFallbackUrl(officialUrl);
-        if (hash.size()) {
-            objectDL->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, hash));
-        }
+        const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
+        const auto urls = MirrorDownload::downloadUrls(officialUrl.toString(), mirror);
+        auto objectDL = Net::ApiDownload::makeFile(QUrl(urls.constFirst()), objectFile.filePath());
+        MirrorDownload::configureFallbacks(objectDL.get(), officialUrl.toString(), mirror);
+        objectDL->setExpectedIntegrity(QStringLiteral("sha1"), hash, size);
         objectDL->setProgress(objectDL->getProgress(), size);
         return objectDL;
     }

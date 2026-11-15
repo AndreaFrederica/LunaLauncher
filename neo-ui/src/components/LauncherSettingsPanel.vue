@@ -12,7 +12,17 @@
     </q-tabs>
 
     <div v-if="tab==='general'" class="q-mt-md">
-      <SettingsPanel :settings="settings" category="paths" :busy="busy" @save="save" @reset="reset" />
+      <section class="settings-card">
+        <h6>{{ t('neo.dataLocation.title') }}</h6>
+        <div class="data-location-path"><code>{{ dataLocation?.current || '—' }}</code><q-btn flat dense icon="folder_open" :disable="!dataLocation?.current" @click="openDataPath(dataLocation?.current)" /></div>
+        <q-select dark outlined emit-value map-options v-model="dataLocationMode" :options="dataLocationOptions" :label="t('neo.dataLocation.mode')" :disable="busy || dataLocationBusy" />
+        <div class="data-location-path q-mt-sm"><span>{{ t('neo.dataLocation.target') }}</span><code>{{ dataLocationTarget }}</code><q-btn flat dense icon="folder_open" :disable="!dataLocationTarget" @click="openDataPath(dataLocationTarget)" /></div>
+        <div class="row q-gutter-sm q-mt-md"><q-btn color="primary" :label="t('neo.dataLocation.apply')" :disable="busy || dataLocationBusy || !dataLocation || dataLocationMode === dataLocationCurrentMode" @click="applyDataLocation" /><q-btn flat :label="t('neo.dataLocation.refresh')" :disable="dataLocationBusy" @click="loadDataLocation" /></div>
+        <q-banner v-if="dataLocationError" class="bg-red-9 q-mt-md">{{ dataLocationError }}</q-banner>
+        <q-banner v-if="dataLocationNotice" class="bg-blue-grey-9 q-mt-md">{{ dataLocationNotice }}</q-banner>
+        <p class="data-location-hint">{{ t('neo.dataLocation.hint') }}</p>
+      </section>
+      <SettingsPanel class="q-mt-lg" :settings="settings" category="paths" :busy="busy" @save="save" @reset="reset" />
       <SettingsPanel class="q-mt-lg" :settings="settings" category="console" :busy="busy" @save="save" @reset="reset" />
     </div>
     <div v-else-if="tab==='java'" class="q-mt-md">
@@ -24,10 +34,16 @@
         <h6>{{ t('neo.auto2.k2f85759474') }}</h6>
         <q-select dark outlined emit-value map-options :model-value="value('DownloadBackend')" :options="backends" :label="t('neo.auto2.kd21febb3dc')" @update:model-value="saveKey('DownloadBackend',$event)" />
         <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" :label="t('neo.auto2.k30ad19d3a5')" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" :label="t('neo.auto2.kb0279be358')" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" :label="t('neo.auto2.k25d6c7e35d')" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
+        <q-toggle dark :model-value="bool('PclDownloadSmartConcurrency')" label="智能并发上限" @update:model-value="saveKey('PclDownloadSmartConcurrency',$event)" />
+        <p>仅适用于 PCL 下载：小文件（≤256 KiB）优先，总并发最多 32；大文件及大小未知文件最多 8。关闭后恢复手动上限。</p>
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :disable="bool('PclDownloadSmartConcurrency')" :model-value="number('PclDownloadThreadLimit')" :label="t('neo.auto2.kb0279be358')" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" :label="t('neo.auto2.k25d6c7e35d')" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
       </section>
       <section class="settings-card q-mt-md">
-        <h6>{{ t('ui.aria2') }}</h6>
+          <h6>{{ t('libraryPatches.title') }}</h6>
+          <LibraryDownloadPatchSettings :enabled="bool('LibraryDownloadPatchesEnabled')" :busy="busy" :execute="execute" @update:enabled="saveKey('LibraryDownloadPatchesEnabled', $event)" />
+        </section>
+        <section class="settings-card q-mt-md">
+          <h6>{{ t('ui.aria2') }}</h6>
         <q-toggle dark :model-value="bool('Aria2Enabled')" :label="t('neo.auto2.k10bfe990fe')" @update:model-value="saveKey('Aria2Enabled',$event)" />
         <q-toggle dark :model-value="bool('Aria2AutoInstall')" :label="t('neo.auto2.k75ff090a68')" @update:model-value="saveKey('Aria2AutoInstall',$event)" />
         <q-toggle dark :model-value="bool('Aria2FallbackToQt')" :label="t('neo.auto2.ka8ffe0fe9c')" @update:model-value="saveKey('Aria2FallbackToQt',$event)" />
@@ -51,6 +67,35 @@
           <q-input dark outlined v-model="mirrorDraft.ResourceURLOverride" :label="t('neo.auto2.ke322863a69')" @blur="saveKey('ResourceURLOverride',mirrorDraft.ResourceURLOverride)" />
           <q-input dark outlined v-model="mirrorDraft.LegacyFMLLibsURLOverride" :label="t('neo.auto2.kce3f74d643')" @blur="saveKey('LegacyFMLLibsURLOverride',mirrorDraft.LegacyFMLLibsURLOverride)" />
         </template>
+        <div class="row q-gutter-sm q-mt-md">
+          <q-btn flat icon="folder_open" label="打开镜像配置目录" :disable="busy" @click="openMirrorDirectory" />
+        </div>
+        <q-banner v-if="mirrorDirectoryError" class="bg-red-9 q-mt-md">{{ mirrorDirectoryError }}</q-banner>
+        <section class="mirror-script-manager q-mt-md">
+          <h6>高级 JavaScript 镜像规则</h6>
+          <p class="data-location-hint">可同时启用多个脚本；列表从上到下执行。脚本返回 null 时会继续交给下一个脚本。</p>
+          <div class="row q-gutter-sm q-mb-sm">
+            <q-btn flat label="刷新脚本列表" :disable="busy || mirrorScriptsBusy" @click="loadMirrorScripts" />
+            <q-btn flat label="保存排序和启用状态" :disable="busy || mirrorScriptsBusy" @click="saveMirrorScripts" />
+          </div>
+          <q-banner v-if="mirrorScriptsError" class="bg-red-9 q-mb-sm">{{ mirrorScriptsError }}</q-banner>
+          <q-list v-if="mirrorScripts.length" bordered separator>
+            <q-item v-for="(script,index) in mirrorScripts" :key="script.id">
+              <q-item-section avatar><q-checkbox v-model="script.enabled" :disable="mirrorScriptsBusy" /></q-item-section>
+              <q-item-section>
+                <q-item-label>{{ script.name }}</q-item-label>
+                <q-item-label caption>{{ script.id }} · metadata priority {{ script.priority }}</q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <div class="row q-gutter-xs">
+                  <q-btn flat dense icon="arrow_upward" :disable="index === 0 || mirrorScriptsBusy" @click="moveMirrorScript(index,-1)" />
+                  <q-btn flat dense icon="arrow_downward" :disable="index === mirrorScripts.length - 1 || mirrorScriptsBusy" @click="moveMirrorScript(index,1)" />
+                </div>
+              </q-item-section>
+            </q-item>
+          </q-list>
+          <div v-else class="data-location-hint">没有已加载的镜像脚本。请先放入 .js 文件并刷新列表。</div>
+        </section>
       </section>
       <SettingsPanel class="q-mt-lg" :settings="mirrorOtherSettings" category="all" :busy="busy" @save="save" @reset="reset" />
     </div>
@@ -63,15 +108,28 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import SettingsPanel from './SettingsPanel.vue';
 import JavaPanel from './JavaPanel.vue';
 import LauncherControlPanel from './LauncherControlPanel.vue';
+import LibraryDownloadPatchSettings from './LibraryDownloadPatchSettings.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref<any>('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref<any>('authlib-injector'),externalTool=ref<any>('jprofiler'),externalPath=ref<any>('');
+const dataLocation=ref<any>(null),dataLocationMode=ref<'portable'|'user'>('user'),dataLocationBusy=ref(false),dataLocationError=ref(''),dataLocationNotice=ref(''),mirrorDirectoryError=ref(''),mirrorScripts=ref<any[]>([]),mirrorScriptsBusy=ref(false),mirrorScriptsError=ref('');
+const dataLocationOptions=computed(()=>[{label:t('neo.dataLocation.portable'),value:'portable'},{label:t('neo.dataLocation.userData'),value:'user'}]);
+const dataLocationCurrentMode=computed<'portable'|'user'>(()=>dataLocation.value?.portable?'portable':'user');
+const dataLocationTarget=computed(()=>dataLocationMode.value==='portable'?dataLocation.value?.portablePath:dataLocation.value?.systemPath);
+async function loadDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';try{dataLocation.value=await props.execute('startup.data-location');dataLocationMode.value=dataLocationCurrentMode.value;}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
+async function openDataPath(path:string|undefined){if(!path)return;try{await props.execute('desktop.open-path',{path});}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}}
+async function openMirrorDirectory(){mirrorDirectoryError.value='';try{await props.execute('resource.providers.open-directory');}catch(e){mirrorDirectoryError.value=e instanceof Error?e.message:String(e);}}
+async function loadMirrorScripts(){mirrorScriptsBusy.value=true;mirrorScriptsError.value='';try{mirrorScripts.value=await props.execute('resource.mirrors',{});}catch(e){mirrorScriptsError.value=e instanceof Error?e.message:String(e);}finally{mirrorScriptsBusy.value=false;}}
+async function saveMirrorScripts(){mirrorScriptsBusy.value=true;mirrorScriptsError.value='';try{await props.execute('resource.mirrors.configure',{order:mirrorScripts.value.map(item=>item.id),disabled:mirrorScripts.value.filter(item=>!item.enabled).map(item=>item.id)});emit('changed');}catch(e){mirrorScriptsError.value=e instanceof Error?e.message:String(e);}finally{mirrorScriptsBusy.value=false;}}
+function moveMirrorScript(index:number,delta:number){const target=index+delta;if(target<0||target>=mirrorScripts.value.length)return;const item=mirrorScripts.value.splice(index,1)[0];mirrorScripts.value.splice(target,0,item);void saveMirrorScripts();}
+async function applyDataLocation(){dataLocationBusy.value=true;dataLocationError.value='';dataLocationNotice.value='';try{const result=await props.execute('startup.set-data-location',{portable:dataLocationMode.value==='portable'});dataLocation.value=result?.status||dataLocation.value;dataLocationNotice.value=t('neo.dataLocation.applied');}catch(e){dataLocationError.value=e instanceof Error?e.message:String(e);}finally{dataLocationBusy.value=false;}}
+onMounted(()=>{void loadDataLocation();void loadMirrorScripts();});
 const backends=[{label:t('neo.auto2.ka626fe7700'),value:0},{label:'Aria2',value:1},{label:t('neo.auto2.k6a21c71e5f'),value:2}];
-const mirrorTypes=[{label:t('neo.auto2.k212e81e6d0'),value:0},{label:t('neo.auto2.kf0aba8a42d'),value:1},{label:t('neo.auto2.kfe7276cd17'),value:2}];
+const mirrorTypes=[{label:t('neo.auto2.k212e81e6d0'),value:0},{label:t('neo.auto2.kf0aba8a42d'),value:1},{label:t('neo.auto2.kfe7276cd17'),value:2},{label:'FastMinecraftMirror',value:3},{label:'HKMC Mirror (Main)',value:4}];
 const setting=(key:string)=>props.settings.find(x=>x.key===key); const value=(key:string)=>setting(key)?.value; const bool=(key:string)=>Boolean(value(key)); const text=(key:string)=>String(value(key)??''); const number=(key:string)=>Number(value(key)??0);
 const mirrorKeys=new Set(['ModMetadataDisabled','ModDependenciesDisabled','SkipModpackUpdatePrompt','ModDownloadLoaders','OverrideModDownloadLoaders','CurseForgeDownloadBrowser','ShowModIncompat','FallbackMRBlockedMods','MetaURLOverride','ResourceURLOverride','DownloadMirrorType','ModrinthMirror','CurseForgeMirror','ModrinthMirrorURL','CurseForgeMirrorURL','LibrariesURL','LegacyFMLLibsURLOverride','MojangDownloadsMirrorURL','CFKeyOverride','FlameKeyOverride','ModrinthToken']);
 const mirrorControlKeys=new Set(['DownloadMirrorType','MojangDownloadsMirrorURL','LibrariesURL','ResourceURLOverride','LegacyFMLLibsURLOverride']);
@@ -91,5 +149,6 @@ async function externalCheck(){integrationResult.value=await props.execute('exte
 </script>
 
 <style scoped>
-.launcher-settings-panel{max-width:1120px}.settings-card{padding:20px;border:1px solid var(--neo-border);border-radius:16px;background:var(--neo-panel)}.settings-card h6{margin:0 0 14px;font-size:18px}.settings-card .q-toggle{display:block;margin:7px 0}.settings-card .q-input,.settings-card .q-select{margin-top:10px}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.launcher-settings-panel{max-width:1120px}.settings-card{padding:20px;border:1px solid var(--neo-border);border-radius:16px;background:var(--neo-panel)}.settings-card h6{margin:0 0 14px;font-size:18px}.settings-card .q-toggle{display:block;margin:7px 0}.settings-card .q-input,.settings-card .q-select{margin-top:10px}pre{white-space:pre-wrap;overflow-wrap:anywhere}.data-location-path{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.data-location-path code{word-break:break-all}.data-location-hint{margin:12px 0 0;color:var(--neo-muted);font-size:12px;line-height:1.6}
 </style>
+

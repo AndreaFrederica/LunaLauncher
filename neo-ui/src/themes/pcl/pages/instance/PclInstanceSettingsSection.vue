@@ -1,5 +1,9 @@
 <template>
 <section class="pcl-section-card">
+      <div v-if="props.settings.some((item: any) => item.key === 'VanillaGameDirectoryMode')" class="setting-line">
+        <div><strong>原版目录模式</strong><small>新实例默认隔离。切换不会移动存档、模组或设置。</small></div>
+        <PclSelect :model-value="String(settingValue('VanillaGameDirectoryMode') || 'auto')" :options="[{label:'自动识别已有设置',value:'auto'},{label:'隔离 · 版本目录',value:'isolated'},{label:'非隔离 · 共享 .minecraft',value:'shared'}]" :disabled="busy" @update:model-value="save('VanillaGameDirectoryMode', $event)" />
+      </div>
       <div class="section-heading"><div><span class="pcl-kicker">{{ t('ui.instanceSettings') }}</span><h2>{{ t('instanceSections.settings') }}</h2><p>{{ t('instanceSections.settingsHint') }}</p></div></div>
       <div class="setting-grid"><div v-for="item in instanceSettings" :key="item.key" class="setting-line"><div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div><q-toggle v-if="item.type === 'boolean'" :model-value="settingValue(item.key)" :label="settingValue(item.key) ? t('instanceSections.enable') : t('instanceSections.disable')" :disable="busy" @update:model-value="save(item.key, $event)"/><q-input v-else outlined dense :model-value="settingValue(item.key)" :label="item.label" :disable="busy" @update:model-value="save(item.key, $event)"/></div></div>
       <q-banner class="pcl-hint"><span class="material-icons">tune</span>{{ t('instanceSections.settingsNotice') }}</q-banner>

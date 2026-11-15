@@ -17,6 +17,7 @@
 #include "net/NetJob.h"
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QUrl>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -29,6 +30,46 @@
 // ============================================================================
 // JavaScript binding helpers
 // ============================================================================
+
+static QString mirrorCategoryForHost(const QString& host)
+{
+    const auto value = host.toLower();
+    if (value == "resources.download.minecraft.net") return QStringLiteral("assets");
+    if (value == "cdn.modrinth.com") return QStringLiteral("modrinth");
+    if (value == "meta.fabricmc.net") return QStringLiteral("fabric");
+    if (value == "meta.quiltmc.org") return QStringLiteral("quilt");
+    if (value == "authlib-injector.yushi.moe") return QStringLiteral("authlib");
+    if (value.contains("adoptium") || value.contains("api.azul.com") || value.contains("download.oracle.com"))
+        return QStringLiteral("java");
+    if (value == "launcher.mojang.com" || value == "launchermeta.mojang.com" || value == "piston-data.mojang.com" ||
+        value == "piston-meta.mojang.com" || value == "s3.amazonaws.com")
+        return QStringLiteral("launcher");
+    if (value == "files.minecraftforge.net" || value == "maven.minecraftforge.net" || value == "maven.neoforged.net")
+        return QStringLiteral("forge");
+    if (value == "maven.fabricmc.net" || value == "meta.fabricmc.net") return QStringLiteral("fabric");
+    if (value == "maven.quiltmc.org") return QStringLiteral("quilt");
+    if (value == "libraries.minecraft.net" || value.startsWith("maven.") ||
+        value == "repo.mumfrey.com" || value == "dl.liteloader.com")
+        return QStringLiteral("libraries");
+    return {};
+}
+
+static QString mirrorCategoryForMatch(const QJsonObject& match, const QString& actualHost = {})
+{
+    const auto pathRegex = match.value(QStringLiteral("pathRegex")).toString().toLower();
+    if (pathRegex.contains("adoptium") || pathRegex.contains("temurin"))
+        return QStringLiteral("java");
+    if (!actualHost.isEmpty()) {
+        const auto category = mirrorCategoryForHost(actualHost);
+        if (!category.isEmpty()) return category;
+    }
+    for (const auto& value : match.value(QStringLiteral("hosts")).toArray()) {
+        const auto category = mirrorCategoryForHost(value.toString());
+        if (!category.isEmpty())
+            return category;
+    }
+    return {};
+}
 
 // HTTP GET request
 static JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv)
@@ -156,6 +197,38 @@ std::shared_ptr<JSResourceAPI> JSResourceAPI::fromString(const QString& jsCode, 
     return sharedApi;
 }
 
+std::shared_ptr<JSResourceAPI> JSResourceAPI::fromRuleFile(const QString& jsonFilePath, const QString& apiName)
+{
+    QFile file(jsonFilePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "[JSResourceAPI] Failed to open rule file:" << jsonFilePath;
+        return nullptr;
+    }
+
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        qWarning() << "[JSResourceAPI] Invalid rule file" << jsonFilePath << error.errorString();
+        return nullptr;
+    }
+
+    auto api = std::unique_ptr<JSResourceAPI>(new JSResourceAPI(apiName));
+    const auto object = document.object();
+    if (!api->loadMetadata(object.value(QStringLiteral("metadata")).toObject())) {
+        qWarning() << "[JSResourceAPI] Failed to load rule metadata for" << apiName;
+        return nullptr;
+    }
+    api->m_rules = object.value(QStringLiteral("rules")).toArray();
+    api->m_ruleBased = true;
+
+    auto sharedApi = std::shared_ptr<JSResourceAPI>(api.release());
+    s_registeredAPIs.append(sharedApi);
+    qDebug() << "[JSResourceAPI] Registered declarative rule" << apiName
+             << "- Provider:" << sharedApi->m_metadata.provider
+             << "Rules:" << sharedApi->m_rules.size();
+    return sharedApi;
+}
+
 bool JSResourceAPI::initialize(const QString& jsCode)
 {
     // Create the QuickJS runtime and context.
@@ -270,8 +343,28 @@ bool JSResourceAPI::loadMetadata()
     m_metadata.icon = getStringProp("icon");
     m_metadata.description = getStringProp("description");
     m_metadata.homepage = getStringProp("homepage");
+    m_metadata.kind = getStringProp("kind");
+    if (m_metadata.kind.isEmpty())
+        m_metadata.kind = QStringLiteral("resource");
     m_metadata.enabled = getBoolProp("enabled", true);
     m_metadata.priority = getIntProp("priority", 0);
+    m_metadata.baseRule = getBoolProp("baseRule", false);
+    m_metadata.categories.clear();
+    JSValue categoriesArray = JS_GetPropertyStr(m_context, metadataObj, "categories");
+    if (JS_IsArray(categoriesArray)) {
+        JSValue lengthVal = JS_GetPropertyStr(m_context, categoriesArray, "length");
+        uint32_t length;
+        if (JS_ToUint32(m_context, &length, lengthVal) == 0) {
+            for (uint32_t i = 0; i < length; i++) {
+                JSValue item = JS_GetPropertyUint32(m_context, categoriesArray, i);
+                if (JS_IsString(item))
+                    m_metadata.categories.append(jsValueToString(item));
+                JS_FreeValue(m_context, item);
+            }
+        }
+        JS_FreeValue(m_context, lengthVal);
+    }
+    JS_FreeValue(m_context, categoriesArray);
 
     // Read the supportedTypes array.
     JSValue typesArray = JS_GetPropertyStr(m_context, metadataObj, "supportedTypes");
@@ -300,6 +393,36 @@ bool JSResourceAPI::loadMetadata()
         return false;
     }
 
+    return true;
+}
+
+bool JSResourceAPI::loadMetadata(const QJsonObject& metadata)
+{
+    if (metadata.isEmpty()) {
+        m_lastError = "Rule file must have a 'metadata' object";
+        return false;
+    }
+
+    m_metadata.id = metadata.value(QStringLiteral("id")).toString();
+    m_metadata.displayName = metadata.value(QStringLiteral("displayName")).toString();
+    m_metadata.version = metadata.value(QStringLiteral("version")).toString();
+    m_metadata.provider = metadata.value(QStringLiteral("provider")).toString();
+    m_metadata.icon = metadata.value(QStringLiteral("icon")).toString();
+    m_metadata.description = metadata.value(QStringLiteral("description")).toString();
+    m_metadata.homepage = metadata.value(QStringLiteral("homepage")).toString();
+    m_metadata.kind = metadata.value(QStringLiteral("kind")).toString(QStringLiteral("resource"));
+    m_metadata.enabled = metadata.value(QStringLiteral("enabled")).toBool(true);
+    m_metadata.priority = metadata.value(QStringLiteral("priority")).toInt(0);
+    m_metadata.baseRule = metadata.value(QStringLiteral("baseRule")).toBool(false);
+    for (const auto& value : metadata.value(QStringLiteral("categories")).toArray())
+        m_metadata.categories.append(value.toString());
+    for (const auto& value : metadata.value(QStringLiteral("supportedTypes")).toArray())
+        m_metadata.supportedTypes.append(value.toInt());
+
+    if (m_metadata.id.isEmpty()) {
+        m_lastError = "Metadata 'id' is required";
+        return false;
+    }
     return true;
 }
 
@@ -415,6 +538,150 @@ QString JSResourceAPI::jsValueToString(JSValue val) const
     QString result = QString::fromUtf8(str);
     JS_FreeCString(m_context, str);
     return result;
+}
+
+std::optional<QString> JSResourceAPI::rewriteUrl(const QString& url, const QJsonObject& context) const
+{
+    const auto candidates = rewriteUrls(url, context);
+    if (!candidates.isEmpty())
+        return candidates.constFirst().url;
+    return std::nullopt;
+}
+
+QList<MirrorUrlCandidate> JSResourceAPI::rewriteUrls(const QString& url, const QJsonObject& context) const
+{
+    QList<MirrorUrlCandidate> candidates;
+    if (m_metadata.kind.compare(QStringLiteral("mirror"), Qt::CaseInsensitive) != 0)
+        return candidates;
+
+    if (m_ruleBased)
+        return rewriteRuleUrls(url, context);
+    if (!m_context)
+        return candidates;
+
+    QMutexLocker locker(&m_jsMutex);
+    JSValue jsUrl = JS_NewString(m_context, url.toUtf8().constData());
+    JSValue jsContext = jsonObjectToJSValue(context);
+    JSValue argv[] = { jsUrl, jsContext };
+    JSValue result = callJSFunction("rewriteUrl", 2, argv);
+
+    if (!JS_IsUndefined(result) && !JS_IsNull(result)) {
+        if (JS_IsString(result)) {
+            candidates.append({ jsValueToString(result), {}, 0 });
+        } else if (JS_IsArray(result)) {
+            const auto values = jsValueToJsonArray(result);
+            for (const auto& value : values) {
+                if (value.isString()) {
+                    candidates.append({ value.toString(), {}, 0 });
+                } else if (value.isObject()) {
+                    const auto object = value.toObject();
+                    const auto candidateUrl = object.value(QStringLiteral("url")).toString();
+                    if (!candidateUrl.isEmpty())
+                        candidates.append({ candidateUrl, object.value(QStringLiteral("probeUrl")).toString(),
+                                            object.value(QStringLiteral("priority")).toInt(0),
+                                            object.value(QStringLiteral("category")).toString() });
+                }
+            }
+        }
+        JS_FreeValue(m_context, result);
+    }
+    JS_FreeValue(m_context, jsContext);
+    JS_FreeValue(m_context, jsUrl);
+    return candidates;
+}
+
+QList<MirrorUrlCandidate> JSResourceAPI::rewriteRuleUrls(const QString& url, const QJsonObject& context) const
+{
+    QList<MirrorUrlCandidate> candidates;
+    const QUrl input(url);
+    if (!input.isValid() || input.host().isEmpty())
+        return candidates;
+
+    auto expandContext = [&context](QString value) {
+        static const QRegularExpression token(QStringLiteral(R"(\{([A-Za-z0-9_]+)\})"));
+        QRegularExpressionMatch match;
+        while ((match = token.match(value)).hasMatch())
+            value.replace(match.capturedStart(), match.capturedLength(), context.value(match.captured(1)).toString());
+        return value;
+    };
+
+    for (const auto& value : m_rules) {
+        const auto rule = value.toObject();
+        const auto matchObject = rule.value(QStringLiteral("match")).toObject();
+        const auto mirrorType = matchObject.value(QStringLiteral("mirrorType")).toString();
+        if (!mirrorType.isEmpty() && context.value(QStringLiteral("mirrorType")).toString().compare(mirrorType, Qt::CaseInsensitive) != 0)
+            continue;
+        if (matchObject.contains(QStringLiteral("mirrorTypeId")) &&
+            context.value(QStringLiteral("mirrorTypeId")).toInt(-1) != matchObject.value(QStringLiteral("mirrorTypeId")).toInt(-2))
+            continue;
+
+        const auto hosts = matchObject.value(QStringLiteral("hosts")).toArray();
+        if (!hosts.isEmpty()) {
+            bool hostMatched = false;
+            for (const auto& host : hosts)
+                hostMatched = hostMatched || input.host().compare(host.toString(), Qt::CaseInsensitive) == 0;
+            if (!hostMatched)
+                continue;
+        }
+
+        const auto path = input.path(QUrl::FullyEncoded);
+        const auto pathPrefix = matchObject.value(QStringLiteral("pathPrefix")).toString();
+        if (!pathPrefix.isEmpty() && !path.startsWith(pathPrefix))
+            continue;
+
+        QRegularExpressionMatch regexMatch;
+        const auto pathRegex = matchObject.value(QStringLiteral("pathRegex")).toString();
+        if (!pathRegex.isEmpty()) {
+            regexMatch = QRegularExpression(pathRegex).match(path);
+            if (!regexMatch.hasMatch())
+                continue;
+        }
+
+        const auto rewrite = rule.value(QStringLiteral("rewrite")).toObject();
+        const auto category = rule.value(QStringLiteral("category")).toString(mirrorCategoryForMatch(matchObject, input.host()));
+        auto applyRewrite = [&](const QJsonObject& candidate) -> QString {
+            QString result;
+            if (candidate.contains(QStringLiteral("template")) && regexMatch.hasMatch()) {
+                result = candidate.value(QStringLiteral("template")).toString();
+                for (int i = 1; i <= regexMatch.lastCapturedIndex(); ++i)
+                    result.replace(QStringLiteral("$%1").arg(i), regexMatch.captured(i));
+            } else {
+                auto base = expandContext(candidate.value(QStringLiteral("base")).toString());
+                if (base.isEmpty())
+                    return {};
+                if (!base.endsWith('/'))
+                    base += '/';
+                auto rest = path;
+                const auto stripPrefix = candidate.value(QStringLiteral("stripPrefix")).toString();
+                if (!stripPrefix.isEmpty() && rest.startsWith(stripPrefix))
+                    rest = rest.mid(stripPrefix.size());
+                while (rest.startsWith('/'))
+                    rest.remove(0, 1);
+                result = base + rest;
+            }
+            return result;
+        };
+
+        const auto declaredCandidates = rewrite.value(QStringLiteral("candidates")).toArray();
+        if (!declaredCandidates.isEmpty()) {
+            for (const auto& value : declaredCandidates) {
+                const auto candidate = value.toObject();
+                const auto result = applyRewrite(candidate);
+                if (!result.isEmpty())
+                    candidates.append({ result, expandContext(candidate.value(QStringLiteral("probeUrl")).toString()),
+                                        candidate.value(QStringLiteral("priority")).toInt(0),
+                                        candidate.value(QStringLiteral("category")).toString(category) });
+            }
+        } else {
+            const auto result = applyRewrite(rewrite);
+            if (!result.isEmpty())
+                candidates.append({ result, expandContext(rewrite.value(QStringLiteral("probeUrl")).toString()),
+                                    rewrite.value(QStringLiteral("priority")).toInt(0), category });
+        }
+        if (!candidates.isEmpty())
+            return candidates;
+    }
+    return candidates;
 }
 
 JSValue JSResourceAPI::jsonObjectToJSValue(const QJsonObject& obj) const

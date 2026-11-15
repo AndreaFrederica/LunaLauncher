@@ -146,6 +146,20 @@ QJsonObject componentJson(const ComponentPtr& component)
              { "problems", problems } };
 }
 
+void makeForeignComponentReadOnly(QJsonObject& object)
+{
+    // A vanilla/PCL/HMCL profile is backed by the external version JSON. It
+    // can be inspected in the editor, while Prism-only component mutations
+    // require an explicit conversion first.
+    for (const auto key : { "canDisable", "canRemove", "canMove", "canChangeVersion", "canCustomize", "canRevert" })
+        object.insert(key, false);
+}
+
+bool rejectForeignComponentEdit(const MinecraftInstance* instance)
+{
+    return instance && instance->traits().contains(QStringLiteral("vanilla-compatible"));
+}
+
 QJsonObject listComponents(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
 {
     QString error;
@@ -157,8 +171,11 @@ QJsonObject listComponents(LauncherApi& api, const QJsonObject& parameters, User
 
     QJsonArray components;
     const auto profile = instance->getPackProfile();
+    const bool foreign = rejectForeignComponentEdit(instance);
     for (int i = 0; i < profile->rowCount(); ++i) {
         auto item = componentJson(profile->getComponent(static_cast<size_t>(i)));
+        if (foreign)
+            makeForeignComponentReadOnly(item);
         item.insert("index", i);
         components.append(item);
     }
@@ -171,6 +188,8 @@ QJsonObject setComponentVersion(LauncherApi& api, const QJsonObject& parameters,
     auto instance = findMinecraftInstance(parameters, &error);
     if (!instance)
         return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance))
+        return OperationService::failure(QObject::tr("This external vanilla instance must be converted to a Prism copy before changing components."), 2);
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
     if (!ensureLoaded(instance, api, interaction, &error))
@@ -214,6 +233,8 @@ QJsonObject setComponentEnabled(LauncherApi& api, const QJsonObject& parameters,
     auto instance = findMinecraftInstance(parameters, &error);
     if (!instance)
         return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance))
+        return OperationService::failure(QObject::tr("This external vanilla instance must be converted to a Prism copy before changing components."), 2);
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
     if (!ensureLoaded(instance, api, interaction, &error))
@@ -239,6 +260,8 @@ QJsonObject removeComponent(LauncherApi& api, const QJsonObject& parameters, Use
     auto instance = findMinecraftInstance(parameters, &error);
     if (!instance)
         return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance))
+        return OperationService::failure(QObject::tr("This external vanilla instance must be converted to a Prism copy before changing components."), 2);
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
     if (!ensureLoaded(instance, api, interaction, &error))
@@ -263,6 +286,8 @@ QJsonObject moveComponent(LauncherApi& api, const QJsonObject& parameters, UserI
     auto instance = findMinecraftInstance(parameters, &error);
     if (!instance)
         return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance))
+        return OperationService::failure(QObject::tr("This external vanilla instance must be converted to a Prism copy before changing components."), 2);
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
     if (!ensureLoaded(instance, api, interaction, &error))
@@ -299,6 +324,8 @@ QJsonObject customizeComponent(LauncherApi& api, const QJsonObject& parameters, 
     auto instance = findMinecraftInstance(parameters, &error);
     if (!instance)
         return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance))
+        return OperationService::failure(QObject::tr("This external vanilla instance must be converted to a Prism copy before changing components."), 2);
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
     if (!ensureLoaded(instance, api, interaction, &error))
@@ -328,6 +355,7 @@ QJsonObject installCustomComponent(LauncherApi& api, const QJsonObject& paramete
     QString error;
     auto instance = findMinecraftInstance(parameters, &error);
     if (!instance) return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance)) return OperationService::failure(QObject::tr("This external vanilla instance must be converted to a Prism copy before changing components."), 2);
     if (instance->isRunning()) return OperationService::failure(QObject::tr("Components cannot be modified while the instance is running."), 2);
     if (!ensureLoaded(instance, api, interaction, &error)) return OperationService::failure(error, 2);
     const auto source = QFileInfo(parameters.value("source").toString());

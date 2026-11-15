@@ -554,7 +554,8 @@ void LaunchController::launchInstance()
     if (m_instance->traits().contains("server")) {
         if (m_launcher) {
             if (auto* oldServerTask = dynamic_cast<ServerLaunchTask*>(m_launcher); oldServerTask && oldServerTask->canStop()) {
-                oldServerTask->stop();
+                if (!oldServerTask->stop(false))
+                    oldServerTask->stop(true);
             }
         }
 

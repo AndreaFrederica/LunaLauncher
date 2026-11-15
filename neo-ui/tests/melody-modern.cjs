@@ -125,6 +125,16 @@ function nativeMock(backgrounds = {}) {
       await page.waitForFunction(() => !document.querySelector('.melody-launcher__background')?.getAttribute('src')?.startsWith('blob:'));
     } finally { fs.rmSync(fixture, { recursive: true, force: true }); }
 
+    // The standalone download window must retain its title and show a stable
+    // empty-task state while no backend task is attached.
+    const download = await context.newPage(); record(download);
+    await download.goto(base + '?theme=melody&melodyWindow=download');
+    await download.locator('[data-window="download"]').waitFor();
+    assert.equal(await download.locator('.melody-window__titlebar span').innerText(), '下载');
+    assert.equal(await download.locator('.melody-download__line').first().innerText(), '文件名: 等待下载任务');
+    assert.equal(await download.getByRole('button', { name: '手动下载' }).isDisabled(), true);
+    await download.close();
+
     // Both theme options persist and leave the standalone Melody URL.
     for (const shell of ['neo', 'pcl']) {
       const switcher = await context.newPage();

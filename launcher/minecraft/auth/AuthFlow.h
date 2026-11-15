@@ -4,6 +4,7 @@
 #include <QList>
 #include <QObject>
 #include <QSet>
+#include <QUuid>
 
 #include <functional>
 #include <optional>
@@ -46,10 +47,16 @@ class AuthFlow : public Task {
     void stepFinished(AccountTaskState resultingState, QString message);
 
    private:
+    struct FinishedStep {
+        QUuid id;
+        QString label;
+    };
+
     AccountTaskState m_taskState = AccountTaskState::STATE_CREATED;
     QList<AuthStep::Ptr> m_steps;
     AuthStep::Ptr m_currentStep;
     AccountData* m_data = nullptr;
-    QStringList m_finishedSteps;
+    QList<FinishedStep> m_finishedSteps;
     QString m_failedStep;
+    QUuid m_failedStepId;
 };

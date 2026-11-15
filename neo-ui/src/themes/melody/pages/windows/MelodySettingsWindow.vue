@@ -46,6 +46,7 @@
         </div>
       </footer>
     </form>
+    <InstanceStoreWorkspace v-if="execute" :execute="execute" variant="melody" />
   </MelodyWindow>
 </template>
 <script setup lang="ts">
@@ -59,11 +60,14 @@ import MelodyGroupBox from '../../components/MelodyGroupBox.vue';
 import MelodyInput from '../../components/MelodyInput.vue';
 import MelodySelect from '../../components/MelodySelect.vue';
 import MelodyWindow from '../../components/MelodyWindow.vue';
+import InstanceStoreWorkspace from '../../../../components/InstanceStoreWorkspace.vue';
 import { defaultSettings, type MelodySettings, type MelodyOption } from '../../types';
-const props = withDefaults(defineProps<{ modelValue?: MelodySettings; games?: MelodyOption[]; busy?: boolean }>(), { games: () => [] });
+type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
+const props = withDefaults(defineProps<{ modelValue?: MelodySettings; games?: MelodyOption[]; busy?: boolean; execute?: Execute }>(), { games: () => [] });
 const emit = defineEmits<{ close: []; message: [text: string]; save: [value: MelodySettings]; action: [action: string, value: MelodySettings] }>();
 const id = useId();
 const form = reactive({ ...defaultSettings, ...props.modelValue });
+const execute = props.execute;
 const directoryOptions = [{ value: 'shared', label: '保存到 .minecraft' }, { value: 'version', label: '保存到 .minecraft\\versions\\(版本名称)' }];
 async function browse() {
   if (!isTauri()) { emit('message', '请在 java路径 中填写 javaw.exe 的完整路径。'); return; }

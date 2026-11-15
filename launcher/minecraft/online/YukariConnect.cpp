@@ -665,11 +665,31 @@ void YukariConnect::handleWebSocketMessage(const QString& message)
         // Handle log messages - emit as log output
         const QJsonObject data = obj["data"].toObject();
         QString logMsg = data["logMessage"].toString();
+        if (logMsg.isEmpty()) logMsg = data["log"].toString();
         if (!logMsg.isEmpty()) {
-            emit logOutput(logMsg + "\n");
+            recordLog(logMsg + "\n");
         }
         return;
     }
+}
+
+void YukariConnect::recordLog(const QString& message)
+{
+    if (message.isEmpty()) return;
+
+    {
+        QMutexLocker locker(&m_logMutex);
+        const auto lines = message.split('\n', Qt::KeepEmptyParts);
+        for (auto line : lines) {
+            if (line.endsWith('\r')) line.chop(1);
+            if (!line.isEmpty()) m_logLines.append(line);
+        }
+        // Keep the native snapshot bounded. The stream subscription has its
+        // own byte/event bound, so a long-running Yukari process cannot grow
+        // launcher memory without limit.
+        while (m_logLines.size() > 2000) m_logLines.removeFirst();
+    }
+    emit logOutput(message);
 }
 
 bool YukariConnect::sendWsRequest(const QString& command, const QJsonObject& data)
@@ -1196,12 +1216,12 @@ bool YukariConnect::startProcess()
         connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
             const QByteArray data = m_process->readAllStandardOutput();
             QString output = QString::fromUtf8(data);
-            emit logOutput(output);
+            recordLog(output);
         });
         connect(m_process, &QProcess::readyReadStandardError, this, [this]() {
             const QByteArray data = m_process->readAllStandardError();
             QString output = QString::fromUtf8(data);
-            emit logOutput(output);
+            recordLog(output);
         });
 
         // Process stays running, don't delete it
@@ -1215,12 +1235,12 @@ bool YukariConnect::startProcess()
         connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
             const QByteArray data = m_process->readAllStandardOutput();
             QString output = QString::fromUtf8(data);
-            emit logOutput(output);
+            recordLog(output);
         });
         connect(m_process, &QProcess::readyReadStandardError, this, [this]() {
             const QByteArray data = m_process->readAllStandardError();
             QString output = QString::fromUtf8(data);
-            emit logOutput(output);
+            recordLog(output);
         });
         return false;
     }
@@ -1249,6 +1269,15 @@ void YukariConnect::forceKillProcess()
 {
     // Clean up WebSocket connection first
     resetWebSocket();
+
+    // YukariConnect may continue as a detached HMCL-style server after the
+    // launcher-side QProcess has exited. In that case the only process handle
+    // we have is the local HTTP endpoint, so issue the emergency panic before
+    // trying to terminate an attached process below.
+    if (m_wasStartedSuccessfully || (m_process && m_process->state() == QProcess::Running)) {
+        qDebug() << "Requesting YukariConnect emergency stop...";
+        panic(false);
+    }
 
     if (m_process) {
         qDebug() << "Force killing YukariConnect process...";

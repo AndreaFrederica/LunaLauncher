@@ -54,6 +54,8 @@
 #include "net/Download.h"
 #include "net/NetJob.h"
 #include "server/ServerInstance.h"
+#include "SyncProfile.h"
+#include "VanillaConversionTask.h"
 
 namespace {
 
@@ -123,6 +125,30 @@ MinecraftAccountPtr findAccount(const QString& reference)
     return nullptr;
 }
 
+int autoSyncAfterUpdate(const QString& instanceId)
+{
+    if (instanceId.isEmpty())
+        return 0;
+    int applied = 0;
+    const auto profileDir = QDir(APPLICATION->dataRoot()).filePath(QStringLiteral("sync-profiles"));
+    for (const auto& file : QDir(profileDir).entryInfoList({ QStringLiteral("*.json") }, QDir::Files | QDir::Readable)) {
+        QString error;
+        auto profile = SyncEngine::loadProfile(APPLICATION->dataRoot(), file.baseName(), &error);
+        if (!error.isEmpty() || !profile.autoAfterUpdate || (profile.clientInstanceId != instanceId && profile.serverInstanceId != instanceId))
+            continue;
+        auto* client = APPLICATION->instances()->getInstanceById(profile.clientInstanceId);
+        auto* server = APPLICATION->instances()->getInstanceById(profile.serverInstanceId);
+        if (!client || !server || client->isRunning() || server->isRunning())
+            continue;
+        const auto plan = SyncEngine::plan(profile, client->gameRoot(), server->gameRoot());
+        if (!plan.valid || !plan.conflicts.isEmpty())
+            continue;
+        if (SyncEngine::apply(profile, plan, client->gameRoot(), server->gameRoot(), &error) && SyncEngine::saveProfile(APPLICATION->dataRoot(), profile, &error))
+            ++applied;
+    }
+    return applied;
+}
+
 /**
  * Adapt the synchronous headless API operations to the event-driven Neo task
  * runtime.  The pack APIs already own the provider-specific install tasks and
@@ -131,7 +157,8 @@ MinecraftAccountPtr findAccount(const QString& reference)
  */
 class ApiOperationTask final : public Task {
    public:
-    ApiOperationTask(QString operation, QJsonObject parameters) : m_operation(std::move(operation)), m_parameters(std::move(parameters))
+    ApiOperationTask(QString operation, QJsonObject parameters, bool allowEmbeddedDownloadPage)
+        : m_operation(std::move(operation)), m_parameters(std::move(parameters)), m_allowEmbeddedDownloadPage(allowEmbeddedDownloadPage)
     {
         setAbortable(true);
     }
@@ -192,6 +219,7 @@ class ApiOperationTask final : public Task {
         class Interaction final : public UserInteraction {
            public:
             explicit Interaction(ApiOperationTask* owner) : m_owner(owner) {}
+            bool supportsEmbeddedDownloadPage() const override { return m_owner->m_allowEmbeddedDownloadPage; }
             void status(const QString& message) override { m_owner->setStatus(message); }
             void deviceCode(const QString& url, const QString& code, int expiresIn) override
             {
@@ -266,6 +294,7 @@ class ApiOperationTask final : public Task {
     QJsonObject m_pendingInput;
     QJsonValue m_answer;
     bool m_cancelled = false;
+    bool m_allowEmbeddedDownloadPage = false;
 };
 
 }  // namespace
@@ -293,8 +322,20 @@ AsyncTaskRuntime::AsyncTaskRuntime(QObject* parent) : QObject(parent), m_temp()
 
 QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonObject& parameters) const
 {
-    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install" || operation == "instance.convert.import")
         return "instances";
+    if (operation == "instance.convert.export")
+        return "conversion:" + parameters.value("source").toString();
+    if (operation == "instance-store.add" || operation == "instance-store.update" || operation == "instance-store.remove"
+        || operation == "startup.set-data-location" || operation == "startup.migrate" || operation == "startup.dismiss-migration"
+        || operation == "startup.complete")
+        return "launcher-configuration";
+    if (operation == "instance.store-transfer")
+        return "instance:" + parameters.value("instance").toString();
+    if (operation == "vanilla.loader.install")
+        return "vanilla:" + parameters.value("target").toString();
+    if (operation == "sync.profile.save" || operation == "sync.profile.remove" || operation == "sync.profile.plan" || operation == "sync.profile.apply")
+        return "sync:" + parameters.value("id").toString(parameters.value("profile").toObject().value("id").toString());
     if (operation == "resource.install" || operation == "resource.install-version" || operation == "instance.component.set-version" || operation == "instance.special-loader.install")
         return "instance:" + parameters.value("instance").toString();
     return "global";
@@ -303,8 +344,21 @@ QString AsyncTaskRuntime::conflictKeyFor(const QString& operation, const QJsonOb
 QStringList resourceKeysFor(const QString& operation, const QJsonObject& parameters)
 {
     QStringList keys;
-    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install")
+    if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install" || operation == "instance.convert.import")
         keys << "instances";
+    else if (operation == "instance.convert.export")
+        keys << "conversion:" + parameters.value("source").toString();
+    else if (operation == "instance-store.add" || operation == "instance-store.update" || operation == "instance-store.remove"
+             || operation == "startup.set-data-location" || operation == "startup.migrate" || operation == "startup.dismiss-migration"
+             || operation == "startup.complete")
+        keys << "launcher-configuration";
+    else if (operation == "instance.store-transfer") {
+        keys << "instance:" + parameters.value("instance").toString();
+        keys << "store:" + parameters.value("targetStoreId").toString();
+    } else if (operation == "vanilla.loader.install")
+        keys << "vanilla:" + parameters.value("target").toString();
+    else if (operation == "sync.profile.save" || operation == "sync.profile.remove" || operation == "sync.profile.plan" || operation == "sync.profile.apply")
+        keys << "sync:" + parameters.value("id").toString(parameters.value("profile").toObject().value("id").toString());
     else if (operation == "resource.install" || operation == "resource.install-version" || operation == "resource.install-with-dependencies" || operation == "instance.component.set-version" || operation == "instance.special-loader.install" || operation == "instance.update" || operation == "instance.launch" || operation == "instance.export" || operation == "server.start")
         keys << "instance:" + parameters.value("instance").toString();
     else if (operation == "java.install")
@@ -330,7 +384,7 @@ void AsyncTaskRuntime::addResourceKeys(Record& record) const
     // These compatibility operations own a ScopedUserInteraction across a
     // nested Qt event loop. Do not nest two such installs: a callback from the
     // outer task must not consume the inner task's interaction channel.
-    if (QStringList{ "instance.import", "modpack.install", "resource.install-version",
+    if (QStringList{ "instance.create", "instance.import", "modpack.install", "resource.install-version",
                      "resource.install-with-dependencies", "instance.special-loader.install" }.contains(record.operation))
         record.writes.insert("interactive-install");
 }
@@ -338,25 +392,30 @@ void AsyncTaskRuntime::addResourceKeys(Record& record) const
 int AsyncTaskRuntime::deadlineFor(const QString& operation) const
 {
     if (operation == "modpack.install") return 30 * 60 * 1000;
-    if (operation == "instance.create" || operation == "instance.import") return 30 * 60 * 1000;
+    if (operation == "instance.create" || operation == "instance.import" || operation == "instance.convert.import" || operation == "instance.convert.export") return 30 * 60 * 1000;
     if (operation == "resource.install" || operation == "resource.install-version") return 15 * 60 * 1000;
     if (operation == "instance.component.set-version") return 10 * 60 * 1000;
     if (operation == "instance.special-loader.install") return 30 * 60 * 1000;
     if (operation == "java.install") return 15 * 60 * 1000;
     if (operation == "resource.install-with-dependencies") return 20 * 60 * 1000;
     if (operation == "account.refresh") return 5 * 60 * 1000;
-    if (operation == "account.login") return 10 * 60 * 1000;
+    // Device-code authentication can legitimately wait for an arbitrary
+    // amount of time.  Do not impose a hidden ten-minute cancellation on the
+    // normal login path; callers that need a deadline can opt in explicitly
+    // through `timeoutMs` in the task parameters.
+    if (operation == "account.login") return 0;
     if (operation == "instance.launch") return 10 * 60 * 1000;
     if (operation == "instance.export") return 30 * 60 * 1000;
     if (operation == "server.start") return 5 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
+    if (operation == "startup.migrate" || operation == "startup.set-data-location") return 30 * 60 * 1000;
+    if (operation == "instance.store-transfer" || operation == "vanilla.loader.install" || operation == "sync.profile.apply") return 30 * 60 * 1000;
     return 15 * 60 * 1000;
 }
 
 QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject& parameters, UserInteraction& interaction)
 {
-    Q_UNUSED(interaction);
-    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "server.start" }.contains(operation))
+    if (!QStringList{ "instance.import", "instance.create", "instance.component.set-version", "instance.special-loader.install", "instance.update", "instance.launch", "java.install", "modpack.install", "resource.install", "resource.install-version", "resource.install-with-dependencies", "account.refresh", "account.login", "instance.export", "instance.convert.import", "instance.convert.export", "server.start", "instance-store.add", "instance-store.update", "instance-store.remove", "instance.store-transfer", "startup.set-data-location", "startup.migrate", "startup.dismiss-migration", "startup.complete", "vanilla.loader.install", "sync.profile.save", "sync.profile.remove", "sync.profile.plan", "sync.profile.apply", "vanilla-instance.provenance", "external-launchers.list-recognizers", "external-launchers.icon" }.contains(operation))
         return { { "ok", false }, { "error", QStringLiteral("Unsupported async task operation: %1").arg(operation) } };
 
     const auto idempotencyKey = parameters.value("idempotencyKey").toString();
@@ -375,9 +434,14 @@ QJsonObject AsyncTaskRuntime::start(const QString& operation, const QJsonObject&
     record.operation = operation;
     record.parameters = parameters;
     record.idempotencyKey = idempotencyKey;
+    record.allowEmbeddedDownloadPage = interaction.supportsEmbeddedDownloadPage();
     record.priority = parameters.value("priority").toString() == "high" ? 1 : 0;
     record.queuedAt = QDateTime::currentMSecsSinceEpoch();
     record.deadlineMs = deadlineFor(operation);
+    if (operation == "account.login") {
+        const auto requestedTimeout = parameters.value("timeoutMs").toInt();
+        if (requestedTimeout > 0) record.deadlineMs = qBound(1000, requestedTimeout, 24 * 60 * 60 * 1000);
+    }
     addResourceKeys(record);
     if (operation == "instance.import" || operation == "instance.create" || operation == "modpack.install") {
         for (int i = 0; i < APPLICATION->instances()->count(); ++i)
@@ -484,6 +548,11 @@ void AsyncTaskRuntime::finish(const QString& taskId, bool success, const QString
     record.finished = true;
     record.state = record.cancelRequested ? "cancelled" : (success ? "succeeded" : "failed");
     record.error = error;
+    if (success && record.operation == QStringLiteral("instance.update") && !instanceId.isEmpty()) {
+        const auto synced = autoSyncAfterUpdate(instanceId);
+        if (synced > 0)
+            record.status = QObject::tr("Updated; synchronized %1 profile(s)").arg(synced);
+    }
     record.finishedAt = QDateTime::currentMSecsSinceEpoch();
     if (!instanceId.isEmpty()) record.instanceId = instanceId;
     if (record.deadline) {
@@ -585,6 +654,21 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
     if (record.finished) return { { "ok", true }, { "data", snapshot(record) } };
     const bool wasRunning = record.state == "running";
     record.cancelRequested = true;
+    // File imports/conversions now finish cooperatively after their worker has
+    // removed temporary trees. Keep the store lock and task visible until that
+    // completion, instead of publishing "cancelled" while files are still in use.
+    if (wasRunning && record.task &&
+        QStringList{"instance.import", "instance.convert.import", "instance.convert.export"}.contains(record.operation)) {
+        if (record.deadline) record.deadline->stop();
+        record.status = tr("正在取消并清理临时文件");
+        record.task->abort();
+        saveJournal();
+        // abort() can synchronously finish the task and pump the queue, so do
+        // not keep using the earlier QHash reference after it returns.
+        const auto& updated = m_records[taskId];
+        emitChanged(updated);
+        return {{"ok", true}, {"data", snapshot(updated)}};
+    }
     record.finished = true;
     record.state = "cancelled";
     record.error = "cancelled";
@@ -612,6 +696,72 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
 void AsyncTaskRuntime::startRecord(const Record& record)
 {
     const auto id = record.id;
+    if (record.operation == "instance.convert.import" || record.operation == "instance.convert.export") {
+        const auto mode = record.operation == "instance.convert.import" ? VanillaConversionTask::Mode::Import : VanillaConversionTask::Mode::Export;
+        auto task = makeShared<VanillaConversionTask>(mode, record.parameters);
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = record.operation == "instance.convert.import" ? QStringLiteral("准备导入") : QStringLiteral("准备导出");
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) {
+            if (m_records.contains(id)) {
+                m_records[id].status = status;
+                emitChanged(m_records[id]);
+            }
+        });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+            emitChanged(m_records[id]);
+        });
+        connect(task.get(), &Task::details, this, [this, id](const QString& details) {
+            if (m_records.contains(id)) {
+                m_records[id].status = details;
+                emitChanged(m_records[id]);
+            }
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            const bool successful = task->wasSuccessful();
+            const auto destination = task->report().destination;
+            const auto group = m_records[id].parameters.value("group").toString();
+            finish(id, successful, successful ? QString() : task->failReason());
+            if (successful && !destination.isEmpty() && !group.isEmpty() && m_records[id].operation == QStringLiteral("instance.convert.import")) {
+                APPLICATION->instances()->loadList();
+                for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
+                    auto* instance = APPLICATION->instances()->at(i);
+                    if (QDir::cleanPath(instance->instanceRoot()) == QDir::cleanPath(destination)) {
+                        APPLICATION->instances()->setInstanceGroup(instance->id(), group);
+                        break;
+                    }
+                }
+            }
+        });
+        task->start();
+        return;
+    }
+    if (QStringList{ "instance-store.add", "instance-store.update", "instance-store.remove", "instance.store-transfer", "startup.set-data-location",
+                     "startup.migrate", "startup.dismiss-migration", "startup.complete", "vanilla.loader.install", "sync.profile.save", "sync.profile.remove",
+                     "sync.profile.plan", "sync.profile.apply", "vanilla-instance.provenance", "external-launchers.list-recognizers", "external-launchers.icon" }.contains(record.operation)) {
+        auto task = makeShared<ApiOperationTask>(record.operation, record.parameters, record.allowEmbeddedDownloadPage);
+        auto& stored = m_records[id];
+        stored.task = task.get();
+        stored.holder = task;
+        stored.status = record.operation.startsWith("sync.profile") ? QStringLiteral("正在处理同步配置") : QStringLiteral("正在更新启动器数据");
+        connect(task.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
+        connect(task.get(), &Task::progress, this, [this, id](qint64 current, qint64 total) {
+            if (!m_records.contains(id)) return;
+            m_records[id].progress = current;
+            m_records[id].total = total;
+        });
+        connect(task.get(), &Task::finished, this, [this, id, task]() {
+            if (!m_records.contains(id) || m_records[id].finished) return;
+            finish(id, task->wasSuccessful(), task->wasSuccessful() ? QString() : task->failReason());
+        });
+        task->start();
+        return;
+    }
     if (record.operation == "instance.update") {
         const auto instance = findInstance(record.parameters.value("instance").toString());
         if (!instance) { finish(id, false, "Instance not found."); return; }
@@ -688,6 +838,10 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         const auto parameters = record.parameters;
         const auto instance = dynamic_cast<MinecraftInstance*>(findInstance(parameters.value("instance").toString()));
         if (!instance) { finish(id, false, "Minecraft instance not found."); return; }
+        if (instance->traits().contains(QStringLiteral("vanilla-compatible"))) {
+            finish(id, false, "This external vanilla instance must be converted to a Prism copy before changing components.");
+            return;
+        }
         if (instance->isRunning()) { finish(id, false, "Components cannot be modified while the instance is running."); return; }
         const auto requestedUid = parameters.value("component").toString().trimmed();
         const auto version = parameters.value("version").toString().trimmed();
@@ -802,22 +956,22 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         return;
     }
 
-    if (record.operation == "instance.import" || record.operation == "resource.install-with-dependencies" || record.operation == "modpack.install" || record.operation == "resource.install-version" || record.operation == "instance.special-loader.install" || record.operation == "instance.launch") {
+    if (record.operation == "instance.create" || record.operation == "instance.import" || record.operation == "resource.install-with-dependencies" || record.operation == "modpack.install" || record.operation == "resource.install-version" || record.operation == "instance.special-loader.install" || record.operation == "instance.launch") {
         QJsonObject parameters;
-        if (record.operation == "instance.launch") {
+        if (record.operation == "instance.create" || record.operation == "instance.launch") {
             // Route launches through the same compatibility API adapter as
             // installs. This preserves the UserInteraction channel used by
             // headless launch checks (for example, the low-memory prompt),
             // allowing Neo UI to answer instead of treating it as cancelled.
             parameters = record.parameters;
         } else if (record.operation == "modpack.install") {
-            for (const auto key : { "provider", "projectId", "versionId", "name", "group", "icon", "optionalMods", "privateCode", "offline" })
+            for (const auto key : { "provider", "projectId", "versionId", "name", "group", "icon", "optionalMods", "privateCode", "offline", "targetStoreId" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         } else if (record.operation == "resource.install-version") {
             for (const auto key : { "provider", "kind", "projectId", "versionId", "instance", "world", "replace", "minecraftVersion", "loaders", "pluginLoaders", "includeChangelog" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         } else if (record.operation == "instance.import") {
-            for (const auto key : { "source", "name", "group", "icon", "optionalMods" })
+            for (const auto key : { "source", "name", "group", "icon", "optionalMods", "targetStoreId", "targetFormat" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         } else if (record.operation == "resource.install-with-dependencies") {
             parameters = record.parameters;
@@ -825,7 +979,7 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             for (const auto key : { "instance", "loader", "minecraftVersion", "loaderVersion", "commitRef" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         }
-        auto task = makeShared<ApiOperationTask>(record.operation, parameters);
+        auto task = makeShared<ApiOperationTask>(record.operation, parameters, record.allowEmbeddedDownloadPage);
         auto& stored = m_records[id];
         stored.task = task.get();
         stored.holder = task;
@@ -838,7 +992,7 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         connect(task.get(), &Task::finished, this, [this, id, task, instanceId = parameters.value("instance").toString()]() {
             if (!m_records.contains(id)) return;
             const bool success = task->wasSuccessful();
-            if ((m_records[id].operation == "modpack.install" || m_records[id].operation == "instance.import") && success) {
+            if ((m_records[id].operation == "modpack.install" || m_records[id].operation == "instance.import" || m_records[id].operation == "instance.create") && success) {
                 APPLICATION->instances()->saveNow();
                 const auto& before = m_records[id].instancesBefore;
                 for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
@@ -852,109 +1006,6 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             finish(id, success, success ? QString() : task->failReason(), instanceId);
         });
         task->start();
-        return;
-    }
-
-    if (record.operation == "instance.create") {
-        const auto parameters = record.parameters;
-        const auto type = parameters.value("type").toString().trimmed().toLower();
-        if (!type.isEmpty() && type != "vanilla") {
-            finish(id, false, "Async instance.create currently supports vanilla and loader instances only.");
-            return;
-        }
-        const auto versionName = parameters.value("version").toString().trimmed();
-        if (versionName.isEmpty()) { finish(id, false, "A Minecraft version is required."); return; }
-        if (!ApiSupport::identifier(versionName)) { finish(id, false, "Invalid Minecraft version."); return; }
-        const auto requestedLoader = parameters.value("loader").toString().trimmed().toLower();
-        const auto loaderVersionName = parameters.value("loaderVersion").toString().trimmed();
-        if (!requestedLoader.isEmpty() && !ApiSupport::identifier(loaderVersionName)) {
-            finish(id, false, "A valid loader version is required.");
-            return;
-        }
-        const auto name = parameters.value("name").toString().trimmed();
-        const auto group = parameters.value("group").toString();
-        const auto icon = parameters.value("icon").toString("default");
-        const auto loader = loaderUid(requestedLoader);
-
-        auto& stored = m_records[id];
-        stored.status = "正在加载 Minecraft 版本 " + versionName;
-        const auto index = APPLICATION->metadataIndex();
-        auto loadMinecraft = index->loadVersion("net.minecraft", versionName);
-        stored.holder = loadMinecraft;
-        stored.task = loadMinecraft.get();
-        connect(loadMinecraft.get(), &Task::status, this, [this, id](const QString& status) {
-            if (m_records.contains(id)) m_records[id].status = status;
-        });
-        connect(loadMinecraft.get(), &Task::finished, this, [this, id, index, versionName, loader, loaderVersionName, name, group, icon]() {
-            if (!m_records.contains(id) || m_records[id].finished) return;
-            const auto minecraft = index->get("net.minecraft", versionName);
-            if (!minecraft || !minecraft->isLoaded()) {
-                finish(id, false, "Minecraft version not found: " + versionName);
-                return;
-            }
-            auto createWrapped = [this, id, minecraft, loader, name, group, icon](BaseVersion::Ptr loaderVersion) {
-                if (!m_records.contains(id) || m_records[id].finished) return;
-                InstanceTask* raw = nullptr;
-                if (Meta::Cleanroom::isUid(loader) && loaderVersion) {
-                    // Cleanroom's legacy installer downloads a complete package
-                    // and normalizes its patches. A plain VanillaCreationTask
-                    // only adds the metadata component and leaves the package
-                    // files missing, so mirror the established installer path.
-                    raw = new InstanceImportTask(QUrl(Meta::Cleanroom::packageUrl(loaderVersion->descriptor())), nullptr);
-                } else {
-                    raw = loaderVersion ? new VanillaCreationTask(minecraft, loader, loaderVersion)
-                                         : new VanillaCreationTask(minecraft);
-                }
-                if (!name.isEmpty()) raw->setName(name);
-                raw->setGroup(group);
-                raw->setIcon(icon);
-                auto* task = APPLICATION->instances()->wrapInstanceTask(raw);
-                if (!task) { finish(id, false, "The instance creation task could not be created."); return; }
-                auto& record = m_records[id];
-                record.task = task;
-                record.status = "正在创建实例";
-                connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-                connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
-                    if (!m_records.contains(id)) return;
-                    m_records[id].progress = current;
-                    m_records[id].total = total;
-                });
-                connect(task, &Task::finished, this, [this, id, task]() {
-                    if (!m_records.contains(id)) return;
-                    const bool success = task->wasSuccessful();
-                    QString created;
-                    if (success) {
-                        APPLICATION->instances()->saveNow();
-                        const auto& before = m_records[id].instancesBefore;
-                        for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
-                            const auto candidate = APPLICATION->instances()->at(i);
-                            if (!before.contains(candidate->id())) { created = candidate->id(); break; }
-                        }
-                    }
-                    if (!created.isEmpty()) m_records[id].createdInstanceId = created;
-                    finish(id, success, success ? QString() : task->failReason());
-                });
-                task->start();
-            };
-            if (loader.isEmpty()) { createWrapped({}); return; }
-            auto& record = m_records[id];
-            record.status = "正在加载加载器 " + loader + " " + loaderVersionName;
-            auto loadLoader = index->loadVersion(loader, loaderVersionName);
-            record.holder = loadLoader;
-            record.task = loadLoader.get();
-            connect(loadLoader.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-            connect(loadLoader.get(), &Task::finished, this, [this, id, index, loader, loaderVersionName, createWrapped]() {
-                if (!m_records.contains(id) || m_records[id].finished) return;
-                const auto loaderVersion = index->get(loader, loaderVersionName);
-                if (!loaderVersion || !loaderVersion->isLoaded()) {
-                    finish(id, false, "Loader version not found: " + loader + ":" + loaderVersionName);
-                    return;
-                }
-                createWrapped(loaderVersion);
-            });
-            loadLoader->start();
-        });
-        loadMinecraft->start();
         return;
     }
 

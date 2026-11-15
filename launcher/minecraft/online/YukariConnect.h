@@ -392,6 +392,7 @@ class YukariConnect : public QObject {
     bool ensureWebSocketConnected(int timeoutMs = 5000);
     void resetWebSocket();
     void handleWebSocketMessage(const QString& message);
+    void recordLog(const QString& message);
 
     bool sendWsRequest(const QString& command, const QJsonObject& data = {});
     QJsonObject sendWsRequestAndWait(const QString& command, const QString& responseCommand, const QJsonObject& data = {}, int timeoutMs = 5000);

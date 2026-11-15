@@ -439,9 +439,21 @@ pub fn webui_select(
     };
     // Navigation keeps the Tauri process and launcher sidecar alive. Protect
     // request/reply and login interactions from disappearing with the old page.
-    window
-        .set_decorations(entry.native_frame)
-        .map_err(|e| e.to_string())?;
+    // The built-in window is created frameless already. Calling
+    // `set_decorations(false)` again on Windows can change the client size
+    // without changing the requested native size; persisting that transient
+    // rectangle makes every launch accumulate the same frame offset. Use the
+    // registry's previous entry to decide whether a real shell transition is
+    // needed instead of probing the platform state during startup.
+    let previous_frame = s.active.as_ref().map(|active| active.native_frame);
+    let decorations_changed = previous_frame
+        .map(|previous| previous != entry.native_frame)
+        .unwrap_or(entry.native_frame);
+    if decorations_changed {
+        window
+            .set_decorations(entry.native_frame)
+            .map_err(|e| e.to_string())?;
+    }
     let previous = s.active.replace(entry);
     s.switching = true;
     if let Err(error) = window.navigate(url) {

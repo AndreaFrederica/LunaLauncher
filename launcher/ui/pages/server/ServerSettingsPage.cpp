@@ -19,6 +19,9 @@ ServerSettingsPage::ServerSettingsPage(ServerInstance *instance, QWidget *parent
     m_exePathEdit = new QLineEdit(this);
     m_argsEdit = new QLineEdit(this);
     m_workDirEdit = new QLineEdit(this);
+    m_stopCommandEdit = new QLineEdit(this);
+    m_authlibEnabled = new QCheckBox(tr("Enable server-side authlib-injector"), this);
+    m_authlibApiUrlEdit = new QLineEdit(this);
     m_browseBtn = new QPushButton(tr("Browse..."), this);
 
     auto exeLayout = new QHBoxLayout();
@@ -28,6 +31,9 @@ ServerSettingsPage::ServerSettingsPage(ServerInstance *instance, QWidget *parent
     form->addRow(tr("Executable:"), exeLayout);
     form->addRow(tr("Arguments:"), m_argsEdit);
     form->addRow(tr("Working Directory:"), m_workDirEdit);
+    form->addRow(tr("Graceful Stop Command:"), m_stopCommandEdit);
+    form->addRow(m_authlibEnabled);
+    form->addRow(tr("Authlib Injector API URL:"), m_authlibApiUrlEdit);
 
     layout->addLayout(form);
 
@@ -45,6 +51,9 @@ ServerSettingsPage::ServerSettingsPage(ServerInstance *instance, QWidget *parent
     connect(m_exePathEdit, &QLineEdit::textChanged, this, &ServerSettingsPage::updatePreview);
     connect(m_argsEdit, &QLineEdit::textChanged, this, &ServerSettingsPage::updatePreview);
     connect(m_workDirEdit, &QLineEdit::textChanged, this, &ServerSettingsPage::updatePreview);
+    connect(m_stopCommandEdit, &QLineEdit::textChanged, this, &ServerSettingsPage::updatePreview);
+    connect(m_authlibEnabled, &QCheckBox::toggled, this, &ServerSettingsPage::updatePreview);
+    connect(m_authlibApiUrlEdit, &QLineEdit::textChanged, this, &ServerSettingsPage::updatePreview);
 
     // Register changes
     // connect(m_exePathEdit, &QLineEdit::textChanged, this, &ServerSettingsPage::registerSettingsChange);
@@ -67,6 +76,9 @@ bool ServerSettingsPage::apply()
     m_instance->setExecutablePath(m_exePathEdit->text());
     m_instance->setArguments(m_argsEdit->text().split(' ', Qt::SkipEmptyParts));
     m_instance->setWorkingDir(m_workDirEdit->text());
+    m_instance->setStopCommand(m_stopCommandEdit->text());
+    m_instance->setAuthlibInjectorEnabled(m_authlibEnabled->isChecked());
+    m_instance->setAuthlibInjectorApiUrl(m_authlibApiUrlEdit->text().trimmed());
     return true;
 }
 
@@ -75,6 +87,9 @@ void ServerSettingsPage::load()
     m_exePathEdit->setText(m_instance->executablePath());
     m_argsEdit->setText(m_instance->arguments().join(' '));
     m_workDirEdit->setText(m_instance->workingDir());
+    m_stopCommandEdit->setText(m_instance->stopCommand());
+    m_authlibEnabled->setChecked(m_instance->authlibInjectorEnabled());
+    m_authlibApiUrlEdit->setText(m_instance->authlibInjectorApiUrl());
     updatePreview();
 }
 
@@ -119,6 +134,10 @@ void ServerSettingsPage::updatePreview()
     doReplace(args);
 
     QString cmd = QString("%1 %2").arg(exe, args);
+    if (!m_stopCommandEdit->text().trimmed().isEmpty())
+        cmd += tr("\nGraceful stop: %1").arg(m_stopCommandEdit->text().trimmed());
+    if (m_authlibEnabled->isChecked())
+        cmd += tr("\nAuthlib Injector: %1").arg(m_authlibApiUrlEdit->text().trimmed());
     m_previewLabel->setText(cmd);
 }
 

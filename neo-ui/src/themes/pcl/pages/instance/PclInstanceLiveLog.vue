@@ -3,6 +3,7 @@
     <PclCard :title="t('liveLog.title')">
       <template #actions>
         <PclCheckbox v-model="neoUiPreferences.pclLaunchLogAutoScroll" :label="t('liveLog.autoScroll')" />
+        <DiagnosticExportButton :instance="instance.id" :console="text" :execute="execute" pcl />
         <LogUploadButton :instance="instance.id" :name="t('liveLog.upload')" :content="text" :execute="execute" :disabled="!text" pcl />
         <PclButton size="sm" icon="trash-2" variant="ghost" :disabled="!lines.length" @click="lines = []">{{ t('liveLog.clear') }}</PclButton>
         <PclButton v-if="running" size="sm" variant="red" icon="power" @click="forceStop">{{ t('liveLog.forceStop') }}</PclButton>
@@ -47,6 +48,7 @@ import PclLaunchProgressDialog from '../../components/PclLaunchProgressDialog.vu
 import PclCheckbox from '../../components/PclCheckbox.vue';
 import PclCard from '../../components/PclCard.vue';
 import LogUploadButton from '../../../../components/LogUploadButton.vue';
+import DiagnosticExportButton from '../../../../components/DiagnosticExportButton.vue';
 import { launcher } from '../../../../boot/launcher-api';
 import { waitForTask } from '../../composables/useTaskEvents';
 import { neoUiPreferences } from '../../../../neo-ui-preferences';

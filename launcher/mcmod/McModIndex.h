@@ -36,6 +36,8 @@ public:
     static const Index& instance();
 
     std::optional<Match> find(const QString& modId, const QString& name) const;
+    /** Reverse lookup a MCMod title/alias from a user search expression. */
+    std::optional<Match> findByName(const QString& query) const;
     /** Find an entry by its Modrinth or CurseForge project ID. */
     std::optional<Match> findByProviderId(const QString& provider, const QString& projectId) const;
     /**

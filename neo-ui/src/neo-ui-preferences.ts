@@ -8,7 +8,7 @@ import { recordRuntimeDebug } from './common/runtime/runtime-debug';
 export type NeoTheme = 'dark' | 'light' | 'system';
 export type NeoDensity = 'comfortable' | 'compact';
 export type NeoBackground = 'solid' | 'gradient';
-export type NeoShell = 'neo' | 'pcl' | 'melody';
+export type NeoShell = 'neo' | 'pcl' | 'melody' | 'endfield';
 export type PclFont = 'system' | 'yahei' | 'dengxian' | 'simsun';
 export type PclStylePreset = 'luna-neo' | 'pcl';
 export type PclLoadingAnimation = 'luna-spinner' | 'pcl-pickaxe' | 'pcl-bar';
@@ -41,6 +41,8 @@ export interface NeoUiPreferences {
   /** Shared width of PCL page navigation columns, in CSS pixels. */
   pclPageNavWidth: number;
   pclNavLayout: 'pcl' | 'mmc-classic';
+  pclVerticalNavigation: boolean;
+  pclMainNavigationText: boolean;
   pclClassicSide: 'left' | 'right';
   pclClassicIconSize: number;
   /** Enable the PCL launch-page transition and launching panel animation. */
@@ -58,8 +60,12 @@ export interface NeoUiPreferences {
   pclLaunchLogAutoScroll: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
+  /** Show a Luna provenance badge when Luna only added its own metadata. */
+  pclShowLunaBadge: boolean;
   /** Show the Luna mark before the PCL title-bar brand. */
   pclTitleIcon: boolean;
+  /** Custom text shown in the launcher title bar. */
+  pclTitleText: string;
   /** Accent color for the PCL shell (buttons, links, selected rows). */
   pclAccentColor: string;
   /** Data URL for the PCL page background; empty means no image. */
@@ -82,6 +88,7 @@ export interface NeoUiPreferences {
   pclHomeInstanceRows: number;
   pclHomeInstanceWidth: number;
   pclHomeInstanceFontSize: number;
+  pclHomeInstanceShowSubtitle: boolean;
   pclHomeInstanceTextPosition: 'beside' | 'below';
   pclHomeInstanceGrouping: 'flat' | 'grouped';
   pclHomeInstanceSort: 'manual' | 'name' | 'version';
@@ -111,6 +118,8 @@ const defaults: NeoUiPreferences = {
   pclBaseFontSize: 14,
   pclPageNavWidth: 220,
   pclNavLayout: 'mmc-classic',
+  pclVerticalNavigation: false,
+  pclMainNavigationText: true,
   pclClassicSide: 'right',
   pclClassicIconSize: 96,
   pclLaunchAnimation: false,
@@ -123,7 +132,11 @@ const defaults: NeoUiPreferences = {
   pclLaunchLogAutoScroll: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
+  // A Luna-only sidecar is launcher metadata, so keep the instance list quiet
+  // unless the user explicitly wants to see that provenance.
+  pclShowLunaBadge: false,
   pclTitleIcon: true,
+  pclTitleText: 'LunaLauncher',
   pclAccentColor: '#d65c9a',
   pclBackgroundImage: '',
   pclBackgroundImageName: '',
@@ -142,6 +155,7 @@ const defaults: NeoUiPreferences = {
   pclHomeInstanceRows: 4,
   pclHomeInstanceWidth: 100,
   pclHomeInstanceFontSize: 14,
+  pclHomeInstanceShowSubtitle: true,
   pclHomeInstanceTextPosition: 'below',
   pclHomeInstanceGrouping: 'grouped',
   pclHomeInstanceSort: 'name',
@@ -163,6 +177,8 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFont: 'system',
     pclBaseFontSize: 14,
     pclNavLayout: 'mmc-classic',
+    pclVerticalNavigation: false,
+    pclMainNavigationText: true,
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: false,
@@ -183,6 +199,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 14,
+    pclHomeInstanceShowSubtitle: true,
     pclHomeInstanceTextPosition: 'below',
     pclHomeInstanceGrouping: 'grouped',
     pclHomeInstanceSort: 'name',
@@ -194,6 +211,8 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclFont: 'system',
     pclBaseFontSize: 13,
     pclNavLayout: 'pcl',
+    pclVerticalNavigation: false,
+    pclMainNavigationText: true,
     pclClassicSide: 'right',
     pclClassicIconSize: 96,
     pclLaunchAnimation: true,
@@ -214,6 +233,7 @@ const PCL_STYLE_PRESETS: Record<PclStylePreset, Partial<NeoUiPreferences>> = {
     pclHomeInstanceRows: 4,
     pclHomeInstanceWidth: 100,
     pclHomeInstanceFontSize: 13,
+    pclHomeInstanceShowSubtitle: true,
     pclHomeInstanceTextPosition: 'beside',
     pclHomeInstanceGrouping: 'flat',
     pclHomeInstanceSort: 'manual',
@@ -250,8 +270,18 @@ function normalizeLoaded(value: any): NeoUiPreferences {
     if (typeof merged.pclLaunchLogAutoScroll !== 'boolean') {
       merged.pclLaunchLogAutoScroll = defaults.pclLaunchLogAutoScroll;
     }
+    if (typeof merged.pclMainNavigationText !== 'boolean') {
+      merged.pclMainNavigationText = defaults.pclMainNavigationText;
+    }
+    if (typeof merged.pclVerticalNavigation !== 'boolean') {
+      merged.pclVerticalNavigation = defaults.pclVerticalNavigation;
+    }
     if (typeof merged.pclTitleIcon !== 'boolean') {
       merged.pclTitleIcon = defaults.pclTitleIcon;
+    }
+
+    if (typeof merged.pclHomeInstanceShowSubtitle !== 'boolean') {
+      merged.pclHomeInstanceShowSubtitle = defaults.pclHomeInstanceShowSubtitle;
     }
 
     merged.pclHomeCardOrder = Array.isArray(merged.pclHomeCardOrder)
@@ -395,19 +425,23 @@ export function applyNeoUiPreferences() {
   const root = document.documentElement;
   const isDark = neoUiIsDark.value;
   root.dataset.neoTheme = isDark ? 'dark' : 'light';
-  root.dataset.neoShell = neoUiPreferences.shell;
+  root.dataset.neoShell = neoUiPreferences.shell === 'endfield' ? 'pcl' : neoUiPreferences.shell;
+  root.dataset.neoSkin = neoUiPreferences.shell === 'endfield' ? 'endfield' : '';
   root.dataset.neoDensity = neoUiPreferences.density;
   root.dataset.neoBackground = neoUiPreferences.background;
   root.dataset.neoAnimations = neoUiPreferences.animations ? 'on' : 'off';
+  root.dataset.pclMainNavigation = neoUiPreferences.shell === 'pcl' && neoUiPreferences.pclVerticalNavigation ? 'vertical' : 'horizontal';
+  root.dataset.pclMainNavigationText = neoUiPreferences.pclMainNavigationText ? 'on' : 'off';
   root.dataset.pclTitleLogo = neoUiPreferences.pclTitleLogo ? 'on' : 'off';
   root.dataset.pclTitleBadge = neoUiPreferences.pclTitleBadge ? 'on' : 'off';
   root.dataset.pclTitleIcon = neoUiPreferences.pclTitleIcon ? 'on' : 'off';
   root.style.setProperty('--neo-primary', neoUiPreferences.accent);
-  const pclAccent = normalizePclAccent(neoUiPreferences.pclAccentColor);
+  const endfieldSkin = neoUiPreferences.shell === 'endfield';
+  const pclAccent = endfieldSkin ? '#fffa00' : normalizePclAccent(neoUiPreferences.pclAccentColor);
   root.style.setProperty('--pcl-c3', pclAccent);
-  root.style.setProperty('--pcl-c2', isDark ? mixHex(pclAccent, '#ffffff', 0.4) : mixHex(pclAccent, '#000000', 0.2));
-  root.style.setProperty('--pcl-c4', mixHex(pclAccent, '#ffffff', 0.2));
-  root.style.setProperty('--pcl-c5', isDark ? mixHex(pclAccent, '#000000', 0.32) : mixHex(pclAccent, '#ffffff', 0.6));
+  root.style.setProperty('--pcl-c2', endfieldSkin ? '#fff45c' : isDark ? mixHex(pclAccent, '#ffffff', 0.4) : mixHex(pclAccent, '#000000', 0.2));
+  root.style.setProperty('--pcl-c4', endfieldSkin ? '#fff2a6' : mixHex(pclAccent, '#ffffff', 0.2));
+  root.style.setProperty('--pcl-c5', endfieldSkin ? '#f2ec00' : isDark ? mixHex(pclAccent, '#000000', 0.32) : mixHex(pclAccent, '#ffffff', 0.6));
   root.style.setProperty('--pcl-font', pclFontStacks[neoUiPreferences.pclFont] || pclFontStacks.system);
   root.style.setProperty('--pcl-font-scale', String(Math.max(9, Math.min(20, Number(neoUiPreferences.pclBaseFontSize) || 13)) / 13));
   root.style.setProperty('--pcl-page-nav-width', `${Math.max(140, Math.min(360, Number(neoUiPreferences.pclPageNavWidth) || defaults.pclPageNavWidth))}px`);

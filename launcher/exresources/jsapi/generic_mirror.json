@@ -1,0 +1,17 @@
+{
+  "metadata": { "id": "generic-mirror", "kind": "mirror", "displayName": "Custom mirror mapping", "version": "2.0.0", "enabled": true, "priority": 10, "baseRule": true, "categories": ["launcher", "libraries", "assets", "forge", "fabric", "quilt", "authlib", "modrinth"] },
+  "rules": [
+    { "match": { "hosts": ["cdn.modrinth.com"] }, "rewrite": { "base": "{modrinthCdnBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["resources.download.minecraft.net"] }, "rewrite": { "base": "{assetsBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["libraries.minecraft.net", "maven.minecraftforge.net", "maven.fabricmc.net"] }, "rewrite": { "base": "{librariesBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["files.minecraftforge.net"], "pathPrefix": "/maven/" }, "rewrite": { "base": "{librariesBase}", "stripPrefix": "/maven/" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["maven.neoforged.net"], "pathPrefix": "/releases/" }, "rewrite": { "base": "{librariesBase}", "stripPrefix": "/releases/" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["maven.quiltmc.org"], "pathPrefix": "/repository/release/" }, "rewrite": { "base": "{librariesBase}", "stripPrefix": "/repository/release/" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["meta.fabricmc.net"] }, "rewrite": { "base": "{fabricMetaBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["meta.quiltmc.org"] }, "rewrite": { "base": "{quiltMetaBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["dl.liteloader.com"], "pathPrefix": "/versions/" }, "rewrite": { "base": "{librariesBase}com/mumfrey/liteloader/", "stripPrefix": "/versions/" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["authlib-injector.yushi.moe"] }, "rewrite": { "base": "{authlibInjectorBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["launcher.mojang.com", "launchermeta.mojang.com", "piston-data.mojang.com", "piston-meta.mojang.com"] }, "rewrite": { "base": "{mojangBase}" } },
+    { "match": { "mirrorTypeId": 2, "hosts": ["s3.amazonaws.com"], "pathPrefix": "/Minecraft.Download/" }, "rewrite": { "base": "{mojangBase}", "stripPrefix": "/Minecraft.Download/" } }
+  ]
+}

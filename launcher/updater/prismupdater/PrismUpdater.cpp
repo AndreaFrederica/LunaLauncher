@@ -181,14 +181,17 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
         adjustedBy = "Persistent data path";
 
 #ifndef Q_OS_MACOS
-        if (auto portableUserData = FS::PathCombine(m_rootPath, "UserData"); QDir(portableUserData).exists()) {
-            m_dataPath = portableUserData;
-            adjustedBy = "Portable user data path";
-            m_isPortable = true;
-        } else if (QFile::exists(FS::PathCombine(m_rootPath, "portable.txt"))) {
-            m_dataPath = m_rootPath;
-            adjustedBy = "Portable data path";
-            m_isPortable = true;
+        const bool forceSystemData = QFile::exists(FS::PathCombine(m_rootPath, ".luna-use-system-data"));
+        if (!forceSystemData) {
+            if (auto portableUserData = FS::PathCombine(m_rootPath, "UserData"); QDir(portableUserData).exists()) {
+                m_dataPath = portableUserData;
+                adjustedBy = "Portable user data path";
+                m_isPortable = true;
+            } else if (QFile::exists(FS::PathCombine(m_rootPath, "portable.txt"))) {
+                m_dataPath = m_rootPath;
+                adjustedBy = "Portable data path";
+                m_isPortable = true;
+            }
         }
 #endif
     }

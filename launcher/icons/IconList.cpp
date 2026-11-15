@@ -47,6 +47,35 @@
 
 #define MAX_SIZE 1024
 
+namespace {
+
+// Built-in instance icons are registered in the launcher resource bundle.  A
+// themed QIcon normally resolves them through the active desktop theme, but
+// headless/API clients and custom Qt themes do not always expose the bundled
+// theme as a searchable theme.  Keep a direct resource fallback so callers
+// can still render every icon that is compiled into the launcher.
+QIcon loadBuiltinIcon(const QString& key)
+{
+    const auto resourceKey = key == QStringLiteral("default") ? QStringLiteral("grass") : key;
+    if (resourceKey.isEmpty() || resourceKey.contains('/') || resourceKey.contains('\\'))
+        return {};
+
+    const QStringList paths{
+        QStringLiteral(":/icons/multimc/scalable/instances/") + resourceKey + QStringLiteral(".svg"),
+        QStringLiteral(":/icons/multimc/128x128/instances/") + resourceKey + QStringLiteral(".png"),
+        QStringLiteral(":/icons/multimc/50x50/instances/") + resourceKey + QStringLiteral(".png"),
+        QStringLiteral(":/icons/multimc/32x32/instances/") + resourceKey + QStringLiteral(".png"),
+    };
+    for (const auto& path : paths) {
+        QIcon icon(path);
+        if (!icon.isNull())
+            return icon;
+    }
+    return {};
+}
+
+}  // namespace
+
 IconList::IconList(const QStringList& builtinPaths, const QString& path, QObject* parent) : QAbstractListModel(parent)
 {
     QSet<QString> builtinNames;
@@ -470,15 +499,27 @@ QIcon IconList::getIcon(const QString& key) const
 {
     int iconIndex = getIconIndex(key);
 
-    if (iconIndex != -1)
-        return m_icons[iconIndex].icon();
+    if (iconIndex != -1) {
+        auto icon = m_icons[iconIndex].icon();
+        if (!icon.isNull())
+            return icon;
+
+        // IconList stores bundled icons by theme key.  Resolve the resource
+        // directly when the active QIcon theme cannot provide a pixmap.
+        icon = loadBuiltinIcon(key);
+        if (!icon.isNull())
+            return icon;
+    }
 
     // Fallback for icons that don't exist.b
     iconIndex = getIconIndex("grass");
 
-    if (iconIndex != -1)
-        return m_icons[iconIndex].icon();
-    return {};
+    if (iconIndex != -1) {
+        auto icon = m_icons[iconIndex].icon();
+        if (!icon.isNull())
+            return icon;
+    }
+    return loadBuiltinIcon("grass");
 }
 
 int IconList::getIconIndex(const QString& key) const

@@ -56,6 +56,7 @@ namespace fs = std::filesystem;
 #include "updater/prismupdater/UpdaterDialogs.h"
 
 #include "FileSystem.h"
+#include "LauncherDataPath.h"
 #include "Json.h"
 #include "StringUtils.h"
 
@@ -180,9 +181,20 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
         m_dataPath = foo.absolutePath();
         adjustedBy = "Persistent data path";
 
+        QString configuredDataPath;
+        QString dataPathError;
+        if (!LauncherDataPath::configuredDirectory(m_rootPath, configuredDataPath, dataPathError)) {
+            showFatalErrorMessage(tr("Invalid launcher data directory."), dataPathError);
+            return;
+        }
+        if (!configuredDataPath.isEmpty()) {
+            m_dataPath = configuredDataPath;
+            adjustedBy = "Installer data path";
+        }
+
 #ifndef Q_OS_MACOS
         const bool forceSystemData = QFile::exists(FS::PathCombine(m_rootPath, ".luna-use-system-data"));
-        if (!forceSystemData) {
+        if (configuredDataPath.isEmpty() && !forceSystemData) {
             if (auto portableUserData = FS::PathCombine(m_rootPath, "UserData"); QDir(portableUserData).exists()) {
                 m_dataPath = portableUserData;
                 adjustedBy = "Portable user data path";

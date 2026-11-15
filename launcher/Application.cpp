@@ -43,6 +43,7 @@
  */
 
 #include "Application.h"
+#include "LauncherDataPath.h"
 
 // Qt's bundled rcc emits this probe when resources are compressed with zstd.
 // Some MSVC Qt distributions omit the private export, while the generated
@@ -546,12 +547,23 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         dataPath = foo.absolutePath();
         adjustedBy = "Persistent data path";
 
+        QString configuredDataPath;
+        QString dataPathError;
+        if (!LauncherDataPath::configuredDirectory(m_rootPath, configuredDataPath, dataPathError)) {
+            showFatalErrorMessage("Invalid launcher data directory.", dataPathError);
+            return;
+        }
+        if (!configuredDataPath.isEmpty()) {
+            dataPath = configuredDataPath;
+            adjustedBy = "Installer data path";
+        }
+
 #ifndef Q_OS_MACOS
         // A completed switch to the user data directory leaves UserData in
         // place (removing the process working directory is unsafe on Windows)
         // and disables portable detection until the user switches back.
         const bool forceSystemData = QFile::exists(FS::PathCombine(m_rootPath, ".luna-use-system-data"));
-        if (!forceSystemData) {
+        if (configuredDataPath.isEmpty() && !forceSystemData) {
             if (auto portableUserData = FS::PathCombine(m_rootPath, "UserData"); QDir(portableUserData).exists()) {
                 dataPath = portableUserData;
                 adjustedBy = "Portable user data path";
@@ -2718,6 +2730,15 @@ std::unique_ptr<DataMigrationTask> Application::createDataLocationTask(bool port
 bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
 {
     const auto target = dataPathForMode(portable);
+    const auto dataMarker = FS::PathCombine(m_rootPath, ".luna-data-dir");
+    // An explicit switch in settings replaces the installer's custom location.
+    const auto clearCustomLocation = [&]() {
+        if (QFileInfo::exists(dataMarker) && !QFile::remove(dataMarker)) {
+            if (errorMessage) *errorMessage = tr("Could not remove the custom data-location marker:\n%1").arg(dataMarker);
+            return false;
+        }
+        return true;
+    };
     const auto systemMarker = FS::PathCombine(m_rootPath, ".luna-use-system-data");
     if (portable) {
         if (!FS::ensureFolderPathExists(target)) {
@@ -2742,7 +2763,7 @@ bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
                 return false;
             }
         }
-        return true;
+        return clearCustomLocation();
     }
 
     const auto marker = FS::PathCombine(m_rootPath, "portable.txt");
@@ -2770,7 +2791,7 @@ bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
         if (errorMessage) *errorMessage = tr("Could not write the data-location marker:\n%1").arg(QDir::toNativeSeparators(systemMarker));
         return false;
     }
-    return true;
+    return clearCustomLocation();
 }
 
 QJsonArray Application::dataMigrationCandidates() const

@@ -126,9 +126,28 @@ def main():
                 assert Path(context(environment=portable_env, binary=portable_cli)['dataRoot']) == portable
                 print('PASS: native portable UserData and portable.txt resolution', flush=True)
 
-            def start(tag, native_env=False):
+                data_marker = portable / '.luna-data-dir'
+                data_marker.write_text(str(profiles['first']), encoding='utf-8')
+                (portable / 'UserData').mkdir()
+                assert context(environment=portable_env, binary=portable_cli) == first_context
+                classic = cli.with_name('lunalauncher.exe')
+                if classic.is_file():
+                    portable_classic = portable / classic.name
+                    shutil.copy2(classic, portable_classic)
+                    assert context(environment=portable_env, binary=portable_classic) == first_context
+                assert context(profiles['other'], environment=portable_env, binary=portable_cli) == context(profiles['other'])
+                assert context(environment=dict(portable_env, LUNALAUNCHER_DATA_DIR=str(profiles['other'])), binary=portable_cli) == context(profiles['other'])
+                data_marker.unlink()
+                assert Path(context(environment=portable_env, binary=portable_cli)['dataRoot']) == portable / 'UserData'
+                data_marker.write_text(str(profiles['first']), encoding='utf-8')
+                print('PASS: custom install data is shared by CLI and classic; explicit/environment overrides win and clearing restores portable detection', flush=True)
+
+            def start(tag, native_env=False, from_marker=False):
                 current = dict(env, LUNA_WEB_UI='data/probe', WEBVIEW2_USER_DATA_FOLDER=str(root / ('webview-' + tag)))
-                current['LUNALAUNCHER_DATA_DIR' if native_env else 'LUNA_LAUNCHER_DATA'] = str(profiles[tag])
+                if from_marker:
+                    current.update(LUNA_LAUNCHER_CLI=str(portable_cli), PATH=portable_env['PATH'], QT_PLUGIN_PATH=portable_env['QT_PLUGIN_PATH'])
+                else:
+                    current['LUNALAUNCHER_DATA_DIR' if native_env else 'LUNA_LAUNCHER_DATA'] = str(profiles[tag])
                 process = subprocess.Popen([str(executable)], cwd=executable.parent, env=current)
                 def stop():
                     if process.poll() is None:
@@ -152,7 +171,7 @@ def main():
                     return True
                 wait_until(received, process, f'{tag}: {name}')
 
-            first = start('first')
+            first = start('first', from_marker=os.name == 'nt')
             stage(first, 'first', 'ready')
             # The query must remain available while MCP owns the profile.
             assert context(profiles['first']) == first_context

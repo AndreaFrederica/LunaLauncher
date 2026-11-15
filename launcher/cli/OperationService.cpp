@@ -1992,6 +1992,7 @@ QJsonObject OperationService::launchInstance(const QJsonObject& parameters, User
                     MinecraftAccount::createYggdrasil(username, *password, config.authServerUrl, config.sessionServerUrl, config.sourceName,
                                                       config.refreshEndpoint, config.validateEndpoint, config.authenticateEndpoint,
                                                       config.profileEndpoint, config.oauthTokenEndpoint, config.tokenType);
+                replacement->accountData()->yggdrasilConfig.managedLocal = config.managedLocal;
             } else {
                 const auto& config = data->unifiedPassConfig;
                 replacement = MinecraftAccount::createUnifiedPass(username, *password, config.serverId, config.baseUrl);

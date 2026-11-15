@@ -101,6 +101,14 @@ void AuthFlow::executeTask()
         }
         m_data->yggdrasilConfig.authServerUrl = service.apiUrl();
         m_data->yggdrasilConfig.sessionServerUrl = service.apiUrl();
+        // Managed accounts always use the bundled service's API contract.
+        // Normalize existing accounts too: older entries omitted these paths
+        // and fell back to /sessionserver/refresh, which the service rejects.
+        m_data->yggdrasilConfig.authenticateEndpoint = "/authserver/authenticate";
+        m_data->yggdrasilConfig.refreshEndpoint = "/authserver/refresh";
+        m_data->yggdrasilConfig.validateEndpoint = "/authserver/validate";
+        m_data->yggdrasilConfig.profileEndpoint = "/sessionserver/session/minecraft/profile/{uuid}";
+        m_data->yggdrasilConfig.tokenType = YggdrasilTokenType::Standard;
     }
     changeState(AccountTaskState::STATE_WORKING, tr("Initializing"));
     nextStep();

@@ -12,8 +12,11 @@ public static class DownloadConfig
 
     private static ProxySettings _proxySettings = new("Default", "", 0, "", "");
 
-    /// <summary>Max concurrent threads per download task.</summary>
+    /// <summary>Max concurrent file downloads across the process.</summary>
     public static int NetTaskThreadLimit { get; set; } = 16;
+
+    public static bool SmartConcurrency { get; set; }
+    public const long SmallFileSize = 256 * 1024;
 
     /// <summary>Speed limit in bytes/sec. -1 = unlimited.</summary>
     public static long NetTaskSpeedLimitHigh { get; set; } = -1;

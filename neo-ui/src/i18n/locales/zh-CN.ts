@@ -1,4 +1,10 @@
 export default {
+  libraryPatches: {
+    title: '库下载兼容补丁', enable: '启用库下载补丁（默认关闭）',
+    hint: '包内有效文件优先；缺少文件时按规则替换地址或在原地址失败后使用备选地址。保留原校验值。用户覆盖按规则 ID 替换基础规则，保存文件后下次任务生效。',
+    openBase: '打开基础文件', openOverlay: '打开用户覆盖文件', reload: '重新加载',
+    base: '基础文件', overlay: '用户覆盖', rules: '合并后的规则（{count} 条）',
+  },
   brand: {
     name: 'Luna Launcher',
     neoUi: 'Neo UI',

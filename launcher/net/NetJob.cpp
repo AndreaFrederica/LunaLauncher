@@ -43,9 +43,12 @@
 #include "tasks/ConcurrentTask.h"
 #if defined(LAUNCHER_APPLICATION)
 #include "Application.h"
+#include "BuildConfig.h"
 #include "minecraft/MirrorDownload.h"
 #include "net/Aria2Download.h"
 #include "net/Aria2Manager.h"
+#include "net/PclDownloadBatchTask.h"
+#include "net/PclDownloadTask.h"
 #include "settings/SettingsObject.h"
 #include "ui/dialogs/NetworkJobFailedDialog.h"
 #endif
@@ -144,6 +147,24 @@ void NetJob::updateDownloadSpeed(const QUuid& taskId, qint64 downloadedBytes)
 void NetJob::executeTask()
 {
     m_aria2Delegated = false;
+    m_pclDelegated = false;
+    m_pclBatchTasks.clear();
+    if (canDelegateWholeQueueToPcl()) {
+        QList<Net::PclDownloadTask::Ptr> tasks;
+        tasks.reserve(m_queue.size());
+        while (!m_queue.isEmpty()) {
+            auto task = m_queue.dequeue();
+            auto pcl = qSharedPointerDynamicCast<Net::PclDownloadTask>(task);
+            if (!pcl)
+                return;
+            tasks.append(std::move(pcl));
+        }
+        for (const auto& task : tasks)
+            m_pclBatchTasks.append(task.get());
+        m_pclDelegated = true;
+        addTask(makeShared<Net::PclDownloadBatchTask>(std::move(tasks)));
+        setMaxConcurrent(1);
+    }
     if (canDelegateWholeQueueToAria2()) {
         m_aria2Delegated = true;
         setMaxConcurrent(static_cast<int>(totalSize()));
@@ -190,8 +211,27 @@ bool NetJob::canDelegateWholeQueueToAria2() const
 #endif
 }
 
+bool NetJob::canDelegateWholeQueueToPcl() const
+{
+#if defined(LAUNCHER_APPLICATION)
+    if (!APPLICATION_DYN || !BuildConfig.PCL_DOWNLOAD_ENABLED || m_queue.isEmpty() || !m_doing.isEmpty() || !m_done.isEmpty())
+        return false;
+    if (APPLICATION->settings()->get("DownloadBackend").toInt() != 2 || !Net::PclDownloadTask::shouldUseFor(QUrl("https://pcl.download/batch")))
+        return false;
+    for (const auto& task : m_queue) {
+        if (!dynamic_cast<Net::PclDownloadTask*>(task.get()))
+            return false;
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
 auto NetJob::size() const -> int
 {
+    if (m_pclDelegated)
+        return m_pclBatchTasks.size();
     return m_queue.size() + m_doing.size() + m_done.size();
 }
 
@@ -236,6 +276,12 @@ auto NetJob::abort() -> bool
 auto NetJob::getFailedActions() -> QList<Net::NetRequest*>
 {
     QList<Net::NetRequest*> failed;
+    if (m_pclDelegated) {
+        for (auto* task : m_pclBatchTasks) {
+            if (task && task->getState() == Task::State::Failed)
+                failed.push_back(task);
+        }
+    }
     for (auto index : m_failed) {
         failed.push_back(dynamic_cast<Net::NetRequest*>(index.get()));
     }
@@ -245,6 +291,12 @@ auto NetJob::getFailedActions() -> QList<Net::NetRequest*>
 auto NetJob::getFailedFiles() -> QList<QString>
 {
     QList<QString> failed;
+    if (m_pclDelegated) {
+        for (auto* task : m_pclBatchTasks) {
+            if (task && task->getState() == Task::State::Failed)
+                failed.append(task->url().toString());
+        }
+    }
     for (auto index : m_failed) {
         failed.append(static_cast<Net::NetRequest*>(index.get())->url().toString());
     }
@@ -253,6 +305,15 @@ auto NetJob::getFailedFiles() -> QList<QString>
 
 void NetJob::updateState()
 {
+    if (m_pclDelegated) {
+        const auto done = std::count_if(m_pclBatchTasks.cbegin(), m_pclBatchTasks.cend(), [](const auto* task) {
+            return task && task->getState() == Task::State::Succeeded;
+        });
+        setProgress(done, m_pclBatchTasks.size());
+        setStatus(tr("Downloading %1 task(s) (%2 out of %1 are done)")
+                      .arg(QString::number(m_pclBatchTasks.size()), QString::number(done)));
+        return;
+    }
     setProgress(m_done.count(), totalSize());
     QString status = tr("Executing %1 task(s) (%2 out of %3 are done)")
                          .arg(QString::number(m_doing.count()), QString::number(m_done.count()), QString::number(totalSize()));

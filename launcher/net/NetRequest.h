@@ -87,6 +87,7 @@ class NetRequest : public Task {
     /// may contain multiple mirrors and should end with the official URL.
     void setFallbackUrls(const QList<QUrl>& urls);
     QUrl fallbackUrl() const { return m_fallbackUrls.value(0); }
+    QList<QUrl> downloadUrls() const { return QList<QUrl>{m_url} + m_fallbackUrls.mid(m_fallbackIndex); }
     virtual int replyStatusCode() const;
     virtual QNetworkReply::NetworkError error() const;
     virtual QString errorString() const;
@@ -121,6 +122,11 @@ class NetRequest : public Task {
 
     /// the network reply
     unique_qobject_ptr<QNetworkReply> m_reply;
+    // Authentication callers inspect the response after finished(), when the
+    // reply has already been released. Keep the final response diagnostics.
+    int m_lastStatusCode = -1;
+    QNetworkReply::NetworkError m_lastError = QNetworkReply::NoError;
+    QString m_lastErrorString;
 
     /// source URL
     QUrl m_url;

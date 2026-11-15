@@ -301,9 +301,7 @@ Net::NetRequest::Ptr AssetObject::getDownloadAction(bool verifyIntegrity)
         const auto urls = MirrorDownload::downloadUrls(officialUrl.toString(), mirror);
         auto objectDL = Net::ApiDownload::makeFile(QUrl(urls.constFirst()), objectFile.filePath());
         MirrorDownload::configureFallbacks(objectDL.get(), officialUrl.toString(), mirror);
-        if (hash.size()) {
-            objectDL->addValidator(new Net::ChecksumValidator(QCryptographicHash::Sha1, hash));
-        }
+        objectDL->setExpectedIntegrity(QStringLiteral("sha1"), hash, size);
         objectDL->setProgress(objectDL->getProgress(), size);
         return objectDL;
     }

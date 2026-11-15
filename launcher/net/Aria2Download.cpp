@@ -193,6 +193,7 @@ void Aria2Download::aria2DownloadChanged(const QString& gid, const Aria2Download
             emit aborted();
             emit finished();
         } else {
+            if (tryNextFallback()) return;
             emitFailed(m_errorString);
         }
     }
@@ -274,6 +275,7 @@ void Aria2Download::finishFromTempFile()
         m_error = QNetworkReply::UnknownContentError;
         m_errorString = tr("Downloaded file failed verification: %1").arg(integrityError);
         QFile::remove(m_targetPath);
+        if (tryNextFallback()) return;
         emitFailed(m_errorString);
         return;
     }

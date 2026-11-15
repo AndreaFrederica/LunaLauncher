@@ -258,6 +258,10 @@ void applyRuntimeDownloadSettings(const QString& key)
         auto& library = PclDownloadLibrary::instance();
         if (library.isLoaded())
             library.setThreadLimit(qMax(1, settings->get(key).toInt()));
+    } else if (key == "PclDownloadSmartConcurrency") {
+        auto& library = PclDownloadLibrary::instance();
+        if (library.isLoaded())
+            library.setSmartConcurrency(settings->get(key).toBool());
     } else if (key == "PclDownloadSpeedLimitKBps") {
         auto& library = PclDownloadLibrary::instance();
         if (library.isLoaded())
@@ -323,7 +327,7 @@ QString settingCategory(const QString& id)
         "DownloadsDirWatchRecursive", "MoveModsFromDownloadsDir", "ModMetadataDisabled", "ModDependenciesDisabled", "McModSearchEnabled",
         "SkipModpackUpdatePrompt", "GlobalDataPacksEnabled", "ModDownloadLoaders", "OverrideModDownloadLoaders",
         "AssetVerificationMode", "DownloadBackend", "PclDownloadFallbackToQt", "PclDownloadThreadLimit",
-        "PclDownloadSpeedLimitKBps", "Aria2Enabled", "Aria2AutoInstall", "Aria2FallbackToQt",
+        "PclDownloadSpeedLimitKBps", "PclDownloadSmartConcurrency", "LibraryDownloadPatchesEnabled", "Aria2Enabled", "Aria2AutoInstall", "Aria2FallbackToQt",
         "Aria2FollowLauncherDownloadLimits", "Aria2MaxConcurrentDownloads", "Aria2MaxConnectionPerServer",
         "Aria2Split", "Aria2MinSplitSize", "Aria2FileAllocation", "Aria2Continue", "Aria2RpcPort",
         "Aria2PollInterval", "Aria2ExtraArgs", "Aria2UseLauncherProxy", "CurseForgeDownloadBrowser",
@@ -400,8 +404,12 @@ QString variantTypeName(const QVariant& value, const QVariant& fallback)
 
 QJsonObject describeSetting(SettingsObject* settings, const std::shared_ptr<Setting>& setting, bool reveal)
 {
-    const auto value = settings->get(setting->id());
+    auto value = settings->get(setting->id());
     const auto defaultValue = setting->defValue();
+    // INI persistence returns strings. Keep this toggle boolean for both UIs
+    // after restarting, otherwise JavaScript treats the string "false" as true.
+    if (setting->id() == "PclDownloadSmartConcurrency" || setting->id() == "LibraryDownloadPatchesEnabled")
+        value = value.toBool();
     const bool sensitive = isSensitiveSetting(setting->id());
     const bool redacted = sensitive && !reveal;
     return { { "key", setting->id() },
@@ -1410,7 +1418,8 @@ QJsonObject OperationService::setSetting(const QJsonObject& parameters, UserInte
         input = *value;
     }
     const auto current = settings->get(key);
-    const auto reference = current.isValid() ? current : setting->defValue();
+    const auto reference = (key == "PclDownloadSmartConcurrency" || key == "LibraryDownloadPatchesEnabled") ? setting->defValue() :
+                           (current.isValid() ? current : setting->defValue());
     QVariant converted;
     if (!convertSettingValue(input, reference, &converted, &error))
         return failure(error, 2);

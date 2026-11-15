@@ -124,6 +124,7 @@
                 <div class="pcl-form-row__control">
                   <PclSlider
                     :model-value="draftNumber('PclDownloadThreadLimit', 8)"
+                    :disabled="bool('PclDownloadSmartConcurrency')"
                     :min="1"
                     :max="64"
                     :step="1"
@@ -150,9 +151,15 @@
                 <span class="pcl-form-row__hint">{{ t('pcl.auto2.k71fd57e730') }}</span>
               </div>
 
+              <PclCheckbox :model-value="bool('PclDownloadSmartConcurrency')" label="智能并发上限" @update:model-value="save('PclDownloadSmartConcurrency', $event)" />
+              <PclHint theme="blue">仅适用于 PCL 下载：小文件（≤256 KiB）优先，总并发最多 32；大文件及大小未知文件最多 8。开启后替代手动并发上限，关闭后恢复。</PclHint>
               <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" :label="t('pcl.auto2.k9d5b1f1173')" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
               <PclCheckbox :model-value="bool('McModSearchEnabled')" :label="t('resource.mcmodSearchEnabled')" @update:model-value="save('McModSearchEnabled', $event)" />
               <PclHint theme="blue">{{ t('resource.mcmodSearchHint') }}</PclHint>
+            </PclCard>
+
+            <PclCard :title="t('libraryPatches.title')">
+              <LibraryDownloadPatchSettings :enabled="bool('LibraryDownloadPatchesEnabled')" :busy="busy" :execute="execute" @update:enabled="save('LibraryDownloadPatchesEnabled', $event)" />
             </PclCard>
 
             <PclCard title="高级 JavaScript 镜像规则">
@@ -269,6 +276,7 @@
 
 <script setup lang="ts">
 import { inject, onMounted, ref } from 'vue';
+import LibraryDownloadPatchSettings from '../../../../components/LibraryDownloadPatchSettings.vue';
 import { PclSetupContextKey } from './PclSetupContext';
 import PclCard from '../../components/PclCard.vue';
 import PclCheckbox from '../../components/PclCheckbox.vue';

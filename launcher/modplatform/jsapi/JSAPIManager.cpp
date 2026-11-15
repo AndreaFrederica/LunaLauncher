@@ -111,10 +111,10 @@ bool JSAPIManager::loadAPIFromFile(const QString& filePath)
 
     emit apiLoaded(api->getMetadata().id);
 
-    if (APPLICATION->metacache()) {
-        const auto registerCache = [](const QString& cacheBase) {
+    if (auto* app = APPLICATION_DYN; app && app->metacache()) {
+        const auto registerCache = [app](const QString& cacheBase) {
             const QString cachePath = "cache/" + cacheBase;
-            APPLICATION->metacache()->addBase(cacheBase, QDir(cachePath).absolutePath());
+            app->metacache()->addBase(cacheBase, QDir(cachePath).absolutePath());
             qDebug() << "[JSAPIManager] Registered cache base:" << cacheBase << "at" << cachePath;
         };
         if (api->getMetadata().supportedTypes.contains(static_cast<int>(ModPlatform::ResourceType::Mod)))

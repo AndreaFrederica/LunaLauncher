@@ -34,6 +34,7 @@
  */
 
 #include <QTest>
+#include <QTemporaryDir>
 
 #include <FileSystem.h>
 #include <RuntimeContext.h>
@@ -69,6 +70,43 @@ class LibraryTest : public QObject {
         return r;
     }
    private slots:
+    void test_bundled_native_tree()
+    {
+        QTemporaryDir instance;
+        QVERIFY(instance.isValid());
+        const auto relative = QStringLiteral("gtnh/natives/lwjgl3/3.4.3/lwjgl3-3.4.3-natives-windows.jar");
+        const auto path = QDir(instance.path()).filePath(relative);
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("bundled-native");
+        file.close();
+        ProblemContainer problems;
+        const auto json = QJsonDocument::fromJson(R"({"name":"gtnh.natives:lwjgl3:3.4.3","natives":{"windows":"natives-windows"}})").object();
+        auto lib = OneSixVersionFormat::libraryFromJson(problems, json, "fixture");
+        QStringList failed, jars, natives, native32, native64;
+        auto context = dummyContext("windows");
+        QVERIFY(lib->getDownloads(context, cache.get(), failed, instance.path()).isEmpty());
+        QVERIFY(failed.isEmpty());
+        lib->getApplicableFiles(context, jars, natives, native32, native64, instance.path());
+        QCOMPARE(natives, QStringList{path});
+        QVERIFY(jars.isEmpty());
+        // The same declaration without the bundle still uses the normal resolver.
+        QVERIFY(lib->bundledFile(relative, QString()).isEmpty());
+
+        // Explicit classifier downloads/checksums remain authoritative.
+        auto info = std::make_shared<MojangLibraryDownloadInfo>();
+        auto nativeInfo = std::make_shared<MojangDownloadInfo>();
+        nativeInfo->url = "https://example.org/explicit-native.jar";
+        nativeInfo->sha1 = QString(40, '0');
+        info->classifiers.insert("natives-windows", nativeInfo);
+        lib->setMojangDownloadInfo(info);
+        QVERIFY(lib->bundledFile(relative, instance.path()).isEmpty());
+        natives.clear();
+        lib->getApplicableFiles(context, jars, natives, native32, native64, instance.path());
+        QCOMPARE(natives, getStorage(relative));
+    }
+
     void initTestCase()
     {
         cache.reset(new HttpMetaCache());

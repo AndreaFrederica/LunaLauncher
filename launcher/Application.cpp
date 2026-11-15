@@ -893,6 +893,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("DownloadBackend", 2);
         m_settings->registerSetting("PclDownloadFallbackToQt", true);
         m_settings->registerSetting("PclDownloadThreadLimit", 8);
+        m_settings->registerSetting("PclDownloadSmartConcurrency", false);
+        m_settings->registerSetting("LibraryDownloadPatchesEnabled", false);
         m_settings->registerSetting("PclDownloadSpeedLimitKBps", 0);
         QString defaultMonospace;
         int defaultSize = 11;

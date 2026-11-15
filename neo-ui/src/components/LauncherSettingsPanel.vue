@@ -34,10 +34,16 @@
         <h6>{{ t('neo.auto2.k2f85759474') }}</h6>
         <q-select dark outlined emit-value map-options :model-value="value('DownloadBackend')" :options="backends" :label="t('neo.auto2.kd21febb3dc')" @update:model-value="saveKey('DownloadBackend',$event)" />
         <q-toggle dark :model-value="bool('PclDownloadFallbackToQt')" :label="t('neo.auto2.k30ad19d3a5')" @update:model-value="saveKey('PclDownloadFallbackToQt',$event)" />
-        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadThreadLimit')" :label="t('neo.auto2.kb0279be358')" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" :label="t('neo.auto2.k25d6c7e35d')" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
+        <q-toggle dark :model-value="bool('PclDownloadSmartConcurrency')" label="智能并发上限" @update:model-value="saveKey('PclDownloadSmartConcurrency',$event)" />
+        <p>仅适用于 PCL 下载：小文件（≤256 KiB）优先，总并发最多 32；大文件及大小未知文件最多 8。关闭后恢复手动上限。</p>
+        <div class="row q-col-gutter-md"><q-input class="col" dark outlined type="number" :disable="bool('PclDownloadSmartConcurrency')" :model-value="number('PclDownloadThreadLimit')" :label="t('neo.auto2.kb0279be358')" @update:model-value="saveKey('PclDownloadThreadLimit',Number($event))" /><q-input class="col" dark outlined type="number" :model-value="number('PclDownloadSpeedLimitKBps')" :label="t('neo.auto2.k25d6c7e35d')" @update:model-value="saveKey('PclDownloadSpeedLimitKBps',Number($event))" /></div>
       </section>
       <section class="settings-card q-mt-md">
-        <h6>{{ t('ui.aria2') }}</h6>
+          <h6>{{ t('libraryPatches.title') }}</h6>
+          <LibraryDownloadPatchSettings :enabled="bool('LibraryDownloadPatchesEnabled')" :busy="busy" :execute="execute" @update:enabled="saveKey('LibraryDownloadPatchesEnabled', $event)" />
+        </section>
+        <section class="settings-card q-mt-md">
+          <h6>{{ t('ui.aria2') }}</h6>
         <q-toggle dark :model-value="bool('Aria2Enabled')" :label="t('neo.auto2.k10bfe990fe')" @update:model-value="saveKey('Aria2Enabled',$event)" />
         <q-toggle dark :model-value="bool('Aria2AutoInstall')" :label="t('neo.auto2.k75ff090a68')" @update:model-value="saveKey('Aria2AutoInstall',$event)" />
         <q-toggle dark :model-value="bool('Aria2FallbackToQt')" :label="t('neo.auto2.ka8ffe0fe9c')" @update:model-value="saveKey('Aria2FallbackToQt',$event)" />
@@ -106,6 +112,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import SettingsPanel from './SettingsPanel.vue';
 import JavaPanel from './JavaPanel.vue';
 import LauncherControlPanel from './LauncherControlPanel.vue';
+import LibraryDownloadPatchSettings from './LibraryDownloadPatchSettings.vue';
 const props=defineProps<{settings:any[];busy:boolean;scope:Record<string,unknown>;execute:(op:string,p?:Record<string,unknown>)=>Promise<any>}>();
 const emit=defineEmits<{changed:[]}>();
 const tab=ref<any>('general'),downloads=ref<any[]>([]),integrationResult=ref<any>(null),helper=ref<any>('authlib-injector'),externalTool=ref<any>('jprofiler'),externalPath=ref<any>('');

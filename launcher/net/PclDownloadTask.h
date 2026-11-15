@@ -18,6 +18,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QJsonObject>
 #include <QTimer>
 
 #include "net/Download.h"
@@ -43,6 +44,10 @@ class PclDownloadTask : public Download {
     static Download::Ptr makeFile(QUrl url, QString path, Options options = Option::NoOptions);
 
     bool abort() override;
+    QJsonObject batchDescriptor() const;
+    void startBatchProxy();
+    bool finishBatchProxy();
+    void failBatchProxy(const QString& reason);
     int replyStatusCode() const override { return m_statusCode; }
     QNetworkReply::NetworkError error() const override { return m_error; }
     QString errorString() const override { return m_errorString; }
@@ -72,6 +77,7 @@ class PclDownloadTask : public Download {
     bool m_isEternal = false;
     bool m_usingPcl = false;
     bool m_finished = false;
+    bool m_batchProxy = false;
     int m_statusCode = -1;
     QNetworkReply::NetworkError m_error = QNetworkReply::NoError;
     QString m_errorString;

@@ -1,4 +1,10 @@
 export default {
+  libraryPatches: {
+    title: 'Library download patches', enable: 'Enable library download patches (off by default)',
+    hint: 'Valid bundled files take priority. For missing files, replace the URL or try alternatives after the original fails. Original checksums are preserved. User rules replace shipped rules by ID. Saved changes apply to the next task.',
+    openBase: 'Open base file', openOverlay: 'Open user overlay', reload: 'Reload',
+    base: 'Base file', overlay: 'User overlay', rules: 'Merged rules ({count})',
+  },
   brand: {
     name: 'Luna Launcher',
     neoUi: 'Neo UI',

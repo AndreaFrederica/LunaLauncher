@@ -97,6 +97,9 @@ void NetRequest::addValidator(Validator* v)
 
 void NetRequest::executeTask()
 {
+    m_lastStatusCode = -1;
+    m_lastError = QNetworkReply::NoError;
+    m_lastErrorString.clear();
     setStatus(tr("Requesting %1").arg(StringUtils::truncateUrlHumanFriendly(m_url, 80)));
 
     if (getState() == Task::State::AbortedByUser) {
@@ -279,6 +282,11 @@ auto NetRequest::handleRedirect() -> bool
 
 void NetRequest::downloadFinished()
 {
+    if (m_reply) {
+        m_lastStatusCode = m_reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        m_lastError = m_reply->error();
+        m_lastErrorString = m_reply->errorString();
+    }
     // handle HTTP redirection first
     if (handleRedirect()) {
         qCDebug(logCat) << getUid().toString() << "Request redirected:" << m_url.toString();
@@ -367,6 +375,8 @@ void NetRequest::downloadFinished()
     m_state = m_sink->finalize(*m_reply.get());
     if (m_state != State::Succeeded) {
         qCDebug(logCat) << getUid().toString() << "Request failed to finalize:" << m_url.toString();
+        if (m_state == State::Failed && tryNextFallback())
+            return;
         m_sink->abort();
         m_failReason = m_sink->failReason();
         m_reply.reset();
@@ -407,12 +417,12 @@ auto NetRequest::abort() -> bool
 
 int NetRequest::replyStatusCode() const
 {
-    return m_reply ? m_reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() : -1;
+    return m_reply ? m_reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() : m_lastStatusCode;
 }
 
 QNetworkReply::NetworkError NetRequest::error() const
 {
-    return m_reply ? m_reply->error() : QNetworkReply::NoError;
+    return m_reply ? m_reply->error() : m_lastError;
 }
 
 QUrl NetRequest::url() const
@@ -422,6 +432,6 @@ QUrl NetRequest::url() const
 
 QString NetRequest::errorString() const
 {
-    return m_reply ? m_reply->errorString() : "";
+    return m_reply ? m_reply->errorString() : m_lastErrorString;
 }
 }  // namespace Net

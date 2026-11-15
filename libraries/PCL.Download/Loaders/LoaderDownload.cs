@@ -55,7 +55,12 @@ public class LoaderDownload : LoaderBase
 
             var exceptions = new ConcurrentQueue<Exception>();
             using var semaphore = new SemaphoreSlim(GetMaxParallelFiles());
-            var tasks = Files.Select(async file =>
+            // Submit small files first in smart mode, so large waiting files do
+            // not occupy every local queue slot ahead of the asset downloads.
+            var ordered = DownloadConfig.SmartConcurrency
+                ? Files.OrderBy(f => f.Check?.ActualSize is >= 0 and <= DownloadConfig.SmallFileSize ? 0 : 1)
+                : Files.AsEnumerable();
+            var tasks = ordered.Select(async file =>
             {
                 var entered = false;
                 try
@@ -94,7 +99,8 @@ public class LoaderDownload : LoaderBase
 
     private int GetMaxParallelFiles()
     {
-        return Math.Max(1, Math.Min(Files.Count, Math.Clamp(DownloadConfig.NetTaskThreadLimit, 1, 64)));
+        // The global scheduler owns the live limit, including changes during a batch.
+        return Math.Max(1, Math.Min(Files.Count, 64));
     }
 
     private async Task ProcessFileAsync(DownloadFile file, CancellationToken cancellationToken)
@@ -121,8 +127,12 @@ public class LoaderDownload : LoaderBase
             return;
         }
 
+        using var fileSlot = await NetManager.Instance.AcquireFileSlotAsync(file.Check?.ActualSize ?? -1, cancellationToken).ConfigureAwait(false);
         file.State = NetState.Connecting;
-        var enableParallelChunks = Files.Count <= 1;
+        // File-level scheduling is global (shared by all loaders), so keep one
+        // connection per file. This prevents separate native tasks from
+        // multiplying the configured concurrency by their chunk count.
+        var enableParallelChunks = false;
 
         for (var retry = 0; retry < 4; retry++)
         {

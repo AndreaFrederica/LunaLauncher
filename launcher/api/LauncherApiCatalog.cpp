@@ -30,6 +30,7 @@
 #include "meta/Version.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
+#include "minecraft/LibraryDownloadPatches.h"
 #include "minecraft/mod/MetadataHandler.h"
 #include "minecraft/mod/ModFolderModel.h"
 #include "minecraft/mod/PluginFolderModel.h"
@@ -908,6 +909,15 @@ void registerLauncherApiCatalogOperations(LauncherApi& api)
         });
     api.registerOperation({ "resource.providers.reload", "Reload installed JavaScript resource providers.", schema({}), "catalog", true },
         [](const QJsonObject&, UserInteraction&) { JSAPIManager::instance().reloadAll(); return OperationService::success(); });
+    api.registerOperation({ "resource.library-patches", "Inspect merged JSON5 library download patches and configuration errors.", schema({}), "catalog" },
+        [](const QJsonObject&, UserInteraction&) { return OperationService::success(LibraryDownloadPatches::status()); });
+    api.registerOperation({ "resource.library-patches.open", "Open the shipped or user overlay library download patch file.",
+                           schema({{"overlay", QJsonObject{{"type", "boolean"}}}}), "catalog" },
+        [](const QJsonObject& parameters, UserInteraction&) {
+            QString error;
+            if (!LibraryDownloadPatches::openFile(parameters.value("overlay").toBool(true), error)) return OperationService::failure(error);
+            return OperationService::success(LibraryDownloadPatches::status());
+        });
     api.registerOperation({ "resource.mirrors", "List JavaScript mirror rules and their effective enable/order state.", schema({}), "catalog" },
         [](const QJsonObject&, UserInteraction&) {
             QJsonArray result;

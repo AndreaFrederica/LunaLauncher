@@ -157,6 +157,7 @@ bool PclDownloadLibrary::load()
     if (!resolve(pcl_download_get_error,                 "pcl_download_get_error"))                 return false;
     if (!resolve(pcl_free_string,                        "pcl_free_string"))                        return false;
     if (!resolve(pcl_download_set_thread_limit,          "pcl_download_set_thread_limit"))          return false;
+    if (!resolve(pcl_download_set_smart_concurrency,     "pcl_download_set_smart_concurrency"))     return false;
     if (!resolve(pcl_download_set_speed_limit,           "pcl_download_set_speed_limit"))           return false;
     if (!resolve(pcl_download_set_proxy,                 "pcl_download_set_proxy"))                 return false;
     if (!resolve(pcl_download_set_event_callback,        "pcl_download_set_event_callback"))        return false;
@@ -175,6 +176,7 @@ bool PclDownloadLibrary::load()
     if (APPLICATION_DYN) {
         auto s = APPLICATION->settings();
         pcl_download_set_thread_limit(s->get("PclDownloadThreadLimit").toInt());
+        pcl_download_set_smart_concurrency(s->get("PclDownloadSmartConcurrency").toBool() ? 1 : 0);
         pcl_download_set_speed_limit(static_cast<long long>(s->get("PclDownloadSpeedLimitKBps").toInt()) * 1024);
         const auto proxyType = s->get("ProxyType").toString().toUtf8();
         const auto proxyHost = s->get("ProxyAddr").toString().toUtf8();
@@ -230,6 +232,47 @@ int PclDownloadLibrary::startFileDownload(const QStringList& urls,
 
     return pcl_download_file(urlsJson.constData(), pathUtf8.constData(), hashUtf8.isEmpty() ? nullptr : hashUtf8.constData(),
                              static_cast<int64_t>(expectedSize));
+}
+
+int PclDownloadLibrary::startBatchDownload(const QJsonArray& files)
+{
+    if (!isLoaded() || files.isEmpty())
+        return -1;
+    const auto json = QJsonDocument(files).toJson(QJsonDocument::Compact);
+    return pcl_download_batch_start(json.constData());
+}
+
+int PclDownloadLibrary::batchState(int batchId)
+{
+    return isLoaded() && batchId >= 0 ? pcl_download_batch_get_state(batchId) : -1;
+}
+
+double PclDownloadLibrary::batchProgress(int batchId)
+{
+    return isLoaded() && batchId >= 0 ? pcl_download_batch_get_progress(batchId) : 0.0;
+}
+
+QByteArray PclDownloadLibrary::batchProgressDetailJson(int batchId)
+{
+    if (!isLoaded() || batchId < 0)
+        return {};
+    const char* ptr = pcl_download_batch_get_progress_detail(batchId);
+    if (!ptr)
+        return {};
+    QByteArray result(ptr, static_cast<qsizetype>(std::strlen(ptr)));
+    pcl_free_string(ptr);
+    return result;
+}
+
+QString PclDownloadLibrary::batchErrorString(int batchId)
+{
+    return taskErrorString(batchId);
+}
+
+void PclDownloadLibrary::abortBatch(int batchId)
+{
+    if (isLoaded() && batchId >= 0)
+        pcl_download_batch_abort(batchId);
 }
 
 void PclDownloadLibrary::abortDownload(int taskId)
@@ -297,6 +340,12 @@ void PclDownloadLibrary::setThreadLimit(int limit)
 {
     if (isLoaded())
         pcl_download_set_thread_limit(limit);
+}
+
+void PclDownloadLibrary::setSmartConcurrency(bool enabled)
+{
+    if (m_loaded && pcl_download_set_smart_concurrency)
+        pcl_download_set_smart_concurrency(enabled ? 1 : 0);
 }
 
 void PclDownloadLibrary::setSpeedLimit(qint64 bytesPerSec)

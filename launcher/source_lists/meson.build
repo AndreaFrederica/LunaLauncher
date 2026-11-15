@@ -292,6 +292,8 @@ launcher_logic_sources = [
   'minecraft/MinecraftInstance.h',
   'minecraft/MinecraftClientRoute.cpp',
   'minecraft/MinecraftClientRoute.h',
+  'minecraft/ImportedClientProfile.cpp',
+  'minecraft/ImportedClientProfile.h',
   'minecraft/MinecraftLoadAndCheck.cpp',
   'minecraft/MinecraftLoadAndCheck.h',
   'minecraft/MirrorDownload.cpp',

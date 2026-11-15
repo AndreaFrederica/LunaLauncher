@@ -36,6 +36,7 @@
  */
 
 #include "MinecraftInstance.h"
+#include "ImportedClientProfile.h"
 #include "Application.h"
 #include "BuildConfig.h"
 #include "Commandline.h"
@@ -394,6 +395,23 @@ QString MinecraftInstance::assetsRoot() const
     if (usesLocalAssets())
         return FS::PathCombine(instanceRoot(), "assets");
     return QDir("assets/").absolutePath();
+}
+
+bool MinecraftInstance::validateClientArtifact(QString* error) const
+{
+    QFile file(QDir(instanceRoot()).filePath("luna-imported/client-artifact.json"));
+    if (!file.exists()) return true;
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error) *error = tr("Could not read the preserved client verification record.");
+        return false;
+    }
+    const auto record = QJsonDocument::fromJson(file.readAll()).object();
+    const auto relative = QDir::cleanPath(QDir::fromNativeSeparators(record.value("path").toString()));
+    if (relative.isEmpty() || relative == "." || relative == ".." || relative.startsWith("../") || QDir::isAbsolutePath(relative)) {
+        if (error) *error = tr("The preserved client verification record has an invalid path.");
+        return false;
+    }
+    return ImportedClientProfile::verifyClient(QDir(instanceRoot()).filePath(relative),record,error);
 }
 
 bool MinecraftInstance::usesLocalAssets() const

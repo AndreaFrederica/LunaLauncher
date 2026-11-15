@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "LauncherApiPacks.h"
+#include "LauncherApiInstances.h"
 #include "api/LauncherApiSupport.h"
 #include "Application.h"
 #include "BuildConfig.h"
@@ -208,16 +209,14 @@ QJsonObject install(LauncherApi& api, InstanceTask* raw, const QJsonObject& p, c
     if (api.isCancellationRequested()) return OperationService::failure("Pack installation cancelled.");
     raw->setName(p.value("name").toString(defaultName));
     raw->setGroup(p.value("group").toString()); raw->setIcon(icon);
-    QSet<QString> before;
-    const auto instances = APPLICATION->instances();
-    for (int i = 0; i < instances->count(); ++i) before.insert(instances->at(i)->id());
-    Task::Ptr task(instances->wrapInstanceTask(pending.release()));
-    QString error;
-    if (!wait(api, task, ui, error)) return OperationService::failure(error);
-    instances->saveNow();
+    auto result = installInstanceTaskToStore(api, pending.release(), p, ui, warnings);
+    if (!result.value("ok").toBool()) return result;
+    auto data = result.value("data").toObject();
+    data.insert("installed", true);
     QJsonArray added;
-    for (int i = 0; i < instances->count(); ++i) if (!before.contains(instances->at(i)->id())) added.append(instances->at(i)->id());
-    return OperationService::success(QJsonObject{ { "installed", true }, { "instances", added }, { "warnings", warnings } });
+    if (data.contains("id")) added.append(data.value("id"));
+    data.insert("instances", added);
+    return OperationService::success(data);
 }
 
 QJsonObject packOperation(LauncherApi& api, const QString& action, const QJsonObject& p, UserInteraction& ui)
@@ -410,6 +409,7 @@ void registerLauncherApiPackOperations(LauncherApi& api)
         if (action == "install") {
             for (const auto key : { "name", "group", "icon" }) properties.insert(key, string(QString::fromLatin1(key)));
             properties.insert("optionalMods", strings());
+            properties.insert("targetStoreId", string("Optional enabled writable Prism or vanilla-compatible Store ID."));
         }
         QJsonArray required{ "provider" };
         if (action != "search") required.append("projectId");

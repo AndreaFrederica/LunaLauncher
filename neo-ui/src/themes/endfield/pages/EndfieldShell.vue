@@ -180,6 +180,8 @@ const launchStage = ref('');
 const launchError = ref('');
 let launchTaskId = '';
 let launchCancelled = false;
+let interactionTimer: ReturnType<typeof setInterval> | undefined;
+const submittedInteractions = new Set<string>();
 
 const tabs = [
   { id: 'home', label: '启动', code: '01' },
@@ -397,18 +399,45 @@ function openSearchItem(item: any) {
 
 async function submitInteraction(value: any) {
   if (interactionRequest.value) {
-    try { await launcher.respond({ interactionId: interactionRequest.value.interactionId, value }); } catch { /* ignore */ }
+    try {
+      if (interactionRequest.value.taskId)
+        await call('neo.task.respond', { taskId: interactionRequest.value.taskId, interactionId: interactionRequest.value.request.interactionId, value });
+      else
+        await launcher.respond({ interactionId: interactionRequest.value.interactionId, value });
+    } catch { /* ignore */ }
   }
+  if (interactionRequest.value?.request?.interactionId)
+    submittedInteractions.add(String(interactionRequest.value.request.interactionId));
   interactionShown.value = false;
   interactionRequest.value = null;
 }
 
 function cancelInteraction() {
   if (interactionRequest.value) {
-    launcher.respond({ interactionId: interactionRequest.value.interactionId, cancel: true }).catch(() => {});
+    if (interactionRequest.value.taskId)
+      call('neo.task.cancel', { taskId: interactionRequest.value.taskId }).catch(() => {});
+    else
+      launcher.respond({ interactionId: interactionRequest.value.interactionId, cancel: true }).catch(() => {});
   }
+  if (interactionRequest.value?.request?.interactionId)
+    submittedInteractions.add(String(interactionRequest.value.request.interactionId));
   interactionShown.value = false;
   interactionRequest.value = null;
+}
+
+async function pollTaskInteraction() {
+  if (interactionRequest.value) return;
+  try {
+    const result: any = await call('neo.task.list');
+    const tasks = Array.isArray(result) ? result
+      : (Array.isArray(result?.tasks) ? result.tasks
+        : (Array.isArray(result?.data?.tasks) ? result.data.tasks : []));
+    const pending = tasks.find((task: any) => !task?.finished && task?.interaction?.interactionId
+      && !submittedInteractions.has(String(task.interaction.interactionId)));
+    if (pending)
+      interactionRequest.value = { taskId: String(pending.taskId), request: pending.interaction };
+    interactionShown.value = Boolean(interactionRequest.value);
+  } catch { /* task polling is best effort while the backend is connected */ }
 }
 
 let unlisten: any = null;
@@ -426,9 +455,14 @@ onMounted(async () => {
       }
     });
   } catch { /* optional */ }
+  interactionTimer = setInterval(() => { void pollTaskInteraction(); }, 450);
   await refresh();
 });
-onUnmounted(() => { window.removeEventListener('luna-neo-task-started', openConversionTaskCenter); unlisten?.(); });
+onUnmounted(() => {
+  window.removeEventListener('luna-neo-task-started', openConversionTaskCenter);
+  unlisten?.();
+  if (interactionTimer) clearInterval(interactionTimer);
+});
 </script>
 
 <style scoped>

@@ -40,6 +40,7 @@
 #include "NewInstanceDialog.h"
 #include "Application.h"
 #include "InstanceStore.h"
+#include "InstanceImportTask.h"
 #include "ui/pages/modplatform/ModpackProviderBasePage.h"
 #include "ui/pages/modplatform/import_ftb/ImportFTBPage.h"
 #include "ui_NewInstanceDialog.h"
@@ -236,6 +237,9 @@ NewInstanceDialog::~NewInstanceDialog()
 void NewInstanceDialog::setSuggestedPack(const QString& name, InstanceTask* task)
 {
     creationTask.reset(task);
+    const bool importing = dynamic_cast<InstanceImportTask*>(task) != nullptr;
+    ui->storeBox->setVisible(!importing);
+    ui->storeLabel->setText(importing ? tr("Import format and destination will be selected after confirmation.") : tr("Install to:"));
 
     ui->instNameTextBox->setPlaceholderText(name);
     importVersion.clear();
@@ -252,6 +256,9 @@ void NewInstanceDialog::setSuggestedPack(const QString& name, InstanceTask* task
 void NewInstanceDialog::setSuggestedPack(const QString& name, QString version, InstanceTask* task)
 {
     creationTask.reset(task);
+    const bool importing = dynamic_cast<InstanceImportTask*>(task) != nullptr;
+    ui->storeBox->setVisible(!importing);
+    ui->storeLabel->setText(importing ? tr("Import format and destination will be selected after confirmation.") : tr("Install to:"));
 
     ui->instNameTextBox->setPlaceholderText(name);
     importVersion = std::move(version);

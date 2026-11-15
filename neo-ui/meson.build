@@ -306,6 +306,8 @@ neo_ui_sources = files(
   'src/themes/pcl/components/PclInstanceEditWindow.vue',
   'src/themes/pcl/components/PclLaunchProgressDialog.vue',
   'src/themes/pcl/components/PclTaskCenter.vue',
+  'src/themes/endfield/components/overlays/EfTaskCenter.vue',
+  'src/themes/endfield/pages/EndfieldDownloadPage.vue',
   'src/themes/pcl/components/PclWindowTitleBar.vue',
   'src/themes/pcl/composables/usePclFileDialog.ts',
   'src/themes/pcl/composables/useTaskEvents.ts',

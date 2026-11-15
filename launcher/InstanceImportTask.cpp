@@ -53,6 +53,9 @@
 #include "modplatform/modrinth/ModrinthInstanceCreationTask.h"
 #include "modplatform/pcl/PCLPack.h"
 #include "modplatform/pcl/PCLPlainPack.h"
+#include "VanillaConversion.h"
+#include "VanillaConversionTask.h"
+#include "VanillaCompatibleProvider.h"
 #include "modplatform/technic/TechnicPackProcessor.h"
 
 #include "settings/INISettingsObject.h"
@@ -307,7 +310,7 @@ void InstanceImportTask::processZipPack()
                 if (APPLICATION->isHeadless()) {
                     QJsonArray choices;
                     for (const auto& candidate : candidates) choices.append(candidate.version + " (" + candidate.root + ")");
-                    const auto selected = activeUserInteraction ? activeUserInteraction->select(tr("Select the PCL version to import:"), choices) : std::nullopt;
+                    const auto selected = activeUserInteraction ? activeUserInteraction->select(tr("Select the HMCL / PCL version to import:"), choices) : std::nullopt;
                     if (!selected) { emitAborted(); return; }
                     selectedIndex = *selected;
                 } else {
@@ -316,8 +319,8 @@ void InstanceImportTask::processZipPack()
                         labels.append(
                             QString("%1 (%2)").arg(candidate.version, candidate.root.isEmpty() ? tr("archive root") : candidate.root));
                     bool accepted = false;
-                    const auto selected = QInputDialog::getItem(m_parent, tr("Select PCL version"),
-                                                                tr("This archive contains multiple PCL versions. Select the one to import:"),
+                    const auto selected = QInputDialog::getItem(m_parent, tr("Select HMCL / PCL version"),
+                                                                tr("This archive contains multiple game profiles. Select the one to import:"),
                                                                 labels, 0, false, &accepted);
                     if (!accepted) {
                         emitAborted();
@@ -327,6 +330,7 @@ void InstanceImportTask::processZipPack()
                 }
             }
 
+            if (selectedIndex < 0 || selectedIndex >= candidates.size()) { emitAborted(); return; }
             const auto candidate = candidates.at(selectedIndex);
             m_modpackType = ModpackType::PCLPlain;
             m_pclPlainVersion = candidate.version;
@@ -379,32 +383,93 @@ void InstanceImportTask::processZipPack()
 
 void InstanceImportTask::extractFinished()
 {
-    setAbortable(false);
-    QDir extractDir(m_stagingPath);
-
-    qDebug() << "Fixing permissions for extracted pack files...";
-    QDirIterator it(extractDir, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        auto filepath = it.next();
-        QFileInfo file(filepath);
-        auto permissions = QFile::permissions(filepath);
-        auto origPermissions = permissions;
-        if (file.isDir()) {
-            // Folder +rwx for current user
-            permissions |= QFileDevice::Permission::ReadUser | QFileDevice::Permission::WriteUser | QFileDevice::Permission::ExeUser;
-        } else {
-            // File +rw for current user
-            permissions |= QFileDevice::Permission::ReadUser | QFileDevice::Permission::WriteUser;
-        }
-        if (origPermissions != permissions) {
-            if (!QFile::setPermissions(filepath, permissions)) {
-                logWarning(tr("Could not fix permissions for %1").arg(filepath));
-            } else {
-                qDebug() << "Fixed" << filepath;
+    const auto staging = m_stagingPath;
+    const auto version = m_pclPlainVersion;
+    const auto convert = m_modpackType == ModpackType::PCLPlain && !m_preserveVanillaSource;
+    VanillaImportOptions options;
+    options.name = name().isEmpty() ? version : name();
+    options.group = group();
+    auto preparation = makeShared<VanillaConversionTask>([staging, version, convert, options](const VanillaConversionFeedback& feedback) mutable {
+        const auto prepare = [&]() -> VanillaConversionReport {
+            VanillaConversionReport report;
+            const auto checkCancelled = [&] {
+                if (!feedback.cancelled()) return false;
+                report.error = tr("导入已取消。");
+                return true;
+            };
+            feedback.update(tr("正在扫描解压文件"));
+            QStringList paths;
+            QDirIterator it(staging, QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                if (checkCancelled()) return report;
+                paths.append(it.next());
+                feedback.update(tr("正在扫描解压文件"), paths.size(), 0);
             }
+            feedback.update(tr("正在整理文件权限"), 0, paths.size());
+            qint64 processed = 0;
+            for (const auto& path : paths) {
+                if (checkCancelled()) return report;
+                const QFileInfo file(path);
+                const auto original = QFile::permissions(path);
+                auto permissions = original | QFileDevice::Permission::ReadUser | QFileDevice::Permission::WriteUser;
+                if (file.isDir()) permissions |= QFileDevice::Permission::ExeUser;
+                if (permissions != original && !QFile::setPermissions(path, permissions))
+                    report.warnings.append(tr("Could not fix permissions for %1").arg(path));
+                feedback.update(tr("正在整理文件权限"), ++processed, paths.size(), "files", QDir(staging).relativeFilePath(path));
+            }
+            if (convert) {
+                const auto sourceRoot = QDir(staging).filePath("pcl-source");
+                const auto versionRoot = QDir(sourceRoot).filePath("versions/" + version);
+                const auto layout = detectVanillaInstanceLayout(versionRoot);
+                const auto relative = QDir(sourceRoot).relativeFilePath(layout.gameRoot);
+                if (!layout.isValid() || QDir::isAbsolutePath(relative) || relative == ".." || relative.startsWith("../")) {
+                    report.error = tr("The directory pack refers to a game directory outside the archive.");
+                    return report;
+                }
+                options.feedback = feedback;
+                const auto converted = staging + ".converted";
+                const auto warnings = report.warnings;
+                report = VanillaConverter::importToPrism(versionRoot, converted, options);
+                report.warnings.append(warnings);
+                if (!report.succeeded) return report;
+                report.succeeded = false;
+                if (checkCancelled()) { FS::deletePath(converted); return report; }
+                feedback.update(tr("正在清理解压临时文件"), 0, 0);
+                // Large recursive deletion must also stay off the launcher thread.
+                if (!FS::deletePath(staging) || !QDir().rename(converted, staging)) {
+                    FS::deletePath(converted);
+                    report.error = tr("Could not commit the converted directory pack.");
+                    return report;
+                }
+            }
+            report.succeeded = true;
+            return report;
+        };
+        auto report = prepare();
+        if (!report.succeeded) {
+            feedback.update(tr("正在清理解压临时文件"));
+            FS::deletePath(staging);
+            FS::deletePath(staging + ".converted");
         }
-    }
+        return report;
+    });
+    connect(preparation.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+    connect(preparation.get(), &Task::status, this, &InstanceImportTask::setStatus);
+    connect(preparation.get(), &Task::details, this, &InstanceImportTask::setDetails);
+    connect(preparation.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
+    connect(preparation.get(), &Task::aborted, this, &InstanceImportTask::emitAborted);
+    connect(preparation.get(), &Task::failed, this, &InstanceImportTask::emitFailed);
+    connect(preparation.get(), &Task::succeeded, this, [this, worker = preparation.get()] {
+        for (const auto& warning : worker->report().warnings) logWarning(warning);
+        extractedFilesPrepared();
+    });
+    m_task = preparation;
+    preparation->start();
+}
 
+void InstanceImportTask::extractedFilesPrepared()
+{
+    setAbortable(false);
     switch (m_modpackType) {
         case ModpackType::MultiMC:
             processMultiMC();
@@ -448,28 +513,27 @@ bool installIcon(QString root, QString instIconKey)
 
 void InstanceImportTask::processPCLPlain()
 {
-    QString configPath = FS::PathCombine(m_stagingPath, "instance.cfg");
-    auto instanceSettings = std::make_unique<INISettingsObject>(configPath);
-    auto instance = std::make_unique<MinecraftInstance>(m_globalSettings, std::move(instanceSettings), m_stagingPath);
-    instance->setName(name());
-    if (m_instIcon != "default")
-        instance->setIconKey(m_instIcon);
-
-    const auto conversion = PCL::convertPlainPack(*instance, FS::PathCombine(m_stagingPath, "pcl-source"), m_pclPlainVersion);
-    if (!conversion.succeeded) {
-        emitFailed(conversion.error);
+    const auto sourceRoot = FS::PathCombine(m_stagingPath, "pcl-source");
+    const auto versionRoot = FS::PathCombine(sourceRoot, "versions", m_pclPlainVersion);
+    if (m_preserveVanillaSource) {
+        const auto layout = detectVanillaInstanceLayout(versionRoot);
+        const auto relative = QDir(sourceRoot).relativeFilePath(layout.gameRoot);
+        if (!layout.isValid() || QDir::isAbsolutePath(relative) || relative == ".." || relative.startsWith("../")) {
+            emitFailed(tr("The directory pack refers to a game directory outside the archive."));
+            return;
+        }
+        m_vanillaSource = versionRoot;
+        if (name().isEmpty()) setName(m_pclPlainVersion);
+        emitSucceeded();
         return;
     }
-
-    const auto configConversion = PCL::convertInstanceConfig(*instance);
-    if (configConversion.found && !configConversion.error.isEmpty())
-        logWarning(tr("Some PCL settings could not be converted: %1").arg(configConversion.error));
-    instance->saveNow();
-
-    if (!FS::deletePath(FS::PathCombine(m_stagingPath, "pcl-source")))
-        logWarning(tr("Could not remove temporary PCL source files from the imported instance."));
-
-    addPclCompatibilityWarning();
+    auto settings = std::make_unique<INISettingsObject>(FS::PathCombine(m_stagingPath, "instance.cfg"));
+    MinecraftInstance instance(m_globalSettings, std::move(settings), m_stagingPath);
+    instance.setName(name().isEmpty() ? m_pclPlainVersion : name());
+    instance.setIconKey(m_instIcon);
+    const auto settingsReport = PCL::convertInstanceConfig(instance);
+    if (!settingsReport.error.isEmpty()) logWarning(settingsReport.error);
+    instance.saveNow();
     emitSucceeded();
 }
 

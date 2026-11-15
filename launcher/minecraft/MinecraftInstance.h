@@ -188,6 +188,7 @@ class MinecraftInstance : public BaseInstance {
     virtual JavaVersion getJavaVersion();
 
     virtual std::optional<MinecraftClientRoute> clientArtifactRoute() const { return std::nullopt; }
+    virtual bool validateClientArtifact(QString* error = nullptr) const;
 
    protected:
     QMap<QString, QString> createCensorFilterFromSession(AuthSessionPtr session);

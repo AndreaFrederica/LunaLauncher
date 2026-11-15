@@ -25,13 +25,14 @@
               <strong>{{ operationLabel(task.operation) }}</strong>
               <span class="pcl-task-row__state" :class="task.state">{{ stateLabel(task.state) }}</span>
             </div>
-            <div class="pcl-progress-track">
+            <div class="pcl-progress-track" :class="{ 'pcl-task-progress--indeterminate': !isTaskItemFinished(task) && taskStats(task).percent === null }" role="progressbar" :aria-label="task.status || operationLabel(task.operation)" :aria-valuenow="taskStats(task).percent ?? undefined" :aria-valuemin="0" :aria-valuemax="100">
               <span :style="{ width: `${percent(task)}%` }" />
             </div>
             <div class="pcl-task-row__meta">
               <span>{{ task.status || task.details || task.error || t('tasks.waiting') }}</span>
-              <span v-if="task.transferRate">{{ formatRate(task.transferRate) }}</span>
+              <span>{{ taskStats(task).percent === null ? t('tasks.states.running') : `${Math.round(taskStats(task).percent ?? 0)}%` }}<template v-if="task.transferRate"> · {{ formatRate(task.transferRate) }}</template></span>
             </div>
+            <div v-if="task.details && task.details !== task.status" class="pcl-task-row__details">{{ task.details }}</div>
             <div class="pcl-task-row__meta">
               <span>{{ taskStats(task).summary }}</span>
               <PclButton v-if="!isTaskItemFinished(task)" size="sm" variant="ghost" icon="x" @click="cancel(task)">{{ t('common.cancel') }}</PclButton>
@@ -151,6 +152,10 @@ onUnmounted(() => unsubscribeTaskSnapshots?.());
 </script>
 
 <style scoped>
+.pcl-task-row__details { font-size: 12px; color: var(--pcl-muted); overflow-wrap: anywhere; }
+.pcl-task-progress--indeterminate > span { width: 30% !important; animation: pcl-task-scanning 1.3s ease-in-out infinite; }
+@keyframes pcl-task-scanning { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .pcl-task-progress--indeterminate > span { animation: none; } }
 .pcl-task-center { width: 700px; max-width: 94vw; }
 .pcl-task-center__head { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 8px; }
 .pcl-task-center__head > div { flex: 1; min-width: 0; }

@@ -55,11 +55,12 @@
         <div class="instance-store-list">
           <div v-for="item in vanillaInstances" :key="item.id" class="instance-store-row">
             <div class="instance-store-row__main"><strong>{{ item.name }}</strong><small>{{ item.dialect.toUpperCase() }} · {{ item.isolated ? '版本隔离' : '共享 .minecraft' }} · {{ item.root }}</small></div>
-            <button type="button" class="instance-store-workspace__link" :disabled="busy || !prismStores.length" @click="importVanilla(item)">导入 Prism</button>
+            <button type="button" class="instance-store-workspace__link" :disabled="busy || !importOptions.targetStoreId" @click="importVanilla(item)">导入 Prism</button>
           </div>
           <p v-if="!vanillaInstances.length" class="instance-store-workspace__empty">没有扫描到 PCL/HMCL/Mojang 实例。</p>
         </div>
         <div class="instance-store-form instance-store-form--stack">
+          <label>导入目标 Store<PclSelect v-model="importOptions.targetStoreId" placeholder="每次导入前选择" :options="prismStores.map(store => ({ value: store.id, label: store.name || store.id }))" /></label>
           <label>导入实例名称<PclInput v-model="importOptions.name" placeholder="留空使用源实例名称" /></label>
           <label>导入分组<PclInput v-model="importOptions.group" placeholder="可选，例如 Forge 服务器" /></label>
         </div>
@@ -122,7 +123,7 @@ const stores = ref<any[]>([]), vanillaInstances = ref<any[]>([]), location = ref
 const busy = ref(false), error = ref(''), notice = ref('');
 const newStore = reactive({ name: '', path: '', format: 'prism' });
 const conversion = reactive({ source: '', target: '', versionId: '', dialect: 'pcl', name: '', group: '' });
-const importOptions = reactive({ name: '', group: '' });
+const importOptions = reactive({ targetStoreId: '', name: '', group: '' });
 const transfer = reactive({ instance: '', targetStoreId: '', mode: 'copy' });
 const loader = reactive({ target: '', versionId: '', loaderId: 'net.fabricmc.fabric-loader', loaderVersion: '' });
 const sync = reactive({ id: '', clientRoot: '', serverRoot: '', profileJson: '{\n  "id": "server-pack",\n  "name": "Server pack",\n  "client": { "instanceId": "client" },\n  "server": { "instanceId": "server" },\n  "mods": { "common": [], "clientOnly": [], "serverOnly": [] },\n  "configs": { "common": [], "clientOnly": [], "serverOnly": [] },\n  "sync": { "mode": "bidirectional", "conflictPolicy": "ask", "baseHashes": {}, "baseContents": {} }\n}' });
@@ -163,7 +164,17 @@ async function waitForTask(operation: string, parameters: Record<string, unknown
   if (!task || task.state !== 'succeeded') throw new Error(task?.error || '操作失败。');
   return task;
 }
-async function importVanilla(item: any) { const store = prismStores.value[0]; if (!store) return; busy.value = true; try { await waitForTask('instance.convert.import', { source: item.root, targetStoreId: store.id, name: importOptions.name.trim() || item.name, group: importOptions.group.trim(), copyGameContent: true }); await loadStores(); await loadVanilla(); notice.value = '兼容实例已导入 Prism Store。'; } finally { busy.value = false; } }
+async function importVanilla(item: any) {
+  if (!importOptions.targetStoreId) return;
+  busy.value = true;
+  try {
+    await waitForTask('instance.convert.import', { source: item.root, targetStoreId: importOptions.targetStoreId, name: importOptions.name.trim() || item.name, group: importOptions.group.trim(), copyGameContent: true });
+    await loadStores();
+    await loadVanilla();
+    notice.value = '兼容实例已导入 Prism Store。';
+    importOptions.targetStoreId = '';
+  } finally { busy.value = false; }
+}
 async function exportPrism() { busy.value = true; try { await waitForTask('instance.convert.export', { ...conversion, copyGameContent: true }); await loadVanilla(); notice.value = 'Prism 实例已导出到兼容目录。'; } finally { busy.value = false; } }
 async function transferInstance() { busy.value = true; try { await waitForTask('instance.store-transfer', { ...transfer }); await loadStores(); notice.value = '实例迁移完成。'; } finally { busy.value = false; } }
 async function installLoader() { busy.value = true; try { await waitForTask('vanilla.loader.install', { ...loader }); await loadVanilla(); notice.value = 'Loader profile 已写入兼容目录。'; } finally { busy.value = false; } }

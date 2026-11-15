@@ -157,7 +157,13 @@ void JSONSettingsObject::doSave()
     QJsonObject settings;
     for (auto iter = m_values.constBegin(); iter != m_values.constEnd(); ++iter)
         settings.insert(iter.key(), variantToJson(iter.value()));
-    const QJsonObject root{ { QStringLiteral("formatVersion"), 1 }, { QStringLiteral("settings"), settings } };
+    // Instance settings can share a sidecar with import integrity/provenance
+    // records. Saving a setting must not erase those independent fields.
+    QFile previous(m_filePath);
+    auto root = previous.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(previous.readAll()).object() : QJsonObject{};
+    previous.close();
+    root.insert(QStringLiteral("formatVersion"),1);
+    root.insert(QStringLiteral("settings"),settings);
     const auto data = QJsonDocument(root).toJson(QJsonDocument::Indented);
 
     QString atomicError;

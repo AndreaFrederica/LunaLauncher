@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonParseError>
 
 #include <algorithm>
@@ -83,8 +84,15 @@ ExternalLauncherRecognizer makeHmcl()
         // signature: Luna may preserve such extension fields when exporting.
         findMarkers(context.root, { QStringLiteral("hmclversion.json"), QStringLiteral("hmclversion.cfg"), QStringLiteral(".hmcl"), QStringLiteral("hmcl") }, found.matchedPaths);
         found.confidence = found.matchedPaths.isEmpty() ? 0 : 75;
-        found.canReadInstanceSettings = found.confidence > 0;
-        found.canEditCanonicalMetadata = found.confidence >= 75;
+        bool bootstrapLibrary = false;
+        for (const auto& item : context.version.value("libraries").toArray())
+            bootstrapLibrary = bootstrapLibrary || item.toObject().value("name").toString().startsWith("org.jackhuang.hmcl:mmc-bootstrap:");
+        if (bootstrapLibrary && context.version.value("mainClass").toString() == "org.jackhuang.hmcl.HMCLMultiMCBootstrap") {
+            found.matchedFields.append("mainClass+org.jackhuang.hmcl:mmc-bootstrap");
+            found.confidence = 95;
+        }
+        found.canReadInstanceSettings = !found.matchedPaths.isEmpty();
+        found.canEditCanonicalMetadata = !found.matchedPaths.isEmpty();
         return found;
     };
     return result;

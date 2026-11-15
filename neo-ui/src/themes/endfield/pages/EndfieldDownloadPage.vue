@@ -91,13 +91,14 @@
           <button type="button" class="ef-download-progress__close" aria-label="关闭" @click="progressOpen = false">×</button>
         </header>
         <strong class="ef-download-progress__name">{{ progress.name }}</strong>
-        <div class="ef-download-progress__bar" :class="progress.state">
+        <div class="ef-download-progress__bar" :class="[progress.state, { 'is-indeterminate': progress.state === 'running' && !progress.known }]">
           <span :style="{ width: `${Math.round(progress.percent)}%` }" />
         </div>
         <div class="ef-download-progress__meta">
-          <span>{{ Math.round(progress.percent) }}%</span>
+          <span>{{ progress.known ? `${Math.round(progress.percent)}%` : '处理中' }}</span>
           <span>{{ progress.status }}</span>
         </div>
+        <p v-if="progress.details" class="ef-download-progress__details">{{ progress.details }}</p>
         <footer class="ef-download-progress__actions">
           <EfButton v-if="progress.state === 'running'" icon="minimize" @click="progressOpen = false">后台运行</EfButton>
           <EfButton v-if="progress.state === 'running'" variant="red" icon="close" @click="cancelProgressTask">取消</EfButton>
@@ -136,7 +137,7 @@ const emit = defineEmits<{
 const mode = ref<'game' | 'modpacks' | 'resource'>(props.initialMode || 'game');
 const installing = ref(false);
 const progressOpen = ref(false);
-const progress = ref({ name: '', percent: 0, status: '准备中…', state: 'running', taskId: '' });
+const progress = ref({ name: '', percent: 0, known: false, status: '准备中…', details: '', state: 'running', taskId: '' });
 const game = ref({ version: '', loader: '', loaderVersion: '', name: '' });
 const gameVersions = ref<any[]>([]);
 const gameLoaderVersions = ref<any[]>([]);
@@ -216,11 +217,13 @@ function updateProgress(task: any) {
   if (!task) return;
   if (task.taskId) progress.value.taskId = String(task.taskId);
   if (task.status) progress.value.status = String(task.status);
+  progress.value.details = String(task.details || '');
   if (['succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(task.state || '').toLowerCase())) {
     progress.value.state = String(task.state);
   }
   const total = Number(task.totalProgress || task.total || 0);
   const current = Number(task.progress || 0);
+  progress.value.known = total > 0 || (task.percent != null && Number.isFinite(Number(task.percent)));
   if (total > 0) progress.value.percent = Math.max(0, Math.min(100, current / total * 100));
   else if (Number.isFinite(Number(task.percent))) progress.value.percent = Math.max(0, Math.min(100, Number(task.percent)));
 }
@@ -228,7 +231,7 @@ function updateProgress(task: any) {
 async function runTask(operation: string, parameters: Record<string, unknown>, name: string, successTitle: string) {
   installing.value = true;
   progressOpen.value = true;
-  progress.value = { name, percent: 0, status: '准备中…', state: 'running', taskId: '' };
+  progress.value = { name, percent: 0, known: false, status: '准备中…', details: '', state: 'running', taskId: '' };
   try {
     let task: any = await props.execute('neo.task.start', { operation, priority: 'high', parameters });
     updateProgress(task);
@@ -240,6 +243,7 @@ async function runTask(operation: string, parameters: Record<string, unknown>, n
     if (String(task?.state || '').toLowerCase() !== 'succeeded') throw new Error(task?.error || '安装失败');
     progress.value.state = 'succeeded';
     progress.value.percent = 100;
+    progress.value.known = true;
     progress.value.status = '完成';
     if (operation === 'resource.install-version') {
       await notifyResourceChanged({ instanceId: String(parameters.instance || ''), kind: String(parameters.kind || ''), source: 'endfield-resource-download' });
@@ -282,7 +286,7 @@ async function installGame() {
 async function importInstance() {
   const path = window.prompt('整合包或实例压缩包路径');
   if (!path) return;
-  await runTask('instance.import', { path }, path.split(/[\\/]/).pop() || path, '导入完成');
+  await runTask('instance.import', { source: path }, path.split(/[\\/]/).pop() || path, '导入完成');
 }
 
 async function loadProviders(force = false) {
@@ -560,6 +564,11 @@ watch(() => game.value.version, () => { if (game.value.loader) void loadLoaderVe
   transition: width .25s var(--ef-mech);
 }
 .ef-download-progress__bar.succeeded span { background: var(--ef-ink); }
+.ef-download-progress__bar.is-indeterminate { overflow: hidden; }
+.ef-download-progress__bar.is-indeterminate span { width: 30% !important; animation: ef-import-scanning 1.3s ease-in-out infinite; }
+.ef-download-progress__details { font-size: 12px; color: var(--ef-ink-2); overflow-wrap: anywhere; max-height: 20vh; overflow-y: auto; }
+@keyframes ef-import-scanning { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .ef-download-progress__bar.is-indeterminate span { animation: none; } }
 .ef-download-progress__bar.failed span { background: var(--ef-danger, #b3261e); }
 .ef-download-progress__meta {
   display: flex;

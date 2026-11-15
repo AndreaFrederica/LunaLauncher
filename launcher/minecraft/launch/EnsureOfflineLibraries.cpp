@@ -25,10 +25,19 @@ EnsureOfflineLibraries::EnsureOfflineLibraries(LaunchTask* parent, MinecraftInst
 
 void EnsureOfflineLibraries::executeTask()
 {
+    QString clientError;
+    if (!m_instance->validateClientArtifact(&clientError)) {
+        emitFailed(clientError);
+        return;
+    }
     const auto profile = m_instance->getPackProfile()->getProfile();
     QStringList allJars;
     profile->getLibraryFiles(m_instance->runtimeContext(), allJars, allJars, m_instance->getLocalLibraryPath(), m_instance->binRoot(),
                              false);
+    // External vanilla instances launch the client in versions/, not the
+    // synthesized MMC cache path. Validate the same route as getClassPath().
+    if (const auto route = m_instance->clientArtifactRoute(); route.has_value())
+        allJars = route->applyToClassPath(allJars);
 
     QStringList missing;
     for (const auto& jar : allJars) {

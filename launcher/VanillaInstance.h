@@ -3,11 +3,12 @@
 
 #include "minecraft/MinecraftInstance.h"
 #include "VanillaCompatibleProvider.h"
+#include <QTemporaryDir>
 
 /** Minecraft instance adapter for a vanilla/PCL/HMCL directory.
  *
- * Luna settings and Prism component files are stored inside the instance
- * root, alongside the foreign launcher's ordinary game content.
+ * The authoritative profile remains in vanilla format. The generated Prism
+ * component graph is private temporary runtime data, outside the instance.
  */
 class VanillaInstance final : public MinecraftInstance {
     Q_OBJECT
@@ -15,12 +16,14 @@ class VanillaInstance final : public MinecraftInstance {
     VanillaInstance(SettingsObject* globalSettings,
                     std::unique_ptr<SettingsObject> settings,
                     const VanillaInstanceDescriptor& descriptor);
+    ~VanillaInstance() override;
     QString id() const override { return m_descriptor.stableId; }
-    QString gameRoot() const override { return m_descriptor.layout.gameRoot; }
+    QString gameRoot() const override;
     QString componentRoot() const override;
     std::shared_ptr<VersionFile> loadForeignComponent(const QString& uid, const QString& version) const override;
     QString getLocalLibraryPath() const override { return m_descriptor.layout.librariesRoot; }
     std::optional<MinecraftClientRoute> clientArtifactRoute() const override;
+    bool validateClientArtifact(QString* error = nullptr) const override;
     QString instanceConfigFolder() const override { return QDir(gameRoot()).filePath("config"); }
     // Editing is allowed for Luna settings and ordinary game content. Prism
     // component editing is deliberately not exposed for this adapter; it
@@ -38,8 +41,7 @@ class VanillaInstance final : public MinecraftInstance {
     bool isForeignLoaderEnabled() const { return m_descriptor.loaderEnabled; }
     bool setForeignLoaderEnabled(bool enabled, QString* error = nullptr);
     bool setForeignLoaderProfile(const QString& version, const QJsonObject& profile, QString* error = nullptr);
-    // Flush the generated Prism component profile in the external instance
-    // directory so the instance remains portable between Luna installations.
+    // Save settings beside the profile and the component graph in private storage.
     void saveNow() override { MinecraftInstance::saveNow(); }
     QString typeName() const override { return QStringLiteral("Vanilla"); }
     QString getStatusbarDescription() override
@@ -49,7 +51,8 @@ class VanillaInstance final : public MinecraftInstance {
         const auto loader = loaderVersion.isEmpty() || m_descriptor.loaderType == QStringLiteral("vanilla")
             ? tr("Vanilla")
             : tr("%1 %2").arg(m_descriptor.loaderType.toUpper(), loaderVersion);
-        return tr("%1 %2 (%3)").arg(mc, loader, m_descriptor.dialect);
+        return tr("%1 %2 (%3) · %4").arg(mc, loader, m_descriptor.dialect,
+            gameRoot() == QDir::cleanPath(QDir(m_descriptor.layout.versionsRoot).absoluteFilePath("..")) ? tr("Shared game directory") : tr("Isolated game directory"));
     }
     QSet<QString> traits() const override { return { "vanilla-compatible" }; }
     const VanillaInstanceDescriptor& descriptor() const { return m_descriptor; }
@@ -62,5 +65,6 @@ class VanillaInstance final : public MinecraftInstance {
     QString foreignLoaderManifestFingerprint() const;
     VanillaInstanceDescriptor m_descriptor;
     mutable bool m_runtimeReady = false;
+    QTemporaryDir m_runtimeDirectory{ QDir::tempPath() + QStringLiteral("/luna-vanilla-XXXXXX") };
 };
 

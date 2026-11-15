@@ -44,6 +44,11 @@
 #include "BuildConfig.h"
 #include "FileSystem.h"
 
+#include "api/LauncherApi.h"
+#include "api/LauncherApiInstances.h"
+#include "cli/UserInteraction.h"
+#include "InstanceImportTask.h"
+#include <QInputDialog>
 #include "MainWindow.h"
 #include "minecraft/online/Terracotta.h"
 #include "minecraft/online/YukariConnect.h"
@@ -1110,6 +1115,60 @@ void MainWindow::runModalTask(Task* task)
 
 void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask, const QString& instanceDirectory)
 {
+    if (dynamic_cast<InstanceImportTask*>(rawTask)) {
+        class ImportInteraction final : public UserInteraction {
+        public:
+            explicit ImportInteraction(MainWindow* owner) : owner(owner) {}
+            void status(const QString& message) override { owner->statusBar()->showMessage(message); }
+            void deviceCode(const QString&, const QString&, int) override {}
+            std::optional<QString> input(const QString& prompt, bool secret) override {
+                bool accepted = false;
+                const auto value = QInputDialog::getText(owner, QObject::tr("Import instance"), prompt,
+                    secret ? QLineEdit::Password : QLineEdit::Normal, {}, &accepted);
+                return accepted ? std::optional<QString>(value) : std::nullopt;
+            }
+            std::optional<int> select(const QString& prompt, const QJsonArray& choices) override {
+                QStringList labels;
+                for (const auto& choice : choices) labels.append(choice.isString() ? choice.toString() : choice.toObject().value("name").toString());
+                bool accepted = false;
+                const auto value = QInputDialog::getItem(owner, QObject::tr("Import instance"), prompt, labels, 0, false, &accepted);
+                return accepted ? std::optional<int>(labels.indexOf(value)) : std::nullopt;
+            }
+            MainWindow* owner;
+        } interaction(this);
+        LauncherApi api;
+        QProgressDialog progress(tr("Importing instance…"), tr("Abort"), 0, 0, this);
+        progress.setWindowTitle(tr("Import instance"));
+        progress.setWindowModality(Qt::WindowModal);
+        progress.setMinimumDuration(0);
+        progress.setAutoClose(false);
+        progress.setAutoReset(false);
+        progress.hide();
+        connect(&progress, &QProgressDialog::canceled, &api, &LauncherApi::cancelCurrent);
+        QTimer progressTimer;
+        connect(&progressTimer, &QTimer::timeout, &progress, [&] {
+            auto* current = api.currentTask();
+            if (!current || !current->isRunning()) return;
+            progress.setLabelText(current->getStatus());
+            const auto total = current->getTotalProgress();
+            progress.setRange(0, total > 0 ? 1000 : 0);
+            if (total > 0) progress.setValue(qBound(0, int(1000.0 * current->getProgress() / total), 1000));
+            if (!progress.wasCanceled()) progress.show();
+        });
+        progressTimer.start(100);
+        const auto result = installInstanceTaskToStore(api, rawTask, {{"source","directory-pack"}}, interaction);
+        progressTimer.stop();
+        progress.hide();
+        statusBar()->clearMessage();
+        if (!result.value("ok").toBool())
+            CustomMessageBox::selectable(this, tr("Import failed"), result.value("error").toString(), QMessageBox::Warning)->show();
+        else {
+            QStringList warnings;
+            for (const auto& warning : result.value("data").toObject().value("warnings").toArray()) warnings.append(warning.toString());
+            if (!warnings.isEmpty()) CustomMessageBox::selectable(this, tr("Warnings"), warnings.join('\n'), QMessageBox::Warning)->show();
+        }
+        return;
+    }
     unique_qobject_ptr<Task> task(instanceDirectory.isEmpty() ? APPLICATION->instances()->wrapInstanceTask(rawTask)
                                                                : APPLICATION->instances()->wrapInstanceTask(rawTask, instanceDirectory));
     runModalTask(task.get());

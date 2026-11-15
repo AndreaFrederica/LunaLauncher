@@ -207,7 +207,7 @@ async function importInstance() {
   try {
     const path = window.prompt('整合包或实例压缩包路径');
     if (!path) return;
-    let task: any = await props.execute('neo.task.start', { operation: 'instance.import', priority: 'high', parameters: { path } });
+    let task: any = await props.execute('neo.task.start', { operation: 'instance.import', priority: 'high', parameters: { source: path } });
     while (task && !task.finished) {
       await new Promise(resolve => setTimeout(resolve, 400));
       task = await props.execute('neo.task.status', { taskId: task.taskId });

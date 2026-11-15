@@ -321,7 +321,7 @@ const InstanceStore* InstanceStoreRegistry::find(const QString& id) const
 InstanceStore* InstanceStoreRegistry::defaultStore()
 {
     for (auto& store : m_stores) {
-        if (store.defaultForNewInstances && store.enabled && store.writable)
+        if (store.isPrism() && store.defaultForNewInstances && store.enabled && store.writable)
             return &store;
     }
     for (auto& store : m_stores) {

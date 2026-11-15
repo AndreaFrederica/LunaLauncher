@@ -27,6 +27,12 @@
       </nav>
 
       <section class="ef-settings-content">
+        <EfCard v-if="scope === 'instance' && instanceSettings.some((item: any) => item.key === 'VanillaGameDirectoryMode')" title="原版目录模式">
+          <select :value="instanceSettings.find((item: any) => item.key === 'VanillaGameDirectoryMode')?.value" :disabled="busy" @change="saveSetting('VanillaGameDirectoryMode', ($event.target as HTMLSelectElement).value)">
+            <option value="auto">自动识别已有设置（默认隔离）</option><option value="isolated">隔离 · 版本目录</option><option value="shared">非隔离 · 共享 .minecraft</option>
+          </select>
+          <p>切换不会移动存档、模组或设置。游戏运行时不可修改。</p>
+        </EfCard>
         <header class="ef-settings-content__head">
           <p class="ef-eyebrow">// {{ active.toUpperCase() }}</p>
           <h2>{{ activeInfo.label }}</h2>

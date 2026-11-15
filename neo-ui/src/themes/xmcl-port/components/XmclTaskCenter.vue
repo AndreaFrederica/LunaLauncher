@@ -2,7 +2,7 @@
   <q-dialog v-model="shown" persistent :maximized="false" transition-show="slide-up" transition-hide="slide-down" @hide="emit('closed')">
     <q-card class="task-card text-white">
       <q-card-section class="task-header"><div><div class="eyebrow">{{ t('ui.taskCenter') }}</div><div class="text-h6">{{ task?.name || title || t('xmcl.task.running') }}</div><div class="text-caption text-grey-5">{{ task?.status || status || t('xmcl.task.preparing') }}</div></div><q-btn v-if="task?.canAbort || busy" flat round icon="close" color="orange" :aria-label="t('xmcl.task.cancel')" @click="emit('cancel')" /></q-card-section>
-      <q-linear-progress :value="progress" color="primary" track-color="grey-8" rounded class="q-mx-lg" />
+      <q-linear-progress :value="progress" :indeterminate="!done && stats.percent === null" color="primary" track-color="grey-8" rounded class="q-mx-lg" />
       <q-card-section class="task-body">
         <div class="task-progress-row"><strong>{{ progressLabel }}</strong><span v-if="task">{{ formatRate(effectiveRate) }}<span v-if="eta"> · {{ eta }}</span></span></div>
         <div v-if="taskCountLabel" class="task-count">{{ taskCountLabel }}</div>

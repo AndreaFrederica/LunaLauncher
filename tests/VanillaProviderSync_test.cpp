@@ -93,10 +93,14 @@ void VanillaProviderSyncTest::installsLoaderIntoDirectIsolatedRoot()
     options.versionId = QStringLiteral("forge-pack");
     options.loaderId = QStringLiteral("net.minecraftforge");
     options.loaderVersion = QStringLiteral("47.2.0");
+    options.versionJson = QJsonDocument::fromJson(R"({"id":"forge","mainClass":"cpw.mods.bootstraplauncher.BootstrapLauncher",
+        "arguments":{"game":["--launchTarget","forgeclient","--fml.mcVersion","1.20.1"],"jvm":[]},
+        "libraries":[{"name":"net.minecraftforge:fmlloader:1.20.1-47.2.0"}]})").object();
     const auto report = VanillaConverter::installLoader(instanceRoot, options);
     QVERIFY2(report.succeeded, qPrintable(report.error));
-    QVERIFY2(QFileInfo::exists(QDir(instanceRoot).filePath("forge-pack-minecraftforge-47.2.0.json")), qPrintable(QDir(instanceRoot).entryList(QDir::Files).join(',')));
-    QVERIFY(!QFileInfo::exists(QDir(instanceRoot).filePath("versions/forge-pack-minecraftforge-47.2.0/forge-pack-minecraftforge-47.2.0.json")));
+    const auto installedId = report.destination.isEmpty() ? QStringLiteral("forge-pack-forge-47.2.0") : QFileInfo(report.destination).completeBaseName();
+    QVERIFY2(QFileInfo::exists(QDir(instanceRoot).filePath(installedId + ".json")), qPrintable(QDir(instanceRoot).entryList(QDir::Files).join(',')));
+    QVERIFY(!QFileInfo::exists(QDir(instanceRoot).filePath("versions/" + installedId + '/' + installedId + ".json")));
 }
 
 void VanillaProviderSyncTest::blocksMmcOnlyExport()

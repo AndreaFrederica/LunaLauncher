@@ -17,6 +17,7 @@ const QSet<QString> standardLoaderIds{
     QStringLiteral("net.minecraftforge"),
     QStringLiteral("net.neoforged"),
     QStringLiteral("org.quiltmc.quilt-loader"),
+    QStringLiteral("net.fabricmc.intermediary"),
 };
 
 bool hasGameContent(const QString& path)
@@ -30,8 +31,113 @@ bool hasGameContent(const QString& path)
     return false;
 }
 
+QJsonObject readObject(const QString& path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject{};
+}
+
+bool safeVersionId(const QString& id)
+{
+    return !id.isEmpty() && id != "." && id != ".." && !id.contains('/') && !id.contains('\\') && !id.contains(':');
+}
+
+QString selectedClientJar(const QString& versionJson, const QString& versionsRoot, const QString& versionId)
+{
+    if (!safeVersionId(versionId)) return {};
+    auto raw = readObject(versionJson);
+    auto id = raw.value("jar").toString().trimmed();
+    if (id.isEmpty() && QFileInfo(QDir(QFileInfo(versionJson).absolutePath()).filePath(versionId + ".jar")).isFile()) id = versionId;
+    QSet<QString> visited;
+    if (id.isEmpty()) {
+        id = versionId;
+        while (!visited.contains(id)) {
+            visited.insert(id);
+            const auto explicitJar = raw.value("jar").toString().trimmed();
+            if (!explicitJar.isEmpty()) { id = explicitJar; break; }
+            if (QFileInfo(QDir(versionsRoot).filePath(id + '/' + id + ".jar")).isFile()) break;
+            const auto parent = raw.value("inheritsFrom").toString().trimmed();
+            if (parent.isEmpty()) break;
+            if (!safeVersionId(parent)) return {};
+            id = parent; raw = readObject(QDir(versionsRoot).filePath(id + '/' + id + ".json"));
+        }
+    }
+    if (!safeVersionId(id)) return {};
+    const auto sibling = QDir(QFileInfo(versionJson).absolutePath()).filePath(id + ".jar");
+    if (QFileInfo(sibling).isFile()) return QDir::cleanPath(sibling);
+    return QDir::cleanPath(QDir(versionsRoot).filePath(id + '/' + id + ".jar"));
+}
+
+void resolveGameDirectory(VanillaInstanceLayout& result, const QString& sharedRoot, const QString& versionRoot)
+{
+    const auto shared = QDir::cleanPath(sharedRoot);
+    const auto settings = readObject(QDir(versionRoot).filePath("luna.settings.json")).value("settings").toObject();
+    const auto mode = settings.value("VanillaGameDirectoryMode").toString();
+    QString gameRoot;
+    if (mode == "shared") gameRoot = shared;
+    if (mode == "isolated") gameRoot = versionRoot;
+    if (gameRoot.isEmpty()) {
+        auto hmcl = readObject(QDir(versionRoot).filePath("hmclversion.cfg"));
+        if (hmcl.isEmpty() || hmcl.value("usesGlobal").toBool()) {
+            for (const auto& folder : { shared, QDir(shared).absoluteFilePath("..") }) {
+                const auto profiles = readObject(QDir(folder).filePath("hmcl.json")).value("configurations").toObject();
+                for (const auto& value : profiles) {
+                    const auto profile = value.toObject();
+                    const auto path = QDir::cleanPath(QDir(folder).absoluteFilePath(profile.value("gameDir").toString()));
+                    if (path.compare(shared, Qt::CaseInsensitive) == 0) {
+                        hmcl = profile.value("global").toObject();
+                        hmcl.remove("usesGlobal");
+                    }
+                }
+            }
+        }
+        if (hmcl.contains("gameDirType") && !hmcl.value("usesGlobal").toBool(false)) {
+            const auto type = hmcl.value("gameDirType").toInt(-1);
+            if (type == 0) gameRoot = shared;
+            if (type == 1) gameRoot = versionRoot;
+            if (type == 2 && !hmcl.value("gameDir").toString().isEmpty())
+                gameRoot = QDir(shared).absoluteFilePath(hmcl.value("gameDir").toString());
+        }
+        if (gameRoot.isEmpty()) {
+            QFile pcl(QDir(versionRoot).filePath("PCL/Setup.ini"));
+            if (pcl.open(QIODevice::ReadOnly)) {
+                const auto lines = QString::fromUtf8(pcl.readAll()).split('\n');
+                QString legacy;
+                for (const auto& line : lines) {
+                    const auto key = line.section(':', 0, 0).trimmed();
+                    const auto value = line.section(':', 1).trimmed();
+                    if (key == "VersionArgumentIndieV2") {
+                        if (value.compare("True", Qt::CaseInsensitive) == 0) gameRoot = versionRoot;
+                        if (value.compare("False", Qt::CaseInsensitive) == 0) gameRoot = shared;
+                    }
+                    if (key == "VersionArgumentIndie") legacy = value;
+                }
+                if (gameRoot.isEmpty() && legacy == "1") gameRoot = versionRoot;
+                if (gameRoot.isEmpty() && legacy == "2") gameRoot = shared;
+            }
+        }
+    }
+    if (gameRoot.isEmpty()) {
+        const auto version = readObject(result.versionJson);
+        QString explicitRoot;
+        for (const auto& key : { "gameDir", "gameDirectory", "gameRoot" }) {
+            if (!version.value(key).toString().trimmed().isEmpty()) { explicitRoot = version.value(key).toString(); break; }
+        }
+        if (!explicitRoot.isEmpty()) gameRoot = QDir(shared).absoluteFilePath(explicitRoot);
+        else if (hasGameContent(QDir(versionRoot).filePath("game"))) gameRoot = QDir(versionRoot).filePath("game");
+        else if (hasGameContent(versionRoot)) gameRoot = versionRoot;
+        else if (hasGameContent(shared) || QFileInfo::exists(QDir(shared).filePath("options.txt"))) gameRoot = shared;
+        else gameRoot = versionRoot; // New/empty profiles default to isolation.
+    }
+    result.gameRoot = QDir::cleanPath(gameRoot);
+    result.isolated = result.gameRoot != shared;
+    result.mode = !result.isolated ? VanillaGameLayout::SharedGameRoot
+        : result.gameRoot == QDir::cleanPath(versionRoot) ? VanillaGameLayout::IsolatedVersionRoot : VanillaGameLayout::ExplicitGameDir;
+}
+
 QString firstVersion(const QString& versionsRoot, const QString& requested)
 {
+    if (!requested.isEmpty() && !safeVersionId(requested)) return {};
     if (!requested.isEmpty() && QFileInfo::exists(QDir(versionsRoot).filePath(requested + '/' + requested + ".json")))
         return requested;
 
@@ -63,7 +169,7 @@ QJsonObject mergeVersionObjects(const QJsonObject& parent, const QJsonObject& ch
             continue;
         if (it.value().isObject() && merged.value(key).isObject())
             merged.insert(key, mergeVersionObjects(merged.value(key).toObject(), it.value().toObject()));
-        else if (it.value().isArray() && merged.value(key).isArray() && (key == QStringLiteral("libraries") || key == QStringLiteral("arguments"))) {
+        else if (it.value().isArray() && merged.value(key).isArray() && (key == QStringLiteral("libraries") || key == QStringLiteral("game") || key == QStringLiteral("jvm"))) {
             auto values = merged.value(key).toArray();
             for (const auto& value : it.value().toArray())
                 values.append(value);
@@ -77,6 +183,10 @@ QJsonObject mergeVersionObjects(const QJsonObject& parent, const QJsonObject& ch
 
 QJsonObject loadRawVersion(const QString& sourceRoot, const QString& versionId, QString* error)
 {
+    if (!safeVersionId(versionId)) {
+        if (error) *error = QObject::tr("Unsafe version profile ID: %1").arg(versionId);
+        return {};
+    }
     const auto path = QDir(sourceRoot).filePath(QStringLiteral("versions/%1/%1.json").arg(versionId));
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -110,6 +220,7 @@ QJsonObject resolveVersion(const QString& sourceRoot, const QString& versionId, 
         resolved = resolveVersion(sourceRoot, parent, visiting, error);
     resolved = mergeVersionObjects(resolved, raw);
     resolved.insert(QStringLiteral("id"), raw.value(QStringLiteral("id")).toString(versionId));
+    if (!parent.isEmpty()) resolved.insert("inheritsFrom",parent);
     visiting.remove(versionId);
     return resolved;
 }
@@ -140,20 +251,13 @@ VanillaInstanceLayout detectVanillaInstanceLayout(const QString& sourceRoot, con
     if (directVersionRoot) {
         result.versionId = directName;
         result.versionJson = directJson;
-        const auto version = loadVanillaVersionJson(sharedRoot, result.versionId);
-        const auto jarVersion = version.value(QStringLiteral("jar")).toString().trimmed();
-        const auto jarId = jarVersion.isEmpty() ? result.versionId : jarVersion;
-        result.clientJar = QDir::cleanPath(QDir(result.sourceRoot).filePath(jarId + QStringLiteral(".jar")));
-        // HMCL/PCL may isolate the profile JSON and game content while
-        // keeping the inherited/base client jar in the shared versions tree.
-        // Prefer the profile-local jar, then fall back to that shared jar.
-        if (!QFileInfo::exists(result.clientJar))
-            result.clientJar = QDir::cleanPath(QDir(result.versionsRoot).filePath(jarId + QStringLiteral("/") + jarId + QStringLiteral(".jar")));
+        result.clientJar = selectedClientJar(result.versionJson,result.versionsRoot,result.versionId);
         result.gameRoot = QFileInfo(QDir(result.sourceRoot).filePath(QStringLiteral("game"))).isDir()
             ? QDir::cleanPath(QDir(result.sourceRoot).filePath(QStringLiteral("game")))
             : result.sourceRoot;
         result.mode = VanillaGameLayout::IsolatedVersionRoot;
         result.isolated = true;
+        resolveGameDirectory(result, sharedRoot, result.sourceRoot);
         return result;
     }
     result.versionId = firstVersion(result.versionsRoot, requestedVersion);
@@ -164,12 +268,7 @@ VanillaInstanceLayout detectVanillaInstanceLayout(const QString& sourceRoot, con
     result.versionJson = QDir(versionRoot).filePath(result.versionId + ".json");
 
     QJsonObject version = loadVanillaVersionJson(result.sourceRoot, result.versionId);
-    // A profile that inherits a release (common in PCL/HMCL and official
-    // launcher metadata) may not have its own jar. The resolved `jar` field
-    // names the version directory containing the executable client jar.
-    const auto jarVersion = version.value(QStringLiteral("jar")).toString().trimmed();
-    const auto jarId = jarVersion.isEmpty() ? result.versionId : jarVersion;
-    result.clientJar = QDir(result.versionsRoot).filePath(jarId + "/" + jarId + ".jar");
+    result.clientJar = selectedClientJar(result.versionJson,result.versionsRoot,result.versionId);
 
     const auto explicitRoot = explicitGameRoot(version, result.sourceRoot);
     if (!explicitRoot.isEmpty()) {
@@ -192,6 +291,7 @@ VanillaInstanceLayout detectVanillaInstanceLayout(const QString& sourceRoot, con
             result.isolated = false;
         }
     }
+    resolveGameDirectory(result, sharedRoot, versionRoot);
     return result;
 }
 
@@ -222,7 +322,9 @@ VanillaCompatibilityReport checkVanillaExportCompatibility(const QString& prismI
                     break;
                 }
                 const auto uid = value.toObject().value(QStringLiteral("uid")).toString();
-                if (uid != QStringLiteral("net.minecraft") && !standardLoaderIds.contains(uid)) {
+                if (value.toObject().value(QStringLiteral("disabled")).toBool())
+                    continue;
+                if (uid != QStringLiteral("net.minecraft") && uid != QStringLiteral("org.lwjgl") && uid != QStringLiteral("org.lwjgl3") && !standardLoaderIds.contains(uid)) {
                     vanillaBaseOnly = false;
                     break;
                 }
@@ -235,7 +337,7 @@ VanillaCompatibilityReport checkVanillaExportCompatibility(const QString& prismI
     if (!patches.isEmpty()) {
         const auto patchEntries = QDir(root.filePath(QStringLiteral("patches"))).entryInfoList(QStringList{ QStringLiteral("*.json") }, QDir::Files);
         for (const auto& patch : patchEntries) {
-            if (patch.baseName() != QStringLiteral("net.minecraft") && !standardLoaderIds.contains(patch.baseName()))
+            if (patch.completeBaseName() != QStringLiteral("net.minecraft") && patch.completeBaseName() != QStringLiteral("org.lwjgl") && patch.completeBaseName() != QStringLiteral("org.lwjgl3") && !standardLoaderIds.contains(patch.completeBaseName()))
                 result.blockers.append(QStringLiteral("patches contains Prism component override %1.").arg(patch.fileName()));
         }
     }

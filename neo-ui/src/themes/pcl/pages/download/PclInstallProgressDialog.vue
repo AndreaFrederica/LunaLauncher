@@ -17,7 +17,7 @@
         </div>
         <div class="pcl-install-progress__status">
           <PclLoading v-if="!finished" inline />
-          <span>{{ task?.details || task?.status || t('pcl.installDialog.preparing') }}</span>
+          <span>{{ task?.status || task?.details || t('pcl.installDialog.preparing') }}</span>
         </div>
         <div v-if="failed" class="pcl-install-progress__error">
           <strong>{{ t('tasks.states.failed') }}</strong>
@@ -150,7 +150,7 @@ const stages = computed(() => {
   let active = 0;
   if (finishedTask) active = labels.length - 1;
   else if (children.value.some(child => /\.(jar|zip|litemod)$/i.test(String(child.label || '')))) active = Math.min(labels.length - 2, 3);
-  else if (status.includes('unpack') || status.includes('install')) active = Math.min(labels.length - 2, 2);
+  else if (/unpack|install|解压|整理|扫描|复制|校验|配置|写入|清理/.test(status)) active = Math.min(labels.length - 2, 2);
   else if (children.value.length || status.includes('download')) active = 1;
   return labels.map((label, index) => ({ label, state: index < active ? 'done' : index === active ? 'active' : 'waiting' }));
 });

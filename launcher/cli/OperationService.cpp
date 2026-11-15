@@ -3,6 +3,8 @@
 #include "OperationService.h"
 #include "api/ResourceModelSupport.h"
 #include "cli/ScopedUserInteraction.h"
+#include "api/LauncherApi.h"
+#include "api/LauncherApiInstances.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -91,6 +93,7 @@ QPair<QString, QString> nativeLoaderFor(const MinecraftInstance* instance)
     if (!profile || !profile->ensureLoaded())
         return { QStringLiteral("unknown"), {} };
     for (const auto& entry : { QPair<QString, QString>{ QStringLiteral("com.cleanroommc.cleanroom"), QStringLiteral("cleanroom") },
+                               QPair<QString, QString>{ QStringLiteral("net.xiaoyu233.fishmodloader"), QStringLiteral("fishmodloader") },
                                QPair<QString, QString>{ QStringLiteral("net.neoforged"), QStringLiteral("neoforge") },
                                QPair<QString, QString>{ QStringLiteral("net.minecraftforge"), QStringLiteral("forge") },
                                QPair<QString, QString>{ QStringLiteral("net.fabricmc.fabric-loader"), QStringLiteral("fabric") },
@@ -906,6 +909,9 @@ QJsonObject OperationService::listInstances()
             object.insert("loaderVersion", descriptor.loaderVersion);
             object.insert("minecraftVersion", descriptor.minecraftVersion);
             object.insert("vanillaCompatible", true);
+            object.insert("gameDirectoryMode", instance->settings()->get("VanillaGameDirectoryMode").toString());
+            object.insert("gameRoot", vanilla->gameRoot());
+            object.insert("isolated", vanilla->gameRoot() != QDir::cleanPath(QDir(descriptor.layout.versionsRoot).absoluteFilePath("..")));
         } else {
             object.insert("vanillaCompatible", false);
             if (const auto* minecraft = dynamic_cast<const MinecraftInstance*>(instance)) {
@@ -1023,6 +1029,8 @@ QJsonObject OperationService::instanceInfo(const QJsonObject& parameters)
         // native Prism instance there.
         data.insert("format", QStringLiteral("vanilla-compatible"));
         data.insert("vanillaCompatible", true);
+        data.insert("gameDirectoryMode", vanilla->settings()->get("VanillaGameDirectoryMode").toString());
+        data.insert("isolated", vanilla->gameRoot() != QDir::cleanPath(QDir(descriptor.layout.versionsRoot).absoluteFilePath("..")));
         data.insert("minecraftVersion", descriptor.minecraftVersion);
         data.insert("profileVersionId", descriptor.profileVersionId);
         data.insert("loaderType", descriptor.loaderType);
@@ -1428,6 +1436,12 @@ QJsonObject OperationService::setSetting(const QJsonObject& parameters, UserInte
         return failure(error, 2);
     if (key == "AssetIntegrityTrusted" && converted.toBool())
         return failure(tr("An instance can be added to the integrity whitelist only after instance.verify succeeds with trust=true."), 2);
+    if (key == "VanillaGameDirectoryMode") {
+        if (!QStringList{ "auto", "isolated", "shared" }.contains(converted.toString()))
+            return failure(tr("Game directory mode must be auto, isolated or shared."), 2);
+        if (instance && instance->isRunning())
+            return failure(tr("Stop the game before changing its directory mode."), 2);
+    }
     if (!settings->set(key, converted))
         return failure(tr("Could not set %1.").arg(key));
     applyRuntimeDownloadSettings(key);
@@ -1444,6 +1458,8 @@ QJsonObject OperationService::resetSetting(const QJsonObject& parameters)
     if (!settings)
         return failure(error, 2);
     const auto key = parameters.value("key").toString();
+    if (key == "VanillaGameDirectoryMode" && instance && instance->isRunning())
+        return failure(tr("Stop the game before changing its directory mode."), 2);
     const auto setting = settings->getSetting(key);
     if (!setting)
         return failure(tr("Unknown setting: %1").arg(key), 2);
@@ -1871,23 +1887,10 @@ QJsonObject OperationService::importInstance(const QJsonObject& parameters, User
     const auto name = parameters.value("name").toString();
     if (!name.isEmpty())
         importTask->setName(name);
-    QString targetDirectory;
-    const auto targetStoreId = parameters.value("targetStoreId").toString().trimmed();
-    if (!targetStoreId.isEmpty()) {
-        const auto* store = APPLICATION->instanceStores()->find(targetStoreId);
-        if (!store || !store->isPrism() || !store->enabled || !store->writable)
-            return failure(tr("The selected target store is not an enabled writable Prism store."), 2);
-        targetDirectory = store->path;
-    } else if (const auto* store = APPLICATION->instanceStores()->defaultStore()) {
-        targetDirectory = store->path;
-    }
-    auto task = targetDirectory.isEmpty() ? APPLICATION->instances()->wrapInstanceTask(importTask)
-                                          : APPLICATION->instances()->wrapInstanceTask(importTask, targetDirectory);
-    QString error;
-    if (!waitForTask(task, interaction, &error))
-        return failure(error);
-    APPLICATION->instances()->saveNow();
-    return success(QJsonObject{ { "name", name }, { "source", resolvedUrl.toString() } });
+    LauncherApi api;
+    auto arguments = parameters;
+    arguments.insert("source",resolvedUrl.toString());
+    return installInstanceTaskToStore(api, importTask, arguments, interaction);
 }
 
 QJsonObject OperationService::launchInstance(const QJsonObject& parameters, UserInteraction& interaction)

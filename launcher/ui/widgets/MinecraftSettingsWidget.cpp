@@ -77,6 +77,19 @@ MinecraftSettingsWidget::MinecraftSettingsWidget(MinecraftInstance* instance, QW
         form->addRow(tr("Minecraft version"), minecraft);
         form->addRow(tr("Loader"), loader);
         form->addRow(tr("Foreign profile"), profile);
+        m_vanillaDirectoryMode = new QComboBox(info);
+        m_vanillaDirectoryMode->addItem(tr("Auto-detect existing launcher settings (default: isolated)"), "auto");
+        m_vanillaDirectoryMode->addItem(tr("Isolated: versions/<version>"), "isolated");
+        m_vanillaDirectoryMode->addItem(tr("Shared: .minecraft"), "shared");
+        m_vanillaDirectoryMode->setEnabled(!vanilla->isRunning());
+        form->addRow(tr("Game directory mode"), m_vanillaDirectoryMode);
+        auto directory = new QLabel(vanilla->gameRoot(), info);
+        directory->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        directory->setWordWrap(true);
+        form->addRow(tr("Current game directory"), directory);
+        auto hint = new QLabel(tr("Changing mode does not move saves, mods or settings. Applies to the next launch."), info);
+        hint->setWordWrap(true);
+        form->addRow(hint);
         form->addRow(QString(), folderButton);
         m_ui->verticalLayout_5->insertWidget(0, info);
     }
@@ -193,6 +206,8 @@ MinecraftSettingsWidget::~MinecraftSettingsWidget()
 
 void MinecraftSettingsWidget::loadSettings()
 {
+    if (m_vanillaDirectoryMode)
+        m_vanillaDirectoryMode->setCurrentIndex(m_vanillaDirectoryMode->findData(m_instance->settings()->get("VanillaGameDirectoryMode")));
     SettingsObject* settings;
 
     if (m_instance != nullptr)
@@ -360,6 +375,8 @@ void MinecraftSettingsWidget::loadSettings()
 
 void MinecraftSettingsWidget::saveSettings()
 {
+    if (m_vanillaDirectoryMode && !m_instance->isRunning())
+        m_instance->settings()->set("VanillaGameDirectoryMode", m_vanillaDirectoryMode->currentData());
     SettingsObject* settings;
 
     if (m_instance != nullptr)

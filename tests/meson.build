@@ -2,6 +2,8 @@ test_sources = [
   'FileSystem_test.cpp',
   'InstanceStore_test.cpp',
   'VanillaInstanceLayout_test.cpp',
+  'VanillaInstall_test.cpp',
+  'ImportedClientProfile_test.cpp',
   'VanillaProviderSync_test.cpp',
   'GZip_test.cpp',
   'GradleSpecifier_test.cpp',

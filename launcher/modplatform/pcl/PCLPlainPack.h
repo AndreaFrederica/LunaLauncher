@@ -8,6 +8,7 @@
 #include <QStringList>
 
 class MinecraftInstance;
+class QJsonObject;
 
 namespace PCL {
 

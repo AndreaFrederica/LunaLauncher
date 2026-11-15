@@ -11,6 +11,9 @@
 #include <QProcess>
 #include <QSaveFile>
 #include <QSet>
+#include <QRegularExpression>
+#include <QSysInfo>
+#include "minecraft/ImportedClientProfile.h"
 #include <algorithm>
 #include <functional>
 
@@ -28,7 +31,7 @@ QJsonObject mergeForeignVersion(const QJsonObject& base, const QJsonObject& over
         if (it.value().isObject() && result.value(key).isObject()) {
             result.insert(key, mergeForeignVersion(result.value(key).toObject(), it.value().toObject()));
         } else if (it.value().isArray() && result.value(key).isArray()
-                   && (key == QStringLiteral("libraries") || key == QStringLiteral("arguments"))) {
+                   && (key == QStringLiteral("libraries") || key == QStringLiteral("arguments") || key == QStringLiteral("game") || key == QStringLiteral("jvm"))) {
             auto values = result.value(key).toArray();
             for (const auto& value : it.value().toArray())
                 values.append(value);
@@ -193,29 +196,19 @@ QList<QString> rootsToInspect(const QString& root)
     QList<QString> result;
     const auto normalized = clean(root);
     std::function<void(const QString&, int)> visit = [&result, &visit](const QString& current, int depth) {
+        const auto id = QFileInfo(current).fileName();
+        if (QFileInfo(current).dir().dirName() == "versions" && QFileInfo::exists(QDir(current).filePath(id + ".json"))) {
+            result.append(clean(current));
+            return;
+        }
         const auto versions = QDir(current).filePath(QStringLiteral("versions"));
         if (QFileInfo(versions).isDir()) {
-            bool hasIsolatedContent = false;
+            // Every profile is an instance, including profiles sharing game data.
             for (const auto& entry : QDir(versions).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name)) {
-                const auto versionId = entry.fileName();
-                if (!QFileInfo::exists(QDir(entry.filePath()).filePath(versionId + QStringLiteral(".json")))) continue;
-                const auto isolatedRoot = clean(entry.filePath());
-                const auto hasContent = QFileInfo(QDir(isolatedRoot).filePath(QStringLiteral("game"))).isDir()
-                    || QFileInfo(QDir(isolatedRoot).filePath(QStringLiteral("mods"))).isDir()
-                    || QFileInfo(QDir(isolatedRoot).filePath(QStringLiteral("config"))).isDir()
-                    || QFileInfo(QDir(isolatedRoot).filePath(QStringLiteral("saves"))).isDir();
-                if (hasContent) {
-                    hasIsolatedContent = true;
-                    result.append(isolatedRoot);
-                }
+                const auto id = entry.fileName();
+                if (QFileInfo::exists(QDir(entry.filePath()).filePath(id + ".json")))
+                    result.append(clean(entry.filePath()));
             }
-            // Keep the outer root for the conventional shared layout. If all
-            // content is placed under version roots, the version roots above
-            // are the actual instances and the outer root is only a cache.
-            if (!hasIsolatedContent || QFileInfo(QDir(current).filePath(QStringLiteral("mods"))).isDir()
-                || QFileInfo(QDir(current).filePath(QStringLiteral("config"))).isDir()
-                || QFileInfo(QDir(current).filePath(QStringLiteral("saves"))).isDir())
-                result.append(clean(current));
         }
         if (depth >= 3)
             return;
@@ -237,6 +230,8 @@ QList<QString> rootsToInspect(const QString& root)
 QString VanillaCompatibleProvider::detectedLoaderType(const QJsonObject& version)
 {
     const auto resolved = resolveForeignPatches(version);
+    if (resolved.value("mainClass").toString() == "net.xiaoyu233.fml.relaunch.client.Main"
+        && !libraryVersion(resolved,{"net.xiaoyu233.fishmodloader:fishmodloader:"}).isEmpty()) return "fishmodloader";
     const auto gameArgs = resolved.value(QStringLiteral("arguments")).toObject().value(QStringLiteral("game")).toArray();
     QStringList args;
     for (const auto& value : gameArgs) {
@@ -284,6 +279,7 @@ QString VanillaCompatibleProvider::detectedLoaderVersion(const QJsonObject& vers
         if (value.isEmpty()) value = argumentValue(resolved, { QStringLiteral("--fml.neoforgeVersion"), QStringLiteral("--fml.neoFormVersion") });
         return normalize(value);
     }
+    if (type == "fishmodloader") return libraryVersion(resolved,{"net.xiaoyu233.fishmodloader:fishmodloader:"});
     if (type == QStringLiteral("fabric")) return libraryVersion(resolved, { QStringLiteral("net.fabricmc:fabric-loader:") });
     if (type == QStringLiteral("quilt")) return libraryVersion(resolved, { QStringLiteral("org.quiltmc:quilt-loader:") });
     return {};
@@ -291,18 +287,141 @@ QString VanillaCompatibleProvider::detectedLoaderVersion(const QJsonObject& vers
 
 QString VanillaCompatibleProvider::detectedMinecraftVersion(const QJsonObject& version, const QString& profileId)
 {
-    const auto fmlVersion = argumentValue(version, { QStringLiteral("--fml.mcVersion") });
+    const auto resolved = resolveForeignPatches(version);
+    for (const auto& value : version.value("patches").toArray()) {
+        const auto patch = value.toObject();
+        if (patch.value("id").toString() == "game" || patch.value("uid").toString() == "net.minecraft") {
+            const auto base = patch.value("version").toString().trimmed();
+            if (!base.isEmpty()) return base;
+        }
+    }
+    const auto fmlVersion = argumentValue(resolved, { QStringLiteral("--fml.mcVersion") });
     if (!fmlVersion.isEmpty()) return fmlVersion;
-    const auto jar = version.value(QStringLiteral("jar")).toString().trimmed();
+    const auto explicitVersion = resolved.value("minecraftVersion").toString().trimmed();
+    if (!explicitVersion.isEmpty()) return explicitVersion;
+    // Forge coordinates retain the real Minecraft version even when HMCL
+    // has flattened the profile and replaced its id with the pack name.
+    const auto forge = libraryVersion(resolved, { "net.minecraftforge:forge:", "net.minecraftforge:fmlloader:" });
+    const auto match = QRegularExpression(QStringLiteral("^(1\\.[0-9]+(?:\\.[0-9]+)?)-")).match(forge);
+    if (match.hasMatch()) return match.captured(1);
+    const auto jar = resolved.value("jar").toString().trimmed();
     if (!jar.isEmpty() && (jar != profileId || profileId.isEmpty())) return jar;
-    const auto inherited = version.value(QStringLiteral("inheritsFrom")).toString().trimmed();
+    const auto inherited = resolved.value("inheritsFrom").toString().trimmed();
     if (!inherited.isEmpty()) return inherited;
-    return version.value(QStringLiteral("id")).toString(profileId);
+    const auto clientUrl = resolved.value("downloads").toObject().value("client").toObject().value("url").toString();
+    const auto official = QRegularExpression(QStringLiteral("/versions/([^/]+)/[^/]+$")).match(clientUrl);
+    if (official.hasMatch()) return official.captured(1);
+    return resolved.value("id").toString(profileId);
+}
+
+QString VanillaCompatibleProvider::minecraftVersionForLayout(const QJsonObject& version, const VanillaInstanceLayout& layout)
+{
+    for (const auto& root : {QFileInfo(layout.versionJson).absolutePath(), layout.gameRoot}) {
+        QFile setup(QDir(root).filePath("PCL/Setup.ini"));
+        if (!setup.open(QIODevice::ReadOnly)) continue;
+        for (const auto& line : QString::fromUtf8(setup.readAll()).split(QRegularExpression("[\\r\\n]+"))) {
+            if (line.section(':',0,0).trimmed() == "VersionOriginal") {
+                const auto original = line.section(':',1).trimmed();
+                if (!original.isEmpty()) return original;
+            }
+        }
+    }
+    return detectedMinecraftVersion(version,layout.versionId);
+}
+
+QJsonObject VanillaCompatibleProvider::resolvedProfile(const QJsonObject& profile)
+{
+    return resolveForeignPatches(profile);
+}
+
+QJsonObject VanillaCompatibleProvider::prismRuntimePatch(QJsonObject source, const QString& uid, const QString& version, bool loader)
+{
+    source = resolvedProfile(source);
+    if (!loader && !source.contains("assets") && !source.contains("assetIndex")
+        && source.value("minecraftArguments").toString().contains("${game_assets}")) source.insert("assets","legacy");
+    const auto arguments = source.value("arguments").toObject();
+    const auto flatten = [](const QJsonArray& values) {
+        QStringList result;
+        for (const auto& value : values) {
+            if (value.isString()) { result.append(value.toString()); continue; }
+            const auto object = value.toObject();
+            const auto rules = object.value("rules").toArray();
+            bool allowed = rules.isEmpty();
+            for (const auto& item : rules) {
+                const auto rule = item.toObject();
+                // Feature arguments are supplied by Luna's launch context.
+                if (rule.contains("features")) continue;
+                const auto os = rule.value("os").toObject();
+#ifdef Q_OS_WIN
+                const QString platform = "windows";
+#elif defined(Q_OS_MACOS)
+                const QString platform = "osx";
+#else
+                const QString platform = "linux";
+#endif
+                if (os.contains("name") && os.value("name").toString() != platform) continue;
+                if (os.contains("version") && !QRegularExpression(os.value("version").toString()).match(QSysInfo::kernelVersion()).hasMatch()) continue;
+                auto arch = QSysInfo::currentCpuArchitecture();
+                const auto requested = os.value("arch").toString();
+                if (!requested.isEmpty() && requested != arch && !(requested == "amd64" && arch == "x86_64")) continue;
+                allowed = rule.value("action").toString() == "allow";
+            }
+            if (!allowed) continue;
+            const auto argument = object.value("value");
+            if (argument.isString()) result.append(argument.toString());
+            else for (const auto& nested : argument.toArray()) if (nested.isString()) result.append(nested.toString());
+        }
+        return result;
+    };
+    QStringList game;
+    for (auto argument : flatten(arguments.value("game").toArray())) {
+        if (argument.isEmpty() || argument.contains(QRegularExpression("[\\s\"]"))) {
+            argument.replace('\\', "\\\\");
+            argument.replace('"', "\\\"");
+            argument = '"' + argument + '"';
+        }
+        game.append(argument);
+    }
+    if (!game.isEmpty()) source.insert("minecraftArguments", game.join(' '));
+    QJsonArray jvm = source.value("+jvmArgs").toArray();
+    bool skipNext = false;
+    for (const auto& argument : flatten(arguments.value("jvm").toArray())) {
+        if (skipNext) { skipNext = false; continue; }
+        if (argument == "-cp" || argument == "-classpath" || argument == "--class-path") { skipNext = true; continue; }
+        if (argument.contains("${classpath}") || argument.contains("${natives_directory}")
+            || argument.contains("${launcher_name}") || argument.contains("${launcher_version}")) continue;
+        // JVM options are an ordered token stream. Repeated switches such as
+        // --add-opens/--add-exports each consume their following operand;
+        // deduplicating tokens turns later operands into a bogus main class.
+        jvm.append(argument);
+    }
+    if (!jvm.isEmpty()) source.insert("+jvmArgs", jvm);
+    source.remove("arguments");
+    const auto java = source.value("javaVersion").toObject();
+    if (java.value("majorVersion").toInt() > 0) {
+        source.insert("compatibleJavaMajors", QJsonArray{java.value("majorVersion")});
+        source.insert("compatibleJavaName", java.value("component"));
+    } else if (!loader && source.value("compatibleJavaMajors").toArray().isEmpty()) {
+        // Legacy version JSONs predate javaVersion. A custom local client
+        // still needs the legacy default rather than the global Java 21/25.
+        // Explicit requirements and inferred modern entry points take priority.
+        const auto legacy = QRegularExpression("^1\\.(\\d+)(?:\\.\\d+)?$").match(version);
+        if (legacy.hasMatch() && legacy.captured(1).toInt() <= 16)
+            source.insert("compatibleJavaMajors", QJsonArray{8});
+    }
+    source.insert("uid", uid);
+    source.insert("version", version);
+    source.insert("formatVersion", 1);
+    if (loader) {
+        for (const auto& key : { "id", "jar", "assetIndex", "assets", "downloads", "releaseTime", "time", "minimumLauncherVersion" }) source.remove(key);
+    }
+    return source;
 }
 
 QString VanillaCompatibleProvider::loaderUidForType(const QString& loaderType)
 {
     const auto type = loaderType.trimmed().toLower();
+    if (type == "fishmodloader" || type == "net.xiaoyu233.fishmodloader") return "net.xiaoyu233.fishmodloader";
     if (type == QStringLiteral("forge")) return QStringLiteral("net.minecraftforge");
     if (type == QStringLiteral("neoforge")) return QStringLiteral("net.neoforged");
     if (type == QStringLiteral("fabric")) return QStringLiteral("net.fabricmc.fabric-loader");
@@ -317,6 +436,7 @@ QString VanillaCompatibleProvider::loaderUidForType(const QString& loaderType)
 QString VanillaCompatibleProvider::loaderTypeForUid(const QString& loaderUid)
 {
     const auto uid = loaderUid.trimmed().toLower();
+    if (uid == "fishmodloader" || uid == "net.xiaoyu233.fishmodloader") return "fishmodloader";
     if (uid == QStringLiteral("forge") || uid == QStringLiteral("net.minecraftforge")) return QStringLiteral("forge");
     if (uid == QStringLiteral("neoforge") || uid == QStringLiteral("net.neoforged")) return QStringLiteral("neoforge");
     if (uid == QStringLiteral("fabric") || uid == QStringLiteral("net.fabricmc.fabric-loader")) return QStringLiteral("fabric");
@@ -617,6 +737,7 @@ QList<VanillaInstanceDescriptor> VanillaCompatibleProvider::scan(const QString& 
         descriptor.versionId = layout.versionId;
         descriptor.profileVersionId = layout.versionId;
         descriptor.layout = layout;
+        ImportedClientProfile::inferJavaRequirement(version,layout.librariesRoot,layout.clientJar);
         descriptor.version = version;
         descriptor.stableId = stableId(storeId, root, layout.versionId);
         descriptor.name = QFileInfo(root).fileName();
@@ -626,7 +747,7 @@ QList<VanillaInstanceDescriptor> VanillaCompatibleProvider::scan(const QString& 
         descriptor.dialect = descriptor.provenance.mixed ? QStringLiteral("mixed") : descriptor.provenance.primaryProvider;
         descriptor.loaderType = detectedLoaderType(version);
         descriptor.loaderVersion = detectedLoaderVersion(version);
-        descriptor.minecraftVersion = detectedMinecraftVersion(version, layout.versionId);
+        descriptor.minecraftVersion = minecraftVersionForLayout(version,layout);
         descriptor.writable = QFileInfo(root).isWritable();
         loadSidecar(descriptor);
         result.append(std::move(descriptor));
@@ -704,12 +825,18 @@ bool VanillaCompatibleProvider::saveSidecar(const VanillaInstanceDescriptor& des
         if (error) *error = QStringLiteral("Could not create the instance directory.");
         return false;
     }
-    const QJsonObject settings{ { "name", descriptor.name }, { "iconKey", descriptor.iconKey }, { "notes", descriptor.notes },
+    QJsonObject settings{ { "name", descriptor.name }, { "iconKey", descriptor.iconKey }, { "notes", descriptor.notes },
                                 { "group", descriptor.group }, { "loaderEnabled", descriptor.loaderEnabled },
                                 { "loaderTypeOverride", descriptor.loaderTypeOverride },
                                 { "loaderVersionOverride", descriptor.loaderVersionOverride },
                                 { "loaderProfileOverride", descriptor.loaderProfileOverride },
                                 { "loaderManifestFingerprint", descriptor.loaderManifestFingerprint } };
+    QFile previousFile(lunaSettingsPath(descriptor.root));
+    if (previousFile.open(QIODevice::ReadOnly)) {
+        const auto previous = QJsonDocument::fromJson(previousFile.readAll()).object().value("settings").toObject();
+        for (auto it = previous.begin(); it != previous.end(); ++it)
+            if (!settings.contains(it.key())) settings.insert(it.key(), it.value());
+    }
     QJsonArray actions{ QStringLiteral("settings") };
     const bool loaderManaged = !descriptor.loaderManifestFingerprint.isEmpty()
         || !descriptor.loaderTypeOverride.trimmed().isEmpty()

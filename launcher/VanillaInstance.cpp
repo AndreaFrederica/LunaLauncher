@@ -4,7 +4,10 @@
 #include "Application.h"
 #include "minecraft/OneSixVersionFormat.h"
 #include "minecraft/VersionFile.h"
+#include "minecraft/PackProfile.h"
+#include "minecraft/ImportedClientProfile.h"
 #include "Exception.h"
+#include "settings/Setting.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -15,30 +18,6 @@
 
 namespace {
 
-QStringList modernArguments(const QJsonObject& version, const QString& key)
-{
-    QStringList result;
-    const auto array = version.value(QStringLiteral("arguments")).toObject().value(key).toArray();
-    for (const auto& item : array) {
-        if (item.isString()) {
-            result.append(item.toString());
-            continue;
-        }
-        // Conditional arguments are represented as {rules, value}. Keep
-        // unconditional values and the common loader values; the launcher
-        // itself applies the platform/account substitutions later.
-        const auto object = item.toObject();
-        if (!object.value(QStringLiteral("rules")).isArray()) {
-            const auto value = object.value(QStringLiteral("value"));
-            if (value.isString()) result.append(value.toString());
-            else if (value.isArray()) {
-                for (const auto& nested : value.toArray())
-                    if (nested.isString()) result.append(nested.toString());
-            }
-        }
-    }
-    return result;
-}
 
 void writeJson(const QString& path, const QJsonObject& object)
 {
@@ -50,37 +29,6 @@ void writeJson(const QString& path, const QJsonObject& object)
     }
 }
 
-QJsonObject prismPatch(QJsonObject source, const QString& uid, const QString& componentVersion, bool loader)
-{
-    source.insert(QStringLiteral("uid"), uid);
-    source.insert(QStringLiteral("version"), componentVersion);
-    source.insert(QStringLiteral("formatVersion"), 1);
-    if (source.contains(QStringLiteral("arguments"))) {
-        const auto game = modernArguments(source, QStringLiteral("game"));
-        const auto jvm = modernArguments(source, QStringLiteral("jvm"));
-        source.remove(QStringLiteral("arguments"));
-        if (!game.isEmpty()) source.insert(QStringLiteral("minecraftArguments"), game.join(QLatin1Char(' ')));
-        if (!jvm.isEmpty()) {
-            QJsonArray values;
-            for (const auto& value : jvm) values.append(value);
-            source.insert(QStringLiteral("+jvmArgs"), values);
-        }
-    }
-    if (loader) {
-        // `id` belongs to the Minecraft component. Keeping it in the loader
-        // patch is harmless, but removing it avoids the loader replacing the
-        // base game's version metadata in older parser paths.
-        source.remove(QStringLiteral("id"));
-        source.remove(QStringLiteral("jar"));
-        source.remove(QStringLiteral("assetIndex"));
-        source.remove(QStringLiteral("assets"));
-        source.remove(QStringLiteral("downloads"));
-        source.remove(QStringLiteral("releaseTime"));
-        source.remove(QStringLiteral("time"));
-        source.remove(QStringLiteral("minimumLauncherVersion"));
-    }
-    return source;
-}
 
 QString standardComponentName(const QString& uid)
 {
@@ -101,7 +49,7 @@ std::shared_ptr<VersionFile> parseForeignComponent(const QJsonObject& source,
     if (source.isEmpty() || uid.isEmpty() || version.trimmed().isEmpty())
         return {};
 
-    auto object = prismPatch(source, uid, version.trimmed(), loader);
+    auto object = VanillaCompatibleProvider::prismRuntimePatch(source, uid, version.trimmed(), loader);
     try {
         return OneSixVersionFormat::versionFileFromJson(QJsonDocument(object), filename, false);
     } catch (const Exception& error) {
@@ -114,6 +62,7 @@ std::shared_ptr<VersionFile> parseForeignComponent(const QJsonObject& source,
 
 QString VanillaInstance::standardLoaderUid() const
 {
+    if (m_descriptor.loaderType == "fishmodloader") return {};
     return VanillaCompatibleProvider::loaderUidForType(m_descriptor.loaderType);
 }
 
@@ -134,6 +83,11 @@ std::shared_ptr<VersionFile> VanillaInstance::loadForeignComponent(const QString
 
     if (uid == QStringLiteral("net.minecraft")) {
         auto source = sourceMinecraftVersion();
+        if (!VanillaCompatibleProvider::isStandardLoaderProfile(raw,m_descriptor.loaderType,sourceLoaderProfile())) source = m_descriptor.version;
+        source.insert("id",version);
+        if (QFileInfo(m_descriptor.layout.clientJar).isFile() && !source.contains("mainJar")
+            && !source.value("downloads").toObject().contains("client"))
+            source.insert("mainJar",QJsonObject{{"name","com.mojang:minecraft:"+version+":client"}});
         return parseForeignComponent(source, uid, version, false, m_descriptor.layout.versionJson);
     }
 
@@ -165,8 +119,7 @@ QJsonObject VanillaInstance::sourceMinecraftVersion() const
         }
     }
     auto lookupRoot = m_descriptor.layout.sourceRoot;
-    if (m_descriptor.layout.mode == VanillaGameLayout::IsolatedVersionRoot
-        && QFileInfo(lookupRoot).dir().dirName() == QStringLiteral("versions"))
+    if (QFileInfo(lookupRoot).dir().dirName() == QStringLiteral("versions"))
         lookupRoot = QDir::cleanPath(QDir(lookupRoot).filePath(QStringLiteral("../..")));
     auto result = loadVanillaVersionJson(lookupRoot, minecraftVersion);
     return result.isEmpty() ? m_descriptor.version : result;
@@ -196,10 +149,11 @@ void VanillaInstance::ensureRuntimeFiles() const
 {
     if (m_runtimeReady)
         return;
-    // Keep the Prism component graph beside the foreign instance. Copying the
-    // instance directory therefore carries Luna's editable settings and
-    // component metadata to another Luna installation as one unit.
-    const auto root = m_descriptor.root;
+    // The MMC graph is an implementation detail. Never materialize it in an
+    // external vanilla instance, including when scanning or saving settings.
+    if (!m_runtimeDirectory.isValid())
+        return;
+    const auto root = m_runtimeDirectory.path();
     const auto patchesRoot = QDir(root).filePath(QStringLiteral("patches"));
     const auto componentsPath = QDir(root).filePath(QStringLiteral("mmc-pack.json"));
     const auto patchPath = QDir(patchesRoot).filePath(QStringLiteral("net.minecraft.json"));
@@ -222,17 +176,26 @@ void VanillaInstance::ensureRuntimeFiles() const
         if (parseError.error == QJsonParseError::NoError && document.isObject())
             rawProfile = document.object();
     }
-    const auto loaderSource = m_descriptor.loaderProfileOverride.isEmpty() ? sourceLoaderProfile() : m_descriptor.loaderProfileOverride;
+    auto loaderSource = m_descriptor.loaderProfileOverride.isEmpty() ? sourceLoaderProfile() : m_descriptor.loaderProfileOverride;
     const bool standardMetadataOnly = hasStandardLoader
         && VanillaCompatibleProvider::isStandardLoaderProfile(rawProfile, m_descriptor.loaderType, loaderSource);
     QJsonObject baseVersion = hasStandardLoader ? sourceMinecraftVersion() : m_descriptor.version;
     // Modern PCL/HMCL profiles contain a fully merged Forge JSON. Store the
     // Minecraft metadata and loader metadata as separate Prism components so
     // PackProfile can build the same LaunchProfile as HMCL.
-    if (hasStandardLoader) {
+    if (hasStandardLoader && standardMetadataOnly) {
         baseVersion.remove(QStringLiteral("mainClass"));
         baseVersion.remove(QStringLiteral("arguments"));
         baseVersion.remove(QStringLiteral("minecraftArguments"));
+    }
+    if (hasStandardLoader && !standardMetadataOnly && m_descriptor.loaderProfileOverride.isEmpty()) {
+        // Preserve custom merged runtimes (HMCL bootstrap/RFB) as one unit.
+        baseVersion = m_descriptor.version;
+        loaderSource = QJsonObject{{"name", m_descriptor.loaderType}};
+    }
+    if (!standardMetadataOnly && QFileInfo(m_descriptor.layout.clientJar).isFile() && !baseVersion.contains("mainJar")
+        && !baseVersion.value("downloads").toObject().contains("client")) {
+        baseVersion.insert("mainJar",QJsonObject{{"name","com.mojang:minecraft:"+m_descriptor.minecraftVersion+":client"}});
     }
     if (standardMetadataOnly) {
         // A normal HMCL/PCL loader profile is already represented by Prism's
@@ -249,7 +212,7 @@ void VanillaInstance::ensureRuntimeFiles() const
         QDir(root).rmdir(QStringLiteral("patches"));
     } else {
         QDir().mkpath(patchesRoot);
-        writeJson(patchPath, prismPatch(baseVersion, QStringLiteral("net.minecraft"), m_descriptor.minecraftVersion.isEmpty() ? m_descriptor.versionId : m_descriptor.minecraftVersion, false));
+        writeJson(patchPath, VanillaCompatibleProvider::prismRuntimePatch(baseVersion, QStringLiteral("net.minecraft"), m_descriptor.minecraftVersion.isEmpty() ? m_descriptor.versionId : m_descriptor.minecraftVersion, false));
     }
 
     QJsonArray components;
@@ -264,7 +227,7 @@ void VanillaInstance::ensureRuntimeFiles() const
         if (standardMetadataOnly)
             QFile::remove(loaderPath);
         else
-            writeJson(loaderPath, prismPatch(loaderSource, loaderUid, loaderVersion, true));
+            writeJson(loaderPath, VanillaCompatibleProvider::prismRuntimePatch(loaderSource, loaderUid, loaderVersion, true));
         components.append(QJsonObject{ { "uid", loaderUid },
                                        { "version", loaderVersion },
                                        { "cachedName", standardComponentName(loaderUid) },
@@ -288,8 +251,19 @@ VanillaInstance::VanillaInstance(SettingsObject* globalSettings,
                                  const VanillaInstanceDescriptor& descriptor)
     : MinecraftInstance(globalSettings, std::move(settings), descriptor.root), m_descriptor(descriptor)
 {
+    m_settings->registerSetting("VanillaGameDirectoryMode", QStringLiteral("auto"));
     m_settings->set("name", descriptor.name);
     m_settings->set("InstanceType", QStringLiteral("Vanilla"));
+    const auto invalidateDirectories = [this](const Setting& setting) {
+        if (setting.id() != "VanillaGameDirectoryMode") return;
+        m_loader_mod_list.reset(); m_core_mod_list.reset(); m_nil_mod_list.reset();
+        m_resource_pack_list.reset(); m_shader_pack_list.reset(); m_texture_pack_list.reset();
+        m_yes_steve_model_list.reset(); m_custom_player_model_list.reset();
+        m_schematics_list.reset(); m_data_pack_list.reset(); m_world_list.reset();
+    };
+    connect(m_settings.get(), &SettingsObject::SettingChanged, this,
+            [invalidateDirectories](const Setting& setting, QVariant) { invalidateDirectories(setting); });
+    connect(m_settings.get(), &SettingsObject::settingReset, this, invalidateDirectories);
     setVersionBroken(false);
 }
 
@@ -304,10 +278,35 @@ std::optional<MinecraftClientRoute> VanillaInstance::clientArtifactRoute() const
     return MinecraftClientRoute::external(clientJar, minecraftVersion, loaderType);
 }
 
+bool VanillaInstance::validateClientArtifact(QString* error) const
+{
+    QFile artifact(QDir(instanceRoot()).filePath("luna-imported/client-artifact.json"));
+    if (artifact.exists()) {
+        if (!artifact.open(QIODevice::ReadOnly)) {
+            if (error) *error = tr("Could not read the preserved client verification record.");
+            return false;
+        }
+        const auto record = QJsonDocument::fromJson(artifact.readAll()).object();
+        return ImportedClientProfile::verifyClient(m_descriptor.layout.clientJar,record,error);
+    }
+    QFile sidecar(QDir(instanceRoot()).filePath("luna.settings.json"));
+    const auto record = sidecar.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(sidecar.readAll()).object().value("clientArtifact").toObject() : QJsonObject{};
+    if (record.isEmpty()) return true;
+    return ImportedClientProfile::verifyClient(m_descriptor.layout.clientJar,record,error);
+}
+
+VanillaInstance::~VanillaInstance()
+{
+    // Flush while virtual dispatch and private storage still belong to this
+    // adapter. The base profile destructor must not save into instanceRoot().
+    m_components->saveNow();
+    m_components.reset();
+}
+
 QString VanillaInstance::componentRoot() const
 {
     ensureRuntimeFiles();
-    return m_descriptor.root;
+    return m_runtimeDirectory.path();
 }
 
 bool VanillaInstance::canLaunch() const
@@ -447,3 +446,11 @@ QString VanillaInstance::foreignLoaderManifestFingerprint() const
     return QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex());
 }
 
+
+QString VanillaInstance::gameRoot() const
+{
+    const auto mode = m_settings->get("VanillaGameDirectoryMode").toString();
+    if (mode == "shared") return QDir::cleanPath(QDir(m_descriptor.layout.versionsRoot).absoluteFilePath(".."));
+    if (mode == "isolated") return QFileInfo(m_descriptor.layout.versionJson).absolutePath();
+    return detectVanillaInstanceLayout(m_descriptor.root, m_descriptor.versionId).gameRoot;
+}

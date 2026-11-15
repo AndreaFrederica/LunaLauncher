@@ -19,13 +19,14 @@
             <strong>{{ task.title || task.operation || task.name || '任务' }}</strong>
             <span class="ef-task__state" :class="stateOf(task)">{{ stateLabel(task) }}</span>
           </div>
-          <p v-if="task.message" class="ef-task__message">{{ task.message }}</p>
-          <div v-if="progressOf(task) !== null" class="ef-task__bar">
+          <p v-if="task.status || task.message" class="ef-task__message">{{ task.status || task.message }}</p>
+          <p v-if="task.details" class="ef-task__details">{{ task.details }}</p>
+          <div class="ef-task__bar" :class="{ 'ef-task__bar--indeterminate': !finished(task) && progressOf(task) === null }" role="progressbar" :aria-label="task.status || task.operation" :aria-valuenow="progressOf(task) ?? undefined" :aria-valuemin="0" :aria-valuemax="100">
             <i :style="{ width: `${progressOf(task)}%` }" />
           </div>
           <div class="ef-task__meta">
-            <EfField label="进度" :value="progressOf(task) === null ? '—' : `${progressOf(task)}%`" />
-            <EfField v-if="task.current !== undefined" label="项目" :value="`${task.current}${task.total !== undefined ? ` / ${task.total}` : ''}`" />
+            <EfField label="进度" :value="progressOf(task) === null ? '处理中' : `${progressOf(task)}%`" />
+            <EfField v-if="stageCounter(task)" label="已处理" :value="stageCounter(task)" />
             <button v-if="!finished(task)" type="button" class="ef-task__cancel" @click="cancel(task)">取消</button>
           </div>
         </article>
@@ -38,12 +39,17 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
 import EfIconButton from '../controls/EfIconButton.vue';
 import EfField from '../data/EfField.vue';
+import { flattenTaskItems, isTaskItemActive, taskItemProgressText } from '../../../pcl/composables/useTaskProgress';
 
 const props = defineProps<{ modelValue: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any> }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
 
 const tasks = ref<any[]>([]);
 let timer: ReturnType<typeof setInterval> | undefined;
+function stageCounter(task: any): string {
+  const stage = flattenTaskItems(task).find(isTaskItemActive);
+  return stage ? taskItemProgressText(stage) : '';
+}
 
 function finished(task: any) {
   return Boolean(task?.finished) || ['succeeded', 'failed', 'cancelled', 'canceled', 'aborted'].includes(String(task?.state || task?.status || '').toLowerCase());
@@ -90,6 +96,11 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 </script>
 
 <style scoped>
+.ef-task__details { overflow-wrap: anywhere; font-size: 12px; color: var(--ef-ink-2); }
+.ef-task__bar { overflow: hidden; }
+.ef-task__bar--indeterminate > i { width: 30% !important; animation: ef-task-scanning 1.3s ease-in-out infinite; }
+@keyframes ef-task-scanning { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .ef-task__bar--indeterminate > i { animation: none; } }
 .ef-overlay {
   position: fixed;
   inset: 0;

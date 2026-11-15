@@ -384,7 +384,7 @@ void AsyncTaskRuntime::addResourceKeys(Record& record) const
     // These compatibility operations own a ScopedUserInteraction across a
     // nested Qt event loop. Do not nest two such installs: a callback from the
     // outer task must not consume the inner task's interaction channel.
-    if (QStringList{ "instance.import", "modpack.install", "resource.install-version",
+    if (QStringList{ "instance.create", "instance.import", "modpack.install", "resource.install-version",
                      "resource.install-with-dependencies", "instance.special-loader.install" }.contains(record.operation))
         record.writes.insert("interactive-install");
 }
@@ -654,6 +654,21 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
     if (record.finished) return { { "ok", true }, { "data", snapshot(record) } };
     const bool wasRunning = record.state == "running";
     record.cancelRequested = true;
+    // File imports/conversions now finish cooperatively after their worker has
+    // removed temporary trees. Keep the store lock and task visible until that
+    // completion, instead of publishing "cancelled" while files are still in use.
+    if (wasRunning && record.task &&
+        QStringList{"instance.import", "instance.convert.import", "instance.convert.export"}.contains(record.operation)) {
+        if (record.deadline) record.deadline->stop();
+        record.status = tr("正在取消并清理临时文件");
+        record.task->abort();
+        saveJournal();
+        // abort() can synchronously finish the task and pump the queue, so do
+        // not keep using the earlier QHash reference after it returns.
+        const auto& updated = m_records[taskId];
+        emitChanged(updated);
+        return {{"ok", true}, {"data", snapshot(updated)}};
+    }
     record.finished = true;
     record.state = "cancelled";
     record.error = "cancelled";
@@ -941,22 +956,22 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         return;
     }
 
-    if (record.operation == "instance.import" || record.operation == "resource.install-with-dependencies" || record.operation == "modpack.install" || record.operation == "resource.install-version" || record.operation == "instance.special-loader.install" || record.operation == "instance.launch") {
+    if (record.operation == "instance.create" || record.operation == "instance.import" || record.operation == "resource.install-with-dependencies" || record.operation == "modpack.install" || record.operation == "resource.install-version" || record.operation == "instance.special-loader.install" || record.operation == "instance.launch") {
         QJsonObject parameters;
-        if (record.operation == "instance.launch") {
+        if (record.operation == "instance.create" || record.operation == "instance.launch") {
             // Route launches through the same compatibility API adapter as
             // installs. This preserves the UserInteraction channel used by
             // headless launch checks (for example, the low-memory prompt),
             // allowing Neo UI to answer instead of treating it as cancelled.
             parameters = record.parameters;
         } else if (record.operation == "modpack.install") {
-            for (const auto key : { "provider", "projectId", "versionId", "name", "group", "icon", "optionalMods", "privateCode", "offline" })
+            for (const auto key : { "provider", "projectId", "versionId", "name", "group", "icon", "optionalMods", "privateCode", "offline", "targetStoreId" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         } else if (record.operation == "resource.install-version") {
             for (const auto key : { "provider", "kind", "projectId", "versionId", "instance", "world", "replace", "minecraftVersion", "loaders", "pluginLoaders", "includeChangelog" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         } else if (record.operation == "instance.import") {
-            for (const auto key : { "source", "name", "group", "icon", "optionalMods" })
+            for (const auto key : { "source", "name", "group", "icon", "optionalMods", "targetStoreId", "targetFormat" })
                 if (record.parameters.contains(key)) parameters.insert(key, record.parameters.value(key));
         } else if (record.operation == "resource.install-with-dependencies") {
             parameters = record.parameters;
@@ -977,7 +992,7 @@ void AsyncTaskRuntime::startRecord(const Record& record)
         connect(task.get(), &Task::finished, this, [this, id, task, instanceId = parameters.value("instance").toString()]() {
             if (!m_records.contains(id)) return;
             const bool success = task->wasSuccessful();
-            if ((m_records[id].operation == "modpack.install" || m_records[id].operation == "instance.import") && success) {
+            if ((m_records[id].operation == "modpack.install" || m_records[id].operation == "instance.import" || m_records[id].operation == "instance.create") && success) {
                 APPLICATION->instances()->saveNow();
                 const auto& before = m_records[id].instancesBefore;
                 for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
@@ -991,109 +1006,6 @@ void AsyncTaskRuntime::startRecord(const Record& record)
             finish(id, success, success ? QString() : task->failReason(), instanceId);
         });
         task->start();
-        return;
-    }
-
-    if (record.operation == "instance.create") {
-        const auto parameters = record.parameters;
-        const auto type = parameters.value("type").toString().trimmed().toLower();
-        if (!type.isEmpty() && type != "vanilla") {
-            finish(id, false, "Async instance.create currently supports vanilla and loader instances only.");
-            return;
-        }
-        const auto versionName = parameters.value("version").toString().trimmed();
-        if (versionName.isEmpty()) { finish(id, false, "A Minecraft version is required."); return; }
-        if (!ApiSupport::identifier(versionName)) { finish(id, false, "Invalid Minecraft version."); return; }
-        const auto requestedLoader = parameters.value("loader").toString().trimmed().toLower();
-        const auto loaderVersionName = parameters.value("loaderVersion").toString().trimmed();
-        if (!requestedLoader.isEmpty() && !ApiSupport::identifier(loaderVersionName)) {
-            finish(id, false, "A valid loader version is required.");
-            return;
-        }
-        const auto name = parameters.value("name").toString().trimmed();
-        const auto group = parameters.value("group").toString();
-        const auto icon = parameters.value("icon").toString("default");
-        const auto loader = loaderUid(requestedLoader);
-
-        auto& stored = m_records[id];
-        stored.status = "正在加载 Minecraft 版本 " + versionName;
-        const auto index = APPLICATION->metadataIndex();
-        auto loadMinecraft = index->loadVersion("net.minecraft", versionName);
-        stored.holder = loadMinecraft;
-        stored.task = loadMinecraft.get();
-        connect(loadMinecraft.get(), &Task::status, this, [this, id](const QString& status) {
-            if (m_records.contains(id)) m_records[id].status = status;
-        });
-        connect(loadMinecraft.get(), &Task::finished, this, [this, id, index, versionName, loader, loaderVersionName, name, group, icon]() {
-            if (!m_records.contains(id) || m_records[id].finished) return;
-            const auto minecraft = index->get("net.minecraft", versionName);
-            if (!minecraft || !minecraft->isLoaded()) {
-                finish(id, false, "Minecraft version not found: " + versionName);
-                return;
-            }
-            auto createWrapped = [this, id, minecraft, loader, name, group, icon](BaseVersion::Ptr loaderVersion) {
-                if (!m_records.contains(id) || m_records[id].finished) return;
-                InstanceTask* raw = nullptr;
-                if (Meta::Cleanroom::isUid(loader) && loaderVersion) {
-                    // Cleanroom's legacy installer downloads a complete package
-                    // and normalizes its patches. A plain VanillaCreationTask
-                    // only adds the metadata component and leaves the package
-                    // files missing, so mirror the established installer path.
-                    raw = new InstanceImportTask(QUrl(Meta::Cleanroom::packageUrl(loaderVersion->descriptor())), nullptr);
-                } else {
-                    raw = loaderVersion ? new VanillaCreationTask(minecraft, loader, loaderVersion)
-                                         : new VanillaCreationTask(minecraft);
-                }
-                if (!name.isEmpty()) raw->setName(name);
-                raw->setGroup(group);
-                raw->setIcon(icon);
-                auto* task = APPLICATION->instances()->wrapInstanceTask(raw);
-                if (!task) { finish(id, false, "The instance creation task could not be created."); return; }
-                auto& record = m_records[id];
-                record.task = task;
-                record.status = "正在创建实例";
-                connect(task, &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-                connect(task, &Task::progress, this, [this, id](qint64 current, qint64 total) {
-                    if (!m_records.contains(id)) return;
-                    m_records[id].progress = current;
-                    m_records[id].total = total;
-                });
-                connect(task, &Task::finished, this, [this, id, task]() {
-                    if (!m_records.contains(id)) return;
-                    const bool success = task->wasSuccessful();
-                    QString created;
-                    if (success) {
-                        APPLICATION->instances()->saveNow();
-                        const auto& before = m_records[id].instancesBefore;
-                        for (int i = 0; i < APPLICATION->instances()->count(); ++i) {
-                            const auto candidate = APPLICATION->instances()->at(i);
-                            if (!before.contains(candidate->id())) { created = candidate->id(); break; }
-                        }
-                    }
-                    if (!created.isEmpty()) m_records[id].createdInstanceId = created;
-                    finish(id, success, success ? QString() : task->failReason());
-                });
-                task->start();
-            };
-            if (loader.isEmpty()) { createWrapped({}); return; }
-            auto& record = m_records[id];
-            record.status = "正在加载加载器 " + loader + " " + loaderVersionName;
-            auto loadLoader = index->loadVersion(loader, loaderVersionName);
-            record.holder = loadLoader;
-            record.task = loadLoader.get();
-            connect(loadLoader.get(), &Task::status, this, [this, id](const QString& status) { if (m_records.contains(id)) m_records[id].status = status; });
-            connect(loadLoader.get(), &Task::finished, this, [this, id, index, loader, loaderVersionName, createWrapped]() {
-                if (!m_records.contains(id) || m_records[id].finished) return;
-                const auto loaderVersion = index->get(loader, loaderVersionName);
-                if (!loaderVersion || !loaderVersion->isLoaded()) {
-                    finish(id, false, "Loader version not found: " + loader + ":" + loaderVersionName);
-                    return;
-                }
-                createWrapped(loaderVersion);
-            });
-            loadLoader->start();
-        });
-        loadMinecraft->start();
         return;
     }
 

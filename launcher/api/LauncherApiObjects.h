@@ -438,6 +438,8 @@ class InstanceObject {
         if (const auto vanilla = dynamic_cast<VanillaInstance*>(instance)) {
             result.insert("format", QStringLiteral("vanilla-compatible"));
             result.insert("vanillaCompatible", true);
+            result.insert("gameDirectoryMode", vanilla->settings()->get("VanillaGameDirectoryMode").toString());
+            result.insert("isolated", vanilla->gameRoot() != QDir::cleanPath(QDir(vanilla->descriptor().layout.versionsRoot).absoluteFilePath("..")));
             result.insert("dialect", vanilla->descriptor().dialect);
             result.insert("provenance", vanilla->descriptor().provenance.toJson());
             result.insert("loaderType", vanilla->descriptor().loaderType);

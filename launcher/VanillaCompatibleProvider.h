@@ -70,6 +70,9 @@ class VanillaCompatibleProvider {
     static QString detectedLoaderType(const QJsonObject& version);
     static QString detectedLoaderVersion(const QJsonObject& version);
     static QString detectedMinecraftVersion(const QJsonObject& version, const QString& profileId = {});
+    static QString minecraftVersionForLayout(const QJsonObject& version, const VanillaInstanceLayout& layout);
+    static QJsonObject resolvedProfile(const QJsonObject& profile);
+    static QJsonObject prismRuntimePatch(QJsonObject source, const QString& uid, const QString& version, bool loader);
     // Shared HMCL/PCL writer used by both external-instance editing and new
     // loader-profile installation. Keeping this in the provider prevents the
     // two entry points from producing subtly different version JSON.

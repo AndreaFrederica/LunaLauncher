@@ -9,28 +9,22 @@
 #include "FileSystem.h"
 #include "InstanceStore.h"
 
-namespace {
-QString importPhase(int phase)
-{
-    static const QStringList phases{ QObject::tr("准备导入"), QObject::tr("扫描版本 JSON"),
-                                     QObject::tr("复制游戏内容"), QObject::tr("生成 Prism 元数据"),
-                                     QObject::tr("写入目标目录") };
-    return phases.value(qBound(0, phase, phases.size() - 1));
-}
-
-QString exportPhase(int phase)
-{
-    static const QStringList phases{ QObject::tr("准备导出"), QObject::tr("检查 Prism 实例"),
-                                     QObject::tr("复制游戏内容"), QObject::tr("合并 Loader 元数据"),
-                                     QObject::tr("写入兼容目录") };
-    return phases.value(qBound(0, phase, phases.size() - 1));
-}
-}  // namespace
-
 VanillaConversionTask::VanillaConversionTask(Mode mode, QJsonObject parameters)
     : Task(), m_mode(mode), m_parameters(std::move(parameters))
 {
     setAbortable(true);
+}
+
+VanillaConversionTask::VanillaConversionTask(Work work) : Task(), m_work(std::move(work))
+{
+    setAbortable(true);
+}
+
+VanillaConversionTask::~VanillaConversionTask()
+{
+    m_progressState->cancelled.store(true);
+    // Paths owned by the caller must outlive the filesystem worker.
+    m_future.waitForFinished();
 }
 
 void VanillaConversionTask::executeTask()
@@ -38,31 +32,51 @@ void VanillaConversionTask::executeTask()
     // Resolve registered stores on the launcher thread. The worker only sees
     // immutable paths and performs filesystem work, avoiding access to the Qt
     // application models from a pool thread.
-    if (m_mode == Mode::Import) {
+    if (!m_work && m_mode == Mode::Import) {
         m_resolvedTarget = targetForImport(&m_targetError);
     }
-    m_phase = 0;
-    setProgress(0, 5);
-    setStatus(m_mode == Mode::Import ? importPhase(m_phase) : exportPhase(m_phase));
+    setProgress(0, 0);
+    setStatus(tr("正在准备文件处理"));
 
-    // Conversion itself is deliberately kept in a worker.  The phase timer
-    // gives the UI useful feedback even though the legacy converter reports a
-    // transactional result rather than per-file callbacks.
-    m_phaseTimer.setInterval(350);
+    // Coalesce worker updates instead of queueing a Qt event for every small
+    // file or buffer. Only the launcher thread touches Task state/signals.
+    const auto state = m_progressState;
+    VanillaConversionFeedback feedback;
+    feedback.cancelled = [state] { return state->cancelled.load(); };
+    feedback.progress = [state](const VanillaConversionProgress& progress) {
+        std::lock_guard lock(state->mutex);
+        state->progress = progress;
+        ++state->revision;
+    };
+    m_phaseTimer.setInterval(100);
     m_phaseTimer.setSingleShot(false);
-    connect(&m_phaseTimer, &QTimer::timeout, this, &VanillaConversionTask::advancePhase, Qt::UniqueConnection);
+    connect(&m_phaseTimer, &QTimer::timeout, this, &VanillaConversionTask::publishProgress, Qt::UniqueConnection);
     connect(&m_watcher, &QFutureWatcher<VanillaConversionReport>::finished, this, &VanillaConversionTask::conversionFinished, Qt::UniqueConnection);
-    m_future = QtConcurrent::run(QThreadPool::globalInstance(), [this] { return runConversion(); });
+    m_future = QtConcurrent::run(QThreadPool::globalInstance(), [this, feedback] {
+        return m_work ? m_work(feedback) : runConversion(feedback);
+    });
     m_watcher.setFuture(m_future);
     m_phaseTimer.start();
 }
 
-void VanillaConversionTask::advancePhase()
+void VanillaConversionTask::publishProgress()
 {
-    if (m_phase >= 4) return;
-    ++m_phase;
-    setProgress(m_phase, 5);
-    setStatus(m_mode == Mode::Import ? importPhase(m_phase) : exportPhase(m_phase));
+    VanillaConversionProgress progress;
+    {
+        std::lock_guard lock(m_progressState->mutex);
+        if (m_publishedRevision == m_progressState->revision) return;
+        m_publishedRevision = m_progressState->revision;
+        progress = m_progressState->progress;
+    }
+    setStatus(progress.stage);
+    setDetails(progress.details);
+    setProgress(progress.current, progress.total);
+    m_step.label = progress.stage;
+    m_step.status = progress.stage;
+    m_step.details = progress.details;
+    m_step.progressUnit = progress.unit;
+    m_step.update(progress.current, progress.total);
+    propagateStepProgress(m_step);
 }
 
 QString VanillaConversionTask::targetForImport(QString* error) const
@@ -94,7 +108,7 @@ QString VanillaConversionTask::targetForImport(QString* error) const
     return target;
 }
 
-VanillaConversionReport VanillaConversionTask::runConversion() const
+VanillaConversionReport VanillaConversionTask::runConversion(const VanillaConversionFeedback& feedback) const
 {
     VanillaConversionReport report;
     if (m_mode == Mode::Import) {
@@ -106,6 +120,7 @@ VanillaConversionReport VanillaConversionTask::runConversion() const
         options.name = m_parameters.value("name").toString();
         options.group = m_parameters.value("group").toString();
         options.copyGameContent = m_parameters.value("copyGameContent").toBool(true);
+        options.feedback = feedback;
         return VanillaConverter::importToPrism(m_parameters.value("source").toString(), m_resolvedTarget, options);
     }
 
@@ -117,23 +132,30 @@ VanillaConversionReport VanillaConversionTask::runConversion() const
     options.group = m_parameters.value("group").toString();
     options.extensionFields = m_parameters.value("extensionFields").toObject();
     options.copyGameContent = m_parameters.value("copyGameContent").toBool(true);
+    options.feedback = feedback;
     return VanillaConverter::exportToVanilla(m_parameters.value("source").toString(), m_parameters.value("target").toString(), options);
 }
 
 void VanillaConversionTask::conversionFinished()
 {
     m_phaseTimer.stop();
-    if (m_abortRequested.load()) {
+    publishProgress();
+    m_report = m_future.result();
+    if (m_progressState->cancelled.load() && !m_report.succeeded) {
         emitAborted();
         return;
     }
-    m_report = m_future.result();
     const auto& report = m_report;
-    setProgress(5, 5);
     if (!report.succeeded) {
+        m_step.state = TaskStepState::Failed;
+        propagateStepProgress(m_step);
         emitFailed(report.error.isEmpty() ? QObject::tr("转换失败。") : report.error);
         return;
     }
+    setProgress(1, 1);
+    m_step.update(m_step.total > 0 ? m_step.total : 1, m_step.total > 0 ? m_step.total : 1);
+    m_step.state = TaskStepState::Succeeded;
+    propagateStepProgress(m_step);
     if (!report.warnings.isEmpty())
         setDetails(report.warnings.join(QStringLiteral("；")));
     setStatus(QObject::tr("转换完成"));
@@ -142,11 +164,10 @@ void VanillaConversionTask::conversionFinished()
 
 bool VanillaConversionTask::abort()
 {
-    m_abortRequested.store(true);
-    if (m_future.isRunning()) {
-        m_future.cancel();
-        return true;
-    }
-    if (!isFinished()) emitAborted();
+    if (isFinished()) return false;
+    m_progressState->cancelled.store(true);
+    // Even a completed future may still have its completion signal queued.
+    // Finish only in conversionFinished(), after cleanup and commit outcome.
+    setStatus(tr("正在取消并清理临时文件"));
     return true;
 }

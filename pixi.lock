@@ -2,6 +2,7 @@ version: 6
 environments:
   default:
     channels:
+    - url: https://conda.anaconda.org/conda-forge/label/sysroot_dev/
     - url: https://conda.anaconda.org/conda-forge/
     - url: https://conda.anaconda.org/conda-forge/label/m2w64-experimental/
     indexes:

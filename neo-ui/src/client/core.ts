@@ -8,6 +8,7 @@ import type {
   LunaClient,
   StreamBatch,
 } from './types';
+import { formatError } from '../common/formatError';
 
 type QueueEntry = {
   operation: string;
@@ -76,7 +77,8 @@ export function createLunaClient(options: ClientOptions): LunaClient {
   }
 
   function request<T>(method: string, parameters: Record<string, unknown>): Promise<T> {
-    return transport.invoke<T>('launcher_request', { method, parameters });
+    return transport.invoke<T>('launcher_request', { method, parameters })
+      .catch(error => { throw new Error(formatError(error)); });
   }
 
   function cacheKey(operation: string, parameters: Record<string, unknown>): string {

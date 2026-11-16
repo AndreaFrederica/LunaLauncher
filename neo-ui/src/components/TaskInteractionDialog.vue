@@ -9,8 +9,8 @@
       }"
     >
       <q-card-section>
-        <h3>{{ restricted ? t('neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h3>
-        <p v-if="restricted">{{ t('neo.auto2.k7c306073f8') }}</p>
+        <h3>{{ restricted ? t(downloadFailure ? 'importErrors.downloadTitle' : 'neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h3>
+        <p v-if="restricted">{{ t(downloadFailure ? 'importErrors.downloadHint' : 'neo.auto2.k7c306073f8') }}</p>
         <p v-else>{{ current?.request.prompt }}</p>
         <p v-if="error || current?.request.error" class="task-interaction__error" role="alert">{{ error || current?.request.error }}</p>
       </q-card-section>
@@ -27,6 +27,11 @@
               <strong>{{ file.name }}</strong>
               <span :class="{ verified: file.matched }">{{ file.matched ? t('neo.auto2.k7035f86dd0') : t('neo.auto2.k49fff9ac14') }}</span>
               <small v-if="file.localPath">{{ file.localPath }}</small>
+              <small v-if="file.downloadUrl" class="task-interaction__url">{{ file.downloadUrl }}</small>
+              <details v-if="file.downloadError" class="task-interaction__diagnostic">
+                <summary>{{ t('importErrors.details') }} · {{ downloadErrorSummary(file.downloadError) }}</summary>
+                <pre tabindex="0">{{ file.downloadError }}</pre>
+              </details>
             </div>
             <div class="task-interaction__tools">
               <PclButton size="sm" :disabled="submitting || !safeUrl(file.url)" @click="openDownload(file.url)">{{ t('neo.auto2.k90ef710913') }}</PclButton>
@@ -54,6 +59,7 @@ const { t } = useI18n();
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { launcher } from '../boot/launcher-api';
+import { formatError } from '../common/formatError';
 import PclButton from '../themes/pcl/components/PclButton.vue';
 import PclInput from '../themes/pcl/components/PclInput.vue';
 import PclSelect from '../themes/pcl/components/PclSelect.vue';
@@ -61,7 +67,8 @@ import { pickPclDirectory, pickPclFile } from '../themes/pcl/composables/usePclF
 
 type Request = {
   interactionId: string; type?: string; prompt?: string; secret?: boolean; choices?: any[];
-  files?: { name: string; hash: string; url: string; matched: boolean; localPath: string }[];
+  files?: { name: string; hash: string; url: string; matched: boolean; localPath: string; downloadUrl?: string; downloadError?: string }[];
+  downloadFailure?: boolean;
   directories?: string[]; complete?: boolean; error?: string;
 };
 const props = defineProps<{
@@ -78,6 +85,7 @@ const current = computed(() => {
   return task ? { taskId: String(task.taskId), request: task.interaction as Request } : null;
 });
 const restricted = computed(() => current.value?.request.type === 'restricted-downloads');
+const downloadFailure = computed(() => current.value?.request.downloadFailure === true);
 const files = computed(() => current.value?.request.files || []);
 const matchedCount = computed(() => files.value.filter(file => file.matched).length);
 const choiceOptions = computed(() => (current.value?.request.choices || []).map((choice, value) => ({
@@ -115,7 +123,7 @@ async function submit(value: string | number | null) {
     else { await launcher.respond(parameters); emit('legacy-finished'); }
     submitted.add(pending.request.interactionId);
     tasks.value = tasks.value.filter(task => task.interaction?.interactionId !== pending.request.interactionId);
-  } catch (exception) { error.value = exception instanceof Error ? exception.message : String(exception); }
+  } catch (exception) { error.value = formatError(exception); }
   finally { submitting.value = false; }
 }
 async function chooseDirectory() {
@@ -129,10 +137,15 @@ async function chooseFile(name: string) {
 function safeUrl(value: string): boolean {
   try { return ['https:', 'http:'].includes(new URL(value).protocol); } catch { return false; }
 }
+function downloadErrorSummary(value: string): string {
+  const http = value.match(/(?:HTTP[^\r\n]{0,40}?|status code[^\r\n]{0,40}?)([45]\d{2})/i);
+  if (http) return `HTTP ${http[1]}`;
+  return value.split(/\r?\n/).find(line => line.trim())?.slice(0, 180) || t('importErrors.unknown');
+}
 async function openDownload(url: string) {
   if (!safeUrl(url)) return;
   try { await openUrl(url); }
-  catch (exception) { error.value = exception instanceof Error ? exception.message : String(exception); }
+  catch (exception) { error.value = formatError(exception); }
 }
 </script>
 
@@ -153,5 +166,9 @@ async function openDownload(url: string) {
 .task-interaction__file-info { display: flex; flex: 1; min-width: 200px; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .task-interaction__file-info span, .task-interaction__file-info small { font-size: 12px; }
 .task-interaction__file-info .verified { color: #4fbd8b; }
-.task-interaction__error { color: #ed7373; }
+.task-interaction__error { color: #ed7373; max-height: 24vh; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+.task-interaction__diagnostic { min-width: 0; font-size: 12px; }
+.task-interaction__diagnostic summary { cursor: pointer; overflow-wrap: anywhere; }
+.task-interaction__diagnostic pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-interaction__file-info { min-width: 0; flex-basis: 280px; }
 </style>

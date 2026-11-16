@@ -62,11 +62,11 @@ namespace Net {
 #if defined(LAUNCHER_APPLICATION)
 auto Download::makeCached(QUrl url, MetaEntryPtr entry, Options options) -> Download::Ptr
 {
-    const bool localCache = LocalYggdrasil::instance().isCacheUrl(url);
-    if (!localCache && PclDownloadTask::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+    const bool useNative = !options.testFlag(Option::ForceQt) && !LocalYggdrasil::instance().isCacheUrl(url);
+    if (useNative && PclDownloadTask::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
         return PclDownloadTask::makeCached(std::move(url), entry, options);
     }
-    if (!localCache && Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
+    if (useNative && Aria2Download::shouldUseFor(url) && entry->isStale() && !QFileInfo::exists(entry->getFullPath())) {
         return Aria2Download::makeCached(std::move(url), entry, options);
     }
     auto dl = makeShared<Download>();
@@ -97,10 +97,10 @@ auto Download::makeByteArray(QUrl url, Options options) -> std::pair<Download::P
 auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Ptr
 {
 #if defined(LAUNCHER_APPLICATION)
-    if (PclDownloadTask::shouldUseFor(url)) {
+    if (!options.testFlag(Option::ForceQt) && PclDownloadTask::shouldUseFor(url)) {
         return PclDownloadTask::makeFile(std::move(url), std::move(path), options);
     }
-    if (Aria2Download::shouldUseFor(url)) {
+    if (!options.testFlag(Option::ForceQt) && Aria2Download::shouldUseFor(url)) {
         return Aria2Download::makeFile(std::move(url), std::move(path), options);
     }
 #endif
@@ -114,6 +114,12 @@ auto Download::makeFile(QUrl url, QString path, Options options) -> Download::Pt
 
 QNetworkReply* Download::getReply(QNetworkRequest& request)
 {
+    auto source = property("progressSource").toMap();
+    if (!source.isEmpty()) {
+        source.insert("requestUrl", request.url().toString());
+        source.insert("requestStartedAt", QDateTime::currentMSecsSinceEpoch());
+        setProperty("progressSource", source);
+    }
 #if defined(LAUNCHER_APPLICATION)
     auto& cache = LocalYggdrasil::instance();
     if (cache.isCacheUrl(request.url())) {

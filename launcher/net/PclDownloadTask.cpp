@@ -80,6 +80,10 @@ void PclDownloadTask::startBatchProxy()
 {
     m_batchProxy = true;
     m_finished = false;
+    m_error = QNetworkReply::NoError;
+    m_errorString.clear();
+    m_statusCode = -1;
+    setProgress(0, -1);
     start();
 }
 

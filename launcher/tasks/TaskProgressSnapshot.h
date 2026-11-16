@@ -58,13 +58,15 @@ inline void collect(Task* task, QHash<QString, QJsonObject>& rows, QSet<Task*>& 
         }
     } else if (includeSelf) {
         const auto id = task->getUid().toString(QUuid::WithoutBraces);
-        const auto fileName = downloadLabel(task);
+        const auto source = QJsonObject::fromVariantMap(task->property("progressSource").toMap());
+        const auto fileName = source.value("fileName").toString(downloadLabel(task));
         rows.insert(id, QJsonObject{ { "id", id },
             { "label", fileName.isEmpty() ? (task->getStatus().isEmpty() ? task->objectName() : task->getStatus()) : fileName },
             { "state", stateName(task->getState()) }, { "running", task->isRunning() }, { "finished", task->isFinished() },
             { "current", task->getProgress() }, { "total", task->getState() == Task::State::Inactive ? -1 : task->getTotalProgress() },
             { "progressUnit", fileName.isEmpty() ? "progress" : "bytes" },
             { "status", task->getStatus() }, { "details", task->getDetails() },
+            { "source", source },
             { "transferRate", task->isRunning() ? task->getTransferRate() : 0 } });
     }
 }
@@ -85,6 +87,7 @@ inline QJsonObject snapshot(Task* task, int limit = 96)
     int succeeded = 0, failed = 0, cancelled = 0, running = 0, waiting = 0, unknownBytes = 0;
     qint64 currentBytes = 0, totalBytes = 0;
     bool hasBytes = false;
+    int downloadCount = 0, downloadSucceeded = 0, downloadFailed = 0, downloadRunning = 0, downloadWaiting = 0;
     for (const auto& row : rows) {
         const auto state = row.value("state").toString();
         succeeded += state == "succeeded";
@@ -94,6 +97,13 @@ inline QJsonObject snapshot(Task* task, int limit = 96)
         waiting += state == "waiting";
         if (row.value("progressUnit") != "bytes") continue;
         hasBytes = true;
+        if (row.value("source").toObject().value("kind") != "metadata") {
+            ++downloadCount;
+            downloadSucceeded += state == "succeeded";
+            downloadFailed += state == "failed";
+            downloadRunning += state == "running";
+            downloadWaiting += state == "waiting";
+        }
         const auto total = row.value("total").toInteger();
         const auto current = std::max<qint64>(0, row.value("current").toInteger());
         currentBytes += total > 0 ? std::min(current, total) : current;
@@ -106,6 +116,8 @@ inline QJsonObject snapshot(Task* task, int limit = 96)
         { "summary", QJsonObject{ { "total", rows.size() }, { "succeeded", succeeded }, { "failed", failed },
             { "cancelled", cancelled }, { "running", running }, { "waiting", waiting },
             { "hasBytes", hasBytes }, { "currentBytes", currentBytes }, { "totalBytes", totalBytes },
-            { "unknownByteTotals", unknownBytes } } } };
+            { "unknownByteTotals", unknownBytes },
+            { "downloads", QJsonObject{ { "total", downloadCount }, { "succeeded", downloadSucceeded },
+                { "failed", downloadFailed }, { "running", downloadRunning }, { "waiting", downloadWaiting } } } } } };
 }
 } // namespace TaskProgressSnapshot

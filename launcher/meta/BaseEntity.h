@@ -47,6 +47,7 @@ class BaseEntity {
     [[nodiscard]] Task::Ptr loadTask(Net::Mode loadType = Net::Mode::Online);
 
    protected:
+    QUrl sourceUrl() const;
     QString m_sha256;       // the expected sha256
     QString m_file_sha256;  // the file sha256
 
@@ -65,6 +66,7 @@ class BaseEntityLoadTask : public Task {
     virtual void executeTask() override;
     virtual bool canAbort() const override;
     virtual bool abort() override;
+    QList<Task*> getSubTasks() const override { return m_task ? QList<Task*>{ m_task.get() } : QList<Task*>{}; }
 
    private:
     BaseEntity* m_entity;

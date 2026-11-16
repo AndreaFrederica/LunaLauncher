@@ -14,6 +14,8 @@ struct BlockedMod {
     QString targetFolder;
     bool disabled = false;
     bool move = false;
+    QString downloadUrl;
+    QString downloadError;
 };
 
 inline QDebug operator<<(QDebug debug, const BlockedMod& mod)

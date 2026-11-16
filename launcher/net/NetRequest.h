@@ -60,7 +60,7 @@ class NetRequest : public Task {
 
    public:
     using Ptr = shared_qobject_ptr<class NetRequest>;
-    enum class Option { NoOptions = 0, AcceptLocalFiles = 1, MakeEternal = 2 };
+    enum class Option { NoOptions = 0, AcceptLocalFiles = 1, MakeEternal = 2, ForceQt = 4 };
     Q_DECLARE_FLAGS(Options, Option)
 
    public:

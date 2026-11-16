@@ -24,6 +24,7 @@ private slots:
 
 private:
     void complete(bool success, const QString& error = {});
+    void updateFiles(const QJsonArray& files);
 
     QList<PclDownloadTask::Ptr> m_tasks;
     QTimer m_progressTimer;

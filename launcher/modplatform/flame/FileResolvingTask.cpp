@@ -140,8 +140,8 @@ void Flame::FileResolvingTask::netJobFinished(QByteArray* response)
             auto obj = Json::requireObject(file);
             auto version = FlameMod::loadIndexedPackVersion(obj);
             auto fileid = version.fileId.toInt();
-            Q_ASSERT(fileid != 0);
-            Q_ASSERT(m_manifest.files.contains(fileid));
+            if (fileid <= 0 || !m_manifest.files.contains(fileid))
+                throw JSONValidationError(QString("Unexpected CurseForge file ID: %1").arg(version.fileId.toString()));
             m_manifest.files[fileid].version = version;
             auto url = QUrl(version.downloadUrl, QUrl::TolerantMode);
             if (!url.isValid() && "sha1" == version.hash_type && !version.hash.isEmpty()) {
@@ -155,6 +155,17 @@ void Flame::FileResolvingTask::netJobFinished(QByteArray* response)
 
             return;
         }
+    }
+    QStringList missingFiles;
+    for (const auto& file : m_manifest.files) {
+        if (!file.version.fileId.isValid())
+            missingFiles.append(QString("projectID=%1, fileID=%2").arg(file.projectId).arg(file.fileId));
+    }
+    if (!missingFiles.isEmpty()) {
+        emitFailed(tr("manifest.json references files that CurseForge did not return. They may be removed, private, or incorrectly "
+                      "specified in the pack. Ask the pack author to check these entries or provide an accessible pack:\n%1")
+                       .arg(missingFiles.join("\n")));
+        return;
     }
     if (hashes.isEmpty()) {
         getFlameProjects();

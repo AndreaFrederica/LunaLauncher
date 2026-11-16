@@ -7,6 +7,7 @@
 #include <tasks/SequentialTask.h>
 #include <tasks/Task.h>
 #include <tasks/TaskProgressSnapshot.h>
+#include <net/NetJob.h>
 
 #include <array>
 
@@ -92,6 +93,11 @@ class PendingDownloadTask : public Task {
     void fail() { emitFailed("test failure"); }
 };
 
+class FailedBatchTask : public Task {
+   public:
+    void executeTask() override { emitFailed("batch failed"); }
+};
+
 class TaskTreeProxy : public Task {
    public:
     Task* child = nullptr;
@@ -103,6 +109,18 @@ class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void test_FailedNonRequestInNetJobIsNotCastToRequest()
+    {
+        NetJob job("batch failure", shared_qobject_ptr<QNetworkAccessManager>());
+        job.setAskRetry(false);
+        job.addTask(makeShared<FailedBatchTask>());
+        job.start();
+        QTRY_VERIFY(job.isFinished());
+        QVERIFY(!job.wasSuccessful());
+        QVERIFY(job.getFailedActions().isEmpty());
+        QVERIFY(job.getFailedFiles().isEmpty());
+    }
+
     void test_SnapshotKeepsActiveFilesAndFullCounts()
     {
         ConcurrentTask downloads("assets", 1);
@@ -131,6 +149,11 @@ class TaskTest : public QObject {
         QCOMPARE(summary.value("currentBytes").toInt(), 20);
         QCOMPARE(summary.value("totalBytes").toInt(), 80);
         QCOMPARE(summary.value("unknownByteTotals").toInt(), 1);
+        const auto downloadSummary = summary.value("downloads").toObject();
+        QCOMPARE(downloadSummary.value("total").toInt(), 2);
+        QCOMPARE(downloadSummary.value("succeeded").toInt(), 0);
+        QCOMPARE(downloadSummary.value("running").toInt(), 1);
+        QCOMPARE(downloadSummary.value("waiting").toInt(), 1);
         active->fail();
         bool found = false;
         for (const auto& step : downloads.getStepProgress()) {

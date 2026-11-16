@@ -14,11 +14,77 @@
 
 #include "minecraft/MirrorDownload.h"
 #include "net/Download.h"
+#include "net/HttpMetaCache.h"
 
 class DownloadIntegrityTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void artifactCacheIsOptInAndTemporaryFilesAreNotIndexed()
+    {
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        QString temporary;
+        {
+            HttpMetaCache cache(data.filePath("index.json"));
+            cache.addBase("ATLauncherPacks", data.filePath("downloads"));
+            auto entry = cache.resolveEntry("ATLauncherPacks", "fixture.jar");
+            temporary = entry->getFullPath();
+            QVERIFY(!temporary.startsWith(data.path()));
+            QVERIFY(QDir().mkpath(QFileInfo(temporary).absolutePath()));
+            QFile file(temporary);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("installed payload");
+            file.close();
+            entry->setStale(false);
+            QVERIFY(cache.updateEntry(entry));
+            QCOMPARE(cache.entryCount(), 0);
+            cache.SaveNow();
+            QVERIFY(!cache.getEntry("ATLauncherPacks", "fixture.jar"));
+            QVERIFY(QFileInfo::exists(temporary)); // Still available for install copy/extract.
+        }
+        QVERIFY(!QFileInfo::exists(temporary));
+        QVERIFY(!QFileInfo::exists(data.filePath("downloads/fixture.jar")));
+    }
+
+    void enabledArtifactCacheReusesFilesAndKeepsRuntimeSeparate()
+    {
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        HttpMetaCache cache(data.filePath("index.json"));
+        cache.addBase("ATLauncherPacks", data.filePath("downloads"));
+        cache.addBase("libraries", data.filePath("libraries"));
+        cache.addBase("meta", data.filePath("meta"));
+        cache.setCacheDownloadArtifacts(true);
+        for (const auto& base : { QString("ATLauncherPacks"), QString("libraries"), QString("meta") }) {
+            const auto name = base == "meta" ? "index.json" : "fixture.jar";
+            auto entry = cache.resolveEntry(base, name);
+            const auto path = entry->getFullPath();
+            QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("payload"); file.close();
+            entry->setMD5Sum(QCryptographicHash::hash("payload", QCryptographicHash::Md5).toHex());
+            entry->setLocalChangedTimestamp(QFileInfo(path).lastModified().toMSecsSinceEpoch());
+            entry->makeEternal(true);
+            entry->setStale(false);
+            QVERIFY(cache.updateEntry(entry));
+        }
+        QCOMPARE(cache.entryCount("metadata"), 1);
+        QCOMPARE(cache.entryCount("artifacts"), 1);
+        QCOMPARE(cache.entryCount("runtime"), 1);
+        QVERIFY(!cache.resolveEntry("ATLauncherPacks", "fixture.jar")->isStale());
+        cache.setCacheDownloadArtifacts(false);
+        QVERIFY(cache.resolveEntry("ATLauncherPacks", "fixture.jar")->getFullPath() != data.filePath("downloads/fixture.jar"));
+        QVERIFY(cache.resolveEntry("libraries", "fixture.jar")->getFullPath() == data.filePath("libraries/fixture.jar"));
+        QVERIFY(cache.evictKind("metadata"));
+        QVERIFY(QFileInfo::exists(data.filePath("downloads/fixture.jar")));
+        QVERIFY(QFileInfo::exists(data.filePath("libraries/fixture.jar")));
+        QVERIFY(cache.evictKind("artifacts"));
+        QVERIFY(!QFileInfo::exists(data.filePath("downloads/fixture.jar")));
+        QVERIFY(QFileInfo::exists(data.filePath("libraries/fixture.jar")));
+    }
+
     void rewritesModrinthCdn()
     {
         MirrorDownload::ResolvedMirror mirror;

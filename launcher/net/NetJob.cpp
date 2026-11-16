@@ -281,9 +281,11 @@ auto NetJob::getFailedActions() -> QList<Net::NetRequest*>
             if (task && task->getState() == Task::State::Failed)
                 failed.push_back(task);
         }
+        return failed;
     }
     for (auto index : m_failed) {
-        failed.push_back(dynamic_cast<Net::NetRequest*>(index.get()));
+        if (auto* request = dynamic_cast<Net::NetRequest*>(index.get()))
+            failed.push_back(request);
     }
     return failed;
 }
@@ -291,15 +293,10 @@ auto NetJob::getFailedActions() -> QList<Net::NetRequest*>
 auto NetJob::getFailedFiles() -> QList<QString>
 {
     QList<QString> failed;
-    if (m_pclDelegated) {
-        for (auto* task : m_pclBatchTasks) {
-            if (task && task->getState() == Task::State::Failed)
-                failed.append(task->url().toString());
-        }
-    }
-    for (auto index : m_failed) {
-        failed.append(static_cast<Net::NetRequest*>(index.get())->url().toString());
-    }
+    // A delegated batch is a Task, not a NetRequest. Its individual requests
+    // are returned by getFailedActions(); never cast the batch itself.
+    for (auto* request : getFailedActions())
+        failed.append(request->url().toString());
     return failed;
 }
 

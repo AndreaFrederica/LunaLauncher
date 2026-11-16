@@ -167,7 +167,7 @@ bool FlameCreationTask::updateInstance()
     try {
         Flame::loadManifest(m_pack, index_path);
     } catch (const JSONValidationError& e) {
-        setError(tr("Could not understand pack manifest:\n") + e.cause());
+        setError(tr("The modpack manifest.json is invalid. Ask the pack author to correct this file:\n") + e.cause());
         return false;
     }
 
@@ -385,7 +385,7 @@ std::unique_ptr<BaseInstance> FlameCreationTask::createInstance()
         FS::move(index_path, new_index_place);
 
     } catch (const JSONValidationError& e) {
-        setError(tr("Could not understand pack manifest:\n") + e.cause());
+        setError(tr("The modpack manifest.json is invalid. Ask the pack author to correct this file:\n") + e.cause());
         return nullptr;
     }
 
@@ -807,6 +807,9 @@ QString FlameCreationTask::findLocalCopy(const Flame::File& file) const
 void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop)
 {
     auto failedUrls = m_filesJob->getFailedFiles();
+    QHash<QString, QString> downloadErrors;
+    for (auto* request : m_filesJob->getFailedActions())
+        downloadErrors.insert(request->url().toString(), request->errorString());
     m_filesJob.reset();
     const auto mirror = MirrorDownload::resolve(APPLICATION->settings());
 
@@ -834,6 +837,15 @@ void FlameCreationTask::onDownloadFailed(const QString& reason, QEventLoop& loop
         auto fileName = FS::RemoveInvalidPathChars(result.version.fileName);
         BlockedMod blocked_mod;
         blocked_mod.name = fileName;
+        blocked_mod.downloadUrl = result.version.downloadUrl;
+        for (const auto& mirrorUrl : mirrorUrls) {
+            if (downloadErrors.contains(mirrorUrl)) {
+                blocked_mod.downloadError = downloadErrors.value(mirrorUrl);
+                break;
+            }
+        }
+        if (blocked_mod.downloadError.isEmpty())
+            blocked_mod.downloadError = reason;
         blocked_mod.websiteUrl = QString("%1/download/%2").arg(result.pack.websiteUrl, QString::number(result.fileId));
         blocked_mod.hash = result.version.hash;
         blocked_mod.matched = false;

@@ -5,6 +5,10 @@ static void loadFileV1(Flame::File& f, QJsonObject& file)
 {
     f.projectId = Json::requireInteger(file, "projectID");
     f.fileId = Json::requireInteger(file, "fileID");
+    if (f.projectId <= 0)
+        throw JSONValidationError("projectID must be a positive integer");
+    if (f.fileId <= 0)
+        throw JSONValidationError("fileID must be a positive integer");
     f.required = file["required"].toBool(true);
 }
 
@@ -17,6 +21,8 @@ static void loadModloaderV1(Flame::Modloader& m, QJsonObject& modLoader)
 static void loadMinecraftV1(Flame::Minecraft& m, QJsonObject& minecraft)
 {
     m.version = Json::requireString(minecraft, "version");
+    if (m.version.trimmed().isEmpty())
+        throw JSONValidationError("minecraft.version must not be empty");
     // extra libraries... apparently only used for a custom Minecraft launcher in the 1.2.5 FTB retro pack
     // intended use is likely hardcoded in the 'Flame' client, the manifest says nothing
     m.libraries = minecraft["libraries"].toString();
@@ -40,14 +46,20 @@ static void loadManifestV1(Flame::Manifest& pack, QJsonObject& manifest)
     pack.version = manifest["version"].toString();
     pack.author = manifest["author"].toString("Anonymous");
 
-    auto arr = manifest["files"].toArray();
+    auto arr = Json::requireArray(manifest, "files");
+    int index = 0;
     for (auto item : arr) {
-        auto obj = Json::requireObject(item);
-
-        Flame::File file;
-        loadFileV1(file, obj);
-        Q_ASSERT(file.projectId != 0);
-        pack.files.insert(file.fileId, file);
+        try {
+            auto obj = Json::requireObject(item);
+            Flame::File file;
+            loadFileV1(file, obj);
+            if (pack.files.contains(file.fileId))
+                throw JSONValidationError(QString("Duplicate fileID %1").arg(file.fileId));
+            pack.files.insert(file.fileId, file);
+        } catch (const Json::JsonException& e) {
+            throw JSONValidationError(QString("files[%1]: %2").arg(index).arg(e.cause()));
+        }
+        ++index;
     }
 
     pack.overrides = manifest["overrides"].toString("overrides");

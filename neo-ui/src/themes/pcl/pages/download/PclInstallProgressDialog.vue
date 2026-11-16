@@ -17,7 +17,7 @@
         </div>
         <div class="pcl-install-progress__status">
           <PclLoading v-if="!finished" inline />
-          <span>{{ task?.status || task?.details || t('pcl.installDialog.preparing') }}</span>
+          <span>{{ statusText }}</span>
         </div>
         <div v-if="failed" class="pcl-install-progress__error">
           <strong>{{ t('tasks.states.failed') }}</strong>
@@ -26,20 +26,25 @@
         <div v-if="activeFiles.length" class="pcl-install-progress__files">
           <div v-for="file in activeFiles" :key="file.id || file.label" class="pcl-install-progress__current">
             <div class="pcl-install-progress__current-head">
-              <span>{{ taskItemLabel(file) }}</span>
+              <span :title="taskItemLabel(file)">{{ taskItemLabel(file) }}</span>
               <small>{{ rateText(file) }}</small>
             </div>
             <div class="pcl-progress-track pcl-install-progress__current-track" :class="{ 'is-indeterminate': childPercent(file) === null }">
               <span :style="childPercent(file) === null ? undefined : { width: `${childPercent(file)}%` }" />
             </div>
             <div class="pcl-install-progress__current-meta">
-              <span>{{ childProgressText(file) }}</span>
-              <span v-if="file.status">{{ file.status }}</span>
+              <span>{{ fileBytesText(file) }}</span>
+              <span>{{ fileStatus(file) }}</span>
+            </div>
+            <div v-if="file.source?.kind === 'metadata'" class="pcl-install-progress__request">
+              <span :title="file.source.url">{{ file.source.url }}</span>
+              <span v-if="file.source.requestUrl && file.source.requestUrl !== file.source.url" :title="file.source.requestUrl">{{ t('pcl.installDialog.cacheRequest') }} {{ file.source.requestUrl }}</span>
+              <span v-if="taskState(file) === 'running' && !Number(file.current)">{{ t('pcl.installDialog.waitingResponse', { seconds: requestWaitSeconds(file) }) }}</span>
             </div>
           </div>
         </div>
         <div v-else-if="!finished" class="pcl-install-progress__current">
-          <div class="pcl-install-progress__current-head"><span>{{ task?.status || task?.details || t('pcl.installDialog.nextStep') }}</span></div>
+          <div class="pcl-install-progress__current-head"><span>{{ statusText }}</span></div>
           <div class="pcl-progress-track pcl-install-progress__current-track is-indeterminate"><span /></div>
         </div>
         <div class="pcl-install-progress__stages">
@@ -48,16 +53,26 @@
             <span>{{ stage.label }}</span>
           </div>
         </div>
-        <div class="pcl-install-progress__summary">
-          <span>{{ stats.summary }}</span>
+        <div v-if="downloads.total || stats.byteSummary" class="pcl-install-progress__summary">
+          <span>{{ downloads.total ? fileSummary : metadataRows.length ? t('pcl.installDialog.metadataSummary', { completed: metadataRows.filter(row => taskState(row) === 'succeeded').length, total: metadataRows.length }) : stats.summary }}</span>
           <span v-if="stats.byteSummary"> · {{ stats.byteSummary }}</span>
           <span v-if="pendingCount"> · {{ t('pcl.installDialog.waitingCount', { count: pendingCount }) }}</span>
           <span v-if="activeCount > 1"> · {{ t('pcl.installDialog.activeCount', { count: activeCount }) }}</span>
         </div>
         <div class="pcl-install-progress__meta">
           <span v-if="rateText(task)">{{ rateText(task) }}</span>
-          <span v-if="task?.details">{{ task.details }}</span>
+          <span v-if="detailText">{{ detailText }}</span>
         </div>
+        <details v-if="fileRows.length" class="pcl-install-progress__file-details">
+          <summary>{{ t('pcl.installDialog.fileList', { count: downloads.total || fileRows.length }) }}</summary>
+          <div class="pcl-install-progress__children">
+            <div v-for="file in fileRows" :key="file.id" class="pcl-install-progress__file-row">
+              <span :title="taskItemLabel(file)">{{ taskItemLabel(file) }}</span>
+              <small>{{ fileStatus(file) }}<template v-if="fileBytesText(file)"> · {{ fileBytesText(file) }}</template><template v-if="rateText(file)"> · {{ rateText(file) }}</template></small>
+            </div>
+          </div>
+          <p v-if="task?.childrenTruncated" class="pcl-install-progress__list-note">{{ t('pcl.installDialog.fileListLimit') }}</p>
+        </details>
       </q-card-section>
 
       <q-card-actions align="right" class="pcl-install-progress__actions">
@@ -86,7 +101,11 @@ import {
   taskItemLabel,
   taskProgressStats,
   taskState,
+  taskDownloadStats,
+  taskItemIsBytes,
+  formatTaskSize,
 } from '../../composables/useTaskProgress';
+import { formatError } from '../../../../common/formatError';
 
 const props = withDefaults(defineProps<{
   modelValue: boolean;
@@ -115,13 +134,47 @@ const failed = computed(() => {
 const failureMessage = computed(() => {
   if (!failed.value) return '';
   const failedItem = [props.task, ...children.value].find(item => item?.successful === false || item?.failReason || item?.error || ['failed', 'error'].includes(taskState(item))) || props.task;
-  return String(failedItem?.error || failedItem?.failReason || failedItem?.message || failedItem?.details || t('app.operationFailed'));
+  return formatError(failedItem?.error || failedItem?.failReason || failedItem?.message || failedItem?.details || t('app.operationFailed'));
 });
 const stats = computed(() => taskProgressStats(props.task, children.value));
+const downloads = computed(() => taskDownloadStats(props.task, children.value));
+const fileRows = computed(() => children.value.filter(taskItemIsBytes));
+const metadataRows = computed(() => fileRows.value.filter(row => row.source?.kind === 'metadata'));
+const activeMetadata = computed(() => metadataRows.value.filter(row => taskState(row) === 'running'));
+const fileSummary = computed(() => t('pcl.installDialog.fileSummary', { completed: downloads.value.completed, total: downloads.value.total }));
+const statusText = computed(() => {
+  if (finished.value) return t(taskState(props.task) === 'succeeded' ? 'pcl.installDialog.done' : taskState(props.task) === 'cancelled' ? 'tasks.states.cancelled' : 'tasks.states.failed');
+  if (props.task?.interaction?.interactionId || /waiting for input/i.test(String(props.task?.status || '')))
+    return t('pcl.installDialog.awaitingConfirmation');
+  if (activeMetadata.value.length) return t('pcl.installDialog.loadingGameMetadata');
+  if (downloads.value.total && !finished.value && (downloads.value.active || downloads.value.waiting))
+    return t(['instance.import', 'modpack.install'].includes(props.task?.operation) ? 'pcl.installDialog.downloadingMods' : 'pcl.installDialog.downloadingFiles',
+      { completed: downloads.value.completed, total: downloads.value.total });
+  const status = String(props.task?.status || '');
+  if (/resolving mod ids/i.test(status)) return t('pcl.installDialog.resolvingMods');
+  if (children.value.some(child => taskState(child) === 'running' && /loading components|downloading metadata/i.test(`${child.status} ${child.details}`)))
+    return t('pcl.installDialog.loadingGameMetadata');
+  if (/executing task|please wait|task finished/i.test(status) && /downloading game files/i.test(String(props.task?.details || '')))
+    return t('pcl.installDialog.installingGameFiles');
+  return status || t('pcl.installDialog.preparing');
+});
+const detailText = computed(() => {
+  if (activeMetadata.value.length) return '';
+  const text = String(props.task?.details || '');
+  return /^\d+ out of \d+ complete$/i.test(text) ? '' : text;
+});
 const targetPercent = computed<number | null>(() => {
+  if (activeMetadata.value.length) {
+    if (activeMetadata.value.some(row => !(Number(row.total) > 0))) return null;
+    const total = activeMetadata.value.reduce((sum, row) => sum + Number(row.total), 0);
+    return Math.round(activeMetadata.value.reduce((sum, row) => sum + Number(row.current || 0), 0) / total * 100);
+  }
+  if (downloads.value.total && !finished.value) return downloads.value.percent;
   return stats.value.percent === null ? null : Math.round(stats.value.percent);
 });
 const percent = ref<number | null>(null);
+const now = ref(Date.now());
+const waitTimer = setInterval(() => { now.value = Date.now(); }, 1000);
 let percentFrame = 0;
 watch(targetPercent, value => {
   cancelAnimationFrame(percentFrame);
@@ -137,10 +190,10 @@ watch(targetPercent, value => {
   };
   percentFrame = requestAnimationFrame(tick);
 }, { immediate: true });
-onUnmounted(() => cancelAnimationFrame(percentFrame));
-const activeFiles = computed(() => taskActiveItems(children.value, 8));
-const activeCount = computed(() => stats.value.active);
-const pendingCount = computed(() => stats.value.waiting);
+onUnmounted(() => { cancelAnimationFrame(percentFrame); clearInterval(waitTimer); });
+const activeFiles = computed(() => taskActiveItems(fileRows.value, 3));
+const activeCount = computed(() => activeMetadata.value.length || (downloads.value.total ? downloads.value.active : stats.value.active));
+const pendingCount = computed(() => activeMetadata.value.length ? metadataRows.value.filter(row => taskState(row) === 'waiting').length : downloads.value.total ? downloads.value.waiting : stats.value.waiting);
 const stages = computed(() => {
   const labels = props.task?.operation === 'modpack.install'
     ? [t('pcl.installDialog.prepare'), t('pcl.installDialog.downloadPack'), t('pcl.installDialog.unpack'), t('pcl.installDialog.downloadMods'), t('pcl.installDialog.done')]
@@ -149,13 +202,29 @@ const stages = computed(() => {
   const finishedTask = props.task?.state === 'succeeded';
   let active = 0;
   if (finishedTask) active = labels.length - 1;
-  else if (children.value.some(child => /\.(jar|zip|litemod)$/i.test(String(child.label || '')))) active = Math.min(labels.length - 2, 3);
+  else if (downloads.value.active || downloads.value.waiting) active = props.task?.operation === 'modpack.install' ? 3 : 1;
   else if (/unpack|install|解压|整理|扫描|复制|校验|配置|写入|清理/.test(status)) active = Math.min(labels.length - 2, 2);
   else if (children.value.length || status.includes('download')) active = 1;
   return labels.map((label, index) => ({ label, state: index < active ? 'done' : index === active ? 'active' : 'waiting' }));
 });
 const childPercent = taskItemPercent;
-const childProgressText = taskItemProgressText;
+function fileBytesText(file: any) {
+  if (!taskItemIsBytes(file)) return taskItemProgressText(file);
+  if (taskState(file) === 'waiting') return '';
+  const current = formatTaskSize(file.current);
+  return Number(file.total) > 0 ? `${current} / ${formatTaskSize(file.total)}` : `${current} / ${t('pcl.tasks.unknownSize')}`;
+}
+function fileStatus(file: any) {
+  const state = taskState(file);
+  if (state !== 'running') return t(state === 'succeeded' ? 'tasks.states.succeeded' : state === 'failed' ? 'tasks.states.failed' : 'pcl.installDialog.queued');
+  if (file.source?.kind === 'metadata' && !Number(file.current)) return t('pcl.installDialog.awaitingResponse');
+  if (file.status === 'Connecting') return t('pcl.installDialog.connecting');
+  if (file.status === 'Verifying file') return t('pcl.installDialog.verifying');
+  return t('pcl.installDialog.downloading');
+}
+function requestWaitSeconds(file: any) {
+  return Math.max(0, Math.floor((now.value - Number(file.source?.requestStartedAt || now.value)) / 1000));
+}
 
 function rateText(value: any) {
   if (!value) return '';
@@ -355,6 +424,13 @@ function rateText(value: any) {
   background: var(--pcl-c8);
 }
 
+.pcl-install-progress__body { max-height: 65vh; overflow-y: auto; }
+.pcl-install-progress__file-details { margin-top: 12px; font-size: calc(11px * var(--pcl-font-scale, 1)); }
+.pcl-install-progress__file-details summary { cursor: pointer; color: var(--pcl-c3); }
+.pcl-install-progress__file-row { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pcl-install-progress__file-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcl-install-progress__file-row small, .pcl-install-progress__list-note { color: var(--pcl-muted); }
+
 .pcl-install-progress__children-head,
 .pcl-install-progress__child-head,
 .pcl-install-progress__child-meta {
@@ -436,7 +512,11 @@ function rateText(value: any) {
 
 .pcl-install-progress__error span {
   color: var(--pcl-text);
+  max-height: 24vh;
+  overflow: auto;
 }
+.pcl-install-progress__request { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 11px; opacity: .8; }
+.pcl-install-progress__request span { overflow-wrap: anywhere; }
 
 .pcl-install-progress__steps {
   display: flex;

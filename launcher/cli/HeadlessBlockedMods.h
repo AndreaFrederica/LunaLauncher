@@ -115,19 +115,23 @@ inline bool resolveHeadlessBlockedMods(QList<BlockedMod>& mods, const QString& a
         }
         QJsonArray files, folders;
         bool complete = true;
+        bool downloadFailure = false;
         QStringList missing;
         for (const auto& directory : directories) folders.append(directory);
         for (const auto& mod : mods) {
             complete &= mod.matched;
+            downloadFailure |= !mod.downloadError.isEmpty();
             if (!mod.matched) missing.append(mod.name + "\n" + mod.websiteUrl);
             files.append(QJsonObject{ { "name", mod.name }, { "url", mod.websiteUrl }, { "hash", mod.hash },
-                                      { "matched", mod.matched }, { "localPath", mod.localPath } });
+                                      { "matched", mod.matched }, { "localPath", mod.localPath },
+                                      { "downloadUrl", mod.downloadUrl }, { "downloadError", mod.downloadError } });
         }
         const auto answer = interaction->inputWithContext(
             complete ? "All restricted files were verified. Type continue to install, or cancel."
                      : "Download the missing files, then enter a file/directory path or scan to check again:\n" + missing.join("\n"),
             { { "type", "restricted-downloads" }, { "files", files }, { "directories", folders },
-              { "algorithm", algorithm }, { "complete", complete }, { "error", validationError } });
+              { "algorithm", algorithm }, { "complete", complete }, { "error", validationError },
+              { "downloadFailure", downloadFailure } });
         if (!answer || answer->isEmpty()) { error = "Restricted file selection cancelled."; return false; }
         if (cancelled && cancelled()) { error = "Restricted download cancelled."; return false; }
         validationError.clear();

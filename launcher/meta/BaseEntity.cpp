@@ -76,13 +76,18 @@ class ParsingValidator : public Net::Validator {
 
 QUrl BaseEntity::url() const
 {
+    return LocalYggdrasil::instance().metadataUrl(sourceUrl());
+}
+
+QUrl BaseEntity::sourceUrl() const
+{
     auto s = APPLICATION->settings();
     QString metaOverride = s->get("MetaURLOverride").toString();
 
     if (metaOverride.isEmpty()) {
         metaOverride = BuildConfig.META_URL;
     }
-    return LocalYggdrasil::instance().metadataUrl(QUrl(metaOverride).resolved(localFilename()));
+    return QUrl(metaOverride).resolved(localFilename());
 }
 
 Task::Ptr BaseEntity::loadTask(Net::Mode mode)
@@ -165,7 +170,17 @@ void BaseEntityLoadTask::executeTask()
     auto url = m_entity->url();
     auto entry = APPLICATION->metacache()->resolveEntry("meta", m_entity->localFilename());
     entry->setStale(true);
-    auto dl = Net::ApiDownload::makeCached(url, entry);
+    // Metadata needs request-level URLs, HTTP cache headers and validators even
+    // when the file downloader is configured to batch through a native backend.
+    auto dl = Net::ApiDownload::makeCached(url, entry, Net::Download::Option::ForceQt);
+    dl->setProgress(0, -1);
+    dl->setProperty("progressSource", QVariantMap{ { "kind", "metadata" }, { "fileName", m_entity->localFilename() },
+                                                  { "url", m_entity->sourceUrl().toString() } });
+    // The cache service has a shorter upstream timeout than the launcher.
+    // A cache miss or gateway failure must still allow the original download,
+    // using the same checksum and parsing validators below.
+    if (LocalYggdrasil::instance().isCacheUrl(url))
+        dl->setFallbackUrl(m_entity->sourceUrl());
     /*
      * The validator parses the file and loads it into the object.
      * If that fails, the file is not written to storage.

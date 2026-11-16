@@ -20,6 +20,14 @@
 
 #include "minecraft/Logging.h"
 
+QList<Task*> ComponentUpdateTask::getSubTasks() const
+{
+    QList<Task*> tasks;
+    for (const auto& item : d->remoteLoadStatusList)
+        if (item.task) tasks.append(item.task.get());
+    return tasks;
+}
+
 /*
  * This is responsible for loading the components of a component list AND resolving dependency issues between them
  */
@@ -798,6 +806,7 @@ void ComponentUpdateTask::remoteLoadFailed(size_t taskIndex, const QString& msg)
     qCDebug(instanceProfileResolveC) << "Remote task" << taskIndex << "failed:" << msg;
     d->remoteLoadSuccessful = false;
     taskSlot.succeeded = false;
+    taskSlot.error = msg;
     taskSlot.finished = true;
     d->remoteTasksInProgress--;
     checkIfAllFinished();
@@ -821,8 +830,8 @@ void ComponentUpdateTask::checkIfAllFinished()
         for (auto& item : d->remoteLoadStatusList) {
             if (!item.succeeded) {
                 const ComponentPtr component = d->m_profile->getComponent(item.PackProfileIndex);
-                allErrorsList.append(tr("Could not download metadata for %1 %2. Please change the version or try again later.")
-                                         .arg(component->getName(), component->m_version));
+                allErrorsList.append(tr("Could not download metadata for %1 %2:\n%3")
+                                         .arg(component->getName(), component->m_version, item.error));
             }
         }
         d->remoteLoadStatusList.clear();

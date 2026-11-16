@@ -53,6 +53,7 @@ import { useRuntimeLifecycle } from '../../../../common/runtime/lifecycle-debug'
 import { useThemeResource } from '../../../../common/runtime/theme-runtime';
 import { PclDownloadContextKey } from './PclDownloadContext';
 import { isTaskItemFinished } from '../../composables/useTaskProgress';
+import { formatError } from '../../../../common/formatError';
 
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 type ComponentItem = { id: string; label: string; icon: string; uid?: string; alias?: string; special?: string; channel?: string };
@@ -313,7 +314,7 @@ async function importInstance() {
       name: importName.value.trim() || source.split(/[\\/]/).pop() || t('pcl.auto2.kf1f38acef7'),
     });
   } catch (exception) {
-    importError.value = exception instanceof Error ? exception.message : String(exception);
+    importError.value = formatError(exception);
   } finally {
     importing.value = false;
     emit('install-done', info);

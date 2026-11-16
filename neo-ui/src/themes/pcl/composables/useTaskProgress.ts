@@ -21,6 +21,18 @@ export const isTaskItemWaiting = (item: any): boolean => !isTaskItemFinished(ite
 export const taskItemLabel = (item: any): string => String(item?.source?.fileName || item?.label || item?.name || item?.status || item?.details || item?.type || i18n.global.t('tasks.title'));
 export const taskItemIsBytes = (item: any): boolean => item?.progressUnit === 'bytes' || item?.source?.kind === 'download';
 
+/** File counts are separate from metadata requests and internal wrapper tasks. */
+export function taskDownloadStats(task: any, inputRows?: any[]) {
+  const rows = (inputRows || flattenTaskItems(task)).filter(row => taskItemIsBytes(row) && row?.source?.kind !== 'metadata');
+  const summary = task?.summary?.downloads;
+  const total = summary ? number(summary.total) : rows.length;
+  const completed = summary ? number(summary.succeeded) : rows.filter(row => taskState(row) === 'succeeded').length;
+  const failed = summary ? number(summary.failed) : rows.filter(row => taskState(row) === 'failed').length;
+  const active = summary ? number(summary.running) : rows.filter(isTaskItemActive).length;
+  const waiting = summary ? number(summary.waiting) : rows.filter(isTaskItemWaiting).length;
+  return { total, completed, failed, active, waiting, percent: total > 0 ? Math.round(completed / total * 100) : null };
+}
+
 /** Prefer children to duplicated step summaries, and never deduplicate by a display name. */
 export function flattenTaskItems(input: any): any[] {
   const rows = new Map<string, any>();
@@ -47,7 +59,8 @@ export function taskRowsEqual(previous: any, next: any): boolean {
   const b = Array.isArray(next) ? next : [];
   if (a.length !== b.length) return false;
   const fields = ['id', 'label', 'state', 'current', 'total', 'progressUnit', 'status', 'details', 'transferRate', 'finished'];
-  return a.every((row, index) => fields.every(field => row?.[field] === b[index]?.[field]));
+  return a.every((row, index) => fields.every(field => row?.[field] === b[index]?.[field]) &&
+    ['kind', 'fileName', 'url', 'requestUrl', 'requestStartedAt'].every(field => row?.source?.[field] === b[index]?.source?.[field]));
 }
 export function taskActiveItems(input: any, limit = 8): any[] {
   const rows = flattenTaskItems(input);

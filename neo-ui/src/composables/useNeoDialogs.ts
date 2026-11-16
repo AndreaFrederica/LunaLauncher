@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { formatError } from '../common/formatError';
 
 export function useNeoDialogs() {
   const dialog = ref(false);
@@ -25,13 +26,7 @@ export function useNeoDialogs() {
     resolveDialog = undefined;
   }
 
-  function message(error:any):string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'string') return error;
-    if (error?.message) return message(error.message);
-    if (error?.error) return message(error.error);
-    try { return JSON.stringify(error); } catch { return String(error); }
-  }
+  const message = formatError;
 
   return { dialog, prompt, answer, choices, secret, confirmation, ask, finishDialog, message };
 }

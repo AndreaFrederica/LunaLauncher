@@ -48,6 +48,9 @@
 #include "icons/IconUtils.h"
 #include "meta/CleanroomMeta.h"
 #include "minecraft/MinecraftInstance.h"
+#include "minecraft/OneSixVersionFormat.h"
+#include "meta/Index.h"
+#include "modplatform/LegacyJarModPack.h"
 
 #include "modplatform/flame/FlameInstanceCreationTask.h"
 #include "modplatform/modrinth/ModrinthInstanceCreationTask.h"
@@ -63,12 +66,16 @@
 #include "ui/dialogs/CustomMessageBox.h"
 
 #include "net/ApiDownload.h"
+#include "net/Download.h"
 
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QRegularExpression>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QTemporaryFile>
 #include <QtConcurrentRun>
+#include <algorithm>
 #include <limits>
 #include <memory>
 
@@ -162,6 +169,7 @@ void InstanceImportTask::processZipPack()
     QString encryptedValidationPath;
     qint64 encryptedValidationSize = std::numeric_limits<qint64>::max();
     m_modpackType = ModpackType::Unknown;
+    m_legacyJarMod = false;
     // NOTE: Prioritize modpack platforms that aren't searched for recursively.
     // Especially Flame has a very common filename for its manifest, which may appear inside overrides for example
     // https://docs.modrinth.com/docs/modpacks/format_definition/#storage
@@ -303,7 +311,16 @@ void InstanceImportTask::processZipPack()
             processZipPack();
             return;
         }
-        const auto candidates = PCL::findPlainPackCandidates(archiveFiles);
+        struct DirectoryCandidate { QString root; QString version; bool installer = false; };
+        QList<DirectoryCandidate> candidates;
+        const auto installers = LegacyJarModPack::findCandidates(archiveFiles);
+        for (const auto& candidate : PCL::findPlainPackCandidates(archiveFiles)) {
+            const bool installer = std::any_of(installers.cbegin(), installers.cend(), [&](const auto& item) {
+                return item.root + item.version == candidate.root + "versions/" + candidate.version;
+            });
+            if (!installer) candidates.append({candidate.root, candidate.version, false});
+        }
+        for (const auto& candidate : installers) candidates.append({candidate.root, candidate.version, true});
         if (!candidates.isEmpty()) {
             int selectedIndex = 0;
             if (candidates.size() > 1) {
@@ -334,6 +351,7 @@ void InstanceImportTask::processZipPack()
             const auto candidate = candidates.at(selectedIndex);
             m_modpackType = ModpackType::PCLPlain;
             m_pclPlainVersion = candidate.version;
+            m_legacyJarMod = candidate.installer;
             root = candidate.root;
             m_pclWrapperDetected = true;
         } else {
@@ -358,12 +376,19 @@ void InstanceImportTask::processZipPack()
         propagateStepProgress(*progressStep);
     });
 
-    connect(zipTask.get(), &Task::succeeded, this, &InstanceImportTask::extractFinished, Qt::QueuedConnection);
-    connect(zipTask.get(), &Task::aborted, this, &InstanceImportTask::emitAborted);
+    connect(zipTask.get(), &Task::succeeded, this, [this] {
+        if (m_legacyJarMod) prepareLegacyJarMod();
+        else extractFinished();
+    }, Qt::QueuedConnection);
+    connect(zipTask.get(), &Task::aborted, this, [this] {
+        if (m_legacyJarMod) finishLegacyJarModEarly();
+        else emitAborted();
+    });
     connect(zipTask.get(), &Task::failed, this, [this, progressStep](QString reason) {
         progressStep->state = TaskStepState::Failed;
         propagateStepProgress(*progressStep);
-        emitFailed(reason);
+        if (m_legacyJarMod) finishLegacyJarModEarly(reason);
+        else emitFailed(reason);
     });
     connect(zipTask.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
 
@@ -381,6 +406,86 @@ void InstanceImportTask::processZipPack()
     zipTask->start();
 }
 
+void InstanceImportTask::prepareLegacyJarMod()
+{
+    const auto root = QDir(m_stagingPath).filePath("pcl-source");
+    QFile file(QDir(root).filePath(m_pclPlainVersion + '/' + m_pclPlainVersion + ".json"));
+    if (!file.open(QIODevice::ReadOnly)) { finishLegacyJarModEarly(tr("无法读取旧式 JAR 补丁包的版本 JSON。")); return; }
+    QString error;
+    const auto base = LegacyJarModPack::baseVersion(QJsonDocument::fromJson(file.readAll()).object(), m_pclPlainVersion, error);
+    file.close();
+    if (base.isEmpty()) { finishLegacyJarModEarly(error); return; }
+    setStatus(tr("已识别旧式 JAR 补丁包；正在获取 Minecraft %1 基底元数据").arg(base));
+    auto metadata = APPLICATION->metadataIndex()->loadVersion("net.minecraft", base);
+    connect(metadata.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+    connect(metadata.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
+    connect(metadata.get(), &Task::aborted, this, [this] { finishLegacyJarModEarly(); });
+    connect(metadata.get(), &Task::failed, this, [this, base](const QString& reason) {
+        finishLegacyJarModEarly(tr("无法获取补丁基底 Minecraft %1 的元数据：%2").arg(base, reason));
+    });
+    connect(metadata.get(), &Task::succeeded, this, [this, base, root] {
+        const auto version = APPLICATION->metadataIndex()->get("net.minecraft", base);
+        if (!version || !version->data()) { finishLegacyJarModEarly(tr("补丁基底的 Minecraft 版本元数据为空。")); return; }
+        m_legacyBaseProfile = OneSixVersionFormat::versionFileToJson(version->data()).object();
+        const auto client = m_legacyBaseProfile.value("mainJar").toObject().value("downloads").toObject().value("artifact").toObject();
+        const QUrl url(client.value("url").toString());
+        static const QRegularExpression sha1("^[0-9a-fA-F]{40}$");
+        if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http")
+            || !sha1.match(client.value("sha1").toString()).hasMatch() || client.value("size").toInteger() <= 0) {
+            finishLegacyJarModEarly(tr("补丁基底的版本元数据缺少有效的客户端地址、SHA-1 或文件大小；已停止安装。")); return;
+        }
+        m_legacyBaseJar = QDir(root).filePath(".legacy-base.jar");
+        setStatus(tr("正在下载并校验补丁基底 Minecraft %1").arg(base));
+        auto download = makeShared<NetJob>(tr("下载旧式补丁包的基础客户端"), APPLICATION->network());
+        auto action = Net::Download::makeFile(url, m_legacyBaseJar);
+        action->setExpectedIntegrity("sha1", client.value("sha1").toString(), client.value("size").toInteger());
+        download->addNetAction(action);
+        connect(download.get(), &Task::progress, this, &InstanceImportTask::setProgress);
+        connect(download.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
+        connect(download.get(), &Task::transferRate, this, &Task::setTransferRate);
+        connect(download.get(), &Task::aborted, this, [this] { finishLegacyJarModEarly(); });
+        connect(download.get(), &Task::failed, this, [this, base](const QString& reason) {
+            finishLegacyJarModEarly(tr("下载或校验补丁基底 Minecraft %1 失败：%2").arg(base, reason));
+        });
+        connect(download.get(), &Task::succeeded, this, &InstanceImportTask::extractFinished, Qt::QueuedConnection);
+        m_task = download;
+        download->start();
+    }, Qt::QueuedConnection);
+    m_task = metadata;
+    metadata->start();
+}
+
+void InstanceImportTask::finishLegacyJarModEarly(const QString& error)
+{
+    setAbortable(false);
+    setStatus(tr("正在清理解压临时文件"));
+    // Release the completed network task and its file handles after its signal
+    // stack unwinds, then clean up outside the launcher thread.
+    QMetaObject::invokeMethod(this, [this, error] {
+        const auto staging = m_stagingPath;
+        auto cleanup = makeShared<VanillaConversionTask>([staging](const VanillaConversionFeedback& feedback) {
+            feedback.update(tr("正在清理解压临时文件"));
+            VanillaConversionReport report;
+            const bool removed = FS::deletePath(staging);
+            const bool removedConverted = FS::deletePath(staging + ".converted");
+            report.succeeded = removed && removedConverted;
+            if (!report.succeeded) report.error = tr("无法完整清理导入临时目录：%1").arg(staging);
+            return report;
+        });
+        connect(cleanup.get(), &Task::status, this, &InstanceImportTask::setStatus);
+        connect(cleanup.get(), &Task::stepProgress, this, &InstanceImportTask::propagateStepProgress);
+        connect(cleanup.get(), &Task::succeeded, this, [this, error] {
+            if (error.isEmpty()) emitAborted();
+            else emitFailed(error);
+        });
+        connect(cleanup.get(), &Task::failed, this, [this, error](const QString& cleanupError) {
+            emitFailed(error.isEmpty() ? cleanupError : error + '\n' + cleanupError);
+        });
+        m_task = cleanup;
+        cleanup->start();
+    }, Qt::QueuedConnection);
+}
+
 void InstanceImportTask::extractFinished()
 {
     const auto staging = m_stagingPath;
@@ -389,7 +494,10 @@ void InstanceImportTask::extractFinished()
     VanillaImportOptions options;
     options.name = name().isEmpty() ? version : name();
     options.group = group();
-    auto preparation = makeShared<VanillaConversionTask>([staging, version, convert, options](const VanillaConversionFeedback& feedback) mutable {
+    const auto installer = m_legacyJarMod;
+    const auto baseProfile = m_legacyBaseProfile;
+    const auto baseJar = m_legacyBaseJar;
+    auto preparation = makeShared<VanillaConversionTask>([staging, version, convert, options, installer, baseProfile, baseJar](const VanillaConversionFeedback& feedback) mutable {
         const auto prepare = [&]() -> VanillaConversionReport {
             VanillaConversionReport report;
             const auto checkCancelled = [&] {
@@ -417,6 +525,8 @@ void InstanceImportTask::extractFinished()
                     report.warnings.append(tr("Could not fix permissions for %1").arg(path));
                 feedback.update(tr("正在整理文件权限"), ++processed, paths.size(), "files", QDir(staging).relativeFilePath(path));
             }
+            if (installer && !LegacyJarModPack::prepare(QDir(staging).filePath("pcl-source"), version, baseProfile, baseJar, feedback, report.error))
+                return report;
             if (convert) {
                 const auto sourceRoot = QDir(staging).filePath("pcl-source");
                 const auto versionRoot = QDir(sourceRoot).filePath("versions/" + version);

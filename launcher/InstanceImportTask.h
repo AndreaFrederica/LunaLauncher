@@ -37,6 +37,7 @@
 
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QJsonObject>
 #include <QTemporaryFile>
 #include <QUrl>
 #include <memory>
@@ -62,6 +63,8 @@ class InstanceImportTask : public InstanceTask {
     void processFlame();
     void processModrinth();
     void processPCLPlain();
+    void prepareLegacyJarMod();
+    void finishLegacyJarModEarly(const QString& error = {});
     void addPclCompatibilityWarning();
 
    private slots:
@@ -77,6 +80,9 @@ class InstanceImportTask : public InstanceTask {
     bool m_pclWrapperDetected = false;
     QString m_archivePassphrase;
     QString m_pclPlainVersion;
+    bool m_legacyJarMod = false;
+    QJsonObject m_legacyBaseProfile;
+    QString m_legacyBaseJar;
     bool m_preserveVanillaSource = false;
     QString m_vanillaSource;
     Task::Ptr m_task;

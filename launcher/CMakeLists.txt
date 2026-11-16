@@ -71,6 +71,8 @@ set(CORE_SOURCES
     modplatform/pcl/PCLPack.cpp
     modplatform/pcl/PCLPlainPack.h
     modplatform/pcl/PCLPlainPack.cpp
+    modplatform/LegacyJarModPack.h
+    modplatform/LegacyJarModPack.cpp
 
     # Resource downloading task
     ResourceDownloadTask.h

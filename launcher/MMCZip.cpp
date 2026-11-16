@@ -50,11 +50,13 @@ namespace MMCZip {
 // ours
 using FilterFunction = std::function<bool(const QString&)>;
 #if defined(LAUNCHER_APPLICATION)
-bool mergeZipFiles(ArchiveWriter& into, QFileInfo from, QSet<QString>& contained, const FilterFunction& filter = nullptr)
+bool mergeZipFiles(ArchiveWriter& into, QFileInfo from, QSet<QString>& contained, const FilterFunction& filter = nullptr,
+                   const FilterFunction& onFile = nullptr)
 {
     ArchiveReader r(from.absoluteFilePath());
-    return r.parse([&into, &contained, &filter, from](ArchiveReader::File* f) {
+    return r.parse([&into, &contained, &filter, &onFile, from](ArchiveReader::File* f) {
         auto filename = f->filename();
+        if (onFile && !onFile(filename)) return false;
         if (filter && !filter(filename)) {
             qDebug() << "Skipping file" << filename << "from" << from.fileName() << "- filtered";
             f->skip();
@@ -91,7 +93,7 @@ bool compressDirFiles(ArchiveWriter& zip, QString dir, QFileInfoList files)
 }
 
 // ours
-bool createModdedJar(QString sourceJarPath, QString targetJarPath, const QList<Mod*>& mods)
+bool createModdedJar(QString sourceJarPath, QString targetJarPath, const QList<Mod*>& mods, const FilterFunction& onFile)
 {
     ArchiveWriter zipOut(targetJarPath);
     if (!zipOut.open()) {
@@ -111,7 +113,7 @@ bool createModdedJar(QString sourceJarPath, QString targetJarPath, const QList<M
         if (!mod->enabled())
             continue;
         if (mod->type() == ResourceType::ZIPFILE) {
-            if (!mergeZipFiles(zipOut, mod->fileinfo(), addedFiles)) {
+            if (!mergeZipFiles(zipOut, mod->fileinfo(), addedFiles, nullptr, onFile)) {
                 zipOut.close();
                 FS::deletePath(targetJarPath);
                 qCritical() << "Failed to add" << mod->fileinfo().fileName() << "to the jar.";
@@ -159,7 +161,7 @@ bool createModdedJar(QString sourceJarPath, QString targetJarPath, const QList<M
         }
     }
 
-    if (!mergeZipFiles(zipOut, QFileInfo(sourceJarPath), addedFiles, [](const QString key) { return !key.contains("META-INF"); })) {
+    if (!mergeZipFiles(zipOut, QFileInfo(sourceJarPath), addedFiles, [](const QString key) { return !key.contains("META-INF"); }, onFile)) {
         zipOut.close();
         FS::deletePath(targetJarPath);
         qCritical() << "Failed to insert minecraft.jar contents.";

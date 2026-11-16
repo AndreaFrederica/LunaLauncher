@@ -117,6 +117,8 @@ launcher_logic_sources = [
   'modplatform/pcl/PCLPack.h',
   'modplatform/pcl/PCLPlainPack.cpp',
   'modplatform/pcl/PCLPlainPack.h',
+  'modplatform/LegacyJarModPack.cpp',
+  'modplatform/LegacyJarModPack.h',
   'InstanceList.cpp',
   'InstanceList.h',
   'VanillaInstance.h',

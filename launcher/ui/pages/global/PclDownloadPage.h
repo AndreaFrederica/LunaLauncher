@@ -51,6 +51,8 @@ class PclDownloadPage : public QWidget, public BasePage {
     QCheckBox* m_libraryPatches = nullptr;
     QPlainTextEdit* m_patchStatus = nullptr;
     QSpinBox* m_threadLimit = nullptr;
+    QSpinBox* m_chunkLimit = nullptr;
+    QCheckBox* m_cacheArtifacts = nullptr;
     QSpinBox* m_speedLimit = nullptr;
     QLabel* m_status = nullptr;
 };

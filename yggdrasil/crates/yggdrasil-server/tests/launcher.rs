@@ -322,7 +322,10 @@ async fn third_party_snapshot_can_issue_local_session_without_entitlement() {
     snapshot["local_auth"] = json!(true);
     let id = snapshot["profile"]["id"].as_str().unwrap().to_owned();
     let path = format!("account-snapshots/{id}");
-    assert_eq!(call(&app.router, &admin, "PUT", &path, snapshot).await.0, 200);
+    assert_eq!(
+        call(&app.router, &admin, "PUT", &path, snapshot).await.0,
+        200
+    );
     let (status, session) = call(
         &app.router,
         &admin,
@@ -388,6 +391,41 @@ async fn launcher_metadata_cache_survives_configuration_restart_and_origin_failu
         .unwrap();
     assert_eq!(response.headers["x-yggdrasil-cache"], "MISS");
     assert_eq!(response.body, b"{\"versions\":[]}");
+    let (_, listing) = call(
+        &app.router,
+        &admin,
+        "GET",
+        "cache/entries?limit=1",
+        json!({}),
+    )
+    .await;
+    assert_eq!(listing["items"][0]["source"], format!("{root}index.json"));
+    assert!(listing["items"][0].get("headers").is_none());
+    assert!(listing["items"][0].get("body").is_none());
+    // Seed the exact key format from the old launcher (1.5s / 4s).
+    // Raising timeouts must not strand the existing on-disk entries.
+    let (_, state) = app.service.repo.load().await.unwrap();
+    let (new_key, entry) = state.cache_entries.iter().next().unwrap();
+    let route = &state.cache_routes[&entry.route_id];
+    let mut old = state.upstreams[&route.upstream_id].clone();
+    old.connect_timeout_ms = 1500;
+    old.request_timeout_ms = 4000;
+    let vary = std::collections::BTreeMap::from([
+        ("accept".to_string(), String::new()),
+        ("accept-encoding".to_string(), String::new()),
+    ]);
+    let legacy_key =
+        yggdrasil_core::hash(serde_json::to_vec(&(route, &old, "/index.json", "", &vary)).unwrap());
+    assert_ne!(&legacy_key, new_key);
+    yggdrasil_core::transact(app.service.repo.as_ref(), |state| {
+        state.cache_entries.remove(new_key);
+        state
+            .cache_entries
+            .insert(legacy_key.clone(), entry.clone());
+        Ok(())
+    })
+    .await
+    .unwrap();
     let restarted = build(&config).await.unwrap();
     assert_eq!(
         call(
@@ -411,6 +449,20 @@ async fn launcher_metadata_cache_survives_configuration_restart_and_origin_failu
             .headers["x-yggdrasil-cache"],
         "REVALIDATED"
     );
+    let (_, migrated) = restarted.service.repo.load().await.unwrap();
+    assert_eq!(migrated.cache_entries.len(), 1);
+    assert!(!migrated.cache_entries.contains_key(&legacy_key));
+    // Runtime network policy changes also preserve the representation key.
+    yggdrasil_core::transact(restarted.service.repo.as_ref(), |state| {
+        state
+            .upstreams
+            .get_mut(&route.upstream_id)
+            .unwrap()
+            .request_timeout_ms += 1;
+        Ok(())
+    })
+    .await
+    .unwrap();
     failures.store(1, Ordering::SeqCst);
     assert_eq!(
         restarted
@@ -454,6 +506,60 @@ async fn launcher_metadata_cache_survives_configuration_restart_and_origin_failu
             .unwrap()
             .headers["x-yggdrasil-cache"],
         "STALE"
+    );
+    let (_, state) = restarted.service.repo.load().await.unwrap();
+    let (key, entry) = state.cache_entries.iter().next().unwrap();
+    let blob_path = dir.path().join("cache").join(&entry.blob);
+    assert!(blob_path.is_file());
+    yggdrasil_core::transact(restarted.service.repo.as_ref(), |state| {
+        state
+            .cache_entries
+            .insert("shared-copy".into(), entry.clone());
+        Ok(())
+    })
+    .await
+    .unwrap();
+    let (_, listing) = call(
+        &restarted.router,
+        &admin,
+        "GET",
+        "cache/entries?limit=1",
+        json!({}),
+    )
+    .await;
+    assert_eq!(listing["items"].as_array().unwrap().len(), 1);
+    let next = listing["next_cursor"].as_str().unwrap();
+    let (_, second) = call(
+        &restarted.router,
+        &admin,
+        "GET",
+        &format!("cache/entries?limit=1&cursor={next}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert_ne!(listing["items"][0]["key"], second["items"][0]["key"]);
+    let (status, result) = call(
+        &restarted.router,
+        &admin,
+        "POST",
+        "cache/purge",
+        json!({"key":key}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(result["purged"], 1);
+    assert!(
+        blob_path.is_file(),
+        "Shared content deleted while still referenced"
+    );
+    assert_eq!(
+        restarted.management.cache.purge(None, None).await.unwrap(),
+        1
+    );
+    assert!(
+        !blob_path.exists(),
+        "Last reference removed but disk content remains"
     );
     let changed =
         json!({"metadata_url":root.replace("/v1/", "/v2/"),"transport":{"kind":"direct"}});

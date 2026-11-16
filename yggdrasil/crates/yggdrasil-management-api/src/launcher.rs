@@ -54,8 +54,11 @@ impl Management {
                 } else {
                     config.transport.clone()
                 },
-                connect_timeout_ms: 1500,
-                request_timeout_ms: 4000,
+                // Cold metadata indexes can take tens of seconds to download.
+                // Leave time for the launcher's default 60s transfer timeout
+                // to receive an error and try its original-source fallback.
+                connect_timeout_ms: 10000,
+                request_timeout_ms: 45000,
                 retry_count: 0,
                 health: HealthPolicy {
                     enabled: false,

@@ -114,8 +114,7 @@ public static class FileDownloader
         LogHelper.Log($"[Download] 开始下载：{url} -> {localPath}");
         trackedFile?.BeginProgressNotifications();
 
-        var perFileThreadLimit = enableParallelChunks ? Math.Max(1, DownloadConfig.NetTaskThreadLimit) : 1;
-        var chunkCount = Math.Min(perFileThreadLimit, 4);
+        var chunkCount = enableParallelChunks ? Math.Clamp(DownloadConfig.PerFileChunkLimit, 1, 16) : 1;
         var configuration = new DownloadConfiguration
         {
             ChunkCount = chunkCount,

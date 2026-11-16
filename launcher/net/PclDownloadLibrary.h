@@ -120,6 +120,7 @@ class PclDownloadLibrary {
     int globalActiveThreads();
 
     void setThreadLimit(int limit);
+    void setChunkLimit(int limit);
     void setSmartConcurrency(bool enabled);
     /// Speed limit in bytes/sec. <= 0 means unlimited.
     void setSpeedLimit(qint64 bytesPerSec);
@@ -146,6 +147,7 @@ class PclDownloadLibrary {
     const char* (*pcl_download_get_error)(int) = nullptr;
     void (*pcl_free_string)(const char*) = nullptr;
     void (*pcl_download_set_thread_limit)(int) = nullptr;
+    void (*pcl_download_set_chunk_limit)(int) = nullptr;
     void (*pcl_download_set_smart_concurrency)(int) = nullptr;
     void (*pcl_download_set_speed_limit)(long long) = nullptr;
     void (*pcl_download_set_proxy)(const char*, const char*, int, const char*, const char*) = nullptr;

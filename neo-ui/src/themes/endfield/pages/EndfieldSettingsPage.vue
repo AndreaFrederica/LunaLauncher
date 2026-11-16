@@ -166,13 +166,17 @@
 
         <template v-else-if="active === 'cache'">
           <div class="ef-settings-stats">
-            <EfStat label="HTTP 缓存" :value="cache.httpSize ?? '—'" :unit="cache.httpSize !== undefined ? 'MB' : ''" />
-            <EfStat label="认证缓存" :value="cache.authCount ?? '—'" note="账户条目" />
+            <EfStat label="HTTP 元数据缓存" :value="formatCacheSize(cache.httpBytes)" :note="cache.httpEntries === undefined ? '条目数未知' : `${cache.httpEntries} 条`" />
+            <EfStat label="资源缓存" :value="formatCacheSize(cache.resourceBytes)" :note="cache.resourceEntries === undefined ? '条目数未知' : `${cache.resourceEntries} 条（版本元数据 / 纹理）`" />
           </div>
+          <p v-if="cache.httpIndexPath" class="ef-cache-path">缓存索引：<code>{{ cache.httpIndexPath }}</code></p>
+          <p v-if="cache.resourceDirectory" class="ef-cache-path">资源缓存目录：<code>{{ cache.resourceDirectory }}</code></p>
+          <p v-if="cacheError" role="alert">{{ cacheError }}</p>
           <div class="ef-settings-actions">
             <EfButton icon="refresh" :disabled="busy" @click="loadCache">刷新</EfButton>
             <EfButton variant="red" icon="delete_sweep" :disabled="busy" @click="clearCache">清理缓存</EfButton>
           </div>
+          <CacheEntriesPanel :version="`${cache.httpEntries}:${cache.resourceEntries}:${cache.artifactEntries}`" :execute="props.execute" @changed="loadCache" />
           <EfSettingRow v-for="setting in rows" :key="setting.key" :setting="setting" :busy="busy" @save="saveSetting" @reset="resetSetting" />
         </template>
 
@@ -264,6 +268,9 @@
 </template>
 
 <script setup lang="ts">
+import CacheEntriesPanel from '../../../components/CacheEntriesPanel.vue';
+import { readCacheStatus, formatCacheSize } from '../../../common/cacheStatus';
+import { formatError } from '../../../common/formatError';
 import { computed, onMounted, ref, watch } from 'vue';
 import { applyPclStylePreset, neoUiPreferences, persistNeoUiPreferences } from '../../../neo-ui-preferences';
 import { settingMetadata } from '../../../settings-schema';
@@ -311,7 +318,7 @@ const launcherCategories: Category[] = [
   { id: 'playtime', label: '游戏时间', icon: 'schedule', description: '游戏时间统计与显示。' },
   { id: 'language', label: '语言', icon: 'translate', description: '启动器界面语言。' },
   { id: 'update', label: '更新', icon: 'system_update', description: '检查与安装启动器更新。' },
-  { id: 'cache', label: '缓存', icon: 'storage', description: '下载缓存与认证缓存。' },
+  { id: 'cache', label: '缓存', icon: 'storage', description: 'HTTP 元数据与资源缓存。' },
   { id: 'qt-ui', label: 'Qt 界面', icon: 'desktop_windows', description: '旧版 Qt 界面设置。' },
   { id: 'advanced', label: '高级', icon: 'build', description: 'API、外部工具与实验性选项。' },
   { id: 'logs', label: '日志', icon: 'article', description: '启动器日志与更新日志。' },
@@ -343,7 +350,8 @@ const javaRuntimes = ref<any[]>([]);
 const javaDiagnostic = ref('');
 const proxy = ref({ type: 'None', host: '', port: 0 });
 const proxyResult = ref('');
-const cache = ref<any>({});
+const cache = ref(readCacheStatus(undefined, undefined));
+const cacheError = ref('');
 const runtimeInfo = ref<any>({});
 const updateStatus = ref<any>({});
 const language = ref('');
@@ -519,18 +527,22 @@ async function testProxy() {
   }
 }
 async function loadCache() {
-  try {
-    const [http, auth] = await Promise.allSettled([props.execute('launcher.cache.status'), props.execute('yggdrasil.cache.status')]);
-    const httpData: any = http.status === 'fulfilled' ? http.value : {};
-    const authData: any = auth.status === 'fulfilled' ? auth.value : {};
-    cache.value = { httpSize: httpData.sizeMiB ?? httpData.totalMiB, authCount: authData.entries ?? authData.count };
-  } catch { /* ignore */ }
+  cacheError.value = '';
+  const [http, resources] = await Promise.allSettled([
+    props.execute('launcher.cache.status'), props.execute('yggdrasil.cache.status'),
+  ]);
+  cache.value = readCacheStatus(
+    http.status === 'fulfilled' ? http.value : undefined,
+    resources.status === 'fulfilled' ? resources.value : undefined,
+  );
+  cacheError.value = [http, resources].flatMap((result, index) => result.status === 'rejected'
+    ? [`${index === 0 ? 'HTTP 元数据缓存' : '资源缓存'}：${formatError(result.reason)}`] : []).join('；');
 }
 async function clearCache() {
-  if (!window.confirm('清理下载与认证缓存？')) return;
+  if (!window.confirm('清理 HTTP 元数据与资源缓存？')) return;
   try {
     await props.execute('launcher.cache.clear', { confirm: true });
-    await props.execute('yggdrasil.cache.purge', { confirm: true }).catch(() => {});
+    await props.execute('yggdrasil.cache.purge', { confirm: true });
     await loadCache();
     emit('toast', 'success', '缓存已清理');
   } catch { /* shell toast */ }
@@ -603,6 +615,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.ef-cache-path { font-size: 12px; overflow-wrap: anywhere; }
+.ef-cache-path code { white-space: normal; }
 .ef-settings-page { width: 100%; }
 .ef-settings-page__scope {
   display: flex;

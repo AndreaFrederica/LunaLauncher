@@ -465,6 +465,21 @@ impl Management {
                 )
             }
             ("GET", "cache/stats") => return self.cache.stats().await,
+            ("GET", "cache/entries") => {
+                return page(
+                    s.cache_entries
+                        .iter()
+                        .map(|(key, e)| {
+                            json!({
+                                "id": key, "key": key, "routeId": e.route_id, "source": e.source,
+                                "bytes": e.size, "stored": e.accessed, "freshUntil": e.fresh_until,
+                                "status": e.status
+                            })
+                        })
+                        .collect(),
+                    &q,
+                );
+            }
             ("POST", "cache/purge") => {
                 return Ok(
                     json!({"purged":self.cache.purge(b["route_id"].as_str(),b["key"].as_str()).await?}),
@@ -984,6 +999,7 @@ pub fn openapi_document() -> Value {
         ("cache/routes", vec!["get", "post"]),
         ("cache/routes/{id}", vec!["get", "patch", "delete"]),
         ("cache/stats", vec!["get"]),
+        ("cache/entries", vec!["get"]),
         ("cache/purge", vec!["post"]),
         ("launcher/cache", vec!["put"]),
         ("account-snapshots/{id}", vec!["get", "put", "delete"]),

@@ -35,9 +35,12 @@
 
 #pragma once
 
+#include <QDir>
 #include <QMap>
+#include <QJsonArray>
 #include <QString>
 #include <QTimer>
+#include <QTemporaryDir>
 #include <memory>
 
 class HttpMetaCache;
@@ -90,6 +93,7 @@ class MetaEntry {
     bool m_is_eternal = false;
 
     bool m_stale = true;
+    bool m_transient = false;
 };
 
 using MetaEntryPtr = std::shared_ptr<MetaEntry>;
@@ -117,9 +121,14 @@ class HttpMetaCache : public QObject {
 
     void addBase(QString base, QString base_root);
 
-    int entryCount() const;
+    int entryCount(const QString& kind = "all") const;
     int baseCount() const { return m_entries.size(); }
-    qint64 byteCount() const;
+    qint64 byteCount(const QString& kind = "all") const;
+    QJsonArray entries(const QString& kind = "all") const;
+    static QString entryKind(const QString& base, const QString& path);
+    bool evictKind(const QString& kind);
+    void setCacheDownloadArtifacts(bool enabled) { m_cacheDownloadArtifacts = enabled; }
+    bool removeEntry(const QString& base, const QString& path);
     QString indexPath() const { return m_index_file; }
 
     // (re)start a timer that calls SaveNow later.
@@ -143,4 +152,6 @@ class HttpMetaCache : public QObject {
     QMap<QString, EntryMap> m_entries;
     QString m_index_file;
     QTimer saveBatchingTimer;
+    bool m_cacheDownloadArtifacts = false;
+    QTemporaryDir m_transientDownloads{QDir::tempPath() + "/luna-downloads-XXXXXX"};
 };

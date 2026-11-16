@@ -187,6 +187,16 @@ impl DiskBlobs {
 }
 #[async_trait]
 impl BlobStore for DiskBlobs {
+    async fn remove(&self, digest: &str) -> Result<()> {
+        if digest.len() != 64 || !digest.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return Err(Error::NotFound);
+        }
+        match tokio::fs::remove_file(self.root.join(digest)).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(Error::Internal),
+        }
+    }
     async fn put(&self, bytes: &[u8]) -> Result<String> {
         use tokio::io::AsyncWriteExt;
         let digest = hash(bytes);

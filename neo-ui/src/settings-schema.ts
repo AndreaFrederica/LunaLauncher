@@ -101,6 +101,9 @@ export const settingMetadata: Record<string, {label:string;group:string;minimum?
     "label": "neo.schema.kd4b0445d28",
     "group": "downloads"
   },
+  "CacheDownloadArtifacts": {label: "保留下载文件副本（模组 JAR / 整合包）", group: "downloads"},
+  "PclDownloadChunkLimit": {label: "单文件分段连接数", group: "downloads", minimum: 1, maximum: 16},
+  "PclDownloadThreadLimit": {label: "同时下载文件数（.NET）", group: "downloads", minimum: 1, maximum: 64},
   "AssetCacheExpiryDays": {
     "label": "neo.schema.k921ffa9cc7",
     "group": "downloads",

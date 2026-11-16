@@ -261,6 +261,9 @@ void applyRuntimeDownloadSettings(const QString& key)
         auto& library = PclDownloadLibrary::instance();
         if (library.isLoaded())
             library.setThreadLimit(qMax(1, settings->get(key).toInt()));
+    } else if (key == "PclDownloadChunkLimit") {
+        auto& library = PclDownloadLibrary::instance();
+        if (library.isLoaded()) library.setChunkLimit(settings->get(key).toInt());
     } else if (key == "PclDownloadSmartConcurrency") {
         auto& library = PclDownloadLibrary::instance();
         if (library.isLoaded())
@@ -329,7 +332,7 @@ QString settingCategory(const QString& id)
         "NumberOfConcurrentTasks", "NumberOfConcurrentDownloads", "NumberOfManualRetries", "AssetCacheExpiryDays",
         "DownloadsDirWatchRecursive", "MoveModsFromDownloadsDir", "ModMetadataDisabled", "ModDependenciesDisabled", "McModSearchEnabled",
         "SkipModpackUpdatePrompt", "GlobalDataPacksEnabled", "ModDownloadLoaders", "OverrideModDownloadLoaders",
-        "AssetVerificationMode", "DownloadBackend", "PclDownloadFallbackToQt", "PclDownloadThreadLimit",
+        "AssetVerificationMode", "DownloadBackend", "PclDownloadFallbackToQt", "PclDownloadThreadLimit", "PclDownloadChunkLimit", "CacheDownloadArtifacts",
         "PclDownloadSpeedLimitKBps", "PclDownloadSmartConcurrency", "LibraryDownloadPatchesEnabled", "Aria2Enabled", "Aria2AutoInstall", "Aria2FallbackToQt",
         "Aria2FollowLauncherDownloadLimits", "Aria2MaxConcurrentDownloads", "Aria2MaxConnectionPerServer",
         "Aria2Split", "Aria2MinSplitSize", "Aria2FileAllocation", "Aria2Continue", "Aria2RpcPort",
@@ -411,7 +414,7 @@ QJsonObject describeSetting(SettingsObject* settings, const std::shared_ptr<Sett
     const auto defaultValue = setting->defValue();
     // INI persistence returns strings. Keep this toggle boolean for both UIs
     // after restarting, otherwise JavaScript treats the string "false" as true.
-    if (setting->id() == "PclDownloadSmartConcurrency" || setting->id() == "LibraryDownloadPatchesEnabled")
+    if (setting->id() == "PclDownloadSmartConcurrency" || setting->id() == "LibraryDownloadPatchesEnabled" || setting->id() == "CacheDownloadArtifacts")
         value = value.toBool();
     const bool sensitive = isSensitiveSetting(setting->id());
     const bool redacted = sensitive && !reveal;
@@ -1429,7 +1432,7 @@ QJsonObject OperationService::setSetting(const QJsonObject& parameters, UserInte
         input = *value;
     }
     const auto current = settings->get(key);
-    const auto reference = (key == "PclDownloadSmartConcurrency" || key == "LibraryDownloadPatchesEnabled") ? setting->defValue() :
+    const auto reference = (key == "PclDownloadSmartConcurrency" || key == "LibraryDownloadPatchesEnabled" || key == "CacheDownloadArtifacts") ? setting->defValue() :
                            (current.isValid() ? current : setting->defValue());
     QVariant converted;
     if (!convertSettingValue(input, reference, &converted, &error))

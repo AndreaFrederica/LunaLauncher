@@ -342,6 +342,9 @@ impl Default for CacheRoute {
 }
 #[derive(Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CacheEntry {
+    /// Public origin path only; credentials and query parameters are never stored.
+    #[serde(default)]
+    pub source: String,
     pub route_id: String,
     pub blob: String,
     pub status: u16,
@@ -434,6 +437,7 @@ pub async fn transact<T>(repo: &dyn Repository, f: impl Fn(&mut State) -> Result
 pub trait BlobStore: Send + Sync {
     async fn put(&self, bytes: &[u8]) -> Result<String>;
     async fn get(&self, hash: &str) -> Result<Vec<u8>>;
+    async fn remove(&self, hash: &str) -> Result<()>;
 }
 
 #[cfg(test)]

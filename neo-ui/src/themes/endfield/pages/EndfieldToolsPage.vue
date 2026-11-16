@@ -69,13 +69,17 @@
 
     <section v-else-if="section === 'cache'">
       <div class="ef-tools__stats">
-        <EfStat label="HTTP 缓存" :value="cache.httpSize || '—'" :unit="cache.httpSize ? 'MB' : ''" />
-        <EfStat label="认证缓存" :value="cache.authCount" note="账户条目" />
+        <EfStat label="HTTP 元数据缓存" :value="formatCacheSize(cache.httpBytes)" :note="cache.httpEntries === undefined ? '条目数未知' : `${cache.httpEntries} 条`" />
+        <EfStat label="资源缓存" :value="formatCacheSize(cache.resourceBytes)" :note="cache.resourceEntries === undefined ? '条目数未知' : `${cache.resourceEntries} 条（版本元数据 / 纹理）`" />
       </div>
+          <p v-if="cache.httpIndexPath" class="ef-cache-path">缓存索引：<code>{{ cache.httpIndexPath }}</code></p>
+          <p v-if="cache.resourceDirectory" class="ef-cache-path">资源缓存目录：<code>{{ cache.resourceDirectory }}</code></p>
+          <p v-if="cacheError" role="alert">{{ cacheError }}</p>
       <div class="ef-tools__actions">
         <EfButton icon="refresh" :disabled="busy" @click="loadCache">刷新</EfButton>
         <EfButton variant="red" icon="delete_sweep" :disabled="busy" @click="clearCache">清理缓存</EfButton>
       </div>
+      <CacheEntriesPanel :version="`${cache.httpEntries}:${cache.resourceEntries}:${cache.artifactEntries}`" :execute="props.execute" @changed="loadCache" />
     </section>
 
     <section v-else-if="section === 'diagnostics'">
@@ -113,6 +117,9 @@
 </template>
 
 <script setup lang="ts">
+import CacheEntriesPanel from '../../../components/CacheEntriesPanel.vue';
+import { readCacheStatus, formatCacheSize } from '../../../common/cacheStatus';
+import { formatError } from '../../../common/formatError';
 import { computed, ref, watch } from 'vue';
 import EfButton from '../components/EfButton.vue';
 import EfCard from '../components/EfCard.vue';
@@ -152,7 +159,8 @@ const proxyTypes = [
 ];
 const proxy = ref({ type: 'None', host: '', port: 0 });
 const proxyResult = ref('');
-const cache = ref<any>({ httpSize: 0, authCount: 0 });
+const cache = ref(readCacheStatus(undefined, undefined));
+const cacheError = ref('');
 const runtimeInfo = ref<any>({});
 const tasks = ref<any[]>([]);
 
@@ -239,24 +247,22 @@ async function testProxy() {
   }
 }
 async function loadCache() {
-  try {
-    const [http, auth] = await Promise.allSettled([
-      props.execute('launcher.cache.status'),
-      props.execute('yggdrasil.cache.status'),
-    ]);
-    const httpData: any = http.status === 'fulfilled' ? http.value : {};
-    const authData: any = auth.status === 'fulfilled' ? auth.value : {};
-    cache.value = {
-      httpSize: httpData.sizeMiB ?? httpData.totalMiB ?? 0,
-      authCount: authData.entries ?? authData.count ?? 0,
-    };
-  } catch { /* ignore */ }
+  cacheError.value = '';
+  const [http, resources] = await Promise.allSettled([
+    props.execute('launcher.cache.status'), props.execute('yggdrasil.cache.status'),
+  ]);
+  cache.value = readCacheStatus(
+    http.status === 'fulfilled' ? http.value : undefined,
+    resources.status === 'fulfilled' ? resources.value : undefined,
+  );
+  cacheError.value = [http, resources].flatMap((result, index) => result.status === 'rejected'
+    ? [`${index === 0 ? 'HTTP 元数据缓存' : '资源缓存'}：${formatError(result.reason)}`] : []).join('；');
 }
 async function clearCache() {
-  if (!window.confirm('清理下载与认证缓存？')) return;
+  if (!window.confirm('清理 HTTP 元数据与资源缓存？')) return;
   try {
     await props.execute('launcher.cache.clear', { confirm: true });
-    await props.execute('yggdrasil.cache.purge', { confirm: true }).catch(() => {});
+    await props.execute('yggdrasil.cache.purge', { confirm: true });
     await loadCache();
     emit('toast', 'success', '缓存已清理');
   } catch { /* shell toast */ }
@@ -295,6 +301,8 @@ watch(section, value => {
 </script>
 
 <style scoped>
+.ef-cache-path { font-size: 12px; overflow-wrap: anywhere; }
+.ef-cache-path code { white-space: normal; }
 .ef-tools { width: 100%; }
 .ef-tabs { display: flex; border-bottom: 1px solid var(--ef-ink); margin-bottom: 12px; overflow: auto; }
 .ef-tabs button {

@@ -25,6 +25,7 @@ pub struct Counters {
 }
 #[derive(Clone)]
 pub struct Cache {
+    gate: Arc<tokio::sync::RwLock<()>>,
     pub repo: Arc<dyn Repository>,
     pub blobs: Arc<dyn BlobStore>,
     pub clients: Clients,
@@ -66,6 +67,7 @@ pub fn validate_route(r: &CacheRoute, s: &State) -> Result<()> {
 impl Cache {
     pub fn new(repo: Arc<dyn Repository>, blobs: Arc<dyn BlobStore>, clients: Clients) -> Self {
         Self {
+            gate: Arc::default(),
             repo,
             blobs,
             clients,
@@ -80,14 +82,35 @@ impl Cache {
         )
     }
     pub async fn purge(&self, route: Option<&str>, key: Option<&str>) -> Result<usize> {
-        transact(self.repo.as_ref(), |s| {
+        let _guard = self.gate.write().await;
+        let (_, before) = self.repo.load().await?;
+        let selected = |k: &str, e: &CacheEntry| {
+            route.is_none_or(|r| r == e.route_id) && key.is_none_or(|v| v == k)
+        };
+        let removed: std::collections::BTreeSet<_> = before
+            .cache_entries
+            .iter()
+            .filter(|(k, e)| selected(k, e))
+            .map(|(_, e)| e.blob.clone())
+            .collect();
+        let live: std::collections::BTreeSet<_> = before
+            .cache_entries
+            .iter()
+            .filter(|(k, e)| !selected(k, e))
+            .map(|(_, e)| e.blob.clone())
+            .collect();
+        let purged = transact(self.repo.as_ref(), |s| {
             let before = s.cache_entries.len();
-            s.cache_entries.retain(|k, e| {
-                !(route.is_none_or(|r| r == e.route_id) && key.is_none_or(|v| v == k))
-            });
+            s.cache_entries.retain(|k, e| !selected(k, e));
             Ok(before - s.cache_entries.len())
         })
-        .await
+        .await?;
+        // Shared content may back several entries. Delete only blobs whose last
+        // reference was removed; the gate protects concurrent readers/writers.
+        for blob in removed.difference(&live) {
+            self.blobs.remove(blob).await?;
+        }
+        Ok(purged)
     }
     async fn cached(&self, e: &CacheEntry, head: bool, status: &'static str) -> Result<Response> {
         let body = if head {
@@ -115,6 +138,7 @@ impl Cache {
         })
     }
     pub async fn handle(&self, method: Method, path: &str, headers: HeaderMap) -> Result<Response> {
+        let _guard = self.gate.read().await;
         let (_, s) = self.repo.load().await?;
         let path_only = path.split('?').next().unwrap_or("");
         let r = s
@@ -189,15 +213,57 @@ impl Cache {
                 );
             }
         }
+        // Cache identity includes representation and cache policy, but not
+        // network timeouts or retries. Tuning transport must preserve disk data.
         let key = hash(
-            serde_json::to_vec(&(r, u, &mapped, &normalized_query, vary))
-                .map_err(|_| Error::Internal)?,
+            serde_json::to_vec(&(
+                r,
+                &u.id,
+                &u.base_url,
+                &u.extra_headers,
+                &mapped,
+                &normalized_query,
+                &vary,
+            ))
+            .map_err(|_| Error::Internal)?,
         );
-        let entry = if bypass {
+        let mut entry = if bypass {
             None
         } else {
-            s.cache_entries.get(&key)
+            s.cache_entries.get(&key).cloned()
         };
+        if !bypass && entry.is_none() {
+            let mut legacy_upstreams = vec![u.clone()];
+            if u.id.starts_with("launcher-meta-") || u.id == "launcher-textures" {
+                // Launcher routes used 1.5s / 4s timeouts before cache keys
+                // stopped depending on network policy. Migrate on first use.
+                let mut old = u.clone();
+                old.connect_timeout_ms = 1500;
+                old.request_timeout_ms = 4000;
+                legacy_upstreams.push(old);
+            }
+            for old in legacy_upstreams {
+                let legacy_key = hash(
+                    serde_json::to_vec(&(r, &old, &mapped, &normalized_query, &vary))
+                        .map_err(|_| Error::Internal)?,
+                );
+                if let Some(existing) = s.cache_entries.get(&legacy_key) {
+                    let existing = existing.clone();
+                    transact(self.repo.as_ref(), |state| {
+                        state
+                            .cache_entries
+                            .entry(key.clone())
+                            .or_insert(existing.clone());
+                        state.cache_entries.remove(&legacy_key);
+                        Ok(())
+                    })
+                    .await?;
+                    entry = Some(existing);
+                    break;
+                }
+            }
+        }
+        let entry = entry.as_ref();
         let t = now();
         let head = method == Method::HEAD;
         if let Some(e) = entry {
@@ -291,6 +357,14 @@ impl Cache {
             let blob = self.blobs.put(&response.body).await?;
             let ttl = ttl(r, &response.headers, response.status);
             let e = CacheEntry {
+                source: {
+                    let mut url = safe_url(u, &mapped)?;
+                    let _ = url.set_username("");
+                    let _ = url.set_password(None);
+                    url.set_query(None);
+                    url.set_fragment(None);
+                    url.to_string()
+                },
                 route_id: r.id.clone(),
                 blob,
                 status: response.status,

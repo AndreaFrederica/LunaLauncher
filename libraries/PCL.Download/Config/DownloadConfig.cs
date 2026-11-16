@@ -15,6 +15,9 @@ public static class DownloadConfig
     /// <summary>Max concurrent file downloads across the process.</summary>
     public static int NetTaskThreadLimit { get; set; } = 16;
 
+    /// <summary>Maximum parallel range connections for each sufficiently large file.</summary>
+    public static int PerFileChunkLimit { get; set; } = 4;
+
     public static bool SmartConcurrency { get; set; }
     public const long SmallFileSize = 256 * 1024;
 

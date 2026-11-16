@@ -10,11 +10,12 @@
                 <span>{{ t('pcl.auto2.kd42da9e2ac') }}</span><code>{{ cacheState.running ? t('pcl.auto2.k5942497005') : t('pcl.auto2.kb2ba9634d9') }}</code>
                 <span>{{ t('pcl.auto2.kc1c23347ef') }}</span><code>{{ cacheState.enabled && cacheState.configured ? t('pcl.auto2.k25d2843150') : t('pcl.auto2.k8bb38ef00c') }}</code>
                 <span>{{ t('pcl.auto2.k31479ef943') }}</span><code>{{ cacheState.accountCacheEnabled ? t('pcl.auto2.k25d2843150') : t('pcl.auto2.k8bb38ef00c') }}</code>
-                <span>{{ t('pcl.auto2.ke4b9d92f14') }}</span><code>{{ cacheState.stats.entries ?? 0 }}</code>
-                <span>{{ t('pcl.auto2.kf05934a464') }}</span><code>{{ formatBytes(cacheState.stats.bytes) }}</code>
+                <span>{{ t('pcl.auto2.ke4b9d92f14') }}</span><code>{{ cacheState.stats.entries ?? '—' }}</code>
+                <span>{{ t('pcl.auto2.kf05934a464') }}</span><code>{{ cacheState.stats.bytes === undefined ? '—' : formatBytes(cacheState.stats.bytes) }}</code>
                 <span>{{ t('pcl.auto2.kbc10822e07') }}</span><code>{{ cacheState.stats.hit ?? 0 }} / {{ cacheState.stats.miss ?? 0 }}</code>
                 <span>{{ t('pcl.auto2.k121c44d74b') }}</span><code>{{ cacheState.metadataPath || '—' }}</code>
                 <span>{{ t('pcl.auto2.k78acda3988') }}</span><code>{{ cacheState.texturesPath || '—' }}</code>
+                <span>{{ t('pcl.setup.cacheDirectory') }}</span><code>{{ cacheState.dataDirectory || '—' }}</code>
               </div>
               <PclHint v-else-if="!cacheBusy" theme="blue">{{ t('pcl.auto2.kd9647d9b52') }}</PclHint>
               <div class="pcl-actions">
@@ -36,16 +37,18 @@
             <PclCard :title="t('pcl.auto2.k109dbaf249')">
               <div class="pcl-about-grid">
                 <span>{{ t('pcl.auto2.ke4b9d92f14') }}</span><code>{{ cacheState.http?.entries ?? '—' }}</code>
-                <span>{{ t('pcl.auto2.kf05934a464') }}</span><code>{{ cacheState.http ? formatBytes(cacheState.http.bytes) : '—' }}</code>
+                <span>{{ t('pcl.auto2.kf05934a464') }}</span><code>{{ cacheState.http?.bytes === undefined ? '—' : formatBytes(cacheState.http.bytes) }}</code>
                 <span>{{ t('pcl.auto2.k39287df5e0') }}</span><code>{{ cacheState.http?.bases ?? '—' }}</code>
                 <span>{{ t('pcl.auto2.kfc7b7a21c5') }}</span><code>{{ cacheState.http?.indexPath || '—' }}</code>
               </div>
               <PclHint theme="blue">{{ t('pcl.auto2.k45798cf477') }}</PclHint>
             </PclCard>
+            <CacheEntriesPanel :version="`${cacheState.http?.entries}:${cacheState.stats?.entries}:${cacheState.http?.artifacts?.entries}`" :execute="execute" @changed="loadCache(true)" />
           </div>
 </template>
 
 <script setup lang="ts">
+import CacheEntriesPanel from '../../../../components/CacheEntriesPanel.vue';
 import { inject } from 'vue';
 import { PclSetupContextKey } from './PclSetupContext';
 import PclButton from '../../components/PclButton.vue';

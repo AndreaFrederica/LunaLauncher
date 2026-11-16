@@ -905,6 +905,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("DownloadBackend", 2);
         m_settings->registerSetting("PclDownloadFallbackToQt", true);
         m_settings->registerSetting("PclDownloadThreadLimit", 8);
+        m_settings->registerSetting("PclDownloadChunkLimit", 4);
+        m_settings->registerSetting("CacheDownloadArtifacts", false);
         m_settings->registerSetting("PclDownloadSmartConcurrency", false);
         m_settings->registerSetting("LibraryDownloadPatchesEnabled", false);
         m_settings->registerSetting("PclDownloadSpeedLimitKBps", 0);
@@ -1397,6 +1399,13 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_metacache->addBase("java", QDir("cache/java").absolutePath());
         m_metacache->addBase("feed", QDir("cache/feed").absolutePath());
         JSAPIManager::instance().initialize();
+        m_metacache->setCacheDownloadArtifacts(m_settings->get("CacheDownloadArtifacts").toBool());
+        connect(m_settings.get(), &SettingsObject::SettingChanged, m_metacache.get(), [this](const Setting& setting, QVariant value) {
+            if (setting.id() == "CacheDownloadArtifacts") m_metacache->setCacheDownloadArtifacts(value.toBool());
+        });
+        connect(m_settings.get(), &SettingsObject::settingReset, m_metacache.get(), [this](const Setting& setting) {
+            if (setting.id() == "CacheDownloadArtifacts") m_metacache->setCacheDownloadArtifacts(false);
+        });
         m_metacache->Load();
         Meta::registerBuiltinProviders();
         qInfo() << "<> Cache initialized.";

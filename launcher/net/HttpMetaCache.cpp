@@ -41,6 +41,7 @@
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
+#include <QUuid>
 
 #include <QDebug>
 
@@ -48,6 +49,7 @@
 
 auto MetaEntry::getFullPath() -> QString
 {
+    if (m_transient && m_basePath.isEmpty()) return {};
     // FIXME: make local?
     return FS::PathCombine(m_basePath, m_relativePath);
 }
@@ -66,21 +68,21 @@ HttpMetaCache::~HttpMetaCache()
     SaveNow();
 }
 
-int HttpMetaCache::entryCount() const
+int HttpMetaCache::entryCount(const QString& kind) const
 {
     int count = 0;
     for (const auto& group : m_entries)
         for (const auto& entry : group.entry_list)
-            if (entry && !entry->m_stale) ++count;
+            if (entry && !entry->m_stale && (kind == "all" || entryKind(entry->m_baseId, entry->m_relativePath) == kind)) ++count;
     return count;
 }
 
-qint64 HttpMetaCache::byteCount() const
+qint64 HttpMetaCache::byteCount(const QString& kind) const
 {
     qint64 total = 0;
     for (const auto& group : m_entries) {
         for (const auto& entry : group.entry_list) {
-            if (!entry || entry->m_stale) continue;
+            if (!entry || entry->m_stale || (kind != "all" && entryKind(entry->m_baseId, entry->m_relativePath) != kind)) continue;
             total += QFileInfo(FS::PathCombine(group.base_path, entry->m_relativePath)).size();
         }
     }
@@ -103,9 +105,69 @@ auto HttpMetaCache::getEntry(QString base, QString resource_path) -> MetaEntryPt
     return {};
 }
 
+QString HttpMetaCache::entryKind(const QString& base, const QString& path)
+{
+    // These are installed runtime files, not redundant download copies.
+    if (base == "libraries" || base == "fmllibs" || base == "asset_indexes" || base == "translations") return "runtime";
+    const auto name = path.toLower();
+    const QStringList archives{ ".jar", ".zip", ".mrpack", ".7z", ".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".exe", ".msi" };
+    for (const auto& suffix : archives)
+        if (name.endsWith(suffix)) return "artifacts";
+    return "metadata";
+}
+
+bool HttpMetaCache::evictKind(const QString& kind)
+{
+    bool success = true;
+    const auto selected = entries(kind);
+    for (const auto& value : selected) {
+        const auto entry = value.toObject();
+        success = removeEntry(entry["base"].toString(), entry["path"].toString()) && success;
+    }
+    SaveNow();
+    return success;
+}
+
+QJsonArray HttpMetaCache::entries(const QString& kind) const
+{
+    QJsonArray result;
+    for (auto group = m_entries.cbegin(); group != m_entries.cend(); ++group) {
+        for (const auto& entry : group->entry_list) {
+            if (!entry || entry->m_stale || (kind != "all" && entryKind(group.key(), entry->m_relativePath) != kind)) continue;
+            const QFileInfo file(FS::PathCombine(group->base_path, entry->m_relativePath));
+            result.append(QJsonObject{ { "base", group.key() }, { "path", entry->m_relativePath },
+                { "filePath", file.absoluteFilePath() }, { "bytes", file.size() },
+                { "modified", file.lastModified().toUTC().toString(Qt::ISODate) }, { "exists", file.isFile() } });
+        }
+    }
+    return result;
+}
+
+bool HttpMetaCache::removeEntry(const QString& base, const QString& path)
+{
+    auto entry = getEntry(base, path);
+    if (!entry) return false;
+    // Resolve exclusively through the registered cache index, never a caller-supplied file path.
+    const auto file = FS::PathCombine(m_entries[base].base_path, entry->m_relativePath);
+    if (QFileInfo::exists(file) && !QFile::remove(file)) return false;
+    entry->m_stale = true;
+    m_entries[base].entry_list.remove(path);
+    SaveEventually();
+    return true;
+}
+
 auto HttpMetaCache::resolveEntry(QString base, QString resource_path, QString expected_etag) -> MetaEntryPtr
 {
     resource_path = FS::RemoveInvalidPathChars(resource_path);
+    if (!m_cacheDownloadArtifacts && entryKind(base, resource_path) == "artifacts") {
+        // Installers may copy/extract after the download task releases its entry.
+        // Retain staging files for this launcher session, never in the persistent index.
+        auto entry = staleEntry(base, resource_path);
+        entry->m_transient = true;
+        entry->m_basePath = m_transientDownloads.path();
+        entry->m_relativePath = QUuid::createUuid().toString(QUuid::WithoutBraces) + "/" + QFileInfo(resource_path).fileName();
+        return entry;
+    }
     auto entry = getEntry(base, resource_path);
     // it's not present? generate a default stale entry
     if (!entry) {
@@ -164,6 +226,7 @@ auto HttpMetaCache::resolveEntry(QString base, QString resource_path, QString ex
 
 auto HttpMetaCache::updateEntry(MetaEntryPtr stale_entry) -> bool
 {
+    if (stale_entry->m_transient) return true;
     if (!m_entries.contains(stale_entry->m_baseId)) {
         qCCritical(taskHttpMetaCacheLogC) << "Cannot add entry with unknown base:" << stale_entry->m_baseId.toLocal8Bit();
         return false;
@@ -203,7 +266,8 @@ auto HttpMetaCache::evictAll() -> bool
         }
         map.entry_list.clear();
         // AND all return codes together so the result is true iff all runs of deletePath() are true
-        ret &= FS::deletePath(map.base_path);
+        if (QFileInfo::exists(map.base_path))
+            ret &= FS::deletePath(map.base_path);
     }
     return ret;
 }

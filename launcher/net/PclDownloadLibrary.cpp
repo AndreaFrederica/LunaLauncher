@@ -157,6 +157,7 @@ bool PclDownloadLibrary::load()
     if (!resolve(pcl_download_get_error,                 "pcl_download_get_error"))                 return false;
     if (!resolve(pcl_free_string,                        "pcl_free_string"))                        return false;
     if (!resolve(pcl_download_set_thread_limit,          "pcl_download_set_thread_limit"))          return false;
+    if (!resolve(pcl_download_set_chunk_limit, "pcl_download_set_chunk_limit")) return false;
     if (!resolve(pcl_download_set_smart_concurrency,     "pcl_download_set_smart_concurrency"))     return false;
     if (!resolve(pcl_download_set_speed_limit,           "pcl_download_set_speed_limit"))           return false;
     if (!resolve(pcl_download_set_proxy,                 "pcl_download_set_proxy"))                 return false;
@@ -176,6 +177,7 @@ bool PclDownloadLibrary::load()
     if (APPLICATION_DYN) {
         auto s = APPLICATION->settings();
         pcl_download_set_thread_limit(s->get("PclDownloadThreadLimit").toInt());
+        pcl_download_set_chunk_limit(s->get("PclDownloadChunkLimit").toInt());
         pcl_download_set_smart_concurrency(s->get("PclDownloadSmartConcurrency").toBool() ? 1 : 0);
         pcl_download_set_speed_limit(static_cast<long long>(s->get("PclDownloadSpeedLimitKBps").toInt()) * 1024);
         const auto proxyType = s->get("ProxyType").toString().toUtf8();
@@ -340,6 +342,11 @@ void PclDownloadLibrary::setThreadLimit(int limit)
 {
     if (isLoaded())
         pcl_download_set_thread_limit(limit);
+}
+
+void PclDownloadLibrary::setChunkLimit(int limit)
+{
+    if (isLoaded()) pcl_download_set_chunk_limit(limit);
 }
 
 void PclDownloadLibrary::setSmartConcurrency(bool enabled)

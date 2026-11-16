@@ -146,7 +146,7 @@ bool LocalYggdrasil::request(const QByteArray& method,
     request.setRawHeader("Authorization", "Bearer " + m_managementToken);
     request.setHeader(QNetworkRequest::ContentTypeHeader, contentType);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-    request.setTransferTimeout(15000);
+    request.setTransferTimeout(path == "cache/purge" ? 60000 : 15000);
     auto* reply = network.sendCustomRequest(request, method, body);
     QEventLoop loop;
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -179,6 +179,7 @@ bool LocalYggdrasil::cacheStatus(QJsonObject& status, QString& error)
                { "enabled", APPLICATION->settings()->get("LocalServiceCache").toBool() },
                { "accountCacheEnabled", APPLICATION->settings()->get("YggdrasilAccountCache").toBool() },
                { "configured", configured },
+               { "dataDirectory", dataDirectory() },
                { "metadataPath", m_metadataPath },
                { "texturesPath", m_texturesPath },
                { "stats", stats },

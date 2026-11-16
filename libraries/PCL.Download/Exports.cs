@@ -282,6 +282,10 @@ public static class Exports
         catch { /* ignore */ }
     }
 
+    /// <summary>Maximum range connections per file, independent of file concurrency.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "pcl_download_set_chunk_limit")]
+    public static void SetChunkLimit(int limit) => DownloadConfig.PerFileChunkLimit = Math.Clamp(limit, 1, 16);
+
     /// <summary>Speed limit in bytes/sec. &lt;= 0 means unlimited.</summary>
     [UnmanagedCallersOnly(EntryPoint = "pcl_download_set_speed_limit")]
     public static void SetSpeedLimit(long bytesPerSec)

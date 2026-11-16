@@ -120,7 +120,7 @@
               </div>
 
               <div class="pcl-form-row">
-                <span class="pcl-form-row__label">{{ t('pcl.auto2.kf1b19d21bf') }}</span>
+                <span class="pcl-form-row__label">同时下载文件数（.NET）</span>
                 <div class="pcl-form-row__control">
                   <PclSlider
                     :model-value="draftNumber('PclDownloadThreadLimit', 8)"
@@ -132,9 +132,14 @@
                     @change="save('PclDownloadThreadLimit', $event)"
                   />
                 </div>
-                <span class="pcl-form-row__hint">{{ t('pcl.auto2.k2e3f00b939') }}</span>
+                <span class="pcl-form-row__hint">全局同时下载 1–64 个文件；智能并发开启后自动调整。</span>
               </div>
 
+              <div class="pcl-form-row">
+                <span class="pcl-form-row__label">单文件分段连接数</span>
+                <div class="pcl-form-row__control"><PclSlider :model-value="draftNumber('PclDownloadChunkLimit', 4)" :min="1" :max="16" :step="1" @update:model-value="drafts.PclDownloadChunkLimit = $event" @change="save('PclDownloadChunkLimit', $event)" /></div>
+                <span class="pcl-form-row__hint">每个大文件最多 1–16 个连接；小文件或不支持 Range 时使用单连接。独立于文件并发。</span>
+              </div>
               <div class="pcl-form-row">
                 <span class="pcl-form-row__label">{{ t('pcl.auto2.k7b5aca21d4') }}</span>
                 <div class="pcl-form-row__control">
@@ -151,8 +156,9 @@
                 <span class="pcl-form-row__hint">{{ t('pcl.auto2.k71fd57e730') }}</span>
               </div>
 
+              <PclCheckbox :model-value="bool('CacheDownloadArtifacts')" label="保留下载文件副本（模组 JAR / 整合包，默认关闭）" @update:model-value="save('CacheDownloadArtifacts', $event)" />
               <PclCheckbox :model-value="bool('PclDownloadSmartConcurrency')" label="智能并发上限" @update:model-value="save('PclDownloadSmartConcurrency', $event)" />
-              <PclHint theme="blue">仅适用于 PCL 下载：小文件（≤256 KiB）优先，总并发最多 32；大文件及大小未知文件最多 8。开启后替代手动并发上限，关闭后恢复。</PclHint>
+              <PclHint theme="blue">适用于 Luna .NET 下载器（PCL.Download）：小文件（≤256 KiB）优先，总文件并发最多 32；大文件及大小未知文件最多 8。只替代同时下载文件数，不改变单文件分段连接数。</PclHint>
               <PclCheckbox  :model-value="bool('PclDownloadFallbackToQt')" :label="t('pcl.auto2.k9d5b1f1173')" @update:model-value="save('PclDownloadFallbackToQt', $event)" />
               <PclCheckbox :model-value="bool('McModSearchEnabled')" :label="t('resource.mcmodSearchEnabled')" @update:model-value="save('McModSearchEnabled', $event)" />
               <PclHint theme="blue">{{ t('resource.mcmodSearchHint') }}</PclHint>

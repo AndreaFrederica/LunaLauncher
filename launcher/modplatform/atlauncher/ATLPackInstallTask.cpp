@@ -745,7 +745,6 @@ void PackInstallTask::downloadMods()
 
         if (mod.type == ModType::Extract || mod.type == ModType::TexturePackExtract || mod.type == ModType::ResourcePackExtract) {
             auto entry = APPLICATION->metacache()->resolveEntry("ATLauncherPacks", cacheName);
-            entry->setStale(true);
             modsToExtract.insert(entry->getFullPath(), mod);
 
             auto dl = Net::ApiDownload::makeCached(url, entry);
@@ -755,7 +754,6 @@ void PackInstallTask::downloadMods()
             jobPtr->addNetAction(dl);
         } else if (mod.type == ModType::Decomp) {
             auto entry = APPLICATION->metacache()->resolveEntry("ATLauncherPacks", cacheName);
-            entry->setStale(true);
             modsToDecomp.insert(entry->getFullPath(), mod);
 
             auto dl = Net::ApiDownload::makeCached(url, entry);
@@ -769,7 +767,6 @@ void PackInstallTask::downloadMods()
                 continue;
 
             auto entry = APPLICATION->metacache()->resolveEntry("ATLauncherPacks", cacheName);
-            entry->setStale(true);
 
             auto dl = Net::ApiDownload::makeCached(url, entry);
             if (!mod.md5.isEmpty()) {

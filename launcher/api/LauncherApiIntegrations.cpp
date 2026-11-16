@@ -184,6 +184,16 @@ void registerLauncherApiIntegrationOperations(LauncherApi& api)
                                if (!LocalYggdrasil::instance().cacheStatus(status, error)) return OperationService::failure(error);
                                return OperationService::success(status);
                            });
+    api.registerOperation({ "yggdrasil.cache.entries", "List cached resource metadata without credentials or response bodies.",
+                            schema({ { "cursor", string("Optional page cursor.") } }), "cache" },
+                           [](const QJsonObject& p, UserInteraction&) {
+                               QJsonObject result;
+                               QString error;
+                               const auto cursor = QString::fromLatin1(QUrl::toPercentEncoding(p.value("cursor").toString()));
+                               if (!LocalYggdrasil::instance().request("GET", "cache/entries?limit=100&cursor=" + cursor, {}, result, error))
+                                   return OperationService::failure(error);
+                               return OperationService::success(result);
+                           });
     api.registerOperation({ "yggdrasil.cache.purge", "Remove entries from the embedded Yggdrasil cache.",
                             schema({ { "routeId", string("Optional cache route id.") }, { "key", string("Optional exact cache key.") },
                                      { "confirm", boolean() } }, { "confirm" }), "cache", true },

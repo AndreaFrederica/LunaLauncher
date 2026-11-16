@@ -571,13 +571,15 @@ async function loadCache(force = false) {
       props.execute('launcher.cache.status'),
     ]);
     const yggdrasil = yggdrasilResult.status === 'fulfilled' ? yggdrasilResult.value : {};
-    const http = httpResult.status === 'fulfilled' ? httpResult.value : {};
-    cacheState.value = { ...(yggdrasil || {}), http: http || {} };
+    const http = httpResult.status === 'fulfilled' ? httpResult.value : null;
+    cacheState.value = { ...(yggdrasil || {}), http };
     cacheRoutes.value = Array.isArray(yggdrasil?.routes) ? yggdrasil.routes : [];
     if (yggdrasilResult.status === 'rejected' && httpResult.status === 'rejected')
       cacheError.value = message(yggdrasilResult.reason);
     else if (yggdrasilResult.status === 'rejected')
       cacheError.value = t('pcl.auto2.k5a86d98bca');
+    else if (httpResult.status === 'rejected')
+      cacheError.value = message(httpResult.reason);
   } finally {
     cacheBusy.value = false;
   }

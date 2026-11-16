@@ -129,10 +129,11 @@ public class LoaderDownload : LoaderBase
 
         using var fileSlot = await NetManager.Instance.AcquireFileSlotAsync(file.Check?.ActualSize ?? -1, cancellationToken).ConfigureAwait(false);
         file.State = NetState.Connecting;
-        // File-level scheduling is global (shared by all loaders), so keep one
-        // connection per file. This prevents separate native tasks from
-        // multiplying the configured concurrency by their chunk count.
-        var enableParallelChunks = false;
+        // File slots and range connections are independent controls. Known small
+        // files use one connection; Downloader also checks the actual size and
+        // server Range support before splitting unknown or larger files.
+        var expectedSize = file.Check?.ActualSize ?? -1;
+        var enableParallelChunks = expectedSize < 0 || expectedSize > DownloadConfig.SmallFileSize;
 
         for (var retry = 0; retry < 4; retry++)
         {

@@ -63,13 +63,20 @@ PclDownloadPage::PclDownloadPage(QWidget* parent) : QWidget(parent)
     m_threadLimit->setRange(1, 64);
     m_threadLimit->setToolTip(tr("所有 PCL 下载任务共享的文件并发上限；仅在关闭智能并发时生效。"));
     connect(m_smartConcurrency, &QCheckBox::toggled, m_threadLimit, &QWidget::setDisabled);
+    m_chunkLimit = new QSpinBox(transfers);
+    m_chunkLimit->setRange(1, 16);
+    m_chunkLimit->setToolTip(tr("每个大文件的分段连接上限。小文件或不支持 Range 的服务器使用单连接；独立于同时下载文件数。"));
     m_speedLimit = new QSpinBox(transfers);
     m_speedLimit->setRange(0, 1000000);
     m_speedLimit->setSuffix(tr(" KB/s"));
     m_speedLimit->setSpecialValueText(tr("Unlimited"));
 
     transfersLayout->addRow(tr("手动文件并发上限："), m_threadLimit);
+    transfersLayout->addRow(tr("单文件分段连接数："), m_chunkLimit);
     transfersLayout->addRow(tr("Speed limit:"), m_speedLimit);
+    m_cacheArtifacts = new QCheckBox(tr("保留下载文件副本（模组 JAR / 整合包，默认关闭）"), transfers);
+    m_cacheArtifacts->setToolTip(tr("关闭时使用临时下载文件，退出时清理；不影响实例内的模组、游戏依赖和已安装 Java。已有下载副本需手动清理。"));
+    transfersLayout->addRow(m_cacheArtifacts);
     root->addWidget(transfers);
 
     auto patches = new QGroupBox(tr("库下载兼容补丁"), this);
@@ -135,6 +142,7 @@ bool PclDownloadPage::apply()
     // Apply transfer limits to the engine immediately.
     if (PclDownloadLibrary::instance().isLoaded()) {
         PclDownloadLibrary::instance().setThreadLimit(APPLICATION->settings()->get("PclDownloadThreadLimit").toInt());
+        PclDownloadLibrary::instance().setChunkLimit(APPLICATION->settings()->get("PclDownloadChunkLimit").toInt());
         PclDownloadLibrary::instance().setSmartConcurrency(APPLICATION->settings()->get("PclDownloadSmartConcurrency").toBool());
         PclDownloadLibrary::instance().setSpeedLimit(
             static_cast<qint64>(APPLICATION->settings()->get("PclDownloadSpeedLimitKBps").toInt()) * 1024);
@@ -148,6 +156,8 @@ void PclDownloadPage::loadSettings()
     m_enabled->setChecked(s->get("DownloadBackend").toInt() == 2);
     m_fallbackToQt->setChecked(s->get("PclDownloadFallbackToQt").toBool());
     m_threadLimit->setValue(s->get("PclDownloadThreadLimit").toInt());
+    m_chunkLimit->setValue(s->get("PclDownloadChunkLimit").toInt());
+    m_cacheArtifacts->setChecked(s->get("CacheDownloadArtifacts").toBool());
     m_smartConcurrency->setChecked(s->get("PclDownloadSmartConcurrency").toBool());
     m_libraryPatches->setChecked(s->get("LibraryDownloadPatchesEnabled").toBool());
     m_threadLimit->setDisabled(m_smartConcurrency->isChecked());
@@ -165,6 +175,8 @@ void PclDownloadPage::applySettings()
     }
     s->set("PclDownloadFallbackToQt", m_fallbackToQt->isChecked());
     s->set("PclDownloadThreadLimit", m_threadLimit->value());
+    s->set("PclDownloadChunkLimit", m_chunkLimit->value());
+    s->set("CacheDownloadArtifacts", m_cacheArtifacts->isChecked());
     s->set("PclDownloadSmartConcurrency", m_smartConcurrency->isChecked());
     s->set("LibraryDownloadPatchesEnabled", m_libraryPatches->isChecked());
     s->set("PclDownloadSpeedLimitKBps", m_speedLimit->value());

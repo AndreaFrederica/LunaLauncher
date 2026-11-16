@@ -299,8 +299,9 @@ const actions=[{op:'rename',field:'name',label:t('xmcl.instance.rename')},{op:'c
 const { dialog, prompt, answer, choices, secret, confirmation, ask, finishDialog, message } = useNeoDialogs();
 const legacyTaskInteraction = ref<any>(null);
 const readOnlyOperations=new Set([
+ 'launcher.cache.status','launcher.cache.entries','yggdrasil.cache.status','yggdrasil.cache.entries',
  'task.status','task.list','task.cancel','neo.task.status','neo.task.list','neo.task.cancel','api.describe','scheduler.status','aria2.downloads','aria2.cancel','aria2.clear-finished','instance.open-folder','instance.folder-path',
-  'settings.list','resource.icon','runtime.info','runtime.memory','instance.icon-library','account.preset.list','authentication.helper.status',
+  'settings.list','resource.icon','resource.mirrors','resource.library-patches','runtime.info','runtime.memory','runtime.memory.subscribe','event.unsubscribe','instance.icon-library','account.preset.list','authentication.helper.status',
    'language.list','launcher.update.status','component.catalog','component.versions','special.loader.versions'
 ]);
 async function catalogExecute(op:string,p:Record<string,unknown>){
@@ -338,7 +339,10 @@ async function navigate(id:string){
  // A background download/install must not lock the whole UI. Render the
  // target page immediately; its own refresh will queue behind the task and
  // fill in when the backend becomes free.
- if(keepPclTabsAlive)return;
+ if(keepPclTabsAlive){
+  if(target==='pcl-settings')void refresh();
+  return;
+ }
  if(busy.value)return;
  await refresh();
 }

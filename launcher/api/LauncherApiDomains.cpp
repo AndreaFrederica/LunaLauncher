@@ -1156,18 +1156,40 @@ void registerLauncherApiDomains(LauncherApi& api)
             return OperationService::success(entries);
         });
     api.registerOperation({ "launcher.cache.clear", "Evict metadata cache using the same operation as the launcher menu.",
-        objectSchema({ { "confirm", boolProperty("Confirm clearing cached metadata.") } }, { "confirm" }), "launcher", true },
+        objectSchema({ { "confirm", boolProperty("Confirm clearing cached metadata.") }, { "kind", stringProperty("metadata or artifacts; defaults to metadata.") } }, { "confirm" }), "launcher", true },
         [](const QJsonObject& p, UserInteraction&) {
             if (!p.value("confirm").toBool()) return OperationService::failure("Cache clearing requires confirm=true.", 2);
-            const auto cleared = APPLICATION->metacache()->evictAll(); APPLICATION->metacache()->SaveNow();
+            const auto kind = p.value("kind").toString("metadata");
+            if (kind != "metadata" && kind != "artifacts") return OperationService::failure("Unknown cache kind.", 2);
+            const auto cleared = APPLICATION->metacache()->evictKind(kind); APPLICATION->metacache()->SaveNow();
             return cleared ? OperationService::success() : OperationService::failure("Some metadata cache files could not be cleared.");
+        });
+    api.registerOperation({ "launcher.cache.entries", "List metadata or optional artifact cache files; installed runtime files are excluded.",
+        objectSchema({ { "kind", stringProperty("metadata or artifacts; defaults to metadata.") } }), "launcher" },
+        [](const QJsonObject& p, UserInteraction&) {
+            const auto kind = p.value("kind").toString("metadata");
+            if (kind != "metadata" && kind != "artifacts") return OperationService::failure("Unknown cache kind.", 2);
+            return OperationService::success(APPLICATION->metacache()->entries(kind));
+        });
+    api.registerOperation({ "launcher.cache.remove", "Delete one indexed HTTP cache file.",
+        objectSchema({ { "base", stringProperty("Cache base ID.") }, { "path", stringProperty("Indexed resource path.") },
+            { "confirm", boolProperty("Confirm deletion.") } }, { "base", "path", "confirm" }), "launcher", true },
+        [](const QJsonObject& p, UserInteraction&) {
+            if (!p.value("confirm").toBool()) return OperationService::failure("Cache deletion requires confirm=true.", 2);
+            if (HttpMetaCache::entryKind(p.value("base").toString(), p.value("path").toString()) == "runtime")
+                return OperationService::failure("Installed runtime files are not removable cache copies.", 2);
+            const auto removed = APPLICATION->metacache()->removeEntry(p.value("base").toString(), p.value("path").toString());
+            APPLICATION->metacache()->SaveNow();
+            return removed ? OperationService::success() : OperationService::failure("Cache entry not found or file could not be deleted.");
         });
     api.registerOperation({ "launcher.cache.status", "Read the local HTTP metadata cache used by Prism metadata and resource services.",
         objectSchema({}), "launcher" },
         [](const QJsonObject&, UserInteraction&) {
             const auto cache = APPLICATION->metacache();
-            return OperationService::success(QJsonObject{ { "entries", cache->entryCount() }, { "bases", cache->baseCount() },
-                { "bytes", cache->byteCount() }, { "indexPath", cache->indexPath() } });
+            return OperationService::success(QJsonObject{ { "entries", cache->entryCount("metadata") }, { "bases", cache->baseCount() },
+                { "bytes", cache->byteCount("metadata") }, { "indexPath", cache->indexPath() },
+                { "artifactsEnabled", APPLICATION->settings()->get("CacheDownloadArtifacts").toBool() },
+                { "artifacts", QJsonObject{ { "entries", cache->entryCount("artifacts") }, { "bytes", cache->byteCount("artifacts") } } } });
         });
     api.registerOperation({ "instance.world.edit", "Open a world in the configured MCEdit executable.",
         objectSchema({ { "instance", stringProperty("Instance ID.") }, { "world", stringProperty("World folder name.") } }, { "instance", "world" }), "worlds", true },

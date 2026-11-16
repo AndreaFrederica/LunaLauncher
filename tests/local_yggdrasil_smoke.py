@@ -33,6 +33,8 @@ def main():
 
         def do_GET(self):
             hits.append(self.path)
+            if self.path.startswith('/slow/'):
+                time.sleep(5)  # Healthy origin slower than the old 4-second total timeout.
             if unavailable.is_set():
                 self.send_error(503)
                 return
@@ -45,7 +47,10 @@ def main():
             self.send_header('Cache-Control', 'max-age=0')
             self.send_header('ETag', 'fixture')
             self.end_headers()
-            self.wfile.write(json.dumps(payload).encode())
+            try:
+                self.wfile.write(json.dumps(payload).encode())
+            except (ConnectionError, OSError):
+                pass  # Cache timeout has already closed its upstream connection.
 
     server = ThreadingHTTPServer(('127.0.0.1', 0), Origin)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -76,6 +81,69 @@ def main():
             finally:
                 sidecar.close()
             print('PASS: Qt metadata requests use persistent Rust stale cache after restart')
+
+            unavailable.clear()
+            slow_root = root / 'slow-profile'
+            slow_root.mkdir()
+            (slow_root / 'lunalauncher.cfg').write_text(
+                '[General]\nLanguage=en_US\nLocalServiceCache=true\n'
+                f'MetaURLOverride=http://127.0.0.1:{server.server_port}/slow/\n', encoding='utf-8')
+            sidecar = Sidecar(executable, slow_root)
+            try:
+                versions = sidecar.ok('component.versions', uid='net.minecraft')
+                assert versions['versions'][0]['version'] == '1.21.1', versions
+                assert hits.count('/slow/net.minecraft/index.json') == 1, hits
+                state = sidecar.ok('yggdrasil.cache.status')
+                assert state['stats']['entries'] >= 2, state
+                assert state['stats']['bytes'] > 0, state
+                assert state['stats']['error'] == 0, state
+                assert Path(state['dataDirectory']) == slow_root/'yggdrasil', state
+                qt_state = sidecar.ok('launcher.cache.status')
+                assert qt_state['entries'] > 0 and qt_state['bytes'] > 0, qt_state
+            finally:
+                sidecar.close()
+            # A successful direct-source fallback alone would leave Rust empty.
+            # Remove Qt files and restart with the origin failing: only persisted
+            # Rust cache entries can satisfy this request.
+            for file in (slow_root/'meta').rglob('*.json'):
+                file.unlink()
+            unavailable.set()
+            sidecar = Sidecar(executable, slow_root)
+            try:
+                versions = sidecar.ok('component.versions', uid='net.minecraft')
+                assert versions['versions'][0]['version'] == '1.21.1', versions
+                state = sidecar.ok('yggdrasil.cache.status')
+                assert state['stats']['entries'] >= 2 and state['stats']['bytes'] > 0, state
+                assert state['stats']['stale'] >= 1, state
+                resource_entries = sidecar.ok('yggdrasil.cache.entries')['items']
+                assert len(resource_entries) >= 2 and all(e['source'].startswith('http://127.0.0.1:') for e in resource_entries)
+                assert all('headers' not in e and 'body' not in e for e in resource_entries)
+                qt_entries = sidecar.ok('launcher.cache.entries')
+                assert qt_entries and any(e['path'].endswith('index.json') for e in qt_entries)
+                selected = qt_entries[0]
+                cached_file = Path(selected['filePath'])
+                assert cached_file.is_file()
+                rejected = sidecar.execute('launcher.cache.remove', base=selected['base'], path=selected['path'], confirm=False)
+                assert not rejected['ok'] and cached_file.is_file()
+                rejected = sidecar.execute('launcher.cache.remove', base=selected['base'], path='../lunalauncher.cfg', confirm=True)
+                assert not rejected['ok'] and (slow_root/'lunalauncher.cfg').is_file()
+                sidecar.ok('launcher.cache.remove', base=selected['base'], path=selected['path'], confirm=True)
+                assert not cached_file.exists()
+                assert not any(e['base'] == selected['base'] and e['path'] == selected['path'] for e in sidecar.ok('launcher.cache.entries'))
+                chosen = resource_entries[0]
+                sidecar.ok('yggdrasil.cache.purge', key=chosen['key'], confirm=True)
+                remaining = sidecar.ok('yggdrasil.cache.entries')['items']
+                assert len(remaining) == len(resource_entries)-1 and all(e['key'] != chosen['key'] for e in remaining)
+                sidecar.ok('yggdrasil.cache.purge', confirm=True)
+                assert sidecar.ok('yggdrasil.cache.status')['stats']['entries'] == 0
+                assert not list((slow_root/'yggdrasil/cache').glob('[0-9a-f]'*64)), 'Purged cache blobs remain on disk'
+                sidecar.ok('launcher.cache.clear', confirm=True)
+                assert sidecar.ok('launcher.cache.entries') == []
+                print('PASS: cache listing, protected deletion, individual removal and complete disk cleanup')
+            finally:
+                sidecar.close()
+            unavailable.clear()
+            print('PASS: slow origin fetched once, written to Rust disk cache, nonzero API totals and stale recovery after restart')
 
             uid = '123456789abc4def8123456789abcdef'
             profile = {'id': uid, 'name': 'Alice', 'skin': {'id': '', 'url': '', 'variant': ''}, 'capes': []}

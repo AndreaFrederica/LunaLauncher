@@ -36,6 +36,7 @@ class SubTaskProgressBar : public QWidget {
 
     void setRange(int min, int max);
     void setValue(int value);
+    void setFormat(const QString& format);
     void setStatus(QString status);
     void setDetails(QString details);
 

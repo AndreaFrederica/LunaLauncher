@@ -69,6 +69,13 @@ class ProgressDialog : public QDialog {
 
     Task* getTask();
 
+    // Observe an API-owned task without starting it or taking its ownership.
+    // Call again to refresh the task tree or follow the next import phase.
+    void refreshFromTask(Task* task);
+
+   signals:
+    void cancelRequested();
+
    public slots:
     void onTaskStarted();
     void onTaskFailed(QString failure);
@@ -88,12 +95,16 @@ class ProgressDialog : public QDialog {
 
    private:
     bool handleImmediateResult(QDialog::DialogCode& result);
+    void observeTask(Task* task);
     void addTaskProgress(TaskStepProgress const& progress);
 
    private:
     Ui::ProgressDialog* ui;
 
-    Task* m_task;
+    Task* m_task = nullptr;
+    QMetaObject::Connection m_taskDestroyedConnection;
+    bool m_observing = false;
+    bool m_cancelRequested = false;
 
     QList<QMetaObject::Connection> m_taskConnections;
 

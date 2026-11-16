@@ -29,6 +29,8 @@ unique_qobject_ptr<SubTaskProgressBar> SubTaskProgressBar::create(QWidget* paren
 SubTaskProgressBar::SubTaskProgressBar(QWidget* parent) : QWidget(parent), ui(new Ui::SubTaskProgressBar)
 {
     ui->setupUi(this);
+    ui->statusLabel->setTextFormat(Qt::PlainText);
+    ui->statusDetailsLabel->setTextFormat(Qt::PlainText);
 }
 SubTaskProgressBar::~SubTaskProgressBar()
 {
@@ -45,6 +47,11 @@ void SubTaskProgressBar::setValue(int value)
     ui->progressBar->setValue(value);
 }
 
+void SubTaskProgressBar::setFormat(const QString& format)
+{
+    ui->progressBar->setFormat(format);
+}
+
 void SubTaskProgressBar::setStatus(QString status)
 {
     ui->statusLabel->setText(status);
@@ -52,5 +59,6 @@ void SubTaskProgressBar::setStatus(QString status)
 
 void SubTaskProgressBar::setDetails(QString details)
 {
-    ui->statusDetailsLabel->setText(details);
+    ui->statusDetailsLabel->setToolTip(details);
+    ui->statusDetailsLabel->setText(ui->statusDetailsLabel->fontMetrics().elidedText(details, Qt::ElideMiddle, 260));
 }

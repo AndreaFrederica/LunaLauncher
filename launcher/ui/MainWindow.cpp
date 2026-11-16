@@ -73,7 +73,6 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QProgressDialog>
 #include <QShortcut>
 #include <QStatusBar>
 #include <QToolBar>
@@ -1137,23 +1136,21 @@ void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask, const QString& 
             MainWindow* owner;
         } interaction(this);
         LauncherApi api;
-        QProgressDialog progress(tr("Importing instance…"), tr("Abort"), 0, 0, this);
+        ProgressDialog progress(this);
         progress.setWindowTitle(tr("Import instance"));
         progress.setWindowModality(Qt::WindowModal);
-        progress.setMinimumDuration(0);
-        progress.setAutoClose(false);
-        progress.setAutoReset(false);
+        progress.setSkipButton(true, tr("Abort"));
         progress.hide();
-        connect(&progress, &QProgressDialog::canceled, &api, &LauncherApi::cancelCurrent);
+        connect(&progress, &ProgressDialog::cancelRequested, &api, &LauncherApi::cancelCurrent);
         QTimer progressTimer;
         connect(&progressTimer, &QTimer::timeout, &progress, [&] {
             auto* current = api.currentTask();
-            if (!current || !current->isRunning()) return;
-            progress.setLabelText(current->getStatus());
-            const auto total = current->getTotalProgress();
-            progress.setRange(0, total > 0 ? 1000 : 0);
-            if (total > 0) progress.setValue(qBound(0, int(1000.0 * current->getProgress() / total), 1000));
-            if (!progress.wasCanceled()) progress.show();
+            if (!current || !current->isRunning()) {
+                progress.hide();
+                return;
+            }
+            progress.refreshFromTask(current);
+            progress.show();
         });
         progressTimer.start(100);
         const auto result = installInstanceTaskToStore(api, rawTask, {{"source","directory-pack"}}, interaction);

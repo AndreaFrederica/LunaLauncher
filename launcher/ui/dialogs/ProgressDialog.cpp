@@ -43,26 +43,25 @@
 
 #include "StringUtils.h"
 #include "tasks/Task.h"
+#include "tasks/TaskProgressSnapshot.h"
 
 #include "ui/widgets/SubTaskProgressBar.h"
 
-// map a value in a numeric range of an arbitrary type to between 0 and INT_MAX
-// for getting the best precision out of the qt progress bar
-template <typename T, std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
-std::tuple<int, int> map_int_zero_max(T current, T range_max, T range_min)
+// Preserve small counters exactly; scale large byte totals without overflowing
+// QProgressBar's int range or turning an exact 50% into 49% through truncation.
+static std::tuple<int, int> mapProgress(qint64 current, qint64 total)
 {
-    int int_max = std::numeric_limits<int>::max();
-
-    auto type_range = range_max - range_min;
-    double percentage = static_cast<double>(current - range_min) / static_cast<double>(type_range);
-    int mapped_current = percentage * int_max;
-
-    return { mapped_current, int_max };
+    current = qBound<qint64>(0, current, total);
+    if (total <= std::numeric_limits<int>::max())
+        return { int(current), int(total) };
+    constexpr int scale = 1'000'000;
+    return { int(static_cast<long double>(current) * scale / total), scale };
 }
 
 ProgressDialog::ProgressDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ProgressDialog)
 {
     ui->setupUi(this);
+    ui->globalStatusLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     ui->taskProgressLayout->setAlignment(Qt::AlignTop);
     ui->taskProgressScrollArea->setHidden(true);
     auto speedSizePolicy = ui->globalSpeedWidget->sizePolicy();
@@ -90,12 +89,19 @@ void ProgressDialog::setSkipButton(bool present, QString label)
 void ProgressDialog::on_skipButton_clicked(bool checked)
 {
     Q_UNUSED(checked);
-    if (ui->skipButton->isEnabled())  // prevent other triggers from aborting
+    if (!ui->skipButton->isEnabled()) return;
+    if (m_observing) {
+        m_cancelRequested = true;
+        ui->skipButton->setEnabled(false);
+        emit cancelRequested();
+    } else if (m_task) {
         m_task->abort();
+    }
 }
 
 ProgressDialog::~ProgressDialog()
 {
+    disconnect(m_taskDestroyedConnection);
     for (auto conn : this->m_taskConnections) {
         disconnect(conn);
     }
@@ -143,7 +149,7 @@ void ProgressDialog::updateSize(bool recenterParent)
 
 int ProgressDialog::execWithTask(Task* task)
 {
-    this->m_task = task;
+    observeTask(task);
 
     if (!task) {
         qDebug() << "Programmer error: Progress dialog created with null task.";
@@ -216,6 +222,72 @@ Task* ProgressDialog::getTask()
     return m_task;
 }
 
+void ProgressDialog::observeTask(Task* task)
+{
+    if (m_task == task) return;
+    disconnect(m_taskDestroyedConnection);
+    m_task = task;
+    if (task) {
+        m_taskDestroyedConnection = connect(task, &QObject::destroyed, this, [this] {
+            m_task = nullptr;
+            ui->skipButton->setEnabled(false);
+            hide();
+        });
+    }
+}
+
+void ProgressDialog::refreshFromTask(Task* task)
+{
+    m_observing = true;
+    observeTask(task);
+    if (!task) return;
+
+    // Imports can switch from extraction to metadata, downloads and conversion.
+    // Read the same leaf-task snapshot as Neo so nested wrappers cannot hide
+    // file names, byte progress or transfer rates from the classic UI.
+    changeStatus(task->getStatus());
+    changeProgress(task->getProgress(), task->getTotalProgress());
+    const auto snapshot = TaskProgressSnapshot::snapshot(task, 48);
+    const auto children = snapshot.value("children").toArray();
+    QSet<QUuid> visible;
+    qint64 transferRate = 0;
+    for (const auto& value : children) {
+        const auto child = value.toObject();
+        const auto state = child.value("state").toString();
+        if (state != "running" && state != "waiting") continue;
+        TaskStepProgress step(QUuid(child.value("id").toString()));
+        step.label = child.value("label").toString();
+        step.status = child.value("status").toString();
+        step.details = child.value("details").toString();
+        step.current = child.value("current").toInteger();
+        step.total = child.value("total").toInteger(-1);
+        step.progressUnit = child.value("progressUnit").toString();
+        step.transferRate = child.value("transferRate").toInteger();
+        step.state = state == "running" ? TaskStepState::Running : TaskStepState::Waiting;
+        if (step.label.isEmpty() && step.status.isEmpty()) continue;
+        visible.insert(step.uid);
+        transferRate += step.transferRate;
+        changeStepProgress(step);
+    }
+    // Retire rows when the underlying phase or batch changes. Keep the dialog's
+    // widget count bounded even for imports containing thousands of downloads.
+    for (auto it = taskProgress.begin(); it != taskProgress.end();) {
+        if (!visible.contains(it.key())) {
+            delete it.value();
+            it = taskProgress.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    ui->taskProgressScrollArea->setVisible(!visible.isEmpty());
+    transferRate = std::max(transferRate, task->getTransferRate());
+    changeTransferRate(transferRate);
+    // File-copy phases also report bytes, but they are not network transfers.
+    ui->globalSpeedWidget->setVisible(transferRate > 0);
+    ui->skipButton->setEnabled(!m_cancelRequested && task->isRunning() && task->canAbort());
+    updateSize();
+}
+
 void ProgressDialog::onTaskStarted() {}
 
 void ProgressDialog::onTaskFailed([[maybe_unused]] QString failure)
@@ -232,10 +304,9 @@ void ProgressDialog::onTaskSucceeded()
 
 void ProgressDialog::changeStatus([[maybe_unused]] const QString& status)
 {
+    if (!m_task) return;
     ui->globalStatusLabel->setText(m_task->getStatus());
-    ui->globalStatusLabel->adjustSize();
     ui->globalStatusDetailsLabel->setText(m_task->getDetails());
-    ui->globalStatusDetailsLabel->adjustSize();
 
     updateSize();
 }
@@ -259,26 +330,47 @@ void ProgressDialog::changeStepProgress(TaskStepProgress const& task_progress)
         addTaskProgress(task_progress);
     auto task_bar = taskProgress.value(task_progress.uid);
 
-    auto const [mapped_current, mapped_total] = map_int_zero_max<qint64>(task_progress.current, task_progress.total, 0);
     if (task_progress.total <= 0) {
         task_bar->setRange(0, 0);
+        task_bar->setValue(0);
     } else {
+        auto const [mapped_current, mapped_total] = mapProgress(task_progress.current, task_progress.total);
         task_bar->setRange(0, mapped_total);
+        task_bar->setValue(mapped_current);
     }
 
-    task_bar->setValue(mapped_current);
-    task_bar->setStatus(task_progress.status);
-    task_bar->setDetails(task_progress.details);
-
-    if (task_progress.isDone()) {
-        task_bar->setVisible(false);
+    auto status = task_progress.label;
+    if (status.isEmpty()) status = task_progress.status;
+    else if (!task_progress.status.isEmpty() && task_progress.status != status)
+        status += QStringLiteral(" — ") + task_progress.status;
+    task_bar->setStatus(status);
+    QStringList details;
+    if (!task_progress.details.isEmpty()) details.append(task_progress.details);
+    if (task_progress.progressUnit == "bytes") {
+        const auto current = StringUtils::humanReadableFileSize(std::max<qint64>(0, task_progress.current));
+        const auto total = task_progress.total > 0 ? StringUtils::humanReadableFileSize(task_progress.total) : tr("Unknown");
+        details.append(tr("%1 / %2").arg(current, total));
+        task_bar->setFormat(task_progress.total > 0 ? tr("%1 / %2 (%p%)").arg(current, total) : "%p%");
+        if (task_progress.transferRate > 0)
+            details.append(tr("%1/s").arg(StringUtils::humanReadableFileSize(task_progress.transferRate)));
+    } else {
+        task_bar->setFormat(task_progress.progressUnit == "files" && task_progress.total > 0
+            ? tr("%1 / %2 (%p%)").arg(task_progress.current).arg(task_progress.total) : "%p%");
     }
+    task_bar->setDetails(details.join(QStringLiteral(" · ")));
+
+    task_bar->setVisible(!task_progress.isDone());
 }
 
 void ProgressDialog::changeProgress(qint64 current, qint64 total)
 {
-    ui->globalProgressBar->setMaximum(total);
-    ui->globalProgressBar->setValue(current);
+    if (total <= 0) {
+        ui->globalProgressBar->setRange(0, 0);
+    } else {
+        const auto [value, maximum] = mapProgress(current, total);
+        ui->globalProgressBar->setRange(0, maximum);
+        ui->globalProgressBar->setValue(value);
+    }
 }
 
 void ProgressDialog::changeTransferRate(qint64 bytesPerSecond)

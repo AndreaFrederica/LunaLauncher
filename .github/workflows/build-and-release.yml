@@ -55,6 +55,7 @@ jobs:
       prerelease: ${{ steps.meta.outputs.prerelease }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       asset_version: ${{ steps.meta.outputs.asset_version }}
+      release_revision: ${{ steps.meta.outputs.release_revision }}
     steps:
       - name: Check out sources
         uses: actions/checkout@v6
@@ -74,13 +75,13 @@ jobs:
 
           case "$SELECTED_PLATFORM" in
             all)
-              matrix='{"include":[{"target":"windows-x64","runner":"windows-2022"},{"target":"linux-x64","runner":"ubuntu-24.04"},{"target":"macos-arm64","runner":"macos-26"}]}'
+              matrix='{"include":[{"target":"windows-x64","runner":"windows-2022"},{"target":"linux-x64","runner":"ubuntu-22.04"},{"target":"macos-arm64","runner":"macos-26"}]}'
               ;;
             windows-x64)
               matrix='{"include":[{"target":"windows-x64","runner":"windows-2022"}]}'
               ;;
             linux-x64)
-              matrix='{"include":[{"target":"linux-x64","runner":"ubuntu-24.04"}]}'
+              matrix='{"include":[{"target":"linux-x64","runner":"ubuntu-22.04"}]}'
               ;;
             macos-arm64)
               matrix='{"include":[{"target":"macos-arm64","runner":"macos-26"}]}'
@@ -94,10 +95,11 @@ jobs:
           if [[ "$EVENT_NAME" == "push" ]]; then
             publish_release=true
             release_tag="$REF_NAME"
-            if [[ "$release_tag" == *-* ]]; then
-              prerelease=true
-            else
+            # A date and optional same-day revision are normal Luna releases.
+            if [[ "$release_tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9]{8}(r[0-9]+)?)?$ ]]; then
               prerelease=false
+            else
+              prerelease=true
             fi
           else
             publish_release="$MANUAL_PUBLISH"
@@ -110,6 +112,10 @@ jobs:
             fi
           fi
 
+          release_revision=""
+          if [[ "$release_tag" =~ -[0-9]{8}r([0-9]+)$ ]]; then
+            release_revision="${BASH_REMATCH[1]}"
+          fi
           asset_version="$(printf '%s' "$release_tag" | sed 's/[^A-Za-z0-9._-]/-/g')"
           {
             echo "matrix=$matrix"
@@ -117,6 +123,7 @@ jobs:
             echo "prerelease=$prerelease"
             echo "release_tag=$release_tag"
             echo "asset_version=$asset_version"
+            echo "release_revision=$release_revision"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -128,10 +135,14 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CARGO_BUILD_JOBS: '1'
+      LUNA_BUILD_JOBS: '1'
+      LUNA_USE_PCH: ${{ runner.os == 'Linux' && 'true' || 'false' }}
       LUNA_BUILD_DIR: build-meson-release
       LUNA_INSTALL_DIR: install-release
       LUNA_MACOS_DEPLOYMENT_TARGET: "13.0"
       LUNA_NEO_UI: ${{ (github.event_name == 'push' || inputs.include_neo_ui) && 'enabled' || 'disabled' }}
+      LUNA_RELEASE_REVISION: ${{ needs.prepare.outputs.release_revision }}
     steps:
       - name: Check out sources
         uses: actions/checkout@v6
@@ -166,6 +177,14 @@ jobs:
         with:
           cache: true
           frozen: true
+
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev desktop-file-utils libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libopengl0 xvfb
 
       - name: Build and install with Meson
         if: runner.os != 'Windows'
@@ -234,19 +253,42 @@ jobs:
               $hash = (Get-FileHash -Algorithm SHA256 $artifact).Hash.ToLowerInvariant()
               "$hash  $([IO.Path]::GetFileName($artifact))" | Set-Content "$artifact.sha256"
           }
+          pixi run python scripts/windows_update_manifest.py --setup $setup --installation install-release --architecture x64
 
-      - name: Package Linux build
+      - name: Package deployed Linux portable directory and update manifest
+        if: runner.os == 'Linux'
+        shell: bash
+        run: pixi run python scripts/pixi_appimage.py release --format portable
+
+      - name: Package Linux AppImage and update manifest
         if: runner.os == 'Linux'
         shell: bash
         env:
-          ASSET_VERSION: ${{ needs.prepare.outputs.asset_version }}
+          CARGO_BUILD_JOBS: '1'
+          LUNA_BUILD_JOBS: '1'
+        run: pixi run python scripts/pixi_appimage.py release
+
+      - name: Verify Linux AppImage runtime and update transaction
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          LUNA_BUILD_TESTING: 'true'
         run: |
           set -euo pipefail
-          mkdir -p release-assets
-          archive_name="LunaLauncher-Linux-x64-${ASSET_VERSION}.tar.gz"
-          archive="release-assets/$archive_name"
-          tar -czf "$archive" -C install-release .
-          (cd release-assets && sha256sum "$archive_name" > "$archive_name.sha256")
+          image="$(find "$PWD/release-assets" -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$image"
+          pixi run configure release
+          pixi run python scripts/appimage_smoke.py "$image"
+          pixi run python tests/appimage_api_smoke.py --image "$image"
+          portable="$(find "$PWD/release-assets" -maxdepth 1 -name '*-portable.tar.gz' -print -quit)"
+          test -n "$portable"
+          pixi run python scripts/portable_smoke.py "$portable"
+          if [[ "$LUNA_NEO_UI" == enabled ]]; then
+            GDK_BACKEND=x11 xvfb-run -a pixi run python tests/appimage_neo_smoke.py --image "$image"
+            GDK_BACKEND=x11 xvfb-run -a pixi run python tests/linux_portable_runtime.py --archive "$portable" --neo
+          else
+            pixi run python tests/linux_portable_runtime.py --archive "$portable"
+          fi
 
       - name: Validate and sign macOS app
         if: runner.os == 'macOS'

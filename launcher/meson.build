@@ -161,6 +161,28 @@ if gamemode_dep.found()
   launcher_logic_args += ['-DWITH_GAMEMODE']
 endif
 
+launcher_no_pch_objects = []
+if get_option('use_pch')
+  # QTermWidget's global Filter class conflicts with the filesystem Filter
+  # alias included by the launcher PCH. Compile this integration on its own.
+  _pch_sources = []
+  foreach src : launcher_logic_sources
+    if src != 'ui/pages/server/ServerConsoleWidget.cpp'
+      _pch_sources += [src]
+    endif
+  endforeach
+  launcher_logic_sources = _pch_sources
+  terminal_integration = static_library(
+    'ServerConsoleWidget',
+    'ui/pages/server/ServerConsoleWidget.cpp',
+    dependencies: [buildconfig_dep, qt_core_dep, qt_widgets_dep, qt_network_dep, qt_networkauth_dep, qtermwidget_dep],
+    include_directories: [launcher_inc, launcher_minecraft_inc],
+    cpp_args: launcher_logic_args,
+    build_by_default: false,
+  )
+  launcher_no_pch_objects = terminal_integration.extract_all_objects(recursive: false)
+endif
+
 launcher_logic = static_library(
   'Launcher_logic',
   files(launcher_logic_sources) + [
@@ -170,6 +192,7 @@ launcher_logic = static_library(
     launcher_moc_header_generated,
     launcher_moc_source_generated,
   ],
+  objects: launcher_no_pch_objects,
   dependencies: [
     murmur2_dep,
     kvantum_dep,
@@ -205,7 +228,7 @@ launcher_logic = static_library(
     qtermwidget_inc,
   ],
   cpp_args: launcher_logic_args,
-  cpp_pch: get_option('use_pch') ? ['include/base.pch.hpp', 'include/qtcore.pch.hpp', 'include/qtgui.pch.hpp'] : [],
+  cpp_pch: get_option('use_pch') ? ['include/launcher.pch.hpp'] : [],
 )
 
 launcher_main_sources = ['main.cpp']
@@ -320,7 +343,7 @@ if is_windows and get_option('build_filelinker')
       qt_network_dep,
       qt_entrypoint_dep,
     ],
-    cpp_pch: get_option('use_pch') ? ['include/base.pch.hpp', 'include/qtcore.pch.hpp', 'include/qtgui.pch.hpp'] : [],
+    cpp_pch: get_option('use_pch') ? ['include/launcher.pch.hpp'] : [],
   )
 
   executable(

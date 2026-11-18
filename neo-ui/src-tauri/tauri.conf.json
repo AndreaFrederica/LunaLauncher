@@ -56,7 +56,8 @@
     "active": true,
     "targets": "all",
     "icon": [
-      "../../program_info/lunalauncher.ico"
+      "../../program_info/lunalauncher.ico",
+      "../../program_info/org.lunalauncher.LunaLauncher_256.png"
     ]
   }
 }

@@ -1,0 +1,79 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+set -eu
+APPDIR="${APPDIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
+export APPDIR
+if [ -f "$APPDIR/usr/share/luna-portable.requirements" ]; then
+    requirements="$APPDIR/usr/share/luna-portable.requirements"
+    {
+        IFS= read -r required_arch
+        IFS= read -r required_glibc
+    } < "$requirements"
+    host_arch="$(uname -m)"
+    host_glibc="$(getconf GNU_LIBC_VERSION 2>/dev/null || true)"
+    case "$required_arch:$host_arch" in x64:x86_64|arm64:aarch64) :;;
+        *) printf '%s\n' "Luna portable requires $required_arch; this system is $host_arch." >&2; exit 1;;
+    esac
+    case "$host_glibc" in 'glibc '*) host_glibc="${host_glibc#glibc }";;
+        *) printf '%s\n' 'This Luna portable package requires glibc; musl distributions are unsupported.' >&2; exit 1;;
+    esac
+    oldest="$(printf '%s\n%s\n' "$required_glibc" "$host_glibc" | sort -V | head -n 1)"
+    if [ "$oldest" != "$required_glibc" ]; then
+        printf '%s\n' "Luna portable requires glibc >= $required_glibc; this system has $host_glibc." >&2
+        exit 1
+    fi
+    if [ -z "${LUNA_LAUNCHER_DATA:-}" ] && [ ! -e "$APPDIR/usr/.luna-data-dir" ] && [ ! -e "$APPDIR/usr/.luna-use-system-data" ]; then
+        mkdir -p "$APPDIR/usr/UserData"
+    fi
+fi
+export PATH="$APPDIR/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$APPDIR/usr/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$APPDIR/usr/plugins/platforms"
+export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+entry="${LUNA_LAUNCHER_ENTRY:-auto}"
+if [ "${1:-}" = "--luna-entry" ]; then
+    [ "$#" -ge 2 ] || exit 2
+    entry="$2"
+    shift 2
+fi
+if [ "$entry" = auto ]; then
+    entry=classic
+    if [ -x "$APPDIR/usr/bin/luna-neo-ui" ]; then
+        entry=neo
+        for arg in "$@"; do
+            case "$arg" in --version|-v|--help|-h|--cli|--mcp|--print-startup-context) entry=classic;; esac
+        done
+    fi
+fi
+case "$entry" in
+    classic)
+        if [ -n "${LUNA_LAUNCHER_DATA:-}" ]; then
+            exec "$APPDIR/usr/bin/lunalauncher" --dir "$LUNA_LAUNCHER_DATA" "$@"
+        fi
+        exec "$APPDIR/usr/bin/lunalauncher" "$@";;
+    neo|cf-webview)
+        # Upstream deployment hooks assume optional desktop variables may be
+        # unset (for example XDG_CURRENT_DESKTOP under Xvfb or minimal WMs).
+        set +u
+        for hook in "$APPDIR"/apprun-hooks/*.sh; do
+            if [ -f "$hook" ]; then . "$hook"; fi
+        done
+        set -u
+        for webkit in "$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1" "$APPDIR/usr/lib64/webkit2gtk-4.1" "$APPDIR/usr/lib/webkit2gtk-4.1" "$APPDIR/usr/libexec/webkit2gtk-4.1"; do
+            if [ -x "$webkit/WebKitWebProcess" ]; then
+                export WEBKIT_EXEC_PATH="$webkit"
+                export WEBKIT_INJECTED_BUNDLE_PATH="$webkit/injected-bundle"
+                break
+            fi
+        done
+        # The pinned GTK deployment plugin relocates WebKit's /usr paths to ././.
+        # Release WebKit builds ignore WEBKIT_EXEC_PATH, so cwd must be this usr.
+        cd "$APPDIR/usr"
+        if [ "$entry" = neo ]; then
+            exec "$APPDIR/usr/bin/luna-neo-ui" "$@"
+        fi
+        exec "$APPDIR/usr/bin/luna-cf-webview.bin" "$@";;
+    updater) exec "$APPDIR/usr/bin/lunalauncher_updater" "$@";;
+    *) printf '%s\n' "Unknown Luna AppImage entry: $entry" >&2; exit 2;;
+esac

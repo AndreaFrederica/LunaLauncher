@@ -1,0 +1,24 @@
+{
+  "x64": {
+    "linuxdeploy": {
+      "url": "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage",
+      "sha256": "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d"
+    },
+    "qt": {
+      "url": "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-qt-x86_64.AppImage",
+      "sha256": "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724"
+    },
+    "appimagetool": {
+      "url": "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage",
+      "sha256": "e8c1169c4af66c3184d7ee110713d4be04befe671fa358e2c1591ee840553b03"
+    },
+    "runtime": {
+      "url": "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64",
+      "sha256": "617aa77314d57c8b8e4fae9c3f0b35af7b30d5529cb69e98f64f92510ed98a46"
+    },
+    "gtk": {
+      "url": "https://raw.githubusercontent.com/tauri-apps/tauri/8e7028331ad37ac2db74d4ec20e66be5cacf2c40/crates/tauri-bundler/src/bundle/linux/appimage/linuxdeploy-plugin-gtk.sh",
+      "sha256": "ef6b9a980417243bc62e0241b51dc49876032afd1bab9b4762389f961b406d9b"
+    }
+  }
+}

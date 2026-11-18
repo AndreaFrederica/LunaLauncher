@@ -10,6 +10,8 @@ curseforge_webview_sources = files(
   'assets/index.html',
   'src/main.rs',
   '../../program_info/lunalauncher.ico',
+  '../../program_info/org.lunalauncher.LunaLauncher_256.png',
+  '../../scripts/build_cargo_sidecar.py',
 )
 
 curseforge_webview = custom_target(

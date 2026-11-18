@@ -3,7 +3,25 @@
 import shutil
 import subprocess
 import sys
+import platform
 from pathlib import Path
+
+
+def desktop_cargo_command(cargo, arguments):
+    """Keep Pixi's compiler, using the host CRT with its GTK/WebKit SDK.
+
+    The conda GNU sysroot has an older glibc. Mixing its Scrt1.o with the
+    distro GTK library search paths fails with missing __libc_csu_* symbols.
+    Apply this only to the final desktop binary, preserving dependency caches.
+    """
+    if sys.platform != "linux":
+        return [cargo, "build", *arguments]
+    multiarch = "aarch64-linux-gnu" if platform.machine() == "aarch64" else "x86_64-linux-gnu"
+    candidates = (Path("/usr/lib") / multiarch, Path("/usr/lib64"), Path("/usr/lib"))
+    crt = next((path for path in candidates if (path / "Scrt1.o").is_file()), None)
+    if crt is None:
+        raise SystemExit("Native GTK/WebKit builds require the host glibc development startup files (libc6-dev/glibc-devel)")
+    return [cargo, "rustc", *arguments, "--", "-C", "link-arg=--sysroot=/", "-C", f"link-arg=-B{crt}/"]
 
 
 def main() -> None:
@@ -13,19 +31,18 @@ def main() -> None:
         )
 
     cargo, manifest, target_dir, profile, output = sys.argv[1:]
-    command = [
-        cargo,
-        "build",
+    arguments = [
         "--locked",
         "--manifest-path",
         manifest,
         "--target-dir",
         target_dir,
+        "--bin", "luna-cf-webview",
     ]
     if profile == "release":
-        command.append("--release")
+        arguments.append("--release")
 
-    subprocess.check_call(command)
+    subprocess.check_call(desktop_cargo_command(cargo, arguments))
 
     executable_name = "luna-cf-webview.exe" if sys.platform == "win32" else "luna-cf-webview"
     built = Path(target_dir) / profile / executable_name

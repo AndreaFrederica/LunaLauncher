@@ -109,6 +109,34 @@ args = [
 ]
 cmd = "python scripts/pixi_meson.py deploy {{ profile }}"
 
+[tasks.package-appimage]
+description = "Build and package the native Linux Classic AppImage with update manifest"
+cmd = "python scripts/pixi_appimage.py release --build"
+env = { LUNA_NEO_UI = "disabled", LUNA_USE_PCH = "true" }
+
+[tasks.package-appimage-webui]
+description = "Build and package the native Linux NeoUI AppImage with update manifest"
+cmd = "python scripts/pixi_appimage.py release --build"
+env = { LUNA_NEO_UI = "enabled", LUNA_USE_PCH = "true" }
+
+[tasks.test-appimage-update]
+description = "Run AppImage updater transaction and compatibility tests (configure with LUNA_BUILD_TESTING=true first)"
+cmd = "python scripts/appimage_smoke.py"
+
+[tasks.package-linux-portable]
+description = "Build a deployed Linux Classic portable directory archive and update manifest"
+cmd = "python scripts/pixi_appimage.py release --build --format portable"
+env = { LUNA_NEO_UI = "disabled", LUNA_USE_PCH = "true" }
+
+[tasks.package-linux-portable-webui]
+description = "Build a deployed Linux NeoUI portable directory archive and update manifest"
+cmd = "python scripts/pixi_appimage.py release --build --format portable"
+env = { LUNA_NEO_UI = "enabled", LUNA_USE_PCH = "true" }
+
+[tasks.test-linux-portable-update]
+description = "Test Linux portable updates (configure with LUNA_BUILD_TESTING=true first)"
+cmd = "python scripts/portable_smoke.py"
+
 # Optional complete Web UI build. Keep its output separate from the Qt-only build.
 [tasks.configure-webui]
 description = "Configure native launcher + Tauri Web UI (Pixi pnpm/Rust, Meson)"

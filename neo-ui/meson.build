@@ -439,7 +439,9 @@ neo_ui_sources = files(
   'src-tauri/src/window_geometry.rs',
   'src/themes/melody/config/windows.json',
   '../program_info/lunalauncher.ico',
+  '../program_info/org.lunalauncher.LunaLauncher_256.png',
   '../scripts/build_neo_ui.py',
+  '../scripts/build_cargo_sidecar.py',
 )
 
 neo_ui_name = is_windows ? 'luna-neo-ui.exe' : 'luna-neo-ui'

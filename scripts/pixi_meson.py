@@ -111,6 +111,7 @@ def installed_binary_dir(root: Path, profile: str) -> Path:
 
 def task_env(root: Path, profile: str) -> dict[str, str]:
     env = os.environ.copy()
+    env.setdefault("CARGO_BUILD_JOBS", "1")
     qt_tools = qt_tools_root(root) if is_cross_profile(profile) else qt_target_root(root, profile)
     qt_target = qt_target_root(root, profile)
     path_entries = [
@@ -149,12 +150,14 @@ def task_env(root: Path, profile: str) -> dict[str, str]:
     env["CMAKE_PREFIX_PATH"] = os.pathsep.join(cmake_prefix_paths)
     env["LUNA_QT_PLUGIN_DIR"] = str(qt_target / "plugins")
     if platform.system().lower() == "linux" and not is_cross_profile(profile) and env.get("CONDA_PREFIX"):
-        env["PKG_CONFIG_PATH"] = os.pathsep.join(
-            [
-                str(Path(env["CONDA_PREFIX"]) / "lib" / "pkgconfig"),
-                str(Path(env["CONDA_PREFIX"]) / "share" / "pkgconfig"),
-            ]
-        )
+        # Native desktop SDKs (GTK/WebKit for Tauri) come from the host distro.
+        # Keep Pixi first while allowing its pkg-config to see those SDKs.
+        multiarch = "aarch64-linux-gnu" if platform.machine() == "aarch64" else "x86_64-linux-gnu"
+        env["PKG_CONFIG_PATH"] = os.pathsep.join([
+            str(Path(env["CONDA_PREFIX"]) / "lib" / "pkgconfig"),
+            str(Path(env["CONDA_PREFIX"]) / "share" / "pkgconfig"),
+            f"/usr/lib/{multiarch}/pkgconfig", "/usr/lib/pkgconfig", "/usr/share/pkgconfig",
+        ])
         env["PKG_CONFIG_LIBDIR"] = env["PKG_CONFIG_PATH"]
     elif profile_system(profile) == "windows" or is_cross_profile(profile):
         env["PKG_CONFIG_PATH"] = ""
@@ -313,6 +316,7 @@ def configure(root: Path, profile: str) -> None:
     build_testing = os.environ.get("LUNA_BUILD_TESTING", "false").lower() in ("1", "true", "yes")
     build_updater = os.environ.get("LUNA_BUILD_UPDATER", "false" if system == "macos" else "true").lower() in ("1", "true", "yes")
     developer_mode = os.environ.get("LUNA_DEVELOPER_MODE_BUILD", "false").lower() in ("1", "true", "yes")
+    use_pch = os.environ.get("LUNA_USE_PCH", "false").lower() in ("1", "true", "yes")
 
     args = [
         "meson",
@@ -327,6 +331,8 @@ def configure(root: Path, profile: str) -> None:
         f"-Dbuild_testing={'true' if build_testing else 'false'}",
         f"-Ddeveloper_mode_build={'true' if developer_mode else 'false'}",
         f"-Dbuild_updater={'true' if build_updater else 'false'}",
+        f"-Duse_pch={'true' if use_pch else 'false'}",
+        "-Dbackend_max_links=1",
         f"-Dneo_ui={'enabled' if webui_enabled() else 'disabled'}",
         # Ship the launcher-managed Rust authentication/cache service in every
         # native Pixi build. The Linux cross profile builds a foreign target
@@ -354,9 +360,12 @@ def configure(root: Path, profile: str) -> None:
     run(args, cwd=root, env=task_env(root, profile))
 
 
-def build(root: Path, profile: str) -> None:
+def build(root: Path, profile: str, targets: list[str] | None = None) -> None:
     validate_profile(profile)
-    run(["meson", "compile", "-C", str(build_dir(root, profile))], cwd=root, env=task_env(root, profile))
+    jobs = os.environ.get("LUNA_BUILD_JOBS", "4")
+    if not jobs.isdecimal() or int(jobs) < 1:
+        raise SystemExit("LUNA_BUILD_JOBS must be a positive integer")
+    run(["meson", "compile", "-C", str(build_dir(root, profile)), "-j", jobs, *(targets or [])], cwd=root, env=task_env(root, profile))
 
 
 def test_build(root: Path, profile: str) -> None:
@@ -521,7 +530,7 @@ def main() -> None:
     elif command == "configure":
         configure(root, profile)
     elif command == "build":
-        build(root, profile)
+        build(root, profile, sys.argv[3:])
     elif command == "install":
         install(root, profile)
     elif command == "deploy":

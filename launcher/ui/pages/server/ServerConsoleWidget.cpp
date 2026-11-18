@@ -6,6 +6,7 @@
 #include <qtermwidget.h>
 #include <QVBoxLayout>
 #include <QFont>
+#include <QFontInfo>
 #include "Application.h"
 #include "settings/SettingsObject.h"
 

@@ -38,6 +38,7 @@
 </template>
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { useLauncherUpdates } from './composables/useLauncherUpdates';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import NeoCreateInstancePage, { type NeoCreationDraft } from './components/NeoCreateInstancePage.vue';
@@ -563,6 +564,16 @@ async function openDeviceBrowser(){const url=String(device.value?.url || '');if(
 async function copyDeviceCode(){const code=String(device.value?.code || '');if(code)await copyText(code);}
 let unlisten:(()=>void)|undefined,unlistenStream:(()=>void)|undefined,unlistenExit:(()=>void)|undefined;
 const openConversionTaskCenter = () => { taskCenterOpen.value = true; };
+useLauncherUpdates({
+ canCheck: () => !editorInstanceId && !resourceDownloadInstance && connected.value && !busy.value && !installProgressOpen.value && !startupState.value?.needsSetup && !instances.value.some((instance: any) => instance.running),
+ execute: (operation) => call(operation),
+ available: (release) => {
+  quasar.notify({ type: 'info', message: t('pcl.setup.newVersion', { version: release.versionName || release.versionTag }), timeout: 15000,
+   actions: [{ label: t('pcl.auto2.k087db63ab1'), handler: () => {
+    void call('launcher.update.apply', { versionTag: release.versionTag }).catch((exception) => { error.value = message(exception); });
+   } }] });
+ },
+});
  onMounted(async()=>{if(editorInstanceId || resourceDownloadInstance)return;window.addEventListener('luna-neo-task-started', openConversionTaskCenter);void initPclMusic();try{unlistenStream=await launcher.onStream(receiveStream);unlistenExit=await launcher.onExit((reason)=>{connected.value=false;sessions.clear();consoleSubscription='';consoleMonitorId.value='';consoleState.value=t('app.backendExited');for(const item of instances.value)item.running=false;if(selected.value)selected.value.running=false;error.value=reason.message || t('app.backendDisconnected');});unlisten=await launcher.onEvent(async(raw:any)=>{recordRuntimeDebug('event','launcher-event','event received',{kind:raw?.kind,operation:raw?.operation});if(raw.kind==='input'){if(raw.context?.type==='restricted-downloads'){legacyTaskInteraction.value=raw;return;}const opts=raw.choices?.map((x:any,n:number)=>({label:typeof x==='string'?x:(x.name||x.label||JSON.stringify(x)),value:n}));const v=await ask(raw.prompt,'',false,opts||null,raw.secret);try{await launcher.respond(v===null?{interactionId:raw.interactionId,cancel:true}:{interactionId:raw.interactionId,value:v});}catch(e){error.value=message(e);}}else if(raw.kind==='device_code'){device.value=raw.data || raw;deviceShown.value=true;}else if(raw.kind==='status'){const messageText=raw.message || raw.data?.message || (typeof raw.data==='string'?raw.data:t('app.executing'));if(launchInFlight){launchStage.value=messageText;setLaunchState('launching');void appendConsole(`[${t('app.launchPrefix')}] ${messageText}`,launchingId);}status.value=messageText;}else if(raw.kind==='task'){handleTaskUpdate(raw.task || raw.data || null);}});await refresh();startupState.value=await call('startup.status');if(startupState.value?.needsSetup)settings.value=await call('settings.list',{scope:'launcher'});}catch(e){error.value=message(e);}});
  onUnmounted(()=>{stopLaunchProgressAnimation();if(pclRouteAnimationTimer)clearTimeout(pclRouteAnimationTimer);window.removeEventListener('luna-neo-task-started', openConversionTaskCenter);unlisten?.();unlistenStream?.();unlistenExit?.();});
 </script>

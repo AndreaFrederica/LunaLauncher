@@ -29,6 +29,7 @@ neo_ui_sources = files(
   'src/components/NeoUiAppearancePanel.vue',
   'src/neo-ui-preferences.ts',
   'src/composables/useNeoDialogs.ts',
+  'src/composables/useLauncherUpdates.ts',
   'src/common/runtime/runtime-debug.ts',
   'src/common/runtime/lifecycle-debug.ts',
   'src/common/runtime/theme-runtime.ts',

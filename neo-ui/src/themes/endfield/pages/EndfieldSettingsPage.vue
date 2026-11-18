@@ -576,7 +576,7 @@ async function checkUpdate() {
 }
 async function applyUpdate() {
   try {
-    await props.execute('launcher.update.apply');
+    await props.execute('launcher.update.apply', { versionTag: updateStatus.value?.versionTag });
     emit('toast', 'success', '更新已开始');
   } catch { /* shell toast */ }
 }

@@ -59,7 +59,7 @@ async function saveProxy(){await attempt(async()=>{await props.execute('network.
 async function testProxy(){await attempt(async()=>{const r=await props.execute('network.proxy.test',{url:'https://launcher.mojang.com',timeoutMs:10000});proxyResult.value=r.message||t('neo.extra.connectionSucceeded',{status:r.status||'OK'});});}
 async function loadUpdate(){await attempt(async()=>{update.value={...update.value,...await props.execute('launcher.update.status')};});}
 async function saveUpdate(){await attempt(async()=>{await props.execute('launcher.update.configure',update.value);await loadUpdate();});}
-async function checkUpdates(){await attempt(async()=>{const r=await props.execute('launcher.update.check');releases.value=r.releases||r;});}
+async function checkUpdates(){await attempt(async()=>{const r=await props.execute('launcher.update.check');releases.value=r.available?[r]:[];});}
 async function listReleases(){await attempt(async()=>{const r=await props.execute('launcher.update.releases');releases.value=r.releases||r;});}
 async function applyRelease(r:any){await attempt(()=>props.execute('launcher.update.apply',{versionTag:r.versionTag||r.tag,assetName:r.assetName}));}
 async function importPrism(){await attempt(()=>props.execute('settings.import-prism',{confirm:true}));}

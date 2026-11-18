@@ -173,6 +173,8 @@ async fn launcher_request(
     parameters: Value,
 ) -> Result<Value, ApiError> {
     let _lease = webui::RequestLease::acquire(&app).map_err(|message| ApiError { message })?;
+    let update_handoff = method == "launcher/execute"
+        && parameters.get("operation").and_then(Value::as_str) == Some("launcher.update.apply");
     if !["launcher/execute", "launcher/respond", "launcher/catalog"].contains(&method.as_str()) {
         return Err(ApiError {
             message: "Unsupported protocol method".into(),
@@ -233,9 +235,21 @@ async fn launcher_request(
                 .to_string(),
         });
     }
-    message.get("result").cloned().ok_or_else(|| ApiError {
+    let result = message.get("result").cloned().ok_or_else(|| ApiError {
         message: "Launcher response has no result".into(),
-    })
+    })?;
+    if update_handoff && result.get("ok").and_then(Value::as_bool) == Some(true)
+        && result.pointer("/data/shutdownRequired").and_then(Value::as_bool) == Some(true)
+    {
+        // Central native handoff applies to every theme. Returning first lets
+        // the frontend receive the result; RunEvent::Exit reaps the CLI sidecar.
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            handle.exit(0);
+        });
+    }
+    Ok(result)
 }
 
 fn percent_encode(value: &str) -> String {

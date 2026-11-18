@@ -36,6 +36,26 @@ test_sources = [
 
 test_inc = include_directories('..', '../launcher')
 test_inc_with_buildconfig = [test_inc, buildconfig_inc]
+windows_update_moc = qt.preprocess(moc_sources: files('WindowsUpdateManifest_test.cpp'),
+  include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
+windows_update_test = executable('WindowsUpdateManifest_test',
+  files('WindowsUpdateManifest_test.cpp', '../launcher/Version.cpp') + windows_update_moc,
+  include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
+test('WindowsUpdateManifest_test', windows_update_test)
+if is_linux
+  appimage_update_moc = qt.preprocess(moc_sources: files('AppImageUpdate_test.cpp'),
+    include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
+  appimage_update_test = executable('AppImageUpdate_test',
+    files('AppImageUpdate_test.cpp') + appimage_update_moc,
+    include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
+  test('AppImageUpdate_test', appimage_update_test, timeout: 240)
+  portable_update_moc = qt.preprocess(moc_sources: files('LinuxPortableUpdate_test.cpp'),
+    include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
+  portable_update_test = executable('LinuxPortableUpdate_test',
+    files('LinuxPortableUpdate_test.cpp') + portable_update_moc,
+    include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep, libarchive_dep])
+  test('LinuxPortableUpdate_test', portable_update_test, timeout: 300)
+endif
 snapshot_moc = qt.preprocess(moc_sources: files('AccountSnapshot_test.cpp'),
   include_directories: test_inc_with_buildconfig, dependencies: [qt_core_dep, qt_test_dep])
 snapshot_test = executable('AccountSnapshot_test',

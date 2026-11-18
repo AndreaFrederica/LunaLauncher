@@ -7,6 +7,7 @@
 #include "HardwareInfo.h"
 #include "api/LauncherApi.h"
 #include "api/LauncherApiObjects.h"
+#include "api/AsyncTaskRuntime.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/WorldList.h"
 #include "minecraft/World.h"
@@ -63,6 +64,8 @@
 #include <QSysInfo>
 #include <memory>
 #include "updater/ExternalUpdater.h"
+#include "updater/prismupdater/AppImageUpdate.h"
+#include "updater/prismupdater/LinuxPortable.h"
 
 namespace {
 
@@ -665,6 +668,12 @@ QSettings updateSettings()
 
 QJsonObject updateStatus()
 {
+#ifdef Q_OS_WIN
+    constexpr bool supported = true;
+#else
+    const bool supported = !AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() ||
+        !LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty();
+#endif
     auto settings = updateSettings();
     const auto marker = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.success");
     const auto failed = QDir(APPLICATION->dataRoot()).filePath(".prism_launcher_update.fail");
@@ -676,7 +685,8 @@ QJsonObject updateStatus()
         logFile.seek(qMax<qint64>(0, logFile.size() - 262144));
         logTail = logFile.read(262144);
     }
-    return OperationService::success(QJsonObject{ { "automatic", settings.value("auto_check", true).toBool() },
+    return OperationService::success(QJsonObject{ { "supported", supported }, { "unsupportedReason", supported ? "" : "Automatic updates on this platform are TODO; use your package manager or download a release." },
+                                                   { "automatic", settings.value("auto_check", true).toBool() },
                                                    { "intervalSeconds", settings.value("update_interval", 86400).toInt() },
                                                    { "beta", settings.value("allow_beta", false).toBool() },
                                                    { "lastCheck", settings.value("last_check").toString() },
@@ -711,6 +721,8 @@ QJsonObject updateConfigure(const QJsonObject& p)
 
 QString updaterPath()
 {
+    const auto image = AppImageUpdate::runningImage(QCoreApplication::applicationDirPath());
+    if (!image.isEmpty()) return image;
 #ifdef Q_OS_WIN
     const auto name = QString(BuildConfig.LAUNCHER_APP_BINARY_NAME) + "_updater.exe";
 #else
@@ -721,11 +733,20 @@ QString updaterPath()
 
 QJsonObject updateCheck(LauncherApi& api, bool releases = false)
 {
+#ifndef Q_OS_WIN
+    if (AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() &&
+        LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty())
+        return OperationService::failure("Automatic updates require a compatible Luna AppImage or portable directory package. System packages use their package manager.", 2);
+#endif
     const auto updater = updaterPath();
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
     QProcess process;
     auto settings = updateSettings();
     QStringList arguments{ releases ? "--json-releases" : "--check-only", "--dir", APPLICATION->dataRoot(), "--debug" };
+    if (!AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty()) {
+        arguments.prepend("updater"); arguments.prepend("--luna-entry");
+        process.setProcessEnvironment(AppImageUpdate::cleanEnvironment());
+    }
     if (settings.value("allow_beta", false).toBool()) arguments.append("--pre-release");
     QEventLoop loop;
     QTimer timeout, cancellation; timeout.setSingleShot(true); cancellation.setInterval(100);
@@ -758,20 +779,33 @@ QJsonObject updateCheck(LauncherApi& api, bool releases = false)
 
 QJsonObject updateApply(const QJsonObject& p)
 {
+#ifndef Q_OS_WIN
+    if (AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() &&
+        LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty())
+        return OperationService::failure("Automatic updates require a compatible Luna AppImage or portable directory package. System packages use their package manager.", 2);
+#endif
+    if (!APPLICATION->updatesAreAllowed()) return OperationService::failure("请先停止正在运行的游戏，再更新启动器。", 2);
+    if (AsyncTaskRuntime::instance().hasUnfinishedTasks()) return OperationService::failure("请等待安装、导入等后台任务完成后再更新启动器。", 2);
     const auto tag = p.value("versionTag").toString().trimmed();
     if (tag.isEmpty() || tag.contains('/') || tag.contains('\\')) return OperationService::failure("versionTag is invalid.", 2);
     const auto updater = updaterPath();
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
     QProcess process;
     auto settings = updateSettings();
-    QStringList arguments{ "--dir", APPLICATION->dataRoot(), "--install-version", tag, "--headless", "--wait-pid", QString::number(QCoreApplication::applicationPid()) };
+    QStringList arguments{ "--dir", APPLICATION->dataRoot(), "--install-version", tag, "--restart-entry", "neo", "--wait-pid", QString::number(QCoreApplication::applicationPid()) };
+    if (!AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty()) {
+        arguments.prepend("updater"); arguments.prepend("--luna-entry");
+        process.setProcessEnvironment(AppImageUpdate::cleanEnvironment());
+    }
     if (!p.value("assetName").toString().isEmpty()) arguments.append({ "--asset", p.value("assetName").toString() });
     if (settings.value("allow_beta", false).toBool()) arguments.append("--pre-release");
     if (p.value("allowDowngrade").toBool()) arguments.append("--allow-downgrade");
-    const auto started = process.startDetached(updater, arguments);
+    process.setProgram(updater); process.setArguments(arguments);
+    const auto started = process.startDetached();
     if (!started) return OperationService::failure("The updater could not be started.");
     return OperationService::success(QJsonObject{ { "started", true }, { "versionTag", tag }, { "updater", updater },
-        { "shutdownRequired", true }, { "externalUpdaterUi", false }, { "systemInstallerMayOpen", true }, { "restartByFrontend", true } });
+        { "shutdownRequired", true }, { "externalUpdaterUi", true },
+        { "systemInstallerMayOpen", QSysInfo::kernelType() == "winnt" }, { "restartByFrontend", false } });
 }
 
 QJsonObject readLog(const QJsonObject& parameters)

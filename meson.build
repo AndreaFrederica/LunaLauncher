@@ -198,6 +198,11 @@ launcher_version_name4_comma = '@0@,@1@,@2@,0'.format(launcher_version_major, la
 launcher_build_platform = '@0@-@1@'.format(host_machine.system(), host_machine.cpu_family())
 launcher_updater_github_repo = 'https://github.com/AndreaFrederica/LunaLauncher'
 launcher_build_artifact = ''
+if host_machine.system() == 'windows'
+  launcher_build_artifact = 'windows-' + (host_machine.cpu_family() == 'aarch64' ? 'arm64' : 'x64')
+elif is_linux
+  launcher_build_artifact = 'linux-' + (host_machine.cpu_family() == 'aarch64' ? 'arm64' : 'x64')
+endif
 launcher_news_rss_url = 'https://prismlauncher.org/feed/feed.xml'
 launcher_news_open_url = 'https://prismlauncher.org/news'
 launcher_wiki_url = 'https://prismlauncher.org/wiki/'

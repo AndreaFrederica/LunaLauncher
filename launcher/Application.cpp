@@ -151,6 +151,8 @@ unsigned char qResourceFeatureZstd()
 #include "net/HttpMetaCache.h"
 
 #include "updater/ExternalUpdater.h"
+#include "updater/prismupdater/AppImageUpdate.h"
+#include "updater/prismupdater/LinuxPortable.h"
 
 #include "tools/JProfiler.h"
 #include "tools/JVisualVM.h"
@@ -1718,6 +1720,10 @@ bool Application::updaterEnabled()
 {
 #if defined(Q_OS_MAC)
     return BuildConfig.UPDATER_ENABLED;
+#elif defined(Q_OS_LINUX)
+    return BuildConfig.UPDATER_ENABLED && (!AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() ||
+        !LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty()) &&
+        QFileInfo(FS::PathCombine(m_rootPath, updaterBinaryName())).isFile();
 #else
     return BuildConfig.UPDATER_ENABLED && QFileInfo(FS::PathCombine(m_rootPath, updaterBinaryName())).isFile();
 #endif

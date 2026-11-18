@@ -30,12 +30,17 @@
 #include <QProgressDialog>
 #include <QSettings>
 #include <QTimer>
+#include <QEventLoop>
+#include <QScopedValueRollback>
 #include <algorithm>
 #include <memory>
 
 #include "StringUtils.h"
 
 #include "BuildConfig.h"
+#include "Application.h"
+#include "api/AsyncTaskRuntime.h"
+#include "updater/prismupdater/AppImageUpdate.h"
 
 #include "ui/dialogs/UpdateAvailableDialog.h"
 
@@ -48,6 +53,7 @@ class PrismExternalUpdater::Private {
     bool autoCheck{};
     double updateInterval{};
     QDateTime lastCheck;
+    bool checking = false;
     std::unique_ptr<QSettings> settings;
 
     QWidget* parent{};
@@ -97,6 +103,8 @@ void PrismExternalUpdater::checkForUpdates()
 
 void PrismExternalUpdater::checkForUpdates(bool triggeredByUser)
 {
+    if (priv->checking) return;
+    QScopedValueRollback<bool> checking(priv->checking, true);
     QProgressDialog progress(tr("Checking for updates..."), "", 0, 0, priv->parent);
     progress.setCancelButton(nullptr);
     progress.adjustSize();
@@ -142,7 +150,14 @@ void PrismExternalUpdater::checkForUpdates(bool triggeredByUser)
     }
     QCoreApplication::processEvents();
 
-    auto result_finished = proc.waitForFinished(60000);
+    QEventLoop checkLoop;
+    QTimer deadline; deadline.setSingleShot(true);
+    bool timedOut = false;
+    connect(&proc, &QProcess::finished, &checkLoop, &QEventLoop::quit);
+    connect(&deadline, &QTimer::timeout, &checkLoop, [&] { timedOut = true; checkLoop.quit(); });
+    deadline.start(60000);
+    if (proc.state() != QProcess::NotRunning) checkLoop.exec();
+    const auto result_finished = !timedOut && proc.state() == QProcess::NotRunning;
     if (!result_finished) {
         proc.kill();
         auto err = proc.error();
@@ -348,6 +363,10 @@ void PrismExternalUpdater::offerUpdate(const QString& version_name, const QStrin
 
 void PrismExternalUpdater::performUpdate(const QString& version_tag)
 {
+    if (!APPLICATION->updatesAreAllowed() || AsyncTaskRuntime::instance().hasUnfinishedTasks()) {
+        QMessageBox::information(priv->parent, tr("Update deferred"), tr("Stop running games and finish background tasks before updating."));
+        return;
+    }
     QProcess proc;
     auto exe_name = QStringLiteral("%1_updater").arg(BuildConfig.LAUNCHER_APP_BINARY_NAME);
 #if defined Q_OS_WIN32
@@ -360,16 +379,26 @@ void PrismExternalUpdater::performUpdate(const QString& version_tag)
     exe_name = QString("bin/%1").arg(exe_name);
 #endif
 
-    QStringList args = { "--dir", priv->dataDir.absolutePath(), "--install-version", version_tag };
+    QStringList args = { "--dir", priv->dataDir.absolutePath(), "--install-version", version_tag,
+        "--restart-entry", "classic", "--wait-pid", QString::number(QCoreApplication::applicationPid()) };
     if (priv->allowBeta) {
         args.append("--pre-release");
     }
 
     proc.setProgram(priv->appDir.absoluteFilePath(exe_name));
+    const auto image = AppImageUpdate::runningImage(QCoreApplication::applicationDirPath());
+    if (!image.isEmpty()) {
+        // Give the updater its own runtime mount. The frontend's mount ends on exit.
+        proc.setProgram(image);
+        proc.setProcessEnvironment(AppImageUpdate::cleanEnvironment());
+        args.prepend("updater"); args.prepend("--luna-entry");
+    }
     proc.setArguments(args);
     auto result = proc.startDetached();
     if (!result) {
         qDebug() << "Failed to start updater:" << proc.error() << proc.errorString();
+        QMessageBox::critical(priv->parent, tr("Update failed"), proc.errorString());
+        return;
     }
     QCoreApplication::exit();
 }

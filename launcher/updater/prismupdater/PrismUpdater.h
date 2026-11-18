@@ -83,7 +83,9 @@ class PrismUpdaterApp : public QApplication {
     std::optional<QDir> unpackArchive(QFileInfo file);
 
     QFileInfo downloadAsset(const GitHubReleaseAsset& asset);
-    bool callAppImageUpdate();
+    void installAppImage(const QFileInfo& file);
+    void installPortable(const QFileInfo& file);
+    bool startPortableWorker(const GitHubRelease& release, const QString& asset);
 
     void moveAndFinishUpdate(QDir target);
 
@@ -104,6 +106,8 @@ class PrismUpdaterApp : public QApplication {
     bool m_isAppimage = false;
     bool m_isFlatpak = false;
     QString m_appimagePath;
+    QString m_portableRoot;
+    QString m_portableTarget;
     QString m_prismExecutable;
     QUrl m_prismRepoUrl;
     Version m_userSelectedVersion;
@@ -111,6 +115,16 @@ class PrismUpdaterApp : public QApplication {
     bool m_jsonReleases = false;
     qint64 m_waitPid = 0;
     QString m_assetName;
+    QString m_restartEntry = "classic";
+    QHash<QString, QJsonObject> m_windowsManifests;
+    QString m_manifestError;
+    QJsonObject windowsManifest(const GitHubRelease& release);
+    QJsonObject appImageManifest(const GitHubRelease& release);
+    QJsonObject portableManifest(const GitHubRelease& release);
+    QJsonObject updateManifest(const GitHubRelease& release);
+    QHash<QString, QJsonObject> m_appImageManifests;
+    QHash<QString, QJsonObject> m_portableManifests;
+    std::unique_ptr<QTemporaryDir> m_downloadDirectory;
     bool m_checkOnly = false;
     bool m_forceUpdate;
     bool m_printOnly;

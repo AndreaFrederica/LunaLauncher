@@ -21,6 +21,9 @@
  */
 
 #include "PrismUpdater.h"
+#include "WindowsUpdateManifest.h"
+#include "AppImageUpdate.h"
+#include "PortableUpdate.h"
 #include "BuildConfig.h"
 #include "ui/dialogs/ProgressDialog.h"
 
@@ -75,8 +78,10 @@ void appDebugOutput(QtMsgType type, const QMessageLogContext& context, const QSt
     out += QChar::LineFeed;
 
     PrismUpdaterApp* app = static_cast<PrismUpdaterApp*>(QCoreApplication::instance());
-    app->logFile->write(out.toUtf8());
-    app->logFile->flush();
+    if (app->logFile) {
+        app->logFile->write(out.toUtf8());
+        app->logFile->flush();
+    }
     if (app->logToConsole) {
         QTextStream(stderr) << out.toLocal8Bit();
         fflush(stderr);
@@ -111,6 +116,8 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
           { "asset", tr("Select an exact release asset name."), tr("name") },
           { "json-releases", tr("Print releases and compatible assets as JSON, without installing.") },
           { "wait-pid", tr("Wait for this frontend/backend process to exit before changing installation files."), tr("pid") },
+          { "restart-entry", tr("UI to restart after an update: classic or neo."), tr("entry"), "classic" },
+          { "portable-target", tr("Portable directory to update from an isolated updater runtime."), tr("directory") },
           { { "S", "select-ui" }, tr("Select the version to install with a GUI.") },
           { { "D", "allow-downgrade" }, tr("Allow the updater to downgrade to previous versions.") } });
 
@@ -129,6 +136,8 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
     }
     m_checkOnly = parser.isSet("check-only");
     m_assetName = parser.value("asset");
+    m_restartEntry = parser.value("restart-entry");
+    if (m_restartEntry != "classic" && m_restartEntry != "neo") { m_status = Failed; return; }
 
     logToConsole = parser.isSet("debug") || m_headless;
 
@@ -208,6 +217,11 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
 #endif
     }
 
+#ifdef Q_OS_WIN
+    m_isPortable = !QFile::exists(FS::PathCombine(m_rootPath, ".luna-use-system-data")) &&
+        !QFile::exists(FS::PathCombine(m_rootPath, ".luna-data-dir")) &&
+        (QDir(FS::PathCombine(m_rootPath, "UserData")).exists() || QFile::exists(FS::PathCombine(m_rootPath, "portable.txt")));
+#endif
     m_updateLogPath = FS::PathCombine(m_dataPath, "logs", "prism_launcher_update.log");
 
     {  // setup logging
@@ -327,12 +341,16 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
     showFatalErrorMessage(tr("MacOS Not Supported"), tr("The updater does not support installations on MacOS"));
 #endif
 
-    if (binPath.startsWith("/tmp/.mount_")) {
-        m_isAppimage = true;
-        m_appimagePath = QProcessEnvironment::systemEnvironment().value(QStringLiteral("APPIMAGE"));
-        if (m_appimagePath.isEmpty()) {
-            showFatalErrorMessage(tr("Unsupported Installation"),
-                                  tr("Updater is running as misconfigured AppImage? ($APPIMAGE environment variable is missing)"));
+    m_appimagePath = AppImageUpdate::runningImage(binPath);
+    m_isAppimage = !m_appimagePath.isEmpty();
+    m_portableRoot = LinuxPortable::runningRoot(binPath);
+    if (parser.isSet("portable-target")) {
+        m_portableTarget = QDir::cleanPath(parser.value("portable-target"));
+        if (m_portableRoot.isEmpty() || !QDir::isAbsolutePath(m_portableTarget) ||
+            QFileInfo(m_portableTarget).canonicalFilePath() != m_portableTarget || m_portableTarget == m_portableRoot ||
+            LinuxPortable::metadata(m_portableTarget).isEmpty()) {
+            showFatalErrorMessage(tr("Unsupported portable installation"), tr("The portable update target or isolated runtime is invalid."));
+            return;
         }
     }
 
@@ -360,13 +378,14 @@ PrismUpdaterApp::PrismUpdaterApp(int& argc, char** argv) : QApplication(argc, ar
     m_printOnly = parser.isSet("list");
     auto user_version = parser.value("install-version");
     if (!user_version.isEmpty()) {
-        m_userSelectedVersion = Version(user_version);
+        m_userSelectedVersion = Version(WindowsUpdate::normalizedVersion(user_version));
     }
     m_selectUI = parser.isSet("select-ui");
     m_allowDowngrade = parser.isSet("allow-downgrade");
 
     auto version = parser.value("prism-version");
     if (!version.isEmpty()) {
+        m_prismVersion = WindowsUpdate::normalizedVersion(version);
         if (version.contains('-')) {
             auto index = version.indexOf('-');
             m_prsimVersionChannel = version.mid(index + 1);
@@ -425,11 +444,12 @@ void PrismUpdaterApp::abort(const QString& reason)
 void PrismUpdaterApp::showFatalErrorMessage(const QString& title, const QString& content)
 {
     m_status = Failed;
+    if (!m_checkOnly && !m_jsonReleases && !m_dataPath.isEmpty()) {
+        QFile marker(QDir(m_dataPath).filePath(".prism_launcher_update.fail"));
+        if (marker.open(QIODevice::WriteOnly)) marker.write((title + ": " + content).toUtf8());
+        logUpdate(title + ": " + content);
+    }
     if (m_headless) {
-        if (!m_checkOnly && !m_jsonReleases && !m_dataPath.isEmpty()) {
-            QFile marker(QDir(m_dataPath).filePath(".prism_launcher_update.fail"));
-            if (marker.open(QIODevice::WriteOnly)) marker.write((title + ": " + content).toUtf8());
-        }
         qCritical().noquote() << title << ":" << content;
         QMetaObject::invokeMethod(this, [this]() { exit(1); }, Qt::QueuedConnection);
         return;
@@ -459,9 +479,11 @@ void PrismUpdaterApp::run()
             if (release.draft || (release.prerelease && !m_allowPreRelease)) continue;
             QJsonArray assets;
             for (const auto& asset : validReleaseArtifacts(release)) assets.append(QJsonObject{ { "name", asset.name }, { "url", asset.browser_download_url }, { "size", asset.size } });
+            if (assets.isEmpty()) continue;
             result.append(QJsonObject{ { "versionTag", release.tag_name }, { "name", release.name }, { "notes", release.body },
                 { "publishedAt", release.published_at.toString(Qt::ISODate) }, { "prerelease", release.prerelease }, { "assets", assets } });
         }
+        if (!m_manifestError.isEmpty()) return showFatalErrorMessage(tr("Update check failed"), m_manifestError);
         QTextStream out(stdout); out << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n'; out.flush();
         m_status = Succeeded; return exit(0);
     }
@@ -471,7 +493,7 @@ void PrismUpdaterApp::run()
         return exit(0);
     }
 
-    if (!loadPrismVersionFromExe(m_prismExecutable)) {
+    if (m_prismVersion.isEmpty() && !loadPrismVersionFromExe(m_prismExecutable)) {
         m_prismVersion = BuildConfig.printableVersionString();
         m_prismVersionMajor = BuildConfig.VERSION_MAJOR;
         m_prismVersionMinor = BuildConfig.VERSION_MINOR;
@@ -489,6 +511,7 @@ void PrismUpdaterApp::run()
     qDebug() << "Git Commit:" << m_prismGitCommit;
 
     auto latest = getLatestRelease();
+    if (!m_manifestError.isEmpty()) return showFatalErrorMessage(tr("Update check failed"), m_manifestError);
     qDebug() << "Latest release" << latest.version;
     auto need_update = needUpdate(latest);
 
@@ -512,13 +535,6 @@ void PrismUpdaterApp::run()
                                                                         "supported when running the flatpak version of Prism Launcher."));
         return;
     }
-    if (m_isAppimage) {
-        bool result = true;
-        if (need_update)
-            result = callAppImageUpdate();
-        return exit(result ? 0 : 1);
-    }
-
     if (need_update || m_forceUpdate || !m_userSelectedVersion.isEmpty()) {
         GitHubRelease update_release = latest;
         if (!m_userSelectedVersion.isEmpty()) {
@@ -544,7 +560,7 @@ void PrismUpdaterApp::run()
             }
         }
 
-        performUpdate(update_release);
+        return performUpdate(update_release);
     }
 
     exit(0);
@@ -672,7 +688,7 @@ QList<GitHubRelease> PrismUpdaterApp::nonDraftReleases()
 {
     QList<GitHubRelease> nonDraft;
     for (auto rls : m_releases) {
-        if (rls.isValid() && !rls.draft)
+        if (rls.isValid() && !rls.draft && (!rls.prerelease || m_allowPreRelease) && !validReleaseArtifacts(rls).isEmpty())
             nonDraft.append(rls);
     }
     return nonDraft;
@@ -682,7 +698,7 @@ QList<GitHubRelease> PrismUpdaterApp::newerReleases()
 {
     QList<GitHubRelease> newer;
     for (auto rls : nonDraftReleases()) {
-        if (rls.version > m_prismVersion)
+        if (needUpdate(rls))
             newer.append(rls);
     }
     return newer;
@@ -712,66 +728,98 @@ GitHubRelease PrismUpdaterApp::selectRelease()
     return release;
 }
 
+QJsonObject PrismUpdaterApp::windowsManifest(const GitHubRelease& release)
+{
+    if (m_windowsManifests.contains(release.tag_name)) return m_windowsManifests.value(release.tag_name);
+    QJsonObject manifest;
+    const auto arch = QSysInfo::buildCpuArchitecture().contains("arm64") ? "arm64" : "x64";
+    for (const auto& asset : release.assets) {
+        if (asset.name != QString("windows-%1-update.json").arg(arch) || asset.size <= 0 || asset.size > 65536) continue;
+        const auto file = downloadAsset(asset);
+        QFile input(file.absoluteFilePath());
+        if (file.exists() && input.open(QIODevice::ReadOnly)) manifest = QJsonDocument::fromJson(input.read(65537)).object();
+        if (manifest.isEmpty()) m_manifestError = tr("Could not download or parse the Windows update manifest for %1.").arg(release.tag_name);
+        break;
+    }
+    m_windowsManifests.insert(release.tag_name, manifest);
+    return manifest;
+}
+
+QJsonObject PrismUpdaterApp::appImageManifest(const GitHubRelease& release)
+{
+    if (m_appImageManifests.contains(release.tag_name)) return m_appImageManifests.value(release.tag_name);
+    QJsonObject manifest;
+    const auto arch = QSysInfo::buildCpuArchitecture() == "x86_64" ? "x64" : "arm64";
+    int matches = 0;
+    for (const auto& asset : release.assets) {
+        if (asset.name != QString("linux-%1-appimage-update.json").arg(arch)) continue;
+        ++matches;
+        if (asset.size <= 0 || asset.size > 65536) break;
+        const auto file = downloadAsset(asset);
+        QFile input(file.absoluteFilePath());
+        if (file.exists() && input.open(QIODevice::ReadOnly)) manifest = QJsonDocument::fromJson(input.read(65537)).object();
+    }
+    if (matches && (matches != 1 || AppImageUpdate::artifact(manifest, arch, false).isEmpty())) {
+        m_manifestError = tr("Invalid AppImage update manifest for %1.").arg(release.tag_name);
+        manifest = {};
+    }
+    m_appImageManifests.insert(release.tag_name, manifest);
+    return manifest;
+}
+
+QJsonObject PrismUpdaterApp::updateManifest(const GitHubRelease& release)
+{
+#ifdef Q_OS_WIN
+    return windowsManifest(release);
+#else
+    return m_isAppimage ? appImageManifest(release) : !m_portableRoot.isEmpty() ? portableManifest(release) : QJsonObject{};
+#endif
+}
+
+QJsonObject PrismUpdaterApp::portableManifest(const GitHubRelease& release)
+{
+    if (m_portableManifests.contains(release.tag_name)) return m_portableManifests.value(release.tag_name);
+    QJsonObject manifest; int matches = 0;
+    for (const auto& asset : release.assets) {
+        if (asset.name != QString("linux-%1-portable-update.json").arg(LinuxPortable::architecture())) continue;
+        ++matches;
+        if (asset.size <= 0 || asset.size > 65536) break;
+        const auto file = downloadAsset(asset);
+        QFile input(file.absoluteFilePath());
+        if (file.exists() && input.open(QIODevice::ReadOnly)) manifest = QJsonDocument::fromJson(input.read(65537)).object();
+    }
+    // A valid manifest with no compatible glibc artifact is simply unavailable
+    // on this machine; do not offer it as an installable update.
+    if (matches && (matches != 1 || !ReleaseUpdate::validManifest(manifest))) {
+        m_manifestError = tr("Invalid portable Linux update manifest for %1.").arg(release.tag_name);
+        manifest = {};
+    }
+    m_portableManifests.insert(release.tag_name, manifest);
+    return manifest;
+}
+
 QList<GitHubReleaseAsset> PrismUpdaterApp::validReleaseArtifacts(const GitHubRelease& release)
 {
     QList<GitHubReleaseAsset> valid;
-
-    qDebug() << "Selecting best asset from" << release.tag_name << "for platform" << BuildConfig.BUILD_ARTIFACT
-             << "portable:" << m_isPortable;
-    if (BuildConfig.BUILD_ARTIFACT.isEmpty())
-        qWarning() << "Build platform is not set!";
-    for (auto asset : release.assets) {
-        if (asset.name.endsWith(".zsync")) {
-            qDebug() << "Rejecting zsync file" << asset.name;
-            continue;
-        }
-        if (!m_isAppimage && asset.name.toLower().endsWith("appimage")) {
-            qDebug() << "Rejecting" << asset.name << "because it is an AppImage";
-            continue;
-        } else if (m_isAppimage && !asset.name.toLower().endsWith("appimage")) {
-            qDebug() << "Rejecting" << asset.name << "because it is not an AppImage";
-            continue;
-        }
-        auto asset_name = asset.name.toLower();
-        auto [platform, platform_qt_ver] = StringUtils::splitFirst(BuildConfig.BUILD_ARTIFACT.toLower(), "-qt");
-        auto system_is_arm = QSysInfo::buildCpuArchitecture().contains("arm64");
-        auto asset_is_arm = asset_name.contains("arm64");
-        auto asset_is_archive = asset_name.endsWith(".zip") || asset_name.endsWith(".tar.gz");
-
-        bool for_platform = !platform.isEmpty() && asset_name.contains(platform);
-        if (!for_platform) {
-            qDebug() << "Rejecting" << asset.name << "because platforms do not match";
-        }
-        bool for_portable = asset_name.contains("portable");
-        if (for_platform && asset_name.contains("legacy") && !platform.contains("legacy")) {
-            qDebug() << "Rejecting" << asset.name << "because platforms do not match";
-            for_platform = false;
-        }
-        if (for_platform && ((asset_is_arm && !system_is_arm) || (!asset_is_arm && system_is_arm))) {
-            qDebug() << "Rejecting" << asset.name << "because architecture does not match";
-            for_platform = false;
-        }
-        if (for_platform && platform.contains("windows") && !m_isPortable && asset_is_archive) {
-            qDebug() << "Rejecting" << asset.name << "because it is not an installer";
-            for_platform = false;
-        }
-
-        static const QRegularExpression s_qtPattern("-qt(\\d+)");
-        auto qt_match = s_qtPattern.match(asset_name);
-        if (for_platform && qt_match.hasMatch()) {
-            if (platform_qt_ver.isEmpty() || platform_qt_ver.toInt() != qt_match.captured(1).toInt()) {
-                qDebug() << "Rejecting" << asset.name << "because it is not for the correct qt version" << platform_qt_ver.toInt() << "vs"
-                         << qt_match.captured(1).toInt();
-                for_platform = false;
-            }
-        }
-
-        if (((m_isPortable && for_portable) || (!m_isPortable && !for_portable)) && for_platform) {
-            qDebug() << "Accepting" << asset.name;
-            valid.append(asset);
-        }
-    }
+#ifdef Q_OS_WIN
+    const auto arch = QSysInfo::buildCpuArchitecture().contains("arm64") ? "arm64" : "x64";
+    const auto item = WindowsUpdate::artifact(windowsManifest(release), arch,
+        QFileInfo::exists(QDir(root()).filePath("luna-neo-ui.exe")));
+    if (item.isEmpty()) return valid;
+    for (const auto& asset : release.assets)
+        if (asset.name == item.value("asset").toString() && asset.size == item.value("size").toInteger()) valid.append(asset);
     return valid;
+#else
+    if (!m_isAppimage && m_portableRoot.isEmpty()) return valid;
+    const auto arch = QSysInfo::buildCpuArchitecture() == "x86_64" ? "x64" : "arm64";
+    const bool neo = QFileInfo::exists(QDir(root()).filePath("bin/luna-neo-ui"));
+    const auto item = m_isAppimage ? AppImageUpdate::artifact(appImageManifest(release), arch, neo)
+                                 : LinuxPortable::artifact(portableManifest(release), arch, neo);
+    if (item.isEmpty()) return valid;
+    for (const auto& asset : release.assets)
+        if (asset.name == item.value("asset").toString() && asset.size == item.value("size").toInteger()) valid.append(asset);
+    return valid;
+#endif
 }
 
 GitHubReleaseAsset PrismUpdaterApp::selectAsset(const QList<GitHubReleaseAsset>& assets)
@@ -794,6 +842,10 @@ GitHubReleaseAsset PrismUpdaterApp::selectAsset(const QList<GitHubReleaseAsset>&
 
 void PrismUpdaterApp::performUpdate(const GitHubRelease& release)
 {
+    if (!release.isValid() || release.draft || (release.prerelease && !m_allowPreRelease))
+        return showFatalErrorMessage(tr("Unsupported release"), tr("The selected release is not available on this update channel."));
+    if (!m_allowDowngrade && !needUpdate(release) && !m_forceUpdate)
+        return showFatalErrorMessage(tr("Update refused"), tr("The selected package is not newer. Explicitly allow downgrade to install it."));
     m_install_release = release;
     qDebug() << "Updating to" << release.tag_name;
     auto valid_assets = validReleaseArtifacts(release);
@@ -817,10 +869,42 @@ void PrismUpdaterApp::performUpdate(const GitHubRelease& release)
     }
 
     qDebug() << "will install" << selected_asset;
+    if (!m_portableRoot.isEmpty() && m_portableTarget.isEmpty()) {
+        startPortableWorker(release, selected_asset.name);
+        return;
+    }
+    clearUpdateLog();
+    FS::deletePath(QDir(m_dataPath).filePath(".lunalauncher_update.success"));
+    FS::deletePath(QDir(m_dataPath).filePath(".prism_launcher_update.fail"));
+    logUpdate(tr("Updating from %1 to %2; downloading %3").arg(m_prismVersion, release.tag_name, selected_asset.name));
+    FS::write(QDir(m_dataPath).filePath(".prism_launcher_update.changelog"), release.body.toUtf8());
     auto file = downloadAsset(selected_asset);
 
     if (!file.exists()) {
         return showFatalErrorMessage(tr("Failed to Download"), tr("Failed to download the selected asset."));
+    }
+
+#ifdef Q_OS_WIN
+    const auto manifest = windowsManifest(release);
+    const auto arch = QSysInfo::buildCpuArchitecture().contains("arm64") ? "arm64" : "x64";
+    const auto item = WindowsUpdate::artifact(manifest, arch, QFileInfo::exists(QDir(root()).filePath("luna-neo-ui.exe")));
+    if (item.value("asset").toString() != selected_asset.name || !WindowsUpdate::verifyPackage(file.absoluteFilePath(), item))
+        return showFatalErrorMessage(tr("Update verification failed"), tr("The Windows package size or SHA-256 does not match the release manifest. No installation files were changed."));
+#endif
+
+    if (m_isAppimage) {
+        const auto arch = QSysInfo::buildCpuArchitecture() == "x86_64" ? "x64" : "arm64";
+        const auto item = AppImageUpdate::artifact(appImageManifest(release), arch,
+            QFileInfo::exists(QDir(root()).filePath("bin/luna-neo-ui")));
+        if (item.value("asset").toString() != selected_asset.name || !WindowsUpdate::verifyPackage(file.absoluteFilePath(), item) ||
+            !AppImageUpdate::validImage(file.absoluteFilePath(), arch))
+            return showFatalErrorMessage(tr("Update verification failed"), tr("AppImage size, SHA-256 or architecture does not match the release manifest. Original kept."));
+    }
+    if (!m_portableRoot.isEmpty()) {
+        const auto item = LinuxPortable::artifact(portableManifest(release), LinuxPortable::architecture(),
+            QFileInfo::exists(QDir(root()).filePath("bin/luna-neo-ui")));
+        if (item.value("asset").toString() != selected_asset.name || !ReleaseUpdate::verifyPackage(file.absoluteFilePath(), item))
+            return showFatalErrorMessage(tr("Update verification failed"), tr("The portable package checksum, size or system requirements do not match."));
     }
 
     performInstall(file);
@@ -828,9 +912,12 @@ void PrismUpdaterApp::performUpdate(const GitHubRelease& release)
 
 QFileInfo PrismUpdaterApp::downloadAsset(const GitHubReleaseAsset& asset)
 {
-    auto temp_dir = QDir::tempPath();
+    if (!m_downloadDirectory) m_downloadDirectory = std::make_unique<QTemporaryDir>(QDir::tempPath() + "/luna-update-XXXXXX");
+    if (!m_downloadDirectory->isValid()) return {};
+    auto temp_dir = m_downloadDirectory->path();
     auto file_url = QUrl(asset.browser_download_url);
-    auto out_file_path = FS::PathCombine(temp_dir, file_url.fileName());
+    if (file_url.scheme() != "https" || asset.name.contains('/') || asset.name.contains('\\') || asset.name.contains(':')) return {};
+    auto out_file_path = FS::PathCombine(temp_dir, asset.name);
 
     qDebug() << "downloading" << file_url << "to" << out_file_path;
     auto download = Net::Download::makeFile(file_url, out_file_path);
@@ -853,17 +940,135 @@ QFileInfo PrismUpdaterApp::downloadAsset(const GitHubReleaseAsset& asset)
     return out_file;
 }
 
-bool PrismUpdaterApp::callAppImageUpdate()
+bool PrismUpdaterApp::startPortableWorker(const GitHubRelease& release, const QString& asset)
 {
-    auto appimage_path = QProcessEnvironment::systemEnvironment().value(QStringLiteral("APPIMAGE"));
-    QProcess proc = QProcess();
-    qDebug() << "Calling: AppImageUpdate" << appimage_path;
-    proc.setProgram(FS::PathCombine(m_rootPath, "bin", "AppImageUpdate.AppImage"));
-    proc.setArguments({ appimage_path });
-    auto result = proc.startDetached();
-    if (!result)
-        qDebug() << "Failed to start AppImageUpdate reason:" << proc.errorString();
-    return result;
+#ifdef Q_OS_LINUX
+    QProgressDialog progress(tr("Preparing isolated updater runtime…"), QString(), 0, 100);
+    progress.setCancelButton(nullptr); progress.setMinimumWidth(520);
+    if (!m_headless) progress.show(); else progress.setMinimumDuration(INT_MAX);
+    QTemporaryDir worker(QDir::tempPath() + "/luna-portable-worker-XXXXXX");
+    QString error;
+    if (!worker.isValid() || !PortableUpdate::copyProgram(m_portableRoot, worker.path(), error,
+        [&](const QString& label, qint64 done, qint64 total) {
+            progress.setLabelText(label); progress.setValue(total ? int(done * 100 / total) : 0); QCoreApplication::processEvents();
+        })) {
+        showFatalErrorMessage(tr("Cannot prepare portable updater"), error); return false;
+    }
+    auto env = AppImageUpdate::cleanEnvironment(); env.insert("LUNA_LAUNCHER_DATA", QDir(m_dataPath).absolutePath());
+    QStringList arguments{"--luna-entry", "updater", "--portable-target", m_portableRoot,
+        "--dir", QDir(m_dataPath).absolutePath(), "--prism-version", m_prismVersion,
+        "--install-version", release.tag_name, "--asset", asset, "--restart-entry", m_restartEntry,
+        "--update-url", m_prismRepoUrl.toString()};
+    if (m_waitPid > 0) arguments.append({"--wait-pid", QString::number(m_waitPid)});
+    if (m_allowPreRelease) arguments.append("--pre-release");
+    if (m_allowDowngrade) arguments.append("--allow-downgrade");
+    if (m_forceUpdate) arguments.append("--force");
+    if (m_headless) arguments.append("--headless");
+    QProcess process; process.setProcessEnvironment(env); process.setProgram(worker.filePath("AppRun"));
+    process.setArguments(arguments); process.setWorkingDirectory(worker.path());
+    if (!process.startDetached()) { showFatalErrorMessage(tr("Cannot start portable updater"), process.errorString()); return false; }
+    worker.setAutoRemove(false); // Worker owns this isolated runtime until it exits; /tmp cleanup can reclaim it later.
+    logUpdate("Isolated portable updater runtime: " + worker.path());
+    m_status = Succeeded; exit(0); return true;
+#else
+    return false;
+#endif
+}
+
+void PrismUpdaterApp::installPortable(const QFileInfo& file)
+{
+#ifdef Q_OS_LINUX
+    if (m_portableTarget.isEmpty()) return showFatalErrorMessage(tr("Invalid portable update"), tr("The updater must run from an isolated runtime."));
+    const auto manifest = portableManifest(m_install_release);
+    const auto item = LinuxPortable::artifact(manifest, LinuxPortable::architecture(), QFileInfo::exists(QDir(root()).filePath("bin/luna-neo-ui")));
+    const auto expected = ReleaseUpdate::normalizedVersion(manifest.value("version").toString());
+    QProgressDialog progress(tr("Preparing portable update…"), QString(), 0, 100);
+    progress.setCancelButton(nullptr); progress.setMinimumWidth(520);
+    if (!m_headless) progress.show(); else progress.setMinimumDuration(INT_MAX);
+    auto environment = AppImageUpdate::cleanEnvironment();
+    environment.insert("LUNA_LAUNCHER_DATA", QDir(m_dataPath).absolutePath());
+    const auto health = [&](const QString& directory) {
+        progress.setLabelText(tr("Verifying portable launcher…")); QCoreApplication::processEvents();
+        QProcess probe; auto env = environment; env.insert("QT_QPA_PLATFORM", "offscreen"); probe.setProcessEnvironment(env);
+        QEventLoop loop; QTimer timeout; timeout.setSingleShot(true);
+        connect(&probe, &QProcess::finished, &loop, &QEventLoop::quit);
+        connect(&probe, &QProcess::errorOccurred, &loop, &QEventLoop::quit);
+        connect(&timeout, &QTimer::timeout, &loop, [&] { probe.kill(); loop.quit(); });
+        probe.start(QDir(directory).filePath("AppRun"), {"--luna-entry", "classic", "--version"});
+        timeout.start(30000); loop.exec();
+        if (probe.state() != QProcess::NotRunning) { probe.kill(); probe.waitForFinished(5000); }
+        const auto output = QString::fromUtf8(probe.readAllStandardOutput());
+        const auto match = QRegularExpression("(?:^|\\n)LunaLauncher ([^\\s]+)").match(output);
+        if (probe.exitCode() || !match.hasMatch()) logUpdate("Portable health check: " + QString::fromUtf8(probe.readAllStandardError()));
+        return probe.exitStatus() == QProcess::NormalExit && probe.exitCode() == 0 && match.hasMatch() &&
+            ReleaseUpdate::normalizedVersion(match.captured(1)) == expected;
+    };
+    const auto result = PortableUpdate::replace(m_portableTarget, file.absoluteFilePath(), item, manifest.value("version").toString(), m_dataPath, health,
+        [&](const QString& label, qint64 done, qint64 total) {
+            progress.setLabelText(label);
+            if (total > 0) { progress.setRange(0, 100); progress.setValue(int(done * 100 / total)); }
+            else progress.setRange(0, 0);
+            QCoreApplication::processEvents();
+        });
+    if (!result.success) return showFatalErrorMessage(tr("Portable update failed"), result.error);
+    logUpdate("Portable installation updated; program backup: " + result.backup);
+    if (!result.conflicts.isEmpty()) logUpdate("Conflicting unmanaged files retained in backup: " + result.conflicts.join(", "));
+    FS::write(QDir(m_dataPath).filePath(".lunalauncher_update.success"), result.backup.toUtf8());
+    if (!m_headless) {
+        QProcess restart; restart.setProcessEnvironment(environment); restart.setWorkingDirectory(m_portableTarget);
+        restart.setProgram(QDir(m_portableTarget).filePath("AppRun")); restart.setArguments({"--luna-entry", m_restartEntry});
+        if (!restart.startDetached()) return showFatalErrorMessage(tr("Restart failed"), tr("The update succeeded; start AppRun manually. Backup: %1").arg(result.backup));
+    }
+    m_status = Succeeded; exit(0);
+#endif
+}
+
+void PrismUpdaterApp::installAppImage(const QFileInfo& file)
+{
+#ifdef Q_OS_LINUX
+    QProgressDialog progress(tr("Preparing AppImage update…"), QString(), 0, 100);
+    progress.setCancelButton(nullptr); progress.setMinimumWidth(480);
+    if (!m_headless) progress.show(); else progress.setMinimumDuration(INT_MAX);
+    const auto manifest = appImageManifest(m_install_release);
+    const auto arch = QSysInfo::buildCpuArchitecture() == "x86_64" ? "x64" : "arm64";
+    const auto item = AppImageUpdate::artifact(manifest, arch, QFileInfo::exists(QDir(root()).filePath("bin/luna-neo-ui")));
+    auto environment = AppImageUpdate::cleanEnvironment();
+    const auto expected = WindowsUpdate::normalizedVersion(manifest.value("version").toString());
+    const auto health = [&](const QString& path) {
+        progress.setLabelText(tr("Verifying new AppImage…")); QCoreApplication::processEvents();
+        QProcess probe;
+        auto env = environment; env.insert("QT_QPA_PLATFORM", "offscreen");
+        probe.setProcessEnvironment(env);
+        QEventLoop loop; QTimer timeout; timeout.setSingleShot(true);
+        connect(&probe, &QProcess::finished, &loop, &QEventLoop::quit);
+        connect(&probe, &QProcess::errorOccurred, &loop, &QEventLoop::quit);
+        connect(&timeout, &QTimer::timeout, &loop, [&] { probe.kill(); loop.quit(); });
+        probe.start(path, { "--appimage-extract-and-run", "--luna-entry", "classic", "--version" });
+        timeout.start(30000); loop.exec();
+        if (probe.state() != QProcess::NotRunning) { probe.kill(); probe.waitForFinished(5000); }
+        const auto output = QString::fromUtf8(probe.readAllStandardOutput());
+        const auto version = QRegularExpression("(?:^|\\n)LunaLauncher ([^\\s]+)").match(output);
+        return probe.exitStatus() == QProcess::NormalExit && probe.exitCode() == 0 && version.hasMatch() &&
+            WindowsUpdate::normalizedVersion(version.captured(1)) == expected;
+    };
+    logUpdate(tr("Staging and atomically replacing %1").arg(m_appimagePath));
+    const auto result = AppImageUpdate::replace(m_appimagePath, file.absoluteFilePath(), item, health, [&](qint64 done, qint64 total) {
+        progress.setLabelText(tr("Copying AppImage: %1 / %2 MiB").arg(done / 1048576).arg(total / 1048576));
+        progress.setValue(total ? int(done * 100 / total) : 0); QCoreApplication::processEvents();
+    });
+    if (!result.success) return showFatalErrorMessage(tr("AppImage update failed"), result.error);
+    logUpdate(tr("AppImage updated; backup: %1").arg(result.backup));
+    FS::write(QDir(m_dataPath).filePath(".lunalauncher_update.success"), result.backup.toUtf8());
+    if (!m_headless) {
+        progress.setLabelText(tr("Restarting launcher…")); QCoreApplication::processEvents();
+        environment.insert("LUNA_LAUNCHER_DATA", QDir(m_dataPath).absolutePath());
+        QProcess restart; restart.setProcessEnvironment(environment);
+        restart.setWorkingDirectory(QFileInfo(m_appimagePath).absolutePath());
+        restart.setProgram(m_appimagePath); restart.setArguments({ "--luna-entry", m_restartEntry });
+        if (!restart.startDetached()) return showFatalErrorMessage(tr("Restart failed"), tr("The update succeeded. Open the AppImage manually. Backup: %1").arg(result.backup));
+    }
+    m_status = Succeeded; exit(0);
+#endif
 }
 
 void PrismUpdaterApp::clearUpdateLog()
@@ -924,8 +1129,24 @@ bool write_lock_file(const QString& path, QDateTime timestamp, QString from, QSt
 
 void PrismUpdaterApp::performInstall(QFileInfo file)
 {
+#ifdef Q_OS_WIN
+    // The verified SFX is the update worker for both installed and portable copies.
+    // It waits for this exact installation to exit and performs a rollback transaction.
+    QStringList args{ "--update", "--install-dir", QDir(m_rootPath).absolutePath(),
+        "--data-root", QDir(m_dataPath).absolutePath(), "--restart-entry", m_restartEntry };
+    QProcess worker;
+    worker.setProgram(file.absoluteFilePath()); worker.setArguments(args);
+    worker.setWorkingDirectory(m_downloadDirectory->path());
+    if (!worker.startDetached()) return showFatalErrorMessage(tr("Update failed"), worker.errorString());
+    m_downloadDirectory->setAutoRemove(false); // Worker executable must survive updater exit.
+    m_status = Succeeded;
+    return exit(0);
+#endif
     if (m_waitPid > 0) {
         logUpdate(tr("Waiting for process %1 to exit before installing.").arg(m_waitPid));
+        QProgressDialog waiting(tr("Waiting for the launcher to exit…"), QString(), 0, 0);
+        waiting.setCancelButton(nullptr); waiting.setMinimumWidth(480);
+        if (!m_headless) waiting.show(); else waiting.setMinimumDuration(INT_MAX);
 #ifdef Q_OS_WIN
         HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, DWORD(m_waitPid));
         if (!process && GetLastError() != ERROR_INVALID_PARAMETER) return showFatalErrorMessage("Update handoff failed", "Could not inspect the running launcher process.");
@@ -944,6 +1165,8 @@ void PrismUpdaterApp::performInstall(QFileInfo file)
         if (stillRunning) return showFatalErrorMessage("Update handoff timed out", "Close the launcher sidecar before applying the update.");
         m_waitPid = 0;
     }
+    if (m_isAppimage) return installAppImage(file);
+    if (!m_portableRoot.isEmpty()) return installPortable(file);
     qDebug() << "starting install";
     auto update_lock_path = FS::PathCombine(m_dataPath, ".prism_launcher_update.lock");
     QFileInfo update_lock(update_lock_path);
@@ -1285,7 +1508,7 @@ int PrismUpdaterApp::parseReleasePage(const QByteArray* response)
             release.draft = Json::requireBoolean(release_obj, "draft");
             release.prerelease = Json::requireBoolean(release_obj, "prerelease");
             release.body = release_obj["body"].toString();
-            release.version = Version(release.tag_name);
+            release.version = Version(WindowsUpdate::normalizedVersion(release.tag_name));
 
             auto release_assets_obj = Json::requireArray(release_obj, "assets");
             for (auto asset_json : release_assets_obj) {
@@ -1320,7 +1543,16 @@ GitHubRelease PrismUpdaterApp::getLatestRelease()
             continue;
         if (release.prerelease && !m_allowPreRelease)
             continue;
-        if (!latest.isValid() || (release.version > latest.version)) {
+        if (validReleaseArtifacts(release).isEmpty()) continue;
+        auto candidateVersion = release.version;
+        auto latestVersion = latest.version;
+        const auto candidateManifest = updateManifest(release);
+        if (!candidateManifest.isEmpty()) candidateVersion = Version(WindowsUpdate::normalizedVersion(candidateManifest.value("version").toString()));
+        if (latest.isValid()) {
+            const auto previousManifest = updateManifest(latest);
+            if (!previousManifest.isEmpty()) latestVersion = Version(WindowsUpdate::normalizedVersion(previousManifest.value("version").toString()));
+        }
+        if (!latest.isValid() || (candidateVersion > latestVersion)) {
             latest = release;
         }
     }
@@ -1329,11 +1561,13 @@ GitHubRelease PrismUpdaterApp::getLatestRelease()
 
 bool PrismUpdaterApp::needUpdate(const GitHubRelease& release)
 {
-    auto current_ver = Version(QString("%1.%2.%3").arg(m_prismVersionMajor).arg(m_prismVersionMinor).arg(m_prismVersionPatch));
-    return current_ver < release.version;
+    if (!release.isValid()) return false;
+    auto current_ver = Version(WindowsUpdate::normalizedVersion(m_prismVersion));
+    const auto manifest = updateManifest(release);
+    return current_ver < (manifest.isEmpty() ? release.version : Version(WindowsUpdate::normalizedVersion(manifest.value("version").toString())));
 }
 
 void PrismUpdaterApp::downloadError(QString reason)
 {
-    fail(QString("Network request Failed: %1 with reason %2").arg(m_current_url).arg(reason));
+    showFatalErrorMessage(tr("Update check failed"), QString("Network request failed: %1: %2").arg(m_current_url, reason));
 }

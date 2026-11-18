@@ -35,6 +35,10 @@ class AsyncTaskRuntime final : public QObject {
     QJsonObject list() const;
     QJsonObject cancel(const QString& taskId);
     QJsonObject respond(const QJsonObject& parameters);
+    bool hasUnfinishedTasks() const {
+        for (const auto& record : m_records) if (!record.finished) return true;
+        return false;
+    }
 
     static constexpr int maxActive = 6;
 

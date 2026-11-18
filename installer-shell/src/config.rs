@@ -80,6 +80,7 @@ pub fn load() -> Result<Option<InstallConfig>> {
 }
 
 pub fn save(config: &InstallConfig) -> Result<()> {
+    save_install(config)?;
     let Some(path) = config_path() else {
         return Ok(());
     };
@@ -89,6 +90,24 @@ pub fn save(config: &InstallConfig) -> Result<()> {
     let contents = serde_json::to_string_pretty(config)?;
     fs::write(&path, contents)
         .with_context(|| format!("write installer config: {}", path.display()))?;
+    Ok(())
+}
+
+/// Installation identity belongs to this checkout, not the last wizard run.
+pub const INSTALL_RECORD: &str = ".luna-install.json";
+
+pub fn load_install(directory: &Path) -> Result<Option<InstallConfig>> {
+    let path = directory.join(INSTALL_RECORD);
+    if !path.exists() { return Ok(None); }
+    let mut config: InstallConfig = serde_json::from_slice(&fs::read(&path)?)
+        .with_context(|| format!("read installation record: {}", path.display()))?;
+    // Portable installations can be moved after installation.
+    config.install_dir = directory.to_path_buf();
+    Ok(Some(config))
+}
+
+pub fn save_install(config: &InstallConfig) -> Result<()> {
+    fs::write(config.install_dir.join(INSTALL_RECORD), serde_json::to_vec_pretty(config)?)?;
     Ok(())
 }
 

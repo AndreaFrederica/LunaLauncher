@@ -28,6 +28,18 @@ struct Args {
     /// Install using the saved configuration or the platform default and exit.
     #[arg(long)]
     install: bool,
+    /// Update only the specified existing installation, without running setup/migration.
+    #[arg(long, requires = "install_dir", conflicts_with_all = ["install", "extract", "list", "uninstall"])]
+    update: bool,
+    /// Run the update worker without a progress window (automation/testing).
+    #[arg(long, requires = "update")]
+    update_headless: bool,
+    /// Existing launcher data directory (for update logs and restart).
+    #[arg(long, requires = "update")]
+    data_root: Option<PathBuf>,
+    /// Restart the UI that requested the update.
+    #[arg(long, requires = "update", value_parser = ["classic", "neo"])]
+    restart_entry: Option<String>,
     /// Override the installation directory for --install.
     #[arg(long, value_name = "DIR")]
     install_dir: Option<PathBuf>,
@@ -47,6 +59,32 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    if args.update {
+        let result = (|| {
+            let source = payload_source(args.payload)?;
+            let entry = args.restart_entry.as_deref().map(|value| if value == "neo" {
+                config::EntryPoint::Neo
+            } else { config::EntryPoint::Classic });
+            if !args.update_headless {
+                return ui::run_update(source, args.install_dir.clone().unwrap(), args.data_root.clone(), entry, !args.no_launch);
+            }
+            luna_installer_shell::update::apply(
+                &source, args.install_dir.as_deref().unwrap(), args.data_root.as_deref(),
+                entry, !args.no_launch,
+            )
+        })();
+        if let Err(error) = &result {
+            if let Some(data) = args.data_root.as_deref() {
+                use std::io::Write;
+                let _ = std::fs::write(data.join(".prism_launcher_update.fail"), format!("{error:#}"));
+                if let Ok(mut log) = std::fs::OpenOptions::new().create(true).append(true).open(data.join("logs/prism_launcher_update.log")) {
+                    let _ = writeln!(log, "Update failed: {error:#}");
+                }
+            }
+            if !args.update_headless { platform::show_update_error(&format!("{error:#}")); }
+        }
+        return result;
+    }
     if args.reset_config {
         config::reset()?;
         return Ok(());
@@ -63,7 +101,7 @@ fn main() -> Result<()> {
         && !args.list
         && !args.install
         && !args.no_launch
-        && let Some(saved) = config::load()?
+        && let Some(saved) = shell_install_config()?
             .filter(|saved| current_executable_is_shell_for_install_dir(&saved.install_dir))
     {
         let monitor = platform::current_cursor_monitor();
@@ -143,6 +181,15 @@ fn main() -> Result<()> {
     }
 
     ui::run_installer(source)
+}
+
+fn shell_install_config() -> Result<Option<config::InstallConfig>> {
+    let executable = std::env::current_exe()?;
+    if let Some(directory) = executable.parent() {
+        if let Some(saved) = config::load_install(directory)? { return Ok(Some(saved)); }
+        if let Some(saved) = config::load_install(&directory.join("LunaLauncher"))? { return Ok(Some(saved)); }
+    }
+    config::load()
 }
 
 fn current_executable_is_shell_for_install_dir(install_dir: &Path) -> bool {

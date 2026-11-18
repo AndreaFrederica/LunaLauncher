@@ -8,6 +8,7 @@ import hashlib
 import os
 import re
 import subprocess
+from windows_update_manifest import write_manifest
 from pathlib import Path
 
 
@@ -73,6 +74,7 @@ def main() -> None:
         print(f"SHA256 {digest}  {artifact.name}")
     print(f"Packaged {payload}")
     print(f"Packaged {sfx}")
+    print(f"Update manifest {write_manifest(sfx, source)}")
 
 
 if __name__ == "__main__":

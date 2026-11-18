@@ -9,6 +9,58 @@ use sha2::{Digest, Sha256};
 
 use crate::config::{EntryPoint, InstanceStoreFormat};
 
+pub fn show_update_error(message: &str) {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MB_ICONERROR};
+        let body: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
+        let title: Vec<u16> = "LunaLauncher 更新失败".encode_utf16().chain(Some(0)).collect();
+        MessageBoxW(std::ptr::null_mut(), body.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR);
+    }
+    #[cfg(not(windows))]
+    eprintln!("LunaLauncher update failed: {message}");
+}
+
+/// Wait only for processes loaded from this installation. Never kill other
+/// portable copies, or a running Java game that uses external data.
+pub fn wait_for_installation_exit(target: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
+            System::{Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS},
+                Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION}}};
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        loop {
+            let mut running = false;
+            unsafe {
+                let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                if snapshot == INVALID_HANDLE_VALUE { return Err(std::io::Error::last_os_error().into()); }
+                let mut info: PROCESSENTRY32W = std::mem::zeroed();
+                info.dwSize = std::mem::size_of_val(&info) as u32;
+                let mut more = Process32FirstW(snapshot, &mut info);
+                while more != 0 {
+                    let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, info.th32ProcessID);
+                    if !process.is_null() {
+                        let mut buffer = vec![0u16; 32768]; let mut length = buffer.len() as u32;
+                        if QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length) != 0 {
+                            let image = PathBuf::from(String::from_utf16_lossy(&buffer[..length as usize]));
+                            if image.parent().and_then(|p| p.canonicalize().ok()).as_deref() == Some(target) { running = true; }
+                        }
+                        CloseHandle(process);
+                    }
+                    more = Process32NextW(snapshot, &mut info);
+                }
+                CloseHandle(snapshot);
+            }
+            if !running { return Ok(()); }
+            if std::time::Instant::now() >= deadline { bail!("请关闭当前安装的所有启动器窗口后重试更新（等待超时，未修改文件）"); }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+    #[cfg(not(windows))]
+    { let _ = target; bail!("Automatic installation updates are currently supported only on Windows"); }
+}
+
 pub fn entry_targets(install_dir: &Path, entry_point: EntryPoint) -> Vec<(&'static str, PathBuf)> {
     let mut targets = Vec::new();
     if matches!(entry_point, EntryPoint::Classic | EntryPoint::Both) {

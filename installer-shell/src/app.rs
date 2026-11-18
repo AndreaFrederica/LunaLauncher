@@ -260,10 +260,10 @@ pub(crate) fn uninstall(install_dir: &Path, purge: bool) -> Result<()> {
     if install_dir.parent().is_none() || install_dir == install_dir.parent().unwrap() {
         anyhow::bail!("refusing to uninstall a filesystem root");
     }
-    let saved = config::load()?.filter(|config| {
-        config::is_within_install_dir(&install_dir, &config.install_dir)
-            && config::is_within_install_dir(&config.install_dir, &install_dir)
+    let legacy = config::load()?.filter(|config| {
+        config.install_dir.canonicalize().ok().as_deref() == Some(install_dir.as_path())
     });
+    let saved = config::load_install(&install_dir)?.or(legacy.clone());
     if let Some(config) = saved {
         platform::remove_shortcuts(
             &install_dir,
@@ -273,7 +273,7 @@ pub(crate) fn uninstall(install_dir: &Path, purge: bool) -> Result<()> {
         )?;
     }
     platform::remove_windows_installation(&install_dir)?;
-    config::reset()?;
+    if legacy.is_some() { config::reset()?; }
     platform::schedule_remove_installation(&install_dir, !purge)?;
     println!("Uninstall scheduled for {}", install_dir.display());
     Ok(())

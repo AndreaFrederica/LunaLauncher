@@ -207,7 +207,8 @@ pub fn create_zip(source: &Path, output: &Path) -> Result<usize> {
     // Portable/system selection is installation state, not release content.
     // Never let a stale local marker make a freshly packaged release start in
     // the wrong data location.
-    paths.retain(|(relative, _)| !is_runtime_state_marker(relative));
+    paths.retain(|(relative, _)| !is_runtime_state_marker(relative)
+        && !relative.components().next().is_some_and(|part| part.as_os_str().eq_ignore_ascii_case("UserData")));
     paths.sort_by(|left, right| left.0.cmp(&right.0));
 
     let mut count = 0;
@@ -242,6 +243,7 @@ fn is_runtime_state_marker(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
         Some(".luna-use-system-data") | Some(".luna-data-dir") | Some("portable.txt") | Some("portable.txt.disabled")
+        | Some(".luna-install.json") | Some(".luna-update.json") | Some(".luna-update.lock")
     )
 }
 
@@ -359,6 +361,9 @@ mod tests {
         fs::write(source.join("ascii.txt"), "ascii").unwrap();
         fs::write(source.join(".luna-use-system-data"), "stale state").unwrap();
         fs::write(source.join(".luna-data-dir"), "private local path").unwrap();
+        fs::write(source.join(".luna-install.json"), "private installation record").unwrap();
+        fs::create_dir_all(source.join("UserData/instances")).unwrap();
+        fs::write(source.join("UserData/instances/private.txt"), "private user data").unwrap();
 
         assert_eq!(create_zip(&source, &output).unwrap(), 3);
         let bytes = fs::read(&output).unwrap();

@@ -8,3 +8,4 @@ pub mod platform;
 pub mod sfx;
 
 pub mod migration;
+pub mod update;

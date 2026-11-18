@@ -26,6 +26,48 @@ pub(crate) fn run_installer(source: PayloadSource) -> Result<()> {
     .map_err(|error| anyhow::anyhow!("run installer UI: {error}"))
 }
 
+pub(crate) fn run_update(source: PayloadSource, target: PathBuf, data: Option<PathBuf>, entry: Option<config::EntryPoint>, launch: bool) -> Result<()> {
+    let font = archive::read_entry(&source, "resource/fonts/SarasaUiSC-Regular.ttf").ok();
+    let (sender, receiver) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let result = luna_installer_shell::update::apply_with_progress(&source, &target, data.as_deref(), entry, launch,
+            &mut |fraction, text| { let _ = sender.send((fraction, text.to_owned())); });
+        let _ = sender.send((1.0, if result.is_ok() { "更新完成" } else { "更新失败，请查看详细原因" }.into()));
+        result
+    });
+    struct UpdateWindow { receiver: mpsc::Receiver<(f32, String)>, worker: Option<std::thread::JoinHandle<Result<()>>>, fraction: f32, text: String, result: Arc<std::sync::Mutex<Option<Result<(), String>>>> }
+    impl eframe::App for UpdateWindow {
+        fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+            while let Ok((fraction, text)) = self.receiver.try_recv() { self.fraction = fraction; self.text = text; }
+            if self.worker.as_ref().is_some_and(|worker| worker.is_finished()) {
+                let result = self.worker.take().unwrap().join().unwrap_or_else(|_| Err(anyhow::anyhow!("update worker panicked")));
+                let successful = result.is_ok();
+                *self.result.lock().unwrap() = Some(result.map_err(|error| format!("{error:#}")));
+                if successful { ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
+            }
+            if self.worker.is_some() && ctx.input(|input| input.viewport().close_requested()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            }
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.heading("LunaLauncher 更新"); ui.add_space(16.0);
+                ui.label(&self.text);
+                ui.add(egui::ProgressBar::new(self.fraction).show_percentage());
+                if let Some(Err(error)) = self.result.lock().unwrap().as_ref() {
+                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| { ui.colored_label(egui::Color32::LIGHT_RED, error); });
+                    if ui.button("关闭").clicked() { ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
+                }
+            });
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
+    }
+    let outcome = Arc::new(std::sync::Mutex::new(None)); let outcome_ui = outcome.clone();
+    eframe::run_native("LunaLauncher Update", shell_native_options(), Box::new(move |cc| {
+        install_shell_font(&cc.egui_ctx, font);
+        Ok(Box::new(UpdateWindow { receiver, worker: Some(worker), fraction: 0.0, text: "准备更新…".into(), result: outcome_ui }))
+    })).map_err(|error| anyhow::anyhow!("update progress window: {error}"))?;
+    outcome.lock().unwrap().take().unwrap_or_else(|| Err("update did not finish".into())).map_err(anyhow::Error::msg)
+}
+
 fn shell_native_options() -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([760.0, 680.0])

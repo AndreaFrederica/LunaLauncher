@@ -198,6 +198,15 @@ jobs:
             librsvg2-dev desktop-file-utils libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libopengl0 xvfb
 
+      - name: Verify frontend and export selection before compiling
+        if: runner.os == 'Windows' && env.LUNA_NEO_UI == 'enabled'
+        shell: pwsh
+        run: |
+          pixi run webui-check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pixi run node --test neo-ui/tests/export-selection.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build and install with Meson
         if: runner.os != 'Windows'
         run: pixi run install release
@@ -232,14 +241,10 @@ jobs:
       - name: Show Meson build configuration
         run: pixi run meson introspect build-meson-release --buildoptions
 
-      - name: Verify frontend and instance export artifacts
+      - name: Verify instance export artifacts
         if: runner.os == 'Windows' && env.LUNA_NEO_UI == 'enabled'
         shell: pwsh
         run: |
-          pixi run webui-check
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pixi run node --test neo-ui/tests/export-selection.test.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pixi run python tests/instance_export_smoke.py --exe install-release/lunalauncher-cli.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

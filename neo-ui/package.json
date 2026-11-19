@@ -14,7 +14,7 @@
     "build": "quasar build && pnpm build:bridge",
     "build:bridge": "node scripts/build-bridge.mjs",
     "dev": "quasar dev",
-    "typecheck": "vue-tsc --noEmit",
+    "typecheck": "quasar prepare && vue-tsc --noEmit",
     "typecheck:strict": "python scripts/vue_typecheck_warnings.py --project tsconfig.strict.json",
     "typecheck:strict:fail": "pnpm typecheck:strict",
     "test:client": "node --test tests/client-contract.test.mjs"

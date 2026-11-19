@@ -71,6 +71,9 @@ Installation instructions and downloads will be provided once stable releases ar
 
 At the moment, this project is primarily intended for developers and early testers.
 
+Linux x86_64 Flatpak builds include Neo UI, Classic UI and Java 21. See the
+[Flatpak installation and build guide](docs/flatpak.md).
+
 ---
 
 ## Building

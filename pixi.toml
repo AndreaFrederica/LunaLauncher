@@ -137,6 +137,25 @@ env = { LUNA_NEO_UI = "enabled", LUNA_USE_PCH = "true" }
 description = "Test Linux portable updates (configure with LUNA_BUILD_TESTING=true first)"
 cmd = "python scripts/portable_smoke.py"
 
+[tasks.flatpak-setup]
+description = "Install the user Flatpak runtime used by Luna packages"
+cmd = "python scripts/pixi_flatpak.py setup"
+
+[tasks.package-flatpak]
+description = "Build and package Classic UI as a Linux x86_64 Flatpak"
+cmd = "python scripts/pixi_flatpak.py package --build"
+env = { LUNA_NEO_UI = "disabled", LUNA_USE_PCH = "true" }
+
+[tasks.package-flatpak-webui]
+description = "Build and package Neo UI, Classic UI, helpers and Java 21 as a Flatpak"
+cmd = "python scripts/pixi_flatpak.py package --build"
+env = { LUNA_NEO_UI = "enabled", LUNA_USE_PCH = "true" }
+
+[tasks.test-flatpak]
+description = "Install and test a Flatpak bundle in the real runtime sandbox"
+args = [{ arg = "bundle" }]
+cmd = 'python tests/flatpak_smoke.py --bundle "{{ bundle }}"'
+
 # Optional complete Web UI build. Keep its output separate from the Qt-only build.
 [tasks.configure-webui]
 description = "Configure native launcher + Tauri Web UI (Pixi pnpm/Rust, Meson)"

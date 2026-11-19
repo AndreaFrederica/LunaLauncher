@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+set -eu
+# All entries and subprocesses use the deployed runtime in this sandbox.
+unset APPIMAGE LD_PRELOAD
+export APPDIR=/app/runtime
+export LUNA_LAUNCHER_DATA="${LUNA_LAUNCHER_DATA:-${XDG_DATA_HOME:?}/LunaLauncher}"
+export JAVA_HOME=/app/jdk/21
+export PATH="$JAVA_HOME/bin:/app/bin:/usr/bin:/bin"
+export GTK_USE_PORTAL=1
+export QT_QPA_PLATFORMTHEME=xdgdesktopportal
+mkdir -p "$LUNA_LAUNCHER_DATA"
+exec "$APPDIR/AppRun" "$@"

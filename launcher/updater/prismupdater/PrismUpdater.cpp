@@ -531,8 +531,8 @@ void PrismUpdaterApp::run()
     }
 
     if (m_isFlatpak) {
-        showFatalErrorMessage(tr("Updating flatpack not supported"), tr("Actions outside of checking if an update is available are not "
-                                                                        "supported when running the flatpak version of Prism Launcher."));
+        showFatalErrorMessage(tr("Flatpak updates"), tr("Update Luna Launcher in your software center or run:\n"
+                                                       "flatpak update org.lunalauncher.LunaLauncher\nFor standalone bundles, install the newer .flatpak file."));
         return;
     }
     if (need_update || m_forceUpdate || !m_userSelectedVersion.isEmpty()) {

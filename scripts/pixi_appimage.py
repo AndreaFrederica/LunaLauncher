@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy Pixi/Meson runtime dependencies into a verified AppImage or portable tarball."""
+"""Deploy Pixi/Meson runtime dependencies into an AppImage, portable tarball or AppDir."""
 from __future__ import annotations
 
 import argparse
@@ -230,7 +230,13 @@ def package(root: Path, profile: str, output: Path | None = None, format: str = 
                     break
             if webkit is None:
                 raise RuntimeError("WebKit AppImage entries require WebKitGTK 4.1 helper processes from the host development packages")
-        env.update({"PATH": f"{work}:{env['PATH']}", "QMAKE": str(pixi_meson.qt_target_root(root, profile) / "bin/qmake"),
+        # linuxdeploy discovers plugins by scanning every PATH directory. WSL
+        # inherits Windows directories (including large Downloads folders),
+        # which are neither packaging tools nor a reproducible search path.
+        deploy_path = [str(work), str(Path(env["CONDA_PREFIX"]) / "bin"),
+                       str(pixi_meson.qt_target_root(root, profile) / "bin"),
+                       "/usr/local/bin", "/usr/bin", "/bin"]
+        env.update({"PATH": os.pathsep.join(deploy_path), "QMAKE": str(pixi_meson.qt_target_root(root, profile) / "bin/qmake"),
                     "EXTRA_QT_PLUGINS": "platforms;imageformats;iconengines;platformthemes;platforminputcontexts;xcbglintegrations;egldeviceintegrations;multimedia;tls;wayland-shell-integration;wayland-decoration-client;wayland-graphics-integration-client",
                     "ARCH": "x86_64", "APPIMAGE_EXTRACT_AND_RUN": "1", "NO_STRIP": "1"})
         # Resolve dependencies of main entries plus libraries loaded at runtime
@@ -275,6 +281,12 @@ def package(root: Path, profile: str, output: Path | None = None, format: str = 
                 continue
             if check.returncode or "not found" in details or str(root) + "/" in details:
                 raise RuntimeError(f"Unresolved or build-tree AppImage dependencies: {path}\n{details}")
+        if format == "appdir":
+            destination = output / "LunaLauncher.AppDir"
+            # A caller can compose this clean deployment into a system package.
+            # Refuse to merge a previous tree or user-managed installation.
+            shutil.copytree(appdir, destination, symlinks=True)
+            return destination
         if format == "portable":
             return portable_archive(appdir, output, version, neo, env)
         image = output / f"LunaLauncher-Linux-x64-{version}{'-webui' if neo else ''}.AppImage"
@@ -302,7 +314,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", choices=["release"], nargs="?", default="release")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--format", choices=["appimage", "portable"], default="appimage")
+    parser.add_argument("--format", choices=["appimage", "portable", "appdir"], default="appimage")
     parser.add_argument("--build", action="store_true", help="Configure, build and install with the Pixi/Meson wrapper before packaging")
     args = parser.parse_args()
     root = pixi_meson.repo_root()

@@ -39,6 +39,7 @@
 
 #include "BuildConfig.h"
 #include "Application.h"
+#include "DesktopServices.h"
 #include "api/AsyncTaskRuntime.h"
 #include "updater/prismupdater/AppImageUpdate.h"
 
@@ -103,6 +104,12 @@ void PrismExternalUpdater::checkForUpdates()
 
 void PrismExternalUpdater::checkForUpdates(bool triggeredByUser)
 {
+    if (DesktopServices::isFlatpak()) {
+        if (triggeredByUser)
+            QMessageBox::information(priv->parent, tr("Flatpak updates"),
+                tr("Update Luna Launcher in your software center or run:\nflatpak update org.lunalauncher.LunaLauncher\nFor standalone bundles, install the newer .flatpak file."));
+        return;
+    }
     if (priv->checking) return;
     QScopedValueRollback<bool> checking(priv->checking, true);
     QProgressDialog progress(tr("Checking for updates..."), "", 0, 0, priv->parent);
@@ -286,7 +293,7 @@ void PrismExternalUpdater::setBetaAllowed(bool allowed)
 
 void PrismExternalUpdater::resetAutoCheckTimer()
 {
-    if (priv->autoCheck && priv->updateInterval > 0) {
+    if (!DesktopServices::isFlatpak() && priv->autoCheck && priv->updateInterval > 0) {
         auto now = QDateTime::currentDateTime();
 
         qint64 timeoutMs = 0;

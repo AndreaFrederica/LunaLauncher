@@ -1,7 +1,10 @@
 # Flatpak support assessment
 
-Investigated on 2026-11-19. Flatpak support is feasible, but this repository does
-not yet ship a Flatpak manifest, repository, bundle, or tested sandbox build.
+The initial 2026-11-19 assessment below is historical. Implementation now lives
+in the dedicated Pixi Flatpak packaging pipeline; see [build, installation and
+test instructions](flatpak.md). It ships binary bundles on the Freedesktop 25.08
+runtime. An offline Flathub source-build manifest and Flathub review remain
+separate distribution work.
 
 ## Existing foundations
 
@@ -84,5 +87,6 @@ Minecraft launching does not require executing the host launcher or host Java.
    updates. A Flathub submission is a subsequent distribution step with its own
    application-ID verification and review.
 
-No Flatpak binaries were built or sandbox runtime tests run during this
-assessment. The current GitHub release remains a Windows x64 release.
+No Flatpak binaries were built during the original assessment. The implementation
+now provides a full bundle build and installed-sandbox smoke tests through Pixi,
+plus CI packaging. Existing Windows release assets remain separate.

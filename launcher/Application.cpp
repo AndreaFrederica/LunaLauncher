@@ -2704,6 +2704,10 @@ bool Application::removeInstanceStore(const QString& id, QString* errorMessage)
 
 std::unique_ptr<DataMigrationTask> Application::createDataLocationTask(bool portable, QString* errorMessage) const
 {
+    if (DesktopServices::isFlatpak()) {
+        if (errorMessage) *errorMessage = tr("Flatpak stores launcher data in its application data directory. Add an external instance store to use another folder.");
+        return nullptr;
+    }
     const auto target = dataPathForMode(portable);
     if (QDir::cleanPath(target) == QDir::cleanPath(m_dataPath)) {
         if (errorMessage) *errorMessage = tr("The launcher is already using this data location.");
@@ -2744,6 +2748,10 @@ std::unique_ptr<DataMigrationTask> Application::createDataLocationTask(bool port
 
 bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
 {
+    if (DesktopServices::isFlatpak()) {
+        if (errorMessage) *errorMessage = tr("Flatpak stores launcher data in its application data directory. Add an external instance store to use another folder.");
+        return false;
+    }
     const auto target = dataPathForMode(portable);
     const auto dataMarker = FS::PathCombine(m_rootPath, ".luna-data-dir");
     // An explicit switch in settings replaces the installer's custom location.

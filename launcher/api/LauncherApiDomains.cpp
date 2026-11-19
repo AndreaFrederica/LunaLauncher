@@ -666,13 +666,21 @@ QSettings updateSettings()
     return QSettings(QDir(APPLICATION->dataRoot()).filePath("lunalauncher_update.cfg"), QSettings::IniFormat);
 }
 
+QString packageUpdateReason()
+{
+    if (DesktopServices::isFlatpak())
+        return QObject::tr("This installation is managed by Flatpak. Update it in your software center or run: flatpak update org.lunalauncher.LunaLauncher. For standalone bundles, install the newer .flatpak file.");
+    return QObject::tr("Automatic updates require a compatible Luna AppImage or portable directory package. System packages use their package manager.");
+}
+
 QJsonObject updateStatus()
 {
 #ifdef Q_OS_WIN
     constexpr bool supported = true;
 #else
-    const bool supported = !AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() ||
-        !LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty();
+    const bool supported = !DesktopServices::isFlatpak() &&
+        (!AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() ||
+         !LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty());
 #endif
     auto settings = updateSettings();
     const auto marker = QDir(APPLICATION->dataRoot()).filePath(".lunalauncher_update.success");
@@ -685,7 +693,8 @@ QJsonObject updateStatus()
         logFile.seek(qMax<qint64>(0, logFile.size() - 262144));
         logTail = logFile.read(262144);
     }
-    return OperationService::success(QJsonObject{ { "supported", supported }, { "unsupportedReason", supported ? "" : "Automatic updates on this platform are TODO; use your package manager or download a release." },
+    return OperationService::success(QJsonObject{ { "supported", supported }, { "unsupportedReason", supported ? QString() : packageUpdateReason() },
+                                                   { "managedBy", DesktopServices::isFlatpak() ? "flatpak" : "" },
                                                    { "automatic", settings.value("auto_check", true).toBool() },
                                                    { "intervalSeconds", settings.value("update_interval", 86400).toInt() },
                                                    { "beta", settings.value("allow_beta", false).toBool() },
@@ -734,9 +743,9 @@ QString updaterPath()
 QJsonObject updateCheck(LauncherApi& api, bool releases = false)
 {
 #ifndef Q_OS_WIN
-    if (AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() &&
-        LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty())
-        return OperationService::failure("Automatic updates require a compatible Luna AppImage or portable directory package. System packages use their package manager.", 2);
+    if (DesktopServices::isFlatpak() || (AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() &&
+        LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty()))
+        return OperationService::failure(packageUpdateReason(), 2);
 #endif
     const auto updater = updaterPath();
     if (!QFileInfo::exists(updater)) return OperationService::failure("The external updater executable is not installed.", 2);
@@ -780,9 +789,9 @@ QJsonObject updateCheck(LauncherApi& api, bool releases = false)
 QJsonObject updateApply(const QJsonObject& p)
 {
 #ifndef Q_OS_WIN
-    if (AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() &&
-        LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty())
-        return OperationService::failure("Automatic updates require a compatible Luna AppImage or portable directory package. System packages use their package manager.", 2);
+    if (DesktopServices::isFlatpak() || (AppImageUpdate::runningImage(QCoreApplication::applicationDirPath()).isEmpty() &&
+        LinuxPortable::runningRoot(QCoreApplication::applicationDirPath()).isEmpty()))
+        return OperationService::failure(packageUpdateReason(), 2);
 #endif
     if (!APPLICATION->updatesAreAllowed()) return OperationService::failure("请先停止正在运行的游戏，再更新启动器。", 2);
     if (AsyncTaskRuntime::instance().hasUnfinishedTasks()) return OperationService::failure("请等待安装、导入等后台任务完成后再更新启动器。", 2);

@@ -73,6 +73,9 @@ Luna Launcher 支持基于实例的 `lunaui` 自定义设置面板。
 
 目前，本项目主要面向开发者和早期测试者。
 
+Linux x86_64 的 Flatpak 包包含 Neo UI、Classic UI 和 Java 21，详见
+[Flatpak 安装与构建说明](docs/flatpak.md)。
+
 ---
 
 ## 构建

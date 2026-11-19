@@ -14,12 +14,14 @@ import signal
 import subprocess
 import tempfile
 import threading
+import time
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, type=Path)
     parser.add_argument("--portable", action="store_true", help="Probe a deployed portable AppRun instead of an AppImage")
+    parser.add_argument("--flatpak", action="store_true", help="Probe a Flatpak run wrapper and its managed update status")
     args = parser.parse_args()
     events = queue.Queue()
 
@@ -59,12 +61,15 @@ const report = value => fetch(__REPORT__, {method:'POST',body:JSON.stringify(val
  const execute = (operation, parameters = {}) => invoke('launcher_request',
    {method:'launcher/execute',parameters:{operation,parameters}});
  const status = await execute('launcher.update.status');
- if (!status.ok || !status.data.supported) throw new Error(JSON.stringify(status));
+ if (!status.ok || status.data.supported !== __SUPPORTED__) throw new Error(JSON.stringify(status));
+ if (__FLATPAK__ && status.data.managedBy !== 'flatpak') throw new Error(JSON.stringify(status));
  const configured = await execute('launcher.update.configure', {automatic:false, intervalSeconds:3600});
  if (!configured.ok || configured.data.automatic !== false) throw new Error(JSON.stringify(configured));
  await report({stage:'ready', status:status.data});
 })().catch(error => report({stage:'error',error:String(error)}));
 """
+            probe = probe.replace("__SUPPORTED__", "false" if args.flatpak else "true").replace(
+                "__FLATPAK__", "true" if args.flatpak else "false")
             (bundle / "probe.js").write_text(probe.replace("__REPORT__", json.dumps(
                 f"http://127.0.0.1:{server.server_port}/")), encoding="utf-8")
             env = {key: value for key, value in os.environ.items() if key not in {
@@ -76,12 +81,21 @@ const report = value => fetch(__REPORT__, {method:'POST',body:JSON.stringify(val
                        XDG_CACHE_HOME=str(root / "xdg-cache"))
             with (root / "runtime.log").open("w+") as log:
                 arguments = [str(args.image.resolve())]
-                if not args.portable:
+                if not (args.portable or args.flatpak):
                     arguments.append("--appimage-extract-and-run")
                 host = subprocess.Popen([*arguments, "--luna-entry", "neo"],
                                         cwd=root, env=env, stdout=log, stderr=log, start_new_session=True)
                 try:
-                    event = events.get(timeout=90)
+                    deadline = time.monotonic() + 90
+                    while True:
+                        try:
+                            event = events.get(timeout=0.5)
+                            break
+                        except queue.Empty:
+                            if host.poll() is not None:
+                                raise AssertionError(f"Packaged Neo UI exited with code {host.returncode}")
+                            if time.monotonic() >= deadline:
+                                raise AssertionError("Packaged Neo UI did not report native IPC readiness within 90 seconds")
                     assert event["stage"] == "ready", event
                     assert Path(event["status"]["dataRoot"]) == profile, event
                     print("PASS: packaged NeoUI, WebKit helpers, native MCP bridge and isolated update settings")

@@ -135,8 +135,10 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CARGO_BUILD_JOBS: '1'
-      LUNA_BUILD_JOBS: '1'
+      # Linux needs conservative parallelism for its WebKit/Qt build footprint.
+      # Keep Windows builds parallel instead of applying that limit globally.
+      CARGO_BUILD_JOBS: ${{ matrix.target == 'windows-x64' && '2' || '1' }}
+      LUNA_BUILD_JOBS: ${{ matrix.target == 'windows-x64' && '4' || '1' }}
       LUNA_USE_PCH: ${{ matrix.target == 'linux-x64' && 'true' || 'false' }}
       LUNA_BUILD_DIR: build-meson-release
       LUNA_INSTALL_DIR: install-release

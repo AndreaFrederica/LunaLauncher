@@ -1,26 +1,23 @@
 // SPDX-License-Identifier: MPL-2.0
 
 #include "LauncherApiExports.h"
+#include "InstanceExportTask.h"
+#include "ExportSelection.h"
 
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QSaveFile>
-#include <QTemporaryDir>
 
 #include "Application.h"
 #include "BaseInstance.h"
 #include "InstanceList.h"
 #include "MMCZip.h"
 #include "api/LauncherApi.h"
-#include "archive/ExportToZipTask.h"
 #include "cli/OperationService.h"
 #include "tasks/Task.h"
 #include "minecraft/MinecraftInstance.h"
-#include "modplatform/modrinth/ModrinthPackExportTask.h"
-#include "modplatform/flame/FlamePackExportTask.h"
 #include "modplatform/helpers/ExportToModList.h"
 #include "minecraft/mod/tasks/LocalModParseTask.h"
 #include "api/LauncherApiSupport.h"
@@ -102,89 +99,14 @@ QJsonObject exportInstance(const QJsonObject& parameters, UserInteraction& inter
     if (instance->isRunning())
         return OperationService::failure(QObject::tr("An instance cannot be exported while it is running."), 2);
 
-    const QFileInfo outputInfo(outputPath);
-    if (outputInfo.exists() && !parameters.value("overwrite").toBool(false))
-        return OperationService::failure(QObject::tr("The output file already exists. Set overwrite=true to replace it."), 2);
-    const auto parent = outputInfo.absoluteDir();
-    if (!parent.exists() && !QDir().mkpath(parent.absolutePath()))
-        return OperationService::failure(QObject::tr("Could not create the output directory."));
-
-    const auto root = QDir(instance->instanceRoot());
-    const auto outputRelative = root.relativeFilePath(outputInfo.absoluteFilePath());
-    if (!outputRelative.startsWith("../") && !QDir::isAbsolutePath(outputRelative))
-        return OperationService::failure("Export output must be outside the instance directory.", 2);
-    QTemporaryDir staging(parent.filePath(".neo-export-XXXXXX"));
-    if (!staging.isValid()) return OperationService::failure("Could not stage export.");
-    const auto stagedOutput = staging.filePath("pack.zip");
-    const auto gameRoot = QDir(instance->gameRoot());
-    const auto gamePrefix = root.relativeFilePath(gameRoot.absolutePath());
-    const auto includeLogs = parameters.value("includeLogs").toBool(false);
-    const auto includeCrashReports = parameters.value("includeCrashReports").toBool(false);
-    const auto includeCaches = parameters.value("includeCaches").toBool(false);
-
-    QFileInfoList files;
-    const auto exclusions = parameters.value("exclude").toArray();
-    const auto excluded = [root, gamePrefix, includeLogs, includeCrashReports, includeCaches, exclusions, format](const QFileInfo& file) {
-        auto relative = QDir::fromNativeSeparators(root.relativeFilePath(file.absoluteFilePath()));
-        if (file.isSymLink()) return true;
-        for (const auto& path : exclusions) {
-            const auto blocked = QDir::cleanPath(QDir::fromNativeSeparators(path.toString()));
-            if (relative == blocked || relative.startsWith(blocked + '/')) return true;
-        }
-        if (format != "zip" && (relative.endsWith(".pw.toml") || relative.contains("/.index/"))) return true;
-        const auto lower = relative.toLower();
-        if (relative == ".packignore" || lower.endsWith("/.ds_store") || lower.endsWith("/thumbs.db") ||
-            lower == ".ds_store" || lower == "thumbs.db")
-            return true;
-        const auto prefix = gamePrefix.isEmpty() ? QString() : QDir::fromNativeSeparators(gamePrefix) + "/";
-        if (!prefix.isEmpty()) {
-            if (!includeLogs && (lower == (prefix + "logs").toLower() || lower.startsWith((prefix + "logs/").toLower())))
-                return true;
-            if (!includeCrashReports &&
-                (lower == (prefix + "crash-reports").toLower() || lower.startsWith((prefix + "crash-reports/").toLower())))
-                return true;
-            if (!includeCaches && (lower == (prefix + ".cache").toLower() || lower.startsWith((prefix + ".cache/").toLower()) ||
-                                   lower == (prefix + ".fabric").toLower() || lower.startsWith((prefix + ".fabric/").toLower()) ||
-                                   lower == (prefix + ".quilt").toLower() || lower.startsWith((prefix + ".quilt/").toLower())))
-                return true;
-        }
-        return false;
-    };
-    Task::Ptr task;
-    if (format == "zip") {
-        if (!MMCZip::collectFileListRecursively(instance->instanceRoot(), nullptr, &files, excluded))
-            return OperationService::failure(QObject::tr("Unable to enumerate instance files."));
-        task = makeShared<MMCZip::ExportToZipTask>(stagedOutput, instance->instanceRoot(), files, "", true);
-    } else {
-        auto mc = dynamic_cast<MinecraftInstance*>(instance);
-        if (!mc) return OperationService::failure("Pack export requires a Minecraft instance.", 2);
-        const auto name = parameters.value("name").toString(instance->name());
-        const auto version = parameters.value("version").toString();
-        if (version.isEmpty()) return OperationService::failure("Pack version is required.", 2);
-        if (format == "modrinth") task = makeShared<ModrinthPackExportTask>(name, version, parameters.value("summary").toString(),
-            parameters.value("optionalFiles").toBool(), instance, stagedOutput, excluded);
-        else {
-            FlamePackExportOptions options{ name, version, parameters.value("author").toString(), parameters.value("optionalFiles").toBool(),
-                MinecraftInstancePtr(mc, [](MinecraftInstance*) {}), stagedOutput, excluded, parameters.value("recommendedRAM").toInt() };
-            task.reset(new FlamePackExportTask(std::move(options)));
-        }
-    }
+    InstanceExportTask task(instance, parameters);
     QString error;
-    if (!waitForTask(task.get(), interaction, &error, api))
-        return OperationService::failure(error);
-    QFile source(stagedOutput);
-    QSaveFile destination(outputPath);
-    if (!source.open(QIODevice::ReadOnly) || !destination.open(QIODevice::WriteOnly)) return OperationService::failure("Could not publish export.");
-    while (!source.atEnd()) {
-        const auto bytes = source.read(1024 * 1024);
-        if (bytes.isEmpty() || destination.write(bytes) != bytes.size()) return OperationService::failure("Export write failed.");
-    }
-    if (!destination.commit()) return OperationService::failure(destination.errorString());
+    if (!waitForTask(&task, interaction, &error, api)) return OperationService::failure(error);
 
     return OperationService::success(QJsonObject{ { "instance", instance->id() },
                                                   { "format", format },
                                                   { "path", QFileInfo(outputPath).absoluteFilePath() },
-                                                  { "files", files.size() },
+                                                  { "files", task.fileCount() },
                                                   { "changed", true } });
 }
 
@@ -229,6 +151,34 @@ void registerLauncherApiExportOperations(LauncherApi& api)
                 ExportToModList::exportToModList(mods, formats.value(format), static_cast<ExportToModList::OptionalData>(flags));
             return OperationService::success(QJsonObject{ { "content", content }, { "format", format }, { "count", mods.size() } });
         });
+    api.registerOperation({ "instance.export-files", "Browse selectable export files without following symbolic links.",
+        ApiSupport::schema({ { "instance", ApiSupport::string("Instance ID.") }, { "path", ApiSupport::string("Instance-relative directory, default root.") } }, { "instance" }), "files" },
+        [](const QJsonObject& p, UserInteraction&) {
+            auto instance = findInstance(p.value("instance").toString());
+            if (!instance) return OperationService::failure("Instance not found.", 2);
+            const QDir root(instance->instanceRoot());
+            const auto relative = QDir::cleanPath(QDir::fromNativeSeparators(p.value("path").toString(".")));
+            if (QDir::isAbsolutePath(relative) || relative.contains(':') || relative.split('/').contains(".."))
+                return OperationService::failure("Path must stay inside the instance.", 2);
+            auto current = root.absolutePath();
+            for (const auto& part : relative.split('/')) {
+                if (part == ".") continue;
+                current = QDir(current).filePath(part);
+                if (QFileInfo(current).isSymLink()) return OperationService::failure("Symbolic links cannot be exported.", 2);
+            }
+            const QDir directory(current);
+            if (!directory.exists()) return OperationService::failure("Directory not found.", 2);
+            const auto prefix = ExportSelection::gamePrefix(root.absolutePath(), instance->gameRoot());
+            QJsonArray entries;
+            for (const auto& file : directory.entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden, QDir::DirsFirst | QDir::Name)) {
+                if (entries.size() >= 4096) return OperationService::failure("Directory exceeds 4096 entries.", 2);
+                if (file.isSymLink()) continue;
+                const auto path = QDir::fromNativeSeparators(root.relativeFilePath(file.absoluteFilePath()));
+                entries.append(QJsonObject{ { "path", path }, { "name", file.fileName() }, { "isDir", file.isDir() },
+                    { "category", ExportSelection::category(path, prefix) }, { "defaultSelected", ExportSelection::defaultSelected(path, prefix) } });
+            }
+            return OperationService::success(QJsonObject{ { "entries", entries }, { "gamePrefix", prefix } });
+        });
     const auto instance = stringProperty("Instance ID, managed name, or display name.");
     api.registerOperation({ "instance.export", "Export a launcher ZIP, Modrinth pack, or CurseForge pack using existing export tasks.",
                             objectSchema({ { "instance", instance },
@@ -239,6 +189,10 @@ void registerLauncherApiExportOperations(LauncherApi& api)
                                            { "optionalFiles", boolProperty("Mark optional resources.") },
                                            { "recommendedRAM", QJsonObject{ { "type", "integer" }, { "minimum", 0 }, { "maximum", 1048576 } } },
                                            { "exclude", ApiSupport::strings() },
+                                           { "include", ApiSupport::strings() },
+                                           { "fileSelection", QJsonObject{ { "type", "object" }, { "additionalProperties", QJsonObject{ { "type", "boolean" } } } } },
+                                           { "items", ApiSupport::strings() },
+                                           { "modMode", stringProperty("auto: platform links with bundled fallback; bundled: local mod files; links: require hash-verified platform matches.") },
                                            { "overwrite", boolProperty("Replace an existing output file.") },
                                            { "includeLogs", boolProperty("Include the game logs directory.") },
                                            { "includeCrashReports", boolProperty("Include crash reports.") },

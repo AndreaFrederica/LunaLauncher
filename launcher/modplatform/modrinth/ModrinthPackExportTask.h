@@ -38,7 +38,8 @@ class ModrinthPackExportTask : public Task {
                            bool optionalFiles,
                            BaseInstance* instance,
                            const QString& output,
-                           MMCZip::FilterFileFunction filter);
+                           MMCZip::FilterFileFunction filter,
+                           const QString& modMode = "auto");
 
    protected:
     void executeTask() override;
@@ -48,7 +49,7 @@ class ModrinthPackExportTask : public Task {
     struct ResolvedFile {
         QString sha1, sha512, url;
         qint64 size;
-        ModPlatform::Side side;
+        ModPlatform::Side side = ModPlatform::Side::UniversalSide;
     };
 
     static const QStringList PREFIXES;
@@ -57,6 +58,7 @@ class ModrinthPackExportTask : public Task {
     // inputs
     const QString name, version, summary;
     const bool optionalFiles;
+    const QString modMode;
     const BaseInstance* instance;
     MinecraftInstance* mcInstance;
     const QDir gameRoot;
@@ -67,6 +69,7 @@ class ModrinthPackExportTask : public Task {
     QFileInfoList files;
     QList<QPair<QString, QString>> rootExtraFiles;
     QMap<QString, QString> pendingHashes;
+    QMap<QString, ModPlatform::Side> localSides;
     QMap<QString, ResolvedFile> resolvedFiles;
     Task::Ptr task;
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "InstanceExportTask.h"
+#include "ExportSelection.h"
 
 #include <QDir>
 #include <QFile>
@@ -65,38 +66,12 @@ void InstanceExportTask::executeTask()
     m_stagedOutput = m_staging->filePath("pack.zip");
     m_output = outputPath;
 
-    const auto gameRoot = QDir(m_instance->gameRoot());
-    const auto gamePrefix = root.relativeFilePath(gameRoot.absolutePath());
-    const auto includeLogs = m_parameters.value("includeLogs").toBool(false);
-    const auto includeCrashReports = m_parameters.value("includeCrashReports").toBool(false);
-    const auto includeCaches = m_parameters.value("includeCaches").toBool(false);
-    const auto exclusions = m_parameters.value("exclude").toArray();
-    const auto excluded = [root, gamePrefix, includeLogs, includeCrashReports, includeCaches, exclusions, format](const QFileInfo& file) {
-        auto relative = QDir::fromNativeSeparators(root.relativeFilePath(file.absoluteFilePath()));
-        if (file.isSymLink()) return true;
-        for (const auto& path : exclusions) {
-            const auto blocked = QDir::cleanPath(QDir::fromNativeSeparators(path.toString()));
-            if (relative == blocked || relative.startsWith(blocked + '/')) return true;
-        }
-        if (format != "zip" && (relative.endsWith(".pw.toml") || relative.contains("/.index/"))) return true;
-        const auto lower = relative.toLower();
-        if (relative == ".packignore" || lower.endsWith("/.ds_store") || lower.endsWith("/thumbs.db") ||
-            lower == ".ds_store" || lower == "thumbs.db")
-            return true;
-        const auto prefix = gamePrefix.isEmpty() ? QString() : QDir::fromNativeSeparators(gamePrefix) + "/";
-        if (!prefix.isEmpty()) {
-            if (!includeLogs && (lower == (prefix + "logs").toLower() || lower.startsWith((prefix + "logs/").toLower()))) return true;
-            if (!includeCrashReports &&
-                (lower == (prefix + "crash-reports").toLower() || lower.startsWith((prefix + "crash-reports/").toLower())))
-                return true;
-            if (!includeCaches &&
-                (lower == (prefix + ".cache").toLower() || lower.startsWith((prefix + ".cache/").toLower()) ||
-                 lower == (prefix + ".fabric").toLower() || lower.startsWith((prefix + ".fabric/").toLower()) ||
-                 lower == (prefix + ".quilt").toLower() || lower.startsWith((prefix + ".quilt/").toLower())))
-                return true;
-        }
-        return false;
-    };
+    const auto excluded = ExportSelection::filter(m_instance->instanceRoot(), m_instance->gameRoot(), m_parameters);
+    const auto modMode = m_parameters.value("modMode").toString("auto");
+    if (modMode != "auto" && modMode != "bundled" && modMode != "links") {
+        fail("modMode must be auto, bundled, or links.");
+        return;
+    }
 
     QFileInfoList files;
     if (format == "zip") {
@@ -120,11 +95,11 @@ void InstanceExportTask::executeTask()
         }
         if (format == "modrinth") {
             m_child = makeShared<ModrinthPackExportTask>(name, version, m_parameters.value("summary").toString(),
-                                                               m_parameters.value("optionalFiles").toBool(), m_instance, m_stagedOutput, excluded);
+                                                               m_parameters.value("optionalFiles").toBool(), m_instance, m_stagedOutput, excluded, modMode);
         } else {
             FlamePackExportOptions options{ name, version, m_parameters.value("author").toString(),
                 m_parameters.value("optionalFiles").toBool(), MinecraftInstancePtr(mc, [](MinecraftInstance*) {}), m_stagedOutput,
-                excluded, m_parameters.value("recommendedRAM").toInt() };
+                excluded, m_parameters.value("recommendedRAM").toInt(), modMode };
             m_child = Task::Ptr(new FlamePackExportTask(std::move(options)));
         }
     }

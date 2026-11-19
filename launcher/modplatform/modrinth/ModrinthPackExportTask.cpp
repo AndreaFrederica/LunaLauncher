@@ -37,8 +37,8 @@
 #include "modplatform/helpers/HashUtils.h"
 #include "tasks/Task.h"
 
-const QStringList ModrinthPackExportTask::PREFIXES({ "mods/", "coremods/", "resourcepacks/", "texturepacks/", "shaderpacks/" });
-const QStringList ModrinthPackExportTask::FILE_EXTENSIONS({ "jar", "litemod", "zip" });
+const QStringList ModrinthPackExportTask::PREFIXES({ "mods/", "coremods/", "nilmods/", "resourcepacks/", "texturepacks/", "shaderpacks/" });
+const QStringList ModrinthPackExportTask::FILE_EXTENSIONS({ "jar", "litemod", "nilmod", "zip" });
 
 ModrinthPackExportTask::ModrinthPackExportTask(const QString& name,
                                                const QString& version,
@@ -46,11 +46,13 @@ ModrinthPackExportTask::ModrinthPackExportTask(const QString& name,
                                                bool optionalFiles,
                                                BaseInstance* instance,
                                                const QString& output,
-                                               MMCZip::FilterFileFunction filter)
+                                               MMCZip::FilterFileFunction filter,
+                                               const QString& modMode)
     : name(name)
     , version(version)
     , summary(summary)
     , optionalFiles(optionalFiles)
+    , modMode(modMode)
     , instance(instance)
     , mcInstance(dynamic_cast<MinecraftInstance*>(instance))
     , gameRoot(instance->gameRoot())
@@ -88,6 +90,7 @@ void ModrinthPackExportTask::collectFiles()
 
     pendingHashes.clear();
     resolvedFiles.clear();
+    localSides.clear();
 
     if (mcInstance) {
         mcInstance->loaderModList()->update();
@@ -131,6 +134,7 @@ void ModrinthPackExportTask::collectHashes()
         QCoreApplication::processEvents();
 
         const QString relative = gameRoot.relativeFilePath(file.absoluteFilePath());
+        if (modMode == "bundled" && (relative.startsWith("mods/") || relative.startsWith("coremods/") || relative.startsWith("nilmods/"))) continue;
         // require sensible file types
         if (!std::any_of(PREFIXES.begin(), PREFIXES.end(), [&relative](const QString& prefix) { return relative.startsWith(prefix); }))
             continue;
@@ -151,25 +155,11 @@ void ModrinthPackExportTask::collectHashes()
             continue;
         }
         auto sha512 = Hashing::hash(data, Hashing::Algorithm::Sha512);
-
-        auto allMods = mcInstance->loaderModList()->allMods();
-        if (auto modIter = std::find_if(allMods.begin(), allMods.end(), [&file](Mod* mod) { return mod->fileinfo() == file; });
-            modIter != allMods.end()) {
-            const Mod* mod = *modIter;
-            if (mod->metadata() != nullptr) {
-                const QUrl& url = mod->metadata()->url;
-                // ensure the url is permitted on modrinth.com
-                if (!url.isEmpty() && BuildConfig.MODRINTH_MRPACK_HOSTS.contains(url.host())) {
-                    qDebug() << "Resolving" << relative << "from index";
-
-                    auto sha1 = Hashing::hash(data, Hashing::Algorithm::Sha1);
-
-                    ResolvedFile resolvedFile{ sha1, sha512, url.toEncoded(), openFile.size(), mod->metadata()->side };
-                    resolvedFiles[relative] = resolvedFile;
-
-                    // nice! we've managed to resolve based on local metadata!
-                    // no need to enqueue it
-                    continue;
+        if (mcInstance) {
+            for (const auto* mod : mcInstance->loaderModList()->allMods()) {
+                if (mod->fileinfo() == file && mod->metadata()) {
+                    localSides.insert(relative, mod->metadata()->side);
+                    break;
                 }
             }
         }
@@ -219,7 +209,8 @@ void ModrinthPackExportTask::parseApiResponse(QByteArray* response)
                 // map the file to the url
                 resolvedFiles[iterator.key()] =
                     ResolvedFile{ fileIter->toObject()["hashes"].toObject()["sha1"].toString(), iterator.value(),
-                                  fileIter->toObject()["url"].toString(), fileIter->toObject()["size"].toInt() };
+                                  fileIter->toObject()["url"].toString(), fileIter->toObject()["size"].toInteger(),
+                                  localSides.value(iterator.key(), ModPlatform::Side::UniversalSide) };
             }
         }
     } catch (const Json::JsonException& e) {
@@ -232,6 +223,24 @@ void ModrinthPackExportTask::parseApiResponse(QByteArray* response)
 
 void ModrinthPackExportTask::buildZip()
 {
+    if (modMode == "links") {
+        QStringList unbound;
+        for (const auto& file : files) {
+            const auto relative = gameRoot.relativeFilePath(file.absoluteFilePath());
+            if (!(relative.startsWith("mods/") || relative.startsWith("coremods/") || relative.startsWith("nilmods/"))) continue;
+            auto suffix = file.suffix();
+            if (suffix == "disabled") suffix = QFileInfo(file.completeBaseName()).suffix();
+            if (!QStringList{ "jar", "zip", "litemod", "nilmod" }.contains(suffix.toLower())) continue;
+            const auto match = resolvedFiles.constFind(relative);
+            if (match == resolvedFiles.cend() || match->sha1.isEmpty() || match->sha512.isEmpty() ||
+                QUrl(match->url).scheme() != "https" || !BuildConfig.MODRINTH_MRPACK_HOSTS.contains(QUrl(match->url).host())) unbound.append(relative);
+        }
+        if (!unbound.isEmpty()) {
+            emitFailed(tr("These mods have no verified Modrinth link. Bind the correct platform version, exclude them, or use bundled export:\n%1").arg(unbound.join('\n')));
+            return;
+        }
+    }
+
     setStatus(tr("Adding files..."));
 
     auto zipTask = makeShared<MMCZip::ExportToZipTask>(output, gameRoot, files, "overrides/", true);

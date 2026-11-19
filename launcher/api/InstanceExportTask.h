@@ -27,6 +27,7 @@ class InstanceExportTask final : public Task {
     bool isMultiStep() const override { return true; }
     QList<Task*> getSubTasks() const override;
     bool canAbort() const override { return true; }
+    int fileCount() const { return m_fileCount; }
 
    private:
     void publish();

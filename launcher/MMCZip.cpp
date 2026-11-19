@@ -314,12 +314,13 @@ bool collectFileListRecursively(const QString& rootDir, const QString& subDir, Q
     // recurse directories
     QFileInfoList entries = directory.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot | QDir::Hidden);
     for (const auto& e : entries) {
+        if (excludeFilter && excludeFilter(e)) continue;
         if (!collectFileListRecursively(rootDir, e.filePath(), files, excludeFilter))
             return false;
     }
 
     // collect files
-    entries = directory.entryInfoList(QDir::Files);
+    entries = directory.entryInfoList(QDir::Files | QDir::Hidden);
     for (const auto& e : entries) {
         if (excludeFilter && excludeFilter(e)) {
             QString relativeFilePath = rootDirectory.relativeFilePath(e.absoluteFilePath());

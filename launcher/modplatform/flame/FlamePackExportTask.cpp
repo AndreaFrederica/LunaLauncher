@@ -43,7 +43,7 @@
 #include "archive/ExportToZipTask.h"
 
 const QString FlamePackExportTask::TEMPLATE = "<li><a href=\"{url}\">{name}{authors}</a></li>\n";
-const QStringList FlamePackExportTask::FILE_EXTENSIONS({ "jar", "zip" });
+const QStringList FlamePackExportTask::FILE_EXTENSIONS({ "jar", "zip", "litemod", "nilmod" });
 
 FlamePackExportTask::FlamePackExportTask(FlamePackExportOptions&& options)
     : m_options(std::move(options)), m_gameRoot(m_options.instance->gameRoot())
@@ -122,6 +122,7 @@ void FlamePackExportTask::collectHashes()
     task.reset(hashingTask);
     for (const QFileInfo& file : files) {
         const QString relative = m_gameRoot.relativeFilePath(file.absoluteFilePath());
+        if (m_options.modMode == "bundled" && (relative.startsWith("mods/") || relative.startsWith("coremods/") || relative.startsWith("nilmods/"))) continue;
         // require sensible file types
         if (!std::any_of(FILE_EXTENSIONS.begin(), FILE_EXTENSIONS.end(), [&relative](const QString& extension) {
                 return relative.endsWith('.' + extension) || relative.endsWith('.' + extension + ".disabled");
@@ -133,7 +134,7 @@ void FlamePackExportTask::collectHashes()
             auto hashTask = Hashing::createHasher(file.absoluteFilePath(), ModPlatform::ResourceProvider::FLAME);
             connect(hashTask.get(), &Hashing::Hasher::resultsReady, [this, relative, file](QString hash) {
                 if (m_state == Task::State::Running) {
-                    pendingHashes.insert(hash, { relative, file.absoluteFilePath(), relative.endsWith(".zip") });
+                    pendingHashes.insert(hash, { relative, file.absoluteFilePath(), relative.endsWith(".zip"), false });
                 }
             });
             connect(hashTask.get(), &Task::failed, this, &FlamePackExportTask::emitFailed);
@@ -147,13 +148,6 @@ void FlamePackExportTask::collectHashes()
             if (!mod || mod->type() == ResourceType::FOLDER) {
                 continue;
             }
-            if (mod->metadata() && mod->metadata()->provider == ModPlatform::ResourceProvider::FLAME) {
-                resolvedFiles.insert(mod->fileinfo().absoluteFilePath(),
-                                     { mod->metadata()->project_id.toInt(), mod->metadata()->file_id.toInt(), mod->enabled(), true,
-                                       mod->metadata()->name, mod->metadata()->slug, mod->authors().join(", ") });
-                continue;
-            }
-
             auto hashTask = Hashing::createHasher(mod->fileinfo().absoluteFilePath(), ModPlatform::ResourceProvider::FLAME);
             connect(hashTask.get(), &Hashing::Hasher::resultsReady, [this, mod](QString hash) {
                 if (m_state == Task::State::Running) {
@@ -238,7 +232,7 @@ void FlamePackExportTask::makeApiRequest()
                 if (matchObj.isEmpty() || fileObj.isEmpty()) {
                     qWarning() << "Fingerprint match is empty!";
 
-                    return;
+                    continue;
                 }
 
                 auto fingerprint = QString::number(fileObj["fileFingerprint"].toInteger());
@@ -348,6 +342,24 @@ void FlamePackExportTask::getProjectsInfo()
 
 void FlamePackExportTask::buildZip()
 {
+    if (m_options.modMode == "links") {
+        QStringList unbound;
+        for (const auto& file : files) {
+            const auto relative = m_gameRoot.relativeFilePath(file.absoluteFilePath());
+            if (!(relative.startsWith("mods/") || relative.startsWith("coremods/") || relative.startsWith("nilmods/"))) continue;
+            auto suffix = file.suffix();
+            if (suffix == "disabled") suffix = QFileInfo(file.completeBaseName()).suffix();
+            if (!QStringList{ "jar", "zip", "litemod", "nilmod" }.contains(suffix.toLower())) continue;
+            const auto match = resolvedFiles.constFind(file.absoluteFilePath());
+            if (match == resolvedFiles.cend() || match->addonId <= 0 || match->version <= 0 ||
+                (!match->enabled && !m_options.optionalFiles)) unbound.append(relative);
+        }
+        if (!unbound.isEmpty()) {
+            emitFailed(tr("These mods have no verified CurseForge link (disabled mods require optional resources). Bind the correct platform version, exclude them, or use bundled export:\n%1").arg(unbound.join('\n')));
+            return;
+        }
+    }
+
     setStatus(tr("Adding files..."));
     setProgress(4, 5);
 

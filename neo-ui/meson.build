@@ -311,6 +311,7 @@ neo_ui_sources = files(
   'src/themes/endfield/pages/EndfieldDownloadPage.vue',
   'src/themes/pcl/components/PclWindowTitleBar.vue',
   'src/themes/pcl/composables/usePclFileDialog.ts',
+  'src/themes/pcl/composables/usePclExportFiles.ts',
   'src/themes/pcl/composables/useTaskEvents.ts',
   'src/themes/pcl/composables/useTaskProgress.ts',
   'src/themes/pcl/icons/account.svg',

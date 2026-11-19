@@ -35,6 +35,7 @@ struct FlamePackExportOptions {
     QString output;
     MMCZip::FilterFileFunction filter;
     int recommendedRAM;
+    QString modMode = "auto";
 };
 
 class FlamePackExportTask : public Task {

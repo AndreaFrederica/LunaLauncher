@@ -230,6 +230,17 @@ jobs:
       - name: Show Meson build configuration
         run: pixi run meson introspect build-meson-release --buildoptions
 
+      - name: Verify frontend and instance export artifacts
+        if: runner.os == 'Windows' && env.LUNA_NEO_UI == 'enabled'
+        shell: pwsh
+        run: |
+          pixi run webui-check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pixi run node --test neo-ui/tests/export-selection.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pixi run python tests/instance_export_smoke.py --exe install-release/lunalauncher-cli.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build standalone installer shell
         if: runner.os == 'Windows'
         shell: pwsh

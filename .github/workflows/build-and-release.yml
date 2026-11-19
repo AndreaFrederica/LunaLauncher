@@ -137,7 +137,7 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CARGO_BUILD_JOBS: '1'
       LUNA_BUILD_JOBS: '1'
-      LUNA_USE_PCH: ${{ runner.os == 'Linux' && 'true' || 'false' }}
+      LUNA_USE_PCH: ${{ matrix.target == 'linux-x64' && 'true' || 'false' }}
       LUNA_BUILD_DIR: build-meson-release
       LUNA_INSTALL_DIR: install-release
       LUNA_MACOS_DEPLOYMENT_TARGET: "13.0"
@@ -156,6 +156,16 @@ jobs:
         with:
           arch: amd64
           vsversion: 2022
+
+      - name: Pin the MSVC linker for Rust packaging tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir 'bin\HostX64\x64\link.exe'
+          if (-not (Test-Path -LiteralPath $linker)) {
+              throw "MSVC linker not found: $linker"
+          }
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
 
       - name: Cache Qt
         uses: actions/cache@v5.0.4

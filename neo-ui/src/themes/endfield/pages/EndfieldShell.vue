@@ -101,7 +101,7 @@
       </main>
     </div>
 
-    <EfTaskCenter v-model="taskCenterOpen" :execute="execute" />
+    <EfTaskCenter :model-value="taskCenterOpen && !interactionShown" @update:model-value="taskCenterOpen = $event" :execute="execute" />
     <EfLaunchDialog
       v-model="launchShown"
       :title="launchTitle"
@@ -447,7 +447,7 @@ onMounted(async () => {
   try {
     unlisten = await launcher.onEvent((raw: any) => {
       if (raw?.kind === 'input') {
-        interactionRequest.value = raw;
+        interactionRequest.value = { ...raw, request: { ...raw, ...raw.context } };
         interactionShown.value = true;
       } else if (raw?.kind === 'status') {
         const message = raw.message || raw.data?.message || (typeof raw.data === 'string' ? raw.data : '');

@@ -29,20 +29,28 @@
         <div v-else-if="stage === 'migration'">
           <h3>{{ t('neo.auto2.kbf13dd0c07') }}</h3>
           <p class="muted">{{ t('neo.auto2.keb006543fb') }}</p>
-          <div class="migration-list">
+          <div v-if="migrations.length" class="migration-list">
             <div v-for="item in migrations" :key="item.name" class="migration-item">
               <div class="migration-details">
                 <strong>{{ item.name }}</strong>
                 <div class="muted migration-path">{{ item.source }}</div>
-                <div v-if="item.currentDataExists" class="setup-warning">{{ t('neo.auto2.k1c1702cbea') }}</div>
               </div>
               <div class="migration-actions">
-                <component :is="controls.button" v-bind="actionProps(true, Boolean(working) || item.currentDataExists)" @click="migrate(item)">{{ t('neo.auto2.kbdf1cab1ec') }}</component>
+                <component :is="controls.button" v-bind="actionProps(true, Boolean(working) || item.canMigrate === false)" @click="migrate({ name: item.name }, item.source)">{{ t('neo.auto2.kbdf1cab1ec') }}</component>
                 <component :is="controls.button" v-bind="actionProps()" @click="dismiss(item)">{{ t('neo.auto2.k31a98593f1') }}</component>
               </div>
             </div>
           </div>
-          <component :is="controls.hint" v-if="!migrations.length" v-bind="hintProps()" class="setup-banner">{{ t('neo.auto2.kfbdad15688') }}</component>
+          <div class="setup-field migration-custom">
+            <label for="setup-migration-source">{{ t('startupMigration.source') }}</label>
+            <div class="setup-path-actions">
+              <component :is="controls.input" v-model="migrationSource" v-bind="inputFieldProps('setup-migration-source')" :placeholder="t('startupMigration.placeholder')" />
+              <component :is="controls.button" v-bind="actionProps()" @click="browseMigrationSource">{{ t('neo.auto2.kef23ea67b0') }}</component>
+              <component :is="controls.button" v-bind="actionProps(true, Boolean(working) || !migrationSource?.trim())" @click="migrate({ source: migrationSource.trim() }, migrationSource.trim())">{{ t('neo.auto2.kbdf1cab1ec') }}</component>
+            </div>
+            <p class="muted">{{ t('startupMigration.mergeHint') }}</p>
+          </div>
+          <component :is="controls.hint" v-if="lastMigratedSource" role="status" v-bind="hintProps()" class="setup-banner">{{ t('startupMigration.done', { source: lastMigratedSource }) }}</component>
         </div>
 
         <div v-else-if="stage === 'preferences'">
@@ -85,7 +93,7 @@
               <div v-if="!automaticJavaDownload" class="setup-wide setup-java">
                 <div class="setup-field">
                   <label for="setup-java-path">{{ t('neo.auto2.k638752651a') }}</label>
-                  <div class="setup-java-path">
+                  <div class="setup-path-actions">
                     <component :is="controls.input" v-model="javaPath" v-bind="inputFieldProps('setup-java-path')" :placeholder="t('neo.auto2.kea1beb7760')" />
                     <component :is="controls.button" v-bind="actionProps()" @click="browseJava">{{ t('neo.auto2.kef23ea67b0') }}</component>
                     <component :is="controls.button" v-bind="actionProps()" @click="scanJava">{{ t('neo.auto2.k4b15abac06') }}</component>
@@ -167,6 +175,7 @@ const { t } = useI18n();
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QBanner, QBtn, QInput, QSelect, QToggle } from 'quasar';
 import { open } from '@tauri-apps/plugin-dialog';
+import { launcher } from '../boot/launcher-api';
 import { applyPclStylePreset, neoUiIsDark, neoUiPreferences } from '../neo-ui-preferences';
 import launcherLogo from '../assets/luna-launcher.png';
 import PclButton from '../themes/pcl/components/PclButton.vue';
@@ -184,6 +193,8 @@ const emit = defineEmits<{ complete: []; changed: [] }>();
 
 const stage = ref<'welcome' | 'migration' | 'preferences' | 'account' | 'finish'>('welcome');
 const migrations = ref<any[]>([]);
+const migrationSource = ref('');
+const lastMigratedSource = ref('');
 const working = ref('loading');
 const error = ref('');
 const preferencesLoaded = ref(false);
@@ -308,20 +319,31 @@ async function runTask(operation: string, parameters: Record<string, unknown> = 
     task = await props.execute('neo.task.status', { taskId: task.taskId });
   }
   if (!task || task.state !== 'succeeded') throw new Error(task?.error || '操作失败。');
+  launcher.invalidate('startup.status');
   return task;
 }
 
-async function migrate(item: any) {
-  working.value = item.name;
+async function browseMigrationSource() {
   error.value = '';
   try {
-    await runTask('startup.migrate', { name: item.name });
+    const path = await open({ title: t('startupMigration.source'), multiple: false, directory: true });
+    if (typeof path === 'string') migrationSource.value = path;
+  } catch (exception) { error.value = String(exception); }
+}
+
+async function migrate(parameters: { name: string } | { source: string }, source: string) {
+  working.value = 'migration';
+  error.value = '';
+  try {
+    await runTask('startup.migrate', parameters);
     const result = await props.execute('startup.status');
-    migrations.value = Array.isArray(result?.status?.migrations)
-      ? result.status.migrations
-      : migrations.value.filter(candidate => candidate.name !== item.name);
-    hasAccounts.value = Boolean(result?.status?.hasAccounts);
-    loginAvailable.value = Boolean(result?.status?.loginAvailable);
+    migrations.value = result.migrations;
+    hasAccounts.value = Boolean(result.hasAccounts);
+    loginAvailable.value = Boolean(result.loginAvailable);
+    lastMigratedSource.value = source;
+    if ('source' in parameters) migrationSource.value = '';
+    for (const operation of ['settings.list', 'language.list', 'appearance.catalog', 'instance.list', 'instance.icons', 'account.list'])
+      launcher.invalidate(operation);
     await loadPreferences();
     emit('changed');
   } catch (exception) {
@@ -337,9 +359,7 @@ async function dismiss(item: any) {
   try {
     await runTask('startup.dismiss-migration', { name: item.name });
     const result = await props.execute('startup.status');
-    migrations.value = Array.isArray(result?.status?.migrations)
-      ? result.status.migrations
-      : migrations.value.filter(candidate => candidate.name !== item.name);
+    migrations.value = result.migrations;
     emit('changed');
   } catch (exception) {
     error.value = String(exception);
@@ -380,7 +400,7 @@ async function savePreferences() {
 async function next() {
   error.value = '';
   if (stage.value === 'welcome') {
-    stage.value = migrations.value.length ? 'migration' : 'preferences';
+    stage.value = 'migration';
   } else if (stage.value === 'migration') {
     if (migrations.value.length) return;
     stage.value = 'preferences';
@@ -396,7 +416,7 @@ async function next() {
 
 function back() {
   if (stage.value === 'migration') stage.value = 'welcome';
-  else if (stage.value === 'preferences') stage.value = migrations.value.length ? 'migration' : 'welcome';
+  else if (stage.value === 'preferences') stage.value = 'migration';
   else if (stage.value === 'account') stage.value = 'preferences';
   else if (stage.value === 'finish') stage.value = 'account';
 }
@@ -519,15 +539,15 @@ onBeforeUnmount(() => { disposed = true; void cancelLogin(); });
 .migration-details { flex: 1; min-width: 0; }
 .migration-path { overflow-wrap: anywhere; font-size: .9em; }
 .migration-actions { display: flex; align-items: center; flex-shrink: 0; gap: 8px; }
-.setup-warning { color: var(--pcl-warning, var(--q-warning)); line-height: 1.7; }
+.migration-custom { margin-top: 20px; }
 .setup-group { min-width: 0; margin: 24px 0 0; padding: 0; border: 0; }
 .setup-group legend { width: 100%; padding: 0 0 8px; border-bottom: 1px solid var(--setup-border); color: var(--setup-accent); font-size: 1em; font-weight: 600; }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 16px; margin-top: 16px; }
 .setup-field { display: flex; flex-direction: column; min-width: 0; gap: 8px; }
 .setup-wide { grid-column: 1 / -1; }
 .setup-java { display: flex; flex-direction: column; gap: 16px; }
-.setup-java-path { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.setup-java-path > :first-child { flex: 1 1 200px; min-width: 0; }
+.setup-path-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.setup-path-actions > :first-child { flex: 1 1 200px; min-width: 0; }
 .setup-device-code { margin: 18px 0; font: 600 26px monospace; letter-spacing: .12em; }
 .setup-login-button { margin-top: 24px; }
 .setup-login-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }

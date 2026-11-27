@@ -265,7 +265,7 @@ function onImportDrop(event: DragEvent) {
   else if (file?.name) importError.value = t('pcl.auto2.k1ee23fe480');
 }
 async function chooseImportFile() {
-  const selected = await pickPclFile({ title: t('pcl.auto2.k940f61fa15'), filters: [{ name: t('pcl.auto2.kb3a621217c'), extensions: ['zip', 'mrpack'] }] });
+  const selected = await pickPclFile({ title: t('pcl.auto2.k940f61fa15'), filters: [{ name: t('pcl.auto2.kb3a621217c'), extensions: ['zip', 'mrpack', 'rar'] }] });
   if (selected) importPath.value = selected;
 }
 

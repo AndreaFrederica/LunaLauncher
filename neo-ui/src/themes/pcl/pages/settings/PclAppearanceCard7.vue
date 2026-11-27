@@ -11,6 +11,7 @@
         <PclCheckbox v-model="preferences.pclTitleIcon" :label="t('pcl.appearance.titleIcon')" />
         <PclCheckbox v-model="preferences.pclTitleLogo" :label="t('pcl.appearance.titleText')" />
         <PclCheckbox v-model="preferences.pclTitleBadge" :label="t('pcl.appearance.titleBadge')" />
+        <PclCheckbox v-model="preferences.pclTitleVersion" :label="t('appearance.titleVersion')" />
         <PclCheckbox v-model="preferences.pclShowLunaBadge" :label="t('pcl.appearance.showLunaBadge')" />
         <PclCheckbox v-model="preferences.pclLaunchAnimation" :label="t('pcl.auto2.k8eb55365e3')" />
         <PclCheckbox v-model="preferences.pclClearLaunchLogOnStart" :label="t('pcl.auto2.ke51a90b26f')" />

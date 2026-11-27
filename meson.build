@@ -172,7 +172,7 @@ launcher_copyright = '© 2025 Luna Launcher Contributors\\n© 2022-2025 Prism La
 build_date = run_command(
   python_prog,
   '-c',
-  'import datetime; print(datetime.date.today().isoformat())',
+  'import datetime, os; value = os.environ.get("LUNA_BUILD_DATE"); print((datetime.datetime.strptime(value, "%Y%m%d").date() if value else datetime.date.today()).isoformat())',
   check: true,
 ).stdout().strip()
 release_revision = run_command(

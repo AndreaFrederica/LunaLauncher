@@ -3,9 +3,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::Parser;
 use luna_installer_shell::{archive, config, platform, sfx::PayloadSource};
+use luna_installer_shell::version::LauncherVersion;
 
 mod app;
 mod ui;
+#[cfg(windows)]
+mod upgrade_prompt;
 
 use app::{LauncherSetup, install, uninstall};
 
@@ -34,13 +37,16 @@ struct Args {
     /// Run the update worker without a progress window (automation/testing).
     #[arg(long, requires = "update")]
     update_headless: bool,
+    /// Require the locally confirmed version to still be newer at install time.
+    #[arg(long, requires = "update", hide = true)]
+    upgrade_to: Option<String>,
     /// Existing launcher data directory (for update logs and restart).
     #[arg(long, requires = "update")]
     data_root: Option<PathBuf>,
     /// Restart the UI that requested the update.
     #[arg(long, requires = "update", value_parser = ["classic", "neo"])]
     restart_entry: Option<String>,
-    /// Override the installation directory for --install.
+    /// Override the installation directory or select an existing copy to update.
     #[arg(long, value_name = "DIR")]
     install_dir: Option<PathBuf>,
     /// Do not launch the selected entry point after installation.
@@ -62,15 +68,18 @@ fn main() -> Result<()> {
     if args.update {
         let result = (|| {
             let source = payload_source(args.payload)?;
+            let upgrade_to = args.upgrade_to.as_deref().map(|text| {
+                LauncherVersion::parse(text).context("invalid confirmed upgrade version")
+            }).transpose()?;
             let entry = args.restart_entry.as_deref().map(|value| if value == "neo" {
                 config::EntryPoint::Neo
             } else { config::EntryPoint::Classic });
             if !args.update_headless {
-                return ui::run_update(source, args.install_dir.clone().unwrap(), args.data_root.clone(), entry, !args.no_launch);
+                return ui::run_update(source, args.install_dir.clone().unwrap(), args.data_root.clone(), entry, !args.no_launch, upgrade_to);
             }
             luna_installer_shell::update::apply(
                 &source, args.install_dir.as_deref().unwrap(), args.data_root.as_deref(),
-                entry, !args.no_launch,
+                entry, !args.no_launch, upgrade_to,
             )
         })();
         if let Err(error) = &result {
@@ -100,10 +109,20 @@ fn main() -> Result<()> {
         && args.extract.is_none()
         && !args.list
         && !args.install
+        && args.install_dir.is_none()
         && !args.no_launch
         && let Some(saved) = shell_install_config()?
             .filter(|saved| current_executable_is_shell_for_install_dir(&saved.install_dir))
     {
+        #[cfg(windows)]
+        {
+            let source = PayloadSource::from_path(std::env::current_exe()?)?;
+            if source.footer.is_some()
+                && upgrade_prompt::offer(&source, &saved.install_dir, true, true)?
+            {
+                return Ok(());
+            }
+        }
         let monitor = platform::current_cursor_monitor();
         if saved.entry_point == config::EntryPoint::Both {
             ui::run_launch_chooser(saved.install_dir, monitor, payload_source(None)?)?;
@@ -128,6 +147,7 @@ fn main() -> Result<()> {
         let mut existing = config::load()?.unwrap_or_else(|| config::InstallConfig {
             install_dir: PathBuf::from(default_install_dir()),
             installed_entries: Vec::new(),
+            adjacent_setup: None,
             entry_point: config::EntryPoint::Classic,
             desktop_shortcuts: false,
             start_menu_shortcuts: false,
@@ -180,6 +200,12 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    #[cfg(windows)]
+    if let Some(target) = upgrade_prompt::find_installation(args.install_dir.as_deref())? {
+        if upgrade_prompt::offer(&source, &target, false, !args.no_launch)? {
+            return Ok(());
+        }
+    }
     ui::run_installer(source)
 }
 
@@ -210,11 +236,7 @@ fn current_executable_is_shell_for_install_dir(install_dir: &Path) -> bool {
     }
     // In portable vanilla/HMCL/PCL mode the shell stays in the parent folder
     // while the launcher payload lives in the LunaLauncher subdirectory.
-    if install_directory
-        .file_name()
-        .is_none_or(|name| !name.eq_ignore_ascii_case("LunaLauncher"))
-        || install_directory.parent() != Some(executable_directory.as_path())
-    {
+    if config::adjacent_setup_directory(&install_directory) != Some(executable_directory.as_path()) {
         return false;
     }
     PayloadSource::from_path(executable)

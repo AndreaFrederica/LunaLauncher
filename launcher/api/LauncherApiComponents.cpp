@@ -7,6 +7,12 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QFileInfo>
+#include <QDir>
+#include <QFile>
+#include <QSaveFile>
+#include <QJsonDocument>
+#include <QCryptographicHash>
+#include <QRegularExpression>
 #include <QUuid>
 
 #include <exception>
@@ -19,6 +25,7 @@
 #include "minecraft/Component.h"
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
+#include "minecraft/OneSixVersionFormat.h"
 #include "net/Mode.h"
 #include "tasks/Task.h"
 
@@ -84,7 +91,8 @@ bool waitForTask(LauncherApi& api, Task* task, UserInteraction& interaction, QSt
     if (!task->isFinished()) {
         if (!task->isRunning())
             task->start();
-        loop.exec();
+        if (!task->isFinished())
+            loop.exec();
     }
     api.clearTrackedTask(task);
     if (!task->wasSuccessful()) {
@@ -98,17 +106,35 @@ bool waitForTask(LauncherApi& api, Task* task, UserInteraction& interaction, QSt
 bool ensureLoaded(MinecraftInstance* instance, LauncherApi& api, UserInteraction& interaction, QString* error)
 {
     auto profile = instance->getPackProfile();
-    if (profile->isLoaded())
-        return true;
-
     try {
-        const auto result = profile->reload(Net::Mode::Offline);
-        if (!result) {
-            if (error)
-                *error = result.error;
-            return false;
-        }
+        // An online update may already own this profile. Wait for it instead
+        // of replacing it with an offline reload.
         auto task = profile->getCurrentTask();
+        if (!waitForTask(api, task.get(), interaction, error))
+            return false;
+
+        if (profile->isLoaded()) {
+            // instance.list/info can load mmc-pack.json without resolving the
+            // standard components' metadata. The list alone is not enough.
+            bool resolved = true;
+            for (int i = 0; i < profile->rowCount(); ++i) {
+                if (!profile->getComponent(static_cast<size_t>(i))->getVersionFile()) {
+                    resolved = false;
+                    break;
+                }
+            }
+            if (resolved)
+                return true;
+            profile->resolve(Net::Mode::Offline);
+        } else {
+            const auto result = profile->reload(Net::Mode::Offline);
+            if (!result) {
+                if (error)
+                    *error = result.error;
+                return false;
+            }
+        }
+        task = profile->getCurrentTask();
         if (!waitForTask(api, task.get(), interaction, error))
             return false;
     } catch (const std::exception& exception) {
@@ -126,6 +152,22 @@ QJsonObject componentJson(const ComponentPtr& component)
     QJsonArray problems;
     for (const auto& problem : component->getProblems())
         problems.append(QJsonObject{ { "severity", static_cast<int>(problem.m_severity) }, { "description", problem.m_description } });
+    QJsonObject contents;
+    if (const auto file = component->getVersionFile()) {
+        QJsonArray libraries, embeddedLoaders;
+        for (const auto& library : file->libraries) {
+            const auto& name = library->rawName();
+            libraries.append(name.serialize());
+            if (component->getID() != "net.xiaoyu233.fishmodloader" &&
+                name.groupId() == "net.xiaoyu233.fishmodloader" && name.artifactId() == "fishmodloader")
+                embeddedLoaders.append(QJsonObject{{"name", "FishModLoader"}, {"version", name.version()}});
+        }
+        QJsonArray javaVersions;
+        for (const auto major : file->compatibleJavaMajors) javaVersions.append(major);
+        contents = {{"mainClass", file->mainClass}, {"mainJar", file->mainJar ? file->mainJar->rawName().serialize() : QString()},
+                    {"libraries", libraries}, {"embeddedLoaders", embeddedLoaders}, {"javaVersions", javaVersions},
+                    {"jarModCount", file->jarMods.size()}, {"agentCount", file->agents.size()}};
+    }
     return { { "id", component->getID() },
              { "name", component->getName() },
              { "version", component->getVersion() },
@@ -142,7 +184,9 @@ QJsonObject componentJson(const ComponentPtr& component)
              { "canChangeVersion", component->isVersionChangeable(false) },
              { "canCustomize", component->isCustomizable() },
              { "canRevert", component->isRevertible() },
+             { "canEdit", component->isCustom() && QFileInfo::exists(component->getFilename()) },
              { "problemSeverity", static_cast<int>(component->getProblemSeverity()) },
+             { "contents", contents },
              { "problems", problems } };
 }
 
@@ -151,7 +195,7 @@ void makeForeignComponentReadOnly(QJsonObject& object)
     // A vanilla/PCL/HMCL profile is backed by the external version JSON. It
     // can be inspected in the editor, while Prism-only component mutations
     // require an explicit conversion first.
-    for (const auto key : { "canDisable", "canRemove", "canMove", "canChangeVersion", "canCustomize", "canRevert" })
+    for (const auto key : { "canDisable", "canRemove", "canMove", "canChangeVersion", "canCustomize", "canRevert", "canEdit" })
         object.insert(key, false);
 }
 
@@ -179,7 +223,97 @@ QJsonObject listComponents(LauncherApi& api, const QJsonObject& parameters, User
         item.insert("index", i);
         components.append(item);
     }
-    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "components", components } });
+    return OperationService::success(QJsonObject{ { "instance", instance->id() }, { "components", components },
+        { "readOnly", foreign }, { "running", instance->isRunning() }, { "canInstallCustom", !foreign && !instance->isRunning() } });
+}
+
+bool validComponentUid(const QString& uid)
+{
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$"));
+    return pattern.match(uid).hasMatch() && !uid.contains("..");
+}
+
+QJsonObject reloadComponents(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    QString error;
+    auto instance = findMinecraftInstance(parameters, &error);
+    if (!instance) return OperationService::failure(error, 2);
+    if (instance->isRunning()) return listComponents(api, parameters, interaction);
+    instance->getPackProfile()->saveNow();
+    const auto loaded = instance->getPackProfile()->reload(Net::Mode::Offline);
+    if (!loaded) return OperationService::failure(loaded.error);
+    auto task = instance->getPackProfile()->getCurrentTask();
+    if (!waitForTask(api, task.get(), interaction, &error)) return OperationService::failure(error);
+    return listComponents(api, parameters, interaction);
+}
+
+QJsonObject addEmptyComponent(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
+{
+    QString error;
+    auto instance = findMinecraftInstance(parameters, &error);
+    if (!instance) return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance) || instance->isRunning())
+        return OperationService::failure(QObject::tr("Stop the instance and use a Prism-format copy before adding custom components."), 2);
+    if (!ensureLoaded(instance, api, interaction, &error)) return OperationService::failure(error);
+    const auto uid = parameters.value("component").toString().trimmed();
+    const auto name = parameters.value("name").toString().trimmed();
+    if (!validComponentUid(uid) || name.isEmpty())
+        return OperationService::failure(QObject::tr("A component name and a valid UID containing letters, digits, dots, hyphens or underscores are required."), 2);
+    auto profile = instance->getPackProfile();
+    if (profile->getComponent(uid) || QFileInfo::exists(profile->patchFilePathForUid(uid)))
+        return OperationService::failure(QObject::tr("A component with this UID already exists."), 2);
+    if (!profile->installEmpty(uid, name)) return OperationService::failure(QObject::tr("Could not create the component."));
+    profile->saveNow();
+    return OperationService::success(QJsonObject{{"componentInfo", componentJson(profile->getComponent(uid))}});
+}
+
+QJsonObject componentPatch(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction, bool write)
+{
+    QString error;
+    auto instance = findMinecraftInstance(parameters, &error);
+    if (!instance) return OperationService::failure(error, 2);
+    if (rejectForeignComponentEdit(instance) || (write && instance->isRunning()))
+        return OperationService::failure(QObject::tr("This component patch cannot be edited in the current instance."), 2);
+    if (!ensureLoaded(instance, api, interaction, &error)) return OperationService::failure(error);
+    const auto uid = parameters.value("component").toString();
+    auto component = instance->getPackProfile()->getComponent(uid);
+    if (!validComponentUid(uid) || !component || !component->isCustom())
+        return OperationService::failure(QObject::tr("Select a local custom component before editing its JSON."), 2);
+    const QFileInfo path(component->getFilename());
+    const QFileInfo patches(QDir(instance->componentRoot()).filePath("patches"));
+    if (path.isSymLink() || patches.isSymLink() || !path.isFile() ||
+        path.canonicalFilePath() != QDir(patches.canonicalFilePath()).filePath(uid + ".json"))
+        return OperationService::failure(QObject::tr("The component patch must be a regular file in the instance patches directory."), 2);
+    QFile file(path.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly) || file.size() > 4 * 1024 * 1024)
+        return OperationService::failure(QObject::tr("Could not read the component patch, or it exceeds 4 MiB."));
+    const auto current = file.readAll();
+    file.close();
+    const auto hash = [](const QByteArray& bytes) {
+        return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    };
+    if (!write) return OperationService::success(QJsonObject{{"content", QString::fromUtf8(current)},
+        {"revision", hash(current)}, {"filename", path.absoluteFilePath()}});
+    if (parameters.value("revision").toString() != hash(current))
+        return OperationService::failure(QObject::tr("The patch changed on disk. Reload it before saving."), 2);
+    const auto content = parameters.value("content").toString().toUtf8();
+    if (content.size() > 4 * 1024 * 1024) return OperationService::failure(QObject::tr("Component JSON exceeds 4 MiB."), 2);
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(content, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+        return OperationService::failure(QObject::tr("Invalid component JSON: %1").arg(parseError.errorString()), 2);
+    try {
+        const auto parsed = OneSixVersionFormat::versionFileFromJson(document, path.absoluteFilePath(), false);
+        if (parsed->uid != uid) return OperationService::failure(QObject::tr("The component UID cannot be changed while editing."), 2);
+    } catch (const Exception& exception) {
+        return OperationService::failure(exception.cause(), 2);
+    }
+    QSaveFile output(path.absoluteFilePath());
+    if (!output.open(QIODevice::WriteOnly) || output.write(content) != content.size() || !output.commit())
+        return OperationService::failure(output.errorString());
+    auto result = reloadComponents(api, parameters, interaction);
+    if (result.value("ok").toBool()) result.insert("revision", hash(content));
+    return result;
 }
 
 QJsonObject setComponentVersion(LauncherApi& api, const QJsonObject& parameters, UserInteraction& interaction)
@@ -364,6 +498,20 @@ QJsonObject installCustomComponent(LauncherApi& api, const QJsonObject& paramete
     auto profile = instance->getPackProfile();
     bool changed = false;
     if (type == "component") {
+        QFile file(source.absoluteFilePath());
+        if (!file.open(QIODevice::ReadOnly) || file.size() > 4 * 1024 * 1024)
+            return OperationService::failure(QObject::tr("Could not read the component JSON, or it exceeds 4 MiB."), 2);
+        QJsonParseError parseError;
+        const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject())
+            return OperationService::failure(QObject::tr("Invalid component JSON: %1").arg(parseError.errorString()), 2);
+        try {
+            const auto parsed = OneSixVersionFormat::versionFileFromJson(document, source.absoluteFilePath(), false);
+            if (!validComponentUid(parsed->uid) || profile->getComponent(parsed->uid) || QFileInfo::exists(profile->patchFilePathForUid(parsed->uid)))
+                return OperationService::failure(QObject::tr("The imported component UID is invalid or already installed."), 2);
+        } catch (const Exception& exception) {
+            return OperationService::failure(exception.cause(), 2);
+        }
         changed = profile->installComponents({ source.absoluteFilePath() });
     } else if (type == "jarmod") {
         profile->installJarMods({ source.absoluteFilePath() });
@@ -394,6 +542,26 @@ void registerLauncherApiComponentOperations(LauncherApi& api)
                            [&api](const QJsonObject& parameters, UserInteraction& interaction) {
                                return listComponents(api, parameters, interaction);
                            });
+    api.registerOperation({ "instance.components.reload", "Reload local component files and return the ordered profile.",
+                            objectSchema({{"instance", instance}}, {"instance"}), "instance.components" },
+                          [&api](const QJsonObject& p, UserInteraction& ui) { return reloadComponents(api, p, ui); });
+    api.registerOperation({ "instance.component.add-empty", "Create a named local component without replacing an existing UID.",
+                            objectSchema({{"instance", instance}, {"component", component}, {"name", stringProperty("Component display name.")}},
+                                         {"instance", "component", "name"}), "instance.components", true },
+                          [&api](const QJsonObject& p, UserInteraction& ui) { return addEmptyComponent(api, p, ui); });
+    for (const bool write : {false, true}) {
+        auto properties = QJsonObject{{"instance", instance}, {"component", component}};
+        QJsonArray required{"instance", "component"};
+        if (write) {
+            properties.insert("content", stringProperty("Component JSON, at most 4 MiB."));
+            properties.insert("revision", stringProperty("Revision returned by read-json."));
+            required.append("content"); required.append("revision");
+        }
+        api.registerOperation({write ? "instance.component.write-json" : "instance.component.read-json",
+                               "Read or atomically update a local component JSON with revision checking.",
+                               objectSchema(properties, required), "instance.components", write},
+                              [&api, write](const QJsonObject& p, UserInteraction& ui) { return componentPatch(api, p, ui, write); });
+    }
     api.registerOperation({ "instance.component.set-version", "Change a Minecraft component version and optionally resolve dependencies.",
                             objectSchema({ { "instance", instance }, { "component", component }, { "version", stringProperty("Version descriptor.") },
                                            { "important", boolProperty("Mark the component as important.") }, { "resolve", boolProperty("Resolve dependencies online.", true) },

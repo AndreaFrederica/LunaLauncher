@@ -173,7 +173,7 @@ const shellOptions = [
   { label: '终末地', value: 'endfield' },
   { label: '忘却的旋律', value: 'melody' },
   { label: t('pcl.auto2.k67cf30199a'), value: 'pcl' },
-  { label: 'Demo', value: 'neo' },
+  { label: t('appearance.native'), value: 'neo' },
 ];
 const themeOptions = [
   { label: t('pcl.auto2.k30b2c979ac'), value: 'dark' },
@@ -299,6 +299,7 @@ function reset() {
     pclFloatMusic: false,
     pclTitleLogo: true,
     pclTitleBadge: true,
+    pclTitleVersion: true,
     pclTitleIcon: true,
     pclAccentColor: '#d65c9a',
     pclBackgroundImage: '',

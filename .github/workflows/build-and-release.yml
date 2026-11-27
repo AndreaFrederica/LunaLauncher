@@ -55,6 +55,7 @@ jobs:
       prerelease: ${{ steps.meta.outputs.prerelease }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       asset_version: ${{ steps.meta.outputs.asset_version }}
+      release_date: ${{ steps.meta.outputs.release_date }}
       release_revision: ${{ steps.meta.outputs.release_revision }}
     steps:
       - name: Check out sources
@@ -112,9 +113,11 @@ jobs:
             fi
           fi
 
+          release_date=""
           release_revision=""
-          if [[ "$release_tag" =~ -[0-9]{8}r([0-9]+)$ ]]; then
-            release_revision="${BASH_REMATCH[1]}"
+          if [[ "$release_tag" =~ -([0-9]{8})(r([0-9]+))?$ ]]; then
+            release_date="${BASH_REMATCH[1]}"
+            release_revision="${BASH_REMATCH[3]}"
           fi
           asset_version="$(printf '%s' "$release_tag" | sed 's/[^A-Za-z0-9._-]/-/g')"
           {
@@ -123,6 +126,7 @@ jobs:
             echo "prerelease=$prerelease"
             echo "release_tag=$release_tag"
             echo "asset_version=$asset_version"
+            echo "release_date=$release_date"
             echo "release_revision=$release_revision"
           } >> "$GITHUB_OUTPUT"
 
@@ -144,6 +148,7 @@ jobs:
       LUNA_INSTALL_DIR: install-release
       LUNA_MACOS_DEPLOYMENT_TARGET: "13.0"
       LUNA_NEO_UI: ${{ (github.event_name == 'push' || inputs.include_neo_ui) && 'enabled' || 'disabled' }}
+      LUNA_BUILD_DATE: ${{ needs.prepare.outputs.release_date }}
       LUNA_RELEASE_REVISION: ${{ needs.prepare.outputs.release_revision }}
     steps:
       - name: Check out sources

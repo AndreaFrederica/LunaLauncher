@@ -845,13 +845,13 @@ QJsonObject OperationService::setDataLocation(const QJsonObject& parameters, Use
 QJsonObject OperationService::migrateStartupData(const QJsonObject& parameters, UserInteraction& interaction)
 {
     const auto name = parameters.value("name").toString().trimmed();
-    if (name.isEmpty()) return failure(tr("A migration source name is required."), 2);
+    const auto source = parameters.value("source").toString().trimmed();
+    if (name.isEmpty() == source.isEmpty()) return failure(tr("Provide either a detected migration name or a custom source directory."), 2);
     QString error;
-    auto task = APPLICATION->createDataMigrationTask(name, &error);
+    auto task = APPLICATION->createDataMigrationTask(name, source, &error);
     if (!task) return failure(error, 2);
     if (!waitForTask(task.get(), interaction, &error)) return failure(error);
-    if (!APPLICATION->finishDataMigration(name, &error)) return failure(error);
-    return success(QJsonObject{ { "migrated", name }, { "status", APPLICATION->startupStatus() } });
+    return success(QJsonObject{ { "migrated", source.isEmpty() ? name : source }, { "status", APPLICATION->startupStatus() } });
 }
 
 QJsonObject OperationService::dismissStartupMigration(const QJsonObject& parameters)

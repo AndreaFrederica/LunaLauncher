@@ -4,6 +4,7 @@ use crate::{
     config::{self, EntryPoint, InstallConfig, InstanceLayoutMode, InstanceStoreFormat},
     platform,
     sfx::PayloadSource,
+    version::{LauncherVersion, package_version, probe_launcher},
 };
 use anyhow::{Context, Result, bail};
 use std::{
@@ -24,6 +25,7 @@ fn existing_config(target: &Path) -> Result<InstallConfig> {
     let mut saved = local.or(legacy).unwrap_or(InstallConfig {
         install_dir: target.to_path_buf(),
         installed_entries: Vec::new(),
+        adjacent_setup: None,
         entry_point: EntryPoint::Classic,
         desktop_shortcuts: false,
         start_menu_shortcuts: false,
@@ -230,12 +232,76 @@ where
     Ok(backup)
 }
 
+fn setup_payload(path: &Path) -> Option<PayloadSource> {
+    if !fs::symlink_metadata(path).ok()?.is_file()
+        || !path.extension()?.eq_ignore_ascii_case("exe")
+    {
+        return None;
+    }
+    let source = PayloadSource::from_path(path).ok()?;
+    source.footer?;
+    Some(source)
+}
+
+fn previous_installation(target: &Path, parent: &Path) -> Option<PathBuf> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct UpdateRecord {
+        backup_directory: PathBuf,
+    }
+
+    let bytes = fs::read(target.join(".luna-update.json")).ok()?;
+    let record: UpdateRecord = serde_json::from_slice(&bytes).ok()?;
+    let backup = record.backup_directory.canonicalize().ok()?;
+    (backup.parent() == Some(parent)
+        && backup.file_name()?.to_str()?.starts_with(".luna-update-backup-"))
+        .then_some(backup)
+}
+
+fn find_adjacent_setup(target: &Path, recorded: Option<&Path>) -> Option<PayloadSource> {
+    let parent = config::adjacent_setup_directory(target)?;
+    if let Some(name) = recorded {
+        if name.file_name().map(Path::new) == Some(name) {
+            if let Some(source) = setup_payload(&parent.join(name)) {
+                if archive::list(&source).ok()?.iter().any(|entry| entry == "lunalauncher.exe") {
+                    return Some(source);
+                }
+            }
+        }
+        return None;
+    }
+
+    // Older installs have no recorded filename. Their installed shell was a
+    // copy of the SFX. Follow their update backups in case it is now newer
+    // than the external launch entry.
+    let candidates: Vec<_> = fs::read_dir(parent)
+        .ok()?
+        .flatten()
+        .filter_map(|entry| setup_payload(&entry.path()))
+        .collect();
+    let mut visited = HashSet::new();
+    let mut installed_footers = Vec::new();
+    let mut directory = Some(target.to_path_buf());
+    while let Some(path) = directory.filter(|path| visited.insert(path.clone())) {
+        if let Some(installed) = setup_payload(&path.join("luna-installer-shell.exe")) {
+            installed_footers.push(installed.footer);
+        }
+        directory = previous_installation(&path, parent);
+    }
+    let mut matches = candidates
+        .into_iter()
+        .filter(|file| installed_footers.contains(&file.footer));
+    let matched = matches.next()?;
+    (matches.next().is_none() && matched.verify_hash().is_ok()).then_some(matched)
+}
+
 pub fn apply(
     source: &PayloadSource,
     directory: &Path,
     data_root: Option<&Path>,
     restart: Option<EntryPoint>,
     launch: bool,
+    upgrade_to: Option<LauncherVersion>,
 ) -> Result<()> {
     apply_with_progress(
         source,
@@ -243,6 +309,7 @@ pub fn apply(
         data_root,
         restart,
         launch,
+        upgrade_to,
         &mut |_, _| {},
     )
 }
@@ -253,6 +320,7 @@ pub fn apply_with_progress(
     data_root: Option<&Path>,
     restart: Option<EntryPoint>,
     launch: bool,
+    upgrade_to: Option<LauncherVersion>,
     progress: &mut dyn FnMut(f32, &str),
 ) -> Result<()> {
     use std::io::Write;
@@ -296,6 +364,10 @@ pub fn apply_with_progress(
     let mut saved = existing_config(&target)?;
     let entry = restart.unwrap_or(saved.entry_point);
     let entries = archive::list(source)?;
+    let expected_version = package_version(source)?;
+    if upgrade_to.is_some() && upgrade_to != expected_version {
+        bail!("the update package changed after confirmation");
+    }
     if !entries.iter().any(|name| name == "lunalauncher.exe") {
         bail!("update package is missing the launcher executable");
     }
@@ -326,36 +398,49 @@ pub fn apply_with_progress(
         .open(&lock_path)
         .context("an update is already active; inspect .luna-update.lock before retrying")?;
     let result = (|| {
+        if let Some(expected) = upgrade_to {
+            let installed = probe_launcher(&target.join("lunalauncher.exe"))?;
+            if installed >= expected {
+                bail!("installed version {installed} is already at least {expected}");
+            }
+        }
         let old_entries = saved.installed_entries.clone();
+        let sfx = source.footer.is_some();
+        let adjacent = if sfx {
+            find_adjacent_setup(&target, saved.adjacent_setup.as_deref())
+        } else {
+            None
+        };
+        let mut pending_setup = None;
+        if let Some(old) = adjacent {
+            saved.adjacent_setup = old.path.file_name().map(PathBuf::from);
+            if old.path.canonicalize()? != source.path.canonicalize()? {
+                let parent = old.path.parent().context("Setup has no parent directory")?;
+                let mut staged = tempfile::NamedTempFile::new_in(parent)?;
+                std::io::copy(&mut fs::File::open(&source.path)?, &mut staged)?;
+                staged.as_file().sync_all()?;
+                pending_setup = Some((staged, old));
+            }
+        }
         let backup = replace_with_progress(
             source,
             &target,
             &old_entries,
             |new, entries| {
                 let shell = new.join("luna-installer-shell.exe");
-                fs::copy(std::env::current_exe()?, shell)?;
+                if sfx {
+                    fs::copy(&source.path, shell)?;
+                } else {
+                    fs::copy(std::env::current_exe()?, shell)?;
+                }
                 // Keep setup choices; updating never calls configure_launcher or migration.
                 saved.installed_entries = entries.to_vec();
                 config::save_install(&saved)?;
-                let mut child = Command::new(new.join("lunalauncher.exe"))
-                    .arg("--version")
-                    .current_dir(new)
-                    .spawn()
-                    .context("check updated launcher executable")?;
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-                loop {
-                    if let Some(status) = child.try_wait()? {
-                        if !status.success() {
-                            bail!("updated launcher failed its version check");
-                        }
-                        break;
+                let installed = probe_launcher(&new.join("lunalauncher.exe"))?;
+                if let Some(expected) = expected_version {
+                    if installed != expected {
+                        bail!("updated launcher reports {installed}, expected {expected}");
                     }
-                    if std::time::Instant::now() >= deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        bail!("updated launcher version check timed out");
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
                 platform::configure_windows_installation(new, saved.portable_mode)?;
                 fs::write(
@@ -364,6 +449,16 @@ pub fn apply_with_progress(
                         "status": "installed", "restartEntry": entry,
                     }))?,
                 )?;
+                // Commit the outside entry after the new installation has
+                // passed verification. A failed replace still allows rollback.
+                if let Some((staged, old)) = pending_setup {
+                    if setup_payload(&old.path).is_none_or(|current| current.footer != old.footer) {
+                        bail!("Setup changed during the update: {}", old.path.display());
+                    }
+                    staged.persist(&old.path).with_context(|| {
+                        format!("replace Setup at {}; close it before updating", old.path.display())
+                    })?;
+                }
                 Ok(())
             },
             progress,
@@ -397,20 +492,15 @@ pub fn apply_with_progress(
         }
         if launch {
             progress(0.98, "更新完成，正在重新启动…");
-            let executable = platform::entry_targets(
-                &target,
-                if entry == EntryPoint::Both {
-                    EntryPoint::Classic
-                } else {
-                    entry
-                },
-            )[0]
-            .1
-            .clone();
+            let executable = if entry == EntryPoint::Both {
+                target.join("luna-installer-shell.exe")
+            } else {
+                platform::entry_targets(&target, entry)[0].1.clone()
+            };
             let mut command = Command::new(executable);
             command.current_dir(&target);
             if let Some(data) = data_root {
-                if entry == EntryPoint::Neo {
+                if entry != EntryPoint::Classic {
                     command.env("LUNA_LAUNCHER_DATA", data);
                 } else {
                     command.arg("--dir").arg(data);

@@ -60,6 +60,7 @@ export interface NeoUiPreferences {
   pclLaunchLogAutoScroll: boolean;
   pclTitleLogo: boolean;
   pclTitleBadge: boolean;
+  pclTitleVersion: boolean;
   /** Show a Luna provenance badge when Luna only added its own metadata. */
   pclShowLunaBadge: boolean;
   /** Show the Luna mark before the PCL title-bar brand. */
@@ -132,6 +133,7 @@ const defaults: NeoUiPreferences = {
   pclLaunchLogAutoScroll: true,
   pclTitleLogo: true,
   pclTitleBadge: true,
+  pclTitleVersion: true,
   // A Luna-only sidecar is launcher metadata, so keep the instance list quiet
   // unless the user explicitly wants to see that provenance.
   pclShowLunaBadge: false,
@@ -278,6 +280,9 @@ function normalizeLoaded(value: any): NeoUiPreferences {
     }
     if (typeof merged.pclTitleIcon !== 'boolean') {
       merged.pclTitleIcon = defaults.pclTitleIcon;
+    }
+    if (typeof merged.pclTitleVersion !== 'boolean') {
+      merged.pclTitleVersion = defaults.pclTitleVersion;
     }
 
     if (typeof merged.pclHomeInstanceShowSubtitle !== 'boolean') {

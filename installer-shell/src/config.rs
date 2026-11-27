@@ -36,6 +36,9 @@ pub struct InstallConfig {
     pub install_dir: PathBuf,
     #[serde(default)]
     pub installed_entries: Vec<String>,
+    /// Name of the SFX launch entry next to a nested LunaLauncher directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adjacent_setup: Option<PathBuf>,
     #[serde(default)]
     pub entry_point: EntryPoint,
     #[serde(default)]
@@ -118,6 +121,17 @@ pub fn reset() -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn adjacent_setup_directory(install_dir: &Path) -> Option<&Path> {
+    if install_dir
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("LunaLauncher"))
+    {
+        install_dir.parent()
+    } else {
+        None
+    }
 }
 
 pub fn is_within_install_dir(path: &Path, install_dir: &Path) -> bool {

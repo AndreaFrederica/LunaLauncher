@@ -59,12 +59,13 @@
   </MelodyModernWindow>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { isTauri } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import type { NeoShell } from '../../../../neo-ui-preferences';
 import PclSetupPage from '../../../pcl/pages/settings/PclSetupPage.vue';
 import MelodyModernWindow from '../../components/MelodyModernWindow.vue';
+import { useI18n } from 'vue-i18n';
 import MelodyButton from '../../components/MelodyButton.vue';
 import MelodyInput from '../../components/MelodyInput.vue';
 import MelodySelect from '../../components/MelodySelect.vue';
@@ -78,7 +79,13 @@ const { appearance, backgroundUrl, imageName, imageCount, loading: backgroundLoa
 const section = ref('theme'), settings = ref<any[]>([]), accounts = ref<any[]>([]), error = ref(''), loading = ref(false), uploading = ref(false);
 const fileInput = ref<HTMLInputElement>();
 const directoryInput = ref<HTMLInputElement>();
-const shellOptions = [{ value: 'pcl', label: 'PCL Style（Luna Neo）' }, { value: 'neo', label: 'Demo' }, { value: 'endfield', label: '终末地' }, { value: 'melody', label: '忘却的旋律' }];
+const { t } = useI18n();
+const shellOptions = computed(() => [
+  { value: 'pcl', label: 'PCL Style（Luna Neo）' },
+  { value: 'neo', label: t('appearance.native') },
+  { value: 'endfield', label: '终末地' },
+  { value: 'melody', label: '忘却的旋律' },
+]);
 const backgroundOptions = [{ value: 'builtin', label: '原版背景' }, { value: 'single', label: '指定图片' }, { value: 'random', label: '目录随机背景' }];
 const groups = [
   { label: '个性化', items: [{ id: 'theme', label: '主题与背景' }, { id: 'accounts', label: '账户' }, { id: 'language', label: '语言' }] },

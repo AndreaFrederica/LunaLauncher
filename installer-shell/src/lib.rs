@@ -9,3 +9,4 @@ pub mod sfx;
 
 pub mod migration;
 pub mod update;
+pub mod version;

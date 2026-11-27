@@ -11,6 +11,9 @@
 #include <QFuture>
 #include <QFutureWatcher>
 
+#include <functional>
+#include <memory>
+
 /*
  * Migrate existing data from other MMC-like launchers.
  */
@@ -18,7 +21,14 @@
 class DataMigrationTask : public Task {
     Q_OBJECT
    public:
+    struct CopyLocation {
+        QString source;
+        QString target;
+        bool instances = false;
+    };
+
     explicit DataMigrationTask(const QString& sourcePath, const QString& targetPath, Filter pathmatcher);
+    DataMigrationTask(QList<CopyLocation> locations, std::function<QString()> finish);
     ~DataMigrationTask() override = default;
 
    protected:
@@ -31,14 +41,12 @@ class DataMigrationTask : public Task {
     void copyAborted();
 
    private:
-    // Keep the paths by value. Migration tasks can outlive the caller that
-    // requested them (the Neo UI starts one through the API), so references to
-    // temporary or stack-owned strings would make the task unsafe.
-    QString m_sourcePath;
-    QString m_targetPath;
-    const Filter m_pathMatcher;
+    QString copyLocations() const;
 
-    FS::copy m_copy;
+    std::unique_ptr<FS::copy> m_copy;
+    QList<CopyLocation> m_locations;
+    std::function<QString()> m_finish;
+    QFutureWatcher<QString> m_mergeWatcher;
     int m_toCopy = 0;
     QFuture<bool> m_copyFuture;
     QFutureWatcher<bool> m_copyFutureWatcher;

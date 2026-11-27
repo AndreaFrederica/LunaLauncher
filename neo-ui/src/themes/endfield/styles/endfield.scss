@@ -1166,7 +1166,7 @@ a.ef-kv:hover > :first-child,
 }
 
 /* Rows of work inside a panel, edge to edge. */
-.ef-root .ef-rows {
+.ef-root ul.ef-rows {
   margin: 0 -1.15rem;
   padding: 0;
   list-style: none;
@@ -1215,6 +1215,47 @@ a.ef-kv:hover > :first-child,
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.35rem;
+}
+
+/* Page lists align with their section toolbar and share the same row layout. */
+.ef-root div.ef-rows {
+  border-top: 1px solid var(--ef-rule);
+}
+.ef-root .ef-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--ef-rule);
+}
+.ef-root .ef-row__main {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.ef-root .ef-row__main :is(strong, small) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ef-root .ef-row__main strong {
+  font-family: var(--ef-font-ui);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ef-root .ef-row__main small {
+  margin-top: 1px;
+  color: var(--ef-ink-2);
+  font-size: 9px;
+}
+.ef-root .ef-row__state {
+  padding: 1px 6px;
+  border: 1px solid var(--ef-rule);
+  color: var(--ef-ink-2);
+  font-family: var(--ef-font-ui);
+  font-size: 8px;
+  text-transform: uppercase;
 }
 
 /* ---------- 9. forms ---------- */

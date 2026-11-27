@@ -1,5 +1,5 @@
 <template>
-  <q-dialog v-model="shown" persistent :maximized="false" transition-show="slide-up" transition-hide="slide-down" @hide="emit('closed')">
+  <q-dialog :model-value="shown && !suspended" @update:model-value="shown = $event" persistent :maximized="false" transition-show="slide-up" transition-hide="slide-down" @hide="!suspended && emit('closed')">
     <q-card class="task-card text-white">
       <q-card-section class="task-header"><div><div class="eyebrow">{{ t('ui.taskCenter') }}</div><div class="text-h6">{{ task?.name || title || t('xmcl.task.running') }}</div><div class="text-caption text-grey-5">{{ task?.status || status || t('xmcl.task.preparing') }}</div></div><q-btn v-if="task?.canAbort || busy" flat round icon="close" color="orange" :aria-label="t('xmcl.task.cancel')" @click="emit('cancel')" /></q-card-section>
       <q-linear-progress :value="progress" :indeterminate="!done && stats.percent === null" color="primary" track-color="grey-8" rounded class="q-mx-lg" />
@@ -35,7 +35,7 @@ import { launcher } from '../../../boot/launcher-api';
 import { useI18n } from 'vue-i18n';
 import { flattenTaskItems, taskProgressStats, taskItemProgressText, taskItemLabel, taskItemCurrent, taskItemTotal, isTaskItemActive, isTaskItemFinished, taskState } from '../../pcl/composables/useTaskProgress';
 import { useThemeResource } from '../../../common/runtime/theme-runtime';
-const props = defineProps<{ busy: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any>; title?: string; status?: string; snapshot?: any; open?: boolean }>();
+const props = defineProps<{ busy: boolean; suspended?: boolean; execute: (op: string, p?: Record<string, unknown>) => Promise<any>; title?: string; status?: string; snapshot?: any; open?: boolean }>();
 const { t } = useI18n();
 const emit = defineEmits<{ cancel: []; closed: []; updated: [task: any] }>();
 const shown = ref(false); const polled = ref<any>(null); let unlistenTaskEvents: (() => void) | undefined; let pollInFlight = false; let resourceActive = false; let resourceGeneration = 0;

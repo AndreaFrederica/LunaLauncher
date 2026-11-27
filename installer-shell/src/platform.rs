@@ -21,6 +21,14 @@ pub fn show_update_error(message: &str) {
     eprintln!("LunaLauncher update failed: {message}");
 }
 
+#[cfg(windows)]
+pub fn registered_install_directory() -> Option<PathBuf> {
+    use winreg::{RegKey, enums::HKEY_CURRENT_USER};
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey("Software\\LunaLauncher").ok()?
+        .get_value::<String, _>("InstallDir").ok().map(PathBuf::from)
+}
+
 /// Wait only for processes loaded from this installation. Never kill other
 /// portable copies, or a running Java game that uses external data.
 pub fn wait_for_installation_exit(target: &Path) -> Result<()> {

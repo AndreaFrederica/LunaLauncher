@@ -29,6 +29,19 @@ export async function pickPclFile(options: {
   return showNativePicker('file', options.title, undefined, options.filters, options.multiple);
 }
 
+export async function pickPclFiles(options: {
+  title?: string;
+  filters?: PclFileFilter[];
+  multiple?: boolean;
+} = {}): Promise<string[]> {
+  if (!isTauri()) {
+    const path = window.prompt(options.title || i18n.global.t('pcl.fileDialog.filePath'));
+    return path ? [path] : [];
+  }
+  const selected = await open({ title: options.title, filters: options.filters, multiple: options.multiple ?? true });
+  return Array.isArray(selected) ? selected : selected ? [selected] : [];
+}
+
 export async function pickPclDirectory(options: { title?: string } = {}): Promise<string> {
   return showNativePicker('directory', options.title);
 }

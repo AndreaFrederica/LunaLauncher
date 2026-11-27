@@ -14,10 +14,13 @@ Windows、Linux AppImage 与 Linux 便携目录包使用各自的更新协议 1�
 - NeoUI 主界面按共享开关和检查间隔定时检查，跳过首次设置、运行游戏和界面忙碌阶段；发现新版通知用户，安装仍由用户点击触发。网络失败延迟五分钟重试。
 - 工作进程位于临时目录，只等待当前程序目录内的进程退出，不执行全局 `taskkill`。有游戏运行时不交接更新。
 - 在同盘临时目录完整校验并解压后，旧目录改名保留；保留 `UserData`、数据路径标记，以及不与新版程序冲突的未知文件（冲突文件留在旧备份），删除旧安装清单中已被新版移除的程序文件。更新安装器、安装记录与 Windows 当前用户的卸载、URL/文件关联注册；不重新建立快捷方式。
+- 便携布局若从程序目录旁的 Setup.exe 启动，更新会在验证新程序后按原文件名替换该入口。旧安装可通过当前或备份中的安装器识别外部入口，识别到唯一匹配时才会替换。外部入口被占用导致替换失败时，恢复原程序目录。
 - 新程序必须在 15 秒内通过 `--version` 检查。替换或验证等可捕获错误会恢复原目录及用户数据；成功后在旁边保留 `.luna-update-backup-*`，路径写入 `.luna-update.json` 与更新日志。
 - 重启保持发起更新的 Classic/NeoUI 以及原有数据目录（Classic 使用 `--dir`，NeoUI 使用其原生支持的 `LUNA_LAUNCHER_DATA`）。日志为数据目录下的 `logs/prism_launcher_update.log`，失败另写 `.prism_launcher_update.fail`。
 
 ### 发布
+
+用户手动打开新版 Windows Setup 时，安装器会离线比较包内记录的版本和已安装的 `lunalauncher.exe --version`。发现新版会显示新旧版本和安装路径，确认后进入更新进度窗口。安装器可识别登记过的安装、默认安装目录和位于 Setup 旁边且有安装记录的便携目录，也可在向导里选择现有安装。手动打开 Setup 不需要 GitHub 更新清单。
 
 本地 `scripts/pixi_sfx.py` 与 GitHub Windows 打包任务都调用 `scripts/windows_update_manifest.py`，从实际发货的 `lunalauncher.exe --version` 读取版本，并计算最终 Setup EXE 的 SHA-256。清单必须与对应 EXE 一同上传 Release。
 

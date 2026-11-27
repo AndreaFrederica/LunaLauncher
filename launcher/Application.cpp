@@ -119,6 +119,7 @@ unsigned char qResourceFeatureZstd()
 #include "ApplicationMessage.h"
 #include "server/ServerInstance.h"
 
+#include <algorithm>
 #include <iostream>
 #include <mutex>
 
@@ -769,8 +770,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 bool configExists = false;
                 for (const auto& path : configPaths) configExists |= QFileInfo::exists(path);
                 if (!configExists || QFileInfo::exists(nomigratePath)) return;
-                const bool currentExists = QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
-                m_pendingDataMigrations.append({ name, oldData, configFile, currentExists });
+                m_pendingDataMigrations.append({ name, oldData, configFile });
             };
             addCandidate(FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PrismLauncher"),
                          "PrismLauncher", "prismlauncher.cfg");
@@ -2820,13 +2820,14 @@ bool Application::finishDataLocationSwitch(bool portable, QString* errorMessage)
 QJsonArray Application::dataMigrationCandidates() const
 {
     QJsonArray result;
+    const bool currentExists = QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE));
     for (const auto& candidate : m_pendingDataMigrations) {
         result.append(QJsonObject{ { "name", candidate.name },
                                    { "source", candidate.oldData },
                                    { "configFile", candidate.configFile },
                                    { "target", m_dataPath },
-                                   { "currentDataExists", candidate.currentExists },
-                                   { "canMigrate", !candidate.currentExists } });
+                                   { "currentDataExists", currentExists },
+                                   { "canMigrate", true } });
     }
     return result;
 }
@@ -2867,77 +2868,160 @@ QJsonObject Application::startupStatus() const
                         { "hasAccounts", m_accounts && m_accounts->count() > 0 } };
 }
 
-std::unique_ptr<DataMigrationTask> Application::createDataMigrationTask(const QString& name, QString* errorMessage) const
+namespace {
+
+bool migrationPathsOverlap(QString first, QString second)
 {
-    for (const auto& candidate : m_pendingDataMigrations) {
-        if (candidate.name != name) continue;
-        if (candidate.currentExists || QFileInfo::exists(FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE))) {
-            if (errorMessage) *errorMessage = tr("The current Luna data directory already contains a configuration file; automatic migration is unsafe.");
-            return nullptr;
-        }
-        using namespace Filters;
-        QList<Filter> filters;
-        filters.append(equals(candidate.configFile));
-        filters.append(equals(BuildConfig.LAUNCHER_CONFIGFILE));
-        filters.append(startsWith("logs/"));
-        filters.append(equals("accounts.json"));
-        filters.append(startsWith("accounts/"));
-        filters.append(startsWith("assets/"));
-        filters.append(startsWith("icons/"));
-        filters.append(startsWith("instances/"));
-        filters.append(startsWith("libraries/"));
-        filters.append(startsWith("mods/"));
-        filters.append(startsWith("themes/"));
-        return std::make_unique<DataMigrationTask>(candidate.oldData, m_dataPath, any(std::move(filters)));
-    }
-    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
-    return nullptr;
+#ifdef Q_OS_WIN
+    first = first.toCaseFolded();
+    second = second.toCaseFolded();
+#endif
+    const auto contains = [](const QString& parent, const QString& child) {
+        return child.startsWith(parent.endsWith('/') ? parent : parent + '/');
+    };
+    return first == second || contains(first, second) || contains(second, first);
 }
 
-bool Application::finishDataMigration(const QString& name, QString* errorMessage)
+QString resolvedMigrationPath(const QFileInfo& path)
 {
-    for (int i = 0; i < m_pendingDataMigrations.size(); ++i) {
-        const auto candidate = m_pendingDataMigrations.at(i);
-        if (candidate.name != name) continue;
-        const QString migratedConfig = FS::PathCombine(m_dataPath, candidate.configFile);
-        const QString lunaConfig = FS::PathCombine(m_dataPath, BuildConfig.LAUNCHER_CONFIGFILE);
-        if (candidate.configFile != BuildConfig.LAUNCHER_CONFIGFILE && QFileInfo::exists(migratedConfig) && !QFileInfo::exists(lunaConfig) &&
-            !FS::move(migratedConfig, lunaConfig)) {
-            if (errorMessage) *errorMessage = tr("Could not rename %1 to %2.").arg(migratedConfig, lunaConfig);
-            return false;
-        }
-        // The sidecar was already initialized before the user approved the
-        // migration. Reload the same native models that Classic UI initializes
-        // after copying the files so the imported instances/accounts/settings
-        // are visible immediately without restarting NeoUI.
-        if (m_settings && !m_settings->reload()) {
-            if (errorMessage) *errorMessage = tr("Could not load the migrated launcher configuration.");
-            return false;
-        }
-        if (m_instances) m_instances->loadList();
-        if (m_accounts) m_accounts->reloadList();
-        if (m_translations) m_translations->selectLanguage(m_settings->get("Language").toString());
-        if (m_themeManager) {
-            m_themeManager->refresh();
-            m_themeManager->applyCurrentlySelectedTheme(true);
-        }
-        updateCapabilities();
-        QFile marker(FS::PathCombine(m_dataPath, name + "_nomigrate.txt"));
-        if (!marker.open(QIODevice::WriteOnly)) {
-            if (errorMessage) *errorMessage = marker.errorString();
-            return false;
-        }
-        marker.close();
-        m_pendingDataMigrations.removeAt(i);
-        // Once one legacy profile has supplied the active configuration, the
-        // remaining profiles cannot be merged safely by the same automatic
-        // operation. Keep them visible so the user can explicitly skip them.
-        for (auto& remaining : m_pendingDataMigrations) remaining.currentExists = true;
-        return true;
-    }
-    if (errorMessage) *errorMessage = tr("No pending migration from %1 was found.").arg(name);
-    return false;
+    if (path.exists())
+        return path.canonicalFilePath();
+    const auto parent = path.absolutePath();
+    if (parent == path.absoluteFilePath())
+        return parent;
+    return QDir(resolvedMigrationPath(QFileInfo(parent))).filePath(path.fileName());
 }
+
+}  // namespace
+
+std::unique_ptr<DataMigrationTask> Application::createDataMigrationTask(const QString& name, const QString& source, QString* errorMessage)
+{
+    const auto fail = [errorMessage](const QString& message) -> std::unique_ptr<DataMigrationTask> {
+        if (errorMessage)
+            *errorMessage = message;
+        return nullptr;
+    };
+
+    auto candidate = std::find_if(m_pendingDataMigrations.cbegin(), m_pendingDataMigrations.cend(),
+                                  [&name](const auto& item) { return item.name == name; });
+    if (source.isEmpty() && candidate == m_pendingDataMigrations.cend())
+        return fail(tr("No pending migration from %1 was found.").arg(name));
+    const QFileInfo sourceInfo(source.isEmpty() ? candidate->oldData : QDir::fromNativeSeparators(source));
+    if (sourceInfo.isRelative() || !sourceInfo.isDir())
+        return fail(tr("Choose an existing launcher data directory."));
+    const auto sourceRoot = sourceInfo.canonicalFilePath();
+    const QDir sourceDir(sourceRoot);
+    const auto targetRoot = QDir(m_dataPath).canonicalPath();
+    if (migrationPathsOverlap(sourceRoot, targetRoot))
+        return fail(tr("Choose a source directory outside the current Luna data directory."));
+
+    QString configFile;
+    if (source.isEmpty()) {
+        configFile = candidate->configFile;
+        if (!QFileInfo(sourceDir, configFile).isFile())
+            configFile = BuildConfig.LAUNCHER_CONFIGFILE;
+    } else {
+        for (const auto& file : { "prismlauncher.cfg", "polymc.cfg", "multimc.cfg" }) {
+            if (QFileInfo(sourceDir, file).isFile()) {
+                configFile = QString::fromLatin1(file);
+                break;
+            }
+        }
+    }
+    if (configFile.isEmpty() || !QFileInfo(sourceDir, configFile).isFile())
+        return fail(tr("The selected folder does not contain a Prism Launcher, PolyMC or MultiMC configuration file."));
+
+    INIFile imported;
+    if (!imported.loadFile(sourceDir.filePath(configFile)))
+        return fail(tr("Could not read the source launcher configuration."));
+
+    QList<DataMigrationTask::CopyLocation> locations;
+    if (QFileInfo(sourceDir, "accounts.json").isFile())
+        locations.append({ sourceDir.filePath("accounts.json"), QDir(targetRoot).filePath("accounts.json") });
+    for (const auto& folder : { "accounts", "assets", "libraries", "resources", "themes" }) {
+        if (QFileInfo(sourceDir, folder).isDir())
+            locations.append({ sourceDir.filePath(folder), QDir(targetRoot).filePath(folder) });
+    }
+
+    for (const auto& key : { "InstanceDir", "CentralModsDir", "IconsDir", "JavaDir", "SkinsDir", "DownloadsDir" }) {
+        const auto setting = m_settings->getSetting(key);
+        const bool isInstances = setting->id() == "InstanceDir";
+        QString path;
+        for (const auto& configKey : setting->configKeys()) {
+            const auto configured = imported.take(configKey).toString();
+            if (path.isEmpty())
+                path = configured;
+        }
+        imported.remove(setting->id() + "Bookmark");
+        // The downloads folder can contain arbitrary personal files.
+        if (setting->id() == "DownloadsDir")
+            continue;
+        const auto legacyPath = sourceDir.absoluteFilePath(path.isEmpty() ? setting->defValue().toString() : path);
+        if (!QFileInfo(legacyPath).isDir())
+            continue;
+        const auto configuredTarget = setting->get().toString();
+        const auto target = isInstances ? m_instances->instanceDirectories().value(0, configuredTarget) : configuredTarget;
+        locations.append({ legacyPath, QDir(targetRoot).absoluteFilePath(target), isInstances });
+    }
+
+    for (const auto& location : locations) {
+        const auto target = resolvedMigrationPath(QFileInfo(location.target));
+        for (const auto& legacy : locations) {
+            if (migrationPathsOverlap(QFileInfo(legacy.source).canonicalFilePath(), target))
+                return fail(tr("The source and destination folders overlap: %1").arg(QDir::toNativeSeparators(target)));
+        }
+    }
+
+    // A manual selection may refer to a detected source, including via a junction.
+    QString detectedName;
+    for (const auto& pending : m_pendingDataMigrations) {
+        if (QDir(pending.oldData).canonicalPath() == sourceRoot) {
+            detectedName = pending.name;
+            break;
+        }
+    }
+
+    const auto lunaConfig = QDir(targetRoot).filePath(BuildConfig.LAUNCHER_CONFIGFILE);
+    imported.remove("NeoUISetupComplete");
+    return std::make_unique<DataMigrationTask>(std::move(locations), [this, lunaConfig, imported = std::move(imported), detectedName]() mutable -> QString {
+        INIFile current;
+        if (QFileInfo::exists(lunaConfig) && !current.loadFile(lunaConfig))
+            return tr("Could not read the current Luna configuration.");
+        for (const auto& id : m_settings->settingIds()) {
+            const auto keys = m_settings->getSetting(id)->configKeys();
+            if (std::any_of(keys.cbegin(), keys.cend(), [&current](const auto& key) { return current.contains(key); })) {
+                for (const auto& key : keys)
+                    imported.remove(key);
+            }
+        }
+        for (auto entry = imported.cbegin(); entry != imported.cend(); ++entry) {
+            if (!current.contains(entry.key()))
+                current.insert(entry.key(), entry.value());
+        }
+        if (!current.saveFile(lunaConfig))
+            return tr("Could not save the migrated launcher configuration.");
+
+        auto* settings = static_cast<INISettingsObject*>(m_settings.get());
+        settings->suspendSave();
+        const bool loaded = settings->reload();
+        settings->resumeSaveWithoutFlush();
+        if (!loaded)
+            return tr("Could not load the migrated launcher configuration.");
+
+        m_instances->loadList();
+        m_accounts->reloadList();
+        m_translations->selectLanguage(m_settings->get("Language").toString());
+        m_themeManager->refresh();
+        m_themeManager->applyCurrentlySelectedTheme(true);
+        updateCapabilities();
+
+        QString error;
+        if (!detectedName.isEmpty())
+            declineDataMigration(detectedName, &error);
+        return error;
+    });
+}
+
 
 bool Application::declineDataMigration(const QString& name, QString* errorMessage)
 {

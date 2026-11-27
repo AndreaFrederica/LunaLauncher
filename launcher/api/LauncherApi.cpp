@@ -146,8 +146,9 @@ QList<ApiOperation> legacyOperations()
     operations.append({ "sync.profile.remove", "Remove a saved synchronization profile.", objectSchema({ { "id", stringProperty("Saved profile ID.") } }, { "id" }) });
     operations.append({ "sync.profile.plan", "Generate a client/server synchronization preview with conflict detection. Roots may be omitted when the profile binds loaded instances.", objectSchema({ { "id", stringProperty("Saved sync profile ID.") }, { "profile", QJsonObject{ { "type", "object" } } }, { "clientRoot", stringProperty("Optional client game root.") }, { "serverRoot", stringProperty("Optional server game root.") } }, {}) });
     operations.append({ "sync.profile.apply", "Apply a conflict-free synchronization plan. Roots may be omitted when the profile binds loaded instances.", objectSchema({ { "id", stringProperty("Saved sync profile ID.") }, { "profile", QJsonObject{ { "type", "object" } } }, { "clientRoot", stringProperty("Optional client game root.") }, { "serverRoot", stringProperty("Optional server game root.") } }, {}), "", true });
-    operations.append({ "startup.migrate", "Copy a detected Prism/PolyMC/MultiMC data directory using the native migration task.",
-                        objectSchema({ { "name", stringProperty("Migration source name returned by startup.status.") } }, { "name" }) });
+    operations.append({ "startup.migrate", "Copy a detected or user-selected Prism/PolyMC/MultiMC data directory.",
+                        objectSchema({ { "name", stringProperty("Migration source name returned by startup.status.") },
+                                       { "source", stringProperty("Absolute path to a custom launcher data directory.") } }) });
     operations.append({ "startup.dismiss-migration", "Remember that a detected legacy data directory should not be migrated.",
                         objectSchema({ { "name", stringProperty("Migration source name returned by startup.status.") } }, { "name" }) });
     operations.append({ "startup.complete", "Persist that the NeoUI first-run setup has been completed.", objectSchema({}) });

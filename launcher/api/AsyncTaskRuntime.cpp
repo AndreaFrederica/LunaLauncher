@@ -184,6 +184,8 @@ class ApiOperationTask final : public Task {
                 (choices.isArray() && (!answer.isDouble() || answer.toDouble() != answer.toInt(-1) ||
                  answer.toInt(-1) < 0 || answer.toInt() >= choices.toArray().size())))
                 return { { "ok", false }, { "error", "Expected text or a valid choice index." } };
+            if (choices.isArray() && choices.toArray().at(answer.toInt()).toObject().value("disabled").toBool())
+                return { { "ok", false }, { "error", tr("The selected version did not pass validation.") } };
         }
         m_answer = parameters.value("cancel").toBool() ? QJsonValue() : answer;
         m_inputLoop->quit();
@@ -375,10 +377,11 @@ QStringList resourceKeysFor(const QString& operation, const QJsonObject& paramet
 void AsyncTaskRuntime::addResourceKeys(Record& record) const
 {
     const auto keys = resourceKeysFor(record.operation, record.parameters);
-    if (record.operation == "instance.component.set-version" || record.operation == "resource.install") {
-        record.writes = QSet<QString>(keys.begin(), keys.end());
-    } else {
-        record.writes = QSet<QString>(keys.begin(), keys.end());
+    record.writes = QSet<QString>(keys.begin(), keys.end());
+    if (record.operation == "startup.migrate") {
+        record.writes.insert("instances");
+        record.writes.insert("accounts");
+        record.writes.insert("java");
     }
     record.conflictKey = keys.value(0);
     // These compatibility operations own a ScopedUserInteraction across a
@@ -408,7 +411,8 @@ int AsyncTaskRuntime::deadlineFor(const QString& operation) const
     if (operation == "instance.export") return 30 * 60 * 1000;
     if (operation == "server.start") return 5 * 60 * 1000;
     if (operation == "instance.update") return 20 * 60 * 1000;
-    if (operation == "startup.migrate" || operation == "startup.set-data-location") return 30 * 60 * 1000;
+    if (operation == "startup.migrate") return 0;
+    if (operation == "startup.set-data-location") return 30 * 60 * 1000;
     if (operation == "instance.store-transfer" || operation == "vanilla.loader.install" || operation == "sync.profile.apply") return 30 * 60 * 1000;
     return 15 * 60 * 1000;
 }
@@ -528,7 +532,7 @@ void AsyncTaskRuntime::armDeadline(const QString& id)
     record.deadline->setSingleShot(true);
     connect(record.deadline, &QTimer::timeout, this, [this, id]() {
         if (!m_records.contains(id) || m_records[id].finished) return;
-        cancel(id);
+        if (!cancel(id).value("ok").toBool()) return;
         if (m_records.contains(id)) {
             m_records[id].error = "任务超时";
             m_records[id].state = "failed";
@@ -653,6 +657,8 @@ QJsonObject AsyncTaskRuntime::cancel(const QString& taskId)
     auto& record = m_records[taskId];
     if (record.finished) return { { "ok", true }, { "data", snapshot(record) } };
     const bool wasRunning = record.state == "running";
+    if (wasRunning && record.operation == "startup.migrate")
+        return { { "ok", false }, { "error", tr("Migration must finish copying before another operation can start.") } };
     record.cancelRequested = true;
     // File imports/conversions now finish cooperatively after their worker has
     // removed temporary trees. Keep the store lock and task visible until that

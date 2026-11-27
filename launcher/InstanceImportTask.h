@@ -76,10 +76,12 @@ class InstanceImportTask : public InstanceTask {
     QUrl m_sourceUrl;
     QString m_archivePath;
     std::unique_ptr<QTemporaryFile> m_nestedArchive;
+    QString m_nestedArchiveName;
     int m_nestedArchiveDepth = 0;
     bool m_pclWrapperDetected = false;
     QString m_archivePassphrase;
     QString m_pclPlainVersion;
+    QString m_pclProfilePath;
     bool m_legacyJarMod = false;
     QJsonObject m_legacyBaseProfile;
     QString m_legacyBaseJar;

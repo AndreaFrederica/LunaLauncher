@@ -26,11 +26,14 @@ pub(crate) fn run_installer(source: PayloadSource) -> Result<()> {
     .map_err(|error| anyhow::anyhow!("run installer UI: {error}"))
 }
 
-pub(crate) fn run_update(source: PayloadSource, target: PathBuf, data: Option<PathBuf>, entry: Option<config::EntryPoint>, launch: bool) -> Result<()> {
+pub(crate) fn run_update(
+    source: PayloadSource, target: PathBuf, data: Option<PathBuf>, entry: Option<config::EntryPoint>,
+    launch: bool, upgrade_to: Option<luna_installer_shell::version::LauncherVersion>,
+) -> Result<()> {
     let font = archive::read_entry(&source, "resource/fonts/SarasaUiSC-Regular.ttf").ok();
     let (sender, receiver) = mpsc::channel();
     let worker = std::thread::spawn(move || {
-        let result = luna_installer_shell::update::apply_with_progress(&source, &target, data.as_deref(), entry, launch,
+        let result = luna_installer_shell::update::apply_with_progress(&source, &target, data.as_deref(), entry, launch, upgrade_to,
             &mut |fraction, text| { let _ = sender.send((fraction, text.to_owned())); });
         let _ = sender.send((1.0, if result.is_ok() { "更新完成" } else { "更新失败，请查看详细原因" }.into()));
         result
@@ -758,6 +761,33 @@ impl InstallerApp {
             );
         });
         self.show_ui_preview(ui);
+        #[cfg(windows)]
+        if self.entries.iter().any(|entry| entry == luna_installer_shell::version::PACKAGE_ENTRY) {
+            let label = if self.language == i18n::Language::SimplifiedChinese {
+                "选择现有安装进行更新…"
+            } else {
+                "Choose an existing installation to update…"
+            };
+            if ui.button(label).clicked() && let Some(path) = pick_folder(&self.destination, label) {
+                let result = (|| -> Result<()> {
+                    let target = crate::upgrade_prompt::find_installation(Some(&path))?
+                        .ok_or_else(|| anyhow::anyhow!("no existing installation selected"))?;
+                    let executable = std::env::current_exe()?;
+                    let source = self.source.path.canonicalize()?;
+                    let mut command = std::process::Command::new(&executable);
+                    command.arg("--install-dir").arg(target);
+                    if executable.canonicalize()? != source {
+                        command.arg("--payload").arg(source);
+                    }
+                    command.spawn()?;
+                    Ok(())
+                })();
+                match result {
+                    Ok(()) => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+                    Err(error) => self.status = format!("{error:#}"),
+                }
+            }
+        }
     }
 
     fn show_wizard_method(&mut self, ui: &mut egui::Ui) {

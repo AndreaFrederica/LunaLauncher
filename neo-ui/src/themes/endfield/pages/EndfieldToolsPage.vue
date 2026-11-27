@@ -325,12 +325,6 @@ watch(section, value => {
 .ef-tabs button.current small { color: #4a4700; }
 .ef-section-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .ef-section-bar > span { color: var(--ef-ink-2); font-family: var(--ef-font-ui); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
-.ef-rows { display: flex; flex-direction: column; }
-.ef-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--ef-rule); }
-.ef-row__main { flex: 1; min-width: 0; }
-.ef-row__main strong { display: block; overflow: hidden; font-family: var(--ef-font-ui); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.ef-row__main small { display: block; margin-top: 1px; overflow: hidden; color: var(--ef-ink-2); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.ef-row__state { padding: 1px 6px; border: 1px solid var(--ef-rule); color: var(--ef-ink-2); font-family: var(--ef-font-ui); font-size: 8px; text-transform: uppercase; }
 .ef-tools__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .ef-tools__stats { display: flex; gap: 8px; margin-bottom: 10px; overflow: auto; }
 .ef-form { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }

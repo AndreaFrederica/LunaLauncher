@@ -340,12 +340,23 @@ bool copy::operator()(const QString& offset, bool dryRun)
             return;
 
         auto dst_path = PathCombine(dst, relative_dst_path);
+        if (m_skipExisting) {
+            const QFileInfo destination(dst_path);
+            if (destination.exists() || destination.isSymLink())
+                return;
+        }
         if (!dryRun) {
             ensureFilePathExists(dst_path);
 #ifdef Q_OS_WIN32
             copyFolderAttributes(src, dst, relative_dst_path);
 #endif
-            fs::copy(StringUtils::toStdString(src_path), StringUtils::toStdString(dst_path), opt, err);
+            if (m_skipExisting) {
+                // QFile::copy publishes a complete file and refuses to replace
+                // one that appeared in the meantime.
+                err = QFile::copy(src_path, dst_path) ? std::error_code{} : std::make_error_code(std::errc::io_error);
+            } else {
+                fs::copy(StringUtils::toStdString(src_path), StringUtils::toStdString(dst_path), opt, err);
+            }
         }
         if (err) {
             qWarning() << "Failed to copy files:" << QString::fromStdString(err.message());
@@ -376,7 +387,7 @@ bool copy::operator()(const QString& offset, bool dryRun)
     if (!fs::is_directory(StringUtils::toStdString(src)))
         copy_file(src, "");
 
-    return err.value() == 0;
+    return m_failedPaths.isEmpty();
 }
 
 /// qDebug print support for the LinkPair struct

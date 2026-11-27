@@ -363,6 +363,14 @@ QString instanceFolderPath(BaseInstance* instance, QString kind, QString& error)
     QString path = instance->instanceRoot();
     if (kind == "game")
         path = instance->gameRoot();
+    else if (kind == "libraries") {
+        if (auto* minecraft = dynamic_cast<MinecraftInstance*>(instance))
+            path = minecraft->getLocalLibraryPath();
+        else {
+            error = QObject::tr("This instance does not have a local libraries directory.");
+            return {};
+        }
+    }
     else if (kind == "mods")
         path = instance->modsRoot();
     else if (kind == "screenshots")

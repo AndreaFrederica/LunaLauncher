@@ -193,6 +193,8 @@ static bool savePackProfile(const QString& filename, const ComponentContainer& c
                 obj.insert(QStringLiteral("luna"), marker);
         }
     }
+    // Windows cannot atomically replace a file while our read handle is open.
+    existing.close();
     QSaveFile outFile(filename);
     if (!outFile.open(QFile::WriteOnly)) {
         qCCritical(instanceProfileC) << "Couldn't open" << outFile.fileName() << "for writing:" << outFile.errorString();

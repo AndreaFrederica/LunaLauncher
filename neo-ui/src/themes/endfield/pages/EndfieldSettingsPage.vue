@@ -365,7 +365,7 @@ const shellOptions = [
   { id: 'pcl', label: 'PCL Style', shell: 'pcl', preset: 'pcl', preview: 'pcl', description: 'PCL 经典蓝白配色与启动页' },
   { id: 'endfield', label: '终末地', shell: 'endfield', preset: '', preview: 'endfield', description: '纸面、墨线与信号黄的工业界面' },
   { id: 'melody', label: '忘却的旋律', shell: 'melody', preset: '', preview: 'melody', description: '独立窗口与深色旋律界面' },
-  { id: 'demo', label: 'Demo', shell: 'neo', preset: '', preview: 'demo', description: '已废弃的 XMCL 移植界面' },
+  { id: 'demo', label: 'Demo（已弃用）', shell: 'neo', preset: '', preview: 'demo', description: 'XMCL 移植界面' },
 ];
 const theme = computed(() => neoUiPreferences.theme);
 const animations = computed({

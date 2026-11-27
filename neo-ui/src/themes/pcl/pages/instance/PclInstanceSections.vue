@@ -40,7 +40,7 @@ import { isTaskItemFinished } from '../../composables/useTaskProgress';
 type Execute = (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
 const props=defineProps<{section:string;components:any[];componentError?:string;settings?:any[];busy:boolean;instance?:string;execute?:Execute}>();
 const { t } = useI18n();
-const emit=defineEmits<{refresh:[];browse:[uid:string];'component-enabled':[component:any,enabled:boolean];'component-version':[component:any,version:string];export:[payload:any];save:[payload:{key:string;value:any}];console:[]}>();
+const emit=defineEmits<{refresh:[];browse:[uid:string];'component-enabled':[component:any,enabled:boolean];'component-version':[component:any,version:string];export:[payload:any];save:[payload:{key:string;value:any}];console:[];'install-start':[info:any];'install-progress':[task:any];'install-done':[info:any]}>();
 const expanded=ref('minecraft'), versions=reactive<Record<string,string>>({}), exportName=ref(''), exportVersion=ref('1.0'), exportOutput=ref(''), exportFormat=ref('zip'), exportSummary=ref(''), exportAuthor=ref(''), exportOptionalFiles=ref(false), exportOverwrite=ref(true), exportError=ref(''), exporting=ref(false), selectedExport=ref(['game','gameSettings','gameProfile','mod','resourcepacks','shaderpacks']);
 const exportModMode=ref('auto'), exportRecommendedRAM=ref('');
 const exportFiles=usePclExportFiles(props, selectedExport, exportFormat);

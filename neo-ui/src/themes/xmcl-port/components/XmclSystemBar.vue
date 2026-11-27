@@ -1,7 +1,17 @@
 <template>
   <div class="system-bar" :class="{ inner: isPclInner }" role="toolbar" :aria-label="t('xmcl.system.toolbar')">
     <button class="system-bar-back" :aria-label="t('xmcl.system.refreshInstances')" @click="emit('refresh')"><span class="material-icons">arrow_back</span></button><button v-if="isPclInner" class="system-bar-inner-back" :aria-label="t('xmcl.system.backToLaunch')" @click="emit('navigate', 'instances')"><span class="material-icons">arrow_back</span></button>
-    <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging"><strong class="system-bar-inner-title" v-if="isPclInner">{{ instanceName || t('xmcl.system.instanceManagement') }}</strong><span class="system-bar-brand"><img v-if="isPclShell && neoUiPreferences.pclTitleIcon" class="system-bar-brand-icon" :src="lunaLogo" alt="" aria-hidden="true" /><strong class="system-bar-title-default">{{ neoUiPreferences.pclTitleText || 'Luna Launcher' }}</strong><strong class="system-bar-title-pcl">{{ neoUiPreferences.pclTitleText || 'LunaLauncher' }}</strong></span><small class="system-bar-title-default-subtitle">NEO UI</small><small class="system-bar-title-pcl-subtitle">NEOUI</small></div>
+    <div class="system-bar-drag" data-tauri-drag-region @mousedown="startDragging">
+      <strong v-if="isPclInner" class="system-bar-inner-title">{{ instanceName || t('xmcl.system.instanceManagement') }}</strong>
+      <span class="system-bar-brand">
+        <img v-if="isPclShell && neoUiPreferences.pclTitleIcon" class="system-bar-brand-icon" :src="lunaLogo" alt="" aria-hidden="true" />
+        <strong class="system-bar-title-default">{{ neoUiPreferences.pclTitleText || 'Luna Launcher' }}</strong>
+        <strong class="system-bar-title-pcl">{{ neoUiPreferences.pclTitleText || 'LunaLauncher' }}</strong>
+      </span>
+      <small class="system-bar-title-default-subtitle">NEO UI</small>
+      <small class="system-bar-title-pcl-subtitle">NEOUI</small>
+      <span v-if="showVersion && launcherVersion" class="system-bar-version">{{ launcherVersion }}</span>
+    </div>
     <nav ref="pclTabsRef" class="system-bar-pcl-tabs" :aria-label="t('xmcl.system.mainNavigation')">
       <span class="system-bar-pcl-tabs__indicator" aria-hidden="true" :style="pclTabIndicatorStyle" />
       <button :ref="el => setTabRef('home', el)" :aria-label="t('xmcl.system.home')" :title="t('xmcl.system.home')" :class="{ active: activePclTab === 'home' }" @click="emit('navigate', 'instances')"><PclIcon name="layout-dashboard" :size="16" /><span v-if="neoUiPreferences.pclMainNavigationText">{{ t('xmcl.system.home') }}</span></button>
@@ -49,6 +59,15 @@ async function openRuntimeDebug() {
 }
 const props = defineProps<{ connected: boolean; busy: boolean; page?: string; instanceName?: string }>();
 const isPclShell = computed(() => neoUiPreferences.shell === 'pcl');
+const showVersion = computed(() => isPclShell.value && neoUiPreferences.pclTitleVersion);
+const launcherVersion = ref('');
+watch([showVersion, () => props.connected], async ([visible, connected]) => {
+  if (!visible || !connected || launcherVersion.value) return;
+  try {
+    const { data } = await launcher.execute<{ applicationVersion?: string; version?: string }>('runtime.info');
+    launcherVersion.value = data?.applicationVersion || data?.version || '';
+  } catch { /* The title bar remains usable if runtime information is unavailable. */ }
+}, { immediate: true });
 const page = computed(() => props.page || '');
 const isPclInner = computed(() => !isPclShell.value && page.value === 'manage');
 const activePclTab = computed(() => {
@@ -114,5 +133,6 @@ async function startDragging(event: MouseEvent) {
 }
 </script>
 <style scoped>
+.system-bar-version { margin-inline-start: 8px; font-size: 11px; white-space: nowrap; }
 .system-bar{position:fixed;top:0;left:0;right:0;height:38px;z-index:100;display:flex;align-items:center;gap:3px;padding:0 8px;background:rgba(17,17,22,.86);backdrop-filter:blur(18px);color:rgba(255,255,255,.7);font-size:12px;box-shadow:0 1px 0 rgba(255,255,255,.06)}.system-bar-drag{height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;flex:0 0 auto;-webkit-app-region:drag;user-select:none}.system-bar-drag strong{color:#fff;font-size:12px;letter-spacing:.02em}.system-bar-brand{display:inline-flex;align-items:center;gap:8px}.system-bar-brand-icon{display:block;width:22px;height:22px;flex:0 0 auto;object-fit:cover;border-radius:4px}.system-bar-title-pcl,.system-bar-pcl-tabs,.system-bar-title-pcl-subtitle{display:none}.system-bar-title-default-subtitle{display:inline}.system-bar-drag small{color:#818cf8;font-size:9px;letter-spacing:.14em;font-weight:700}.system-bar-spacer{height:38px;flex:1;-webkit-app-region:drag}.system-bar-back,.system-bar-badge,.system-bar-window{height:38px;min-width:32px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;cursor:pointer;-webkit-app-region:no-drag}.system-bar-back:hover,.system-bar-badge:hover,.system-bar-window:hover{background:rgba(255,255,255,.12);color:#fff}.system-bar-window.close:hover{background:#c42b3c;color:#fff}.system-bar-badge{position:relative}.system-bar-badge i{position:absolute;right:4px;top:7px;width:5px;height:5px;border-radius:50%;background:#fbc02d}.system-bar-status{display:flex;align-items:center;gap:5px;margin:0 4px;color:rgba(255,255,255,.55);-webkit-app-region:no-drag}.status-dot{width:7px;height:7px;border-radius:50%;background:#777}.status-dot.connected{background:#4caf50}.material-icons{font-size:18px;line-height:1}
 </style>

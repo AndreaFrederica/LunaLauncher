@@ -60,7 +60,7 @@
      <item>
       <widget class="QLabel" name="pclSupportLabel">
        <property name="text">
-        <string>- Plain Craft Launcher (PCL) modpacks (experimental support; ZIP and mrpack)</string>
+        <string>- Plain Craft Launcher (PCL) modpacks (experimental support; ZIP, RAR, and mrpack)</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>

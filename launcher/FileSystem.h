@@ -130,6 +130,11 @@ class copy : public QObject {
         m_overwrite = overwrite;
         return *this;
     }
+    copy& skipExisting(bool skip)
+    {
+        m_skipExisting = skip;
+        return *this;
+    }
 
     bool operator()(bool dryRun = false) { return operator()(QString(), dryRun); }
 
@@ -150,6 +155,7 @@ class copy : public QObject {
     Filter m_matcher = nullptr;
     bool m_whitelist = false;
     bool m_overwrite = false;
+    bool m_skipExisting = false;
     QDir m_src;
     QDir m_dst;
     qsizetype m_copied;

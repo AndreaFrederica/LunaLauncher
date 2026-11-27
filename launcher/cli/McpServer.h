@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QByteArray>
@@ -66,4 +67,5 @@ class McpServer final : public QObject {
     QString m_interactionId;
     QJsonValue m_interactionAnswer;
     int m_choiceCount = -1;
+    QJsonArray m_choiceOptions;
 };

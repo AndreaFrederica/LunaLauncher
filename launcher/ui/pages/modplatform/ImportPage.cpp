@@ -107,19 +107,16 @@ void ImportPage::updateState()
         QString input = ui->modpackEdit->text().trimmed();
         auto url = QUrl::fromUserInput(input);
         if (url.isLocalFile()) {
-            // FIXME: actually do some validation of what's inside here... this is fake AF
-            QFileInfo fi(input);
-
-            // Allow non-latin people to use ZIP files!
-            bool isZip = QMimeDatabase().mimeTypeForUrl(url).suffixes().contains("zip");
-            // mrpack is a modrinth pack
-            bool isMRPack = fi.suffix() == "mrpack";
-
-            if (fi.exists() && (isZip || isMRPack)) {
+            const QFileInfo fi(url.toLocalFile());
+            const auto suffix = fi.suffix().toLower();
+            const bool isZip = QMimeDatabase().mimeTypeForUrl(url).suffixes().contains("zip");
+            if (fi.isFile() && (isZip || suffix == "mrpack" || suffix == "rar")) {
                 auto extra_info = QMap(m_extra_info);
                 qDebug() << "Pack Extra Info" << extra_info << m_extra_info;
                 dialog->setSuggestedPack(fi.completeBaseName(), new InstanceImportTask(url, this, std::move(extra_info)));
                 dialog->setSuggestedIcon("default");
+            } else {
+                dialog->setSuggestedPack();
             }
         } else if (url.scheme() == "curseforge") {
             // need to find the download link for the modpack
@@ -206,7 +203,7 @@ void ImportPage::setExtraInfo(const QMap<QString, QString>& extra_info)
 void ImportPage::on_modpackBtn_clicked()
 {
     const QMimeType zip = QMimeDatabase().mimeTypeForName("application/zip");
-    auto filter = tr("Supported files") + QString(" (%1 *.mrpack)").arg(zip.globPatterns().join(" "));
+    auto filter = tr("Supported files") + QString(" (%1 *.mrpack *.rar)").arg(zip.globPatterns().join(" "));
     filter += ";;" + zip.filterString();
     //: Option for filtering for *.mrpack files when importing
     filter += ";;" + tr("Modrinth pack") + " (*.mrpack)";

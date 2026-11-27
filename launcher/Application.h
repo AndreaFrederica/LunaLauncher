@@ -186,8 +186,7 @@ class Application : public QApplication {
      */
     QJsonObject startupStatus() const;
     QJsonArray dataMigrationCandidates() const;
-    std::unique_ptr<DataMigrationTask> createDataMigrationTask(const QString& name, QString* errorMessage = nullptr) const;
-    bool finishDataMigration(const QString& name, QString* errorMessage = nullptr);
+    std::unique_ptr<DataMigrationTask> createDataMigrationTask(const QString& name, const QString& source, QString* errorMessage);
     bool declineDataMigration(const QString& name, QString* errorMessage = nullptr);
 
     /** Current and target directories for the portable/user data-location switch. */
@@ -314,7 +313,6 @@ class Application : public QApplication {
         QString name;
         QString oldData;
         QString configFile;
-        bool currentExists = false;
     };
     QList<PendingDataMigration> m_pendingDataMigrations;
 

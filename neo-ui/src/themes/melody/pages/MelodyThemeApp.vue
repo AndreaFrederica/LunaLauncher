@@ -3,7 +3,7 @@
     <section class="melody-desktop" aria-label="忘却的旋律">
       <MelodyWindowHost v-for="entry in entries" :key="entry.id" :entry="entry" :native="native"
         @activate="activate(entry.id)" @move="(x, y) => move(entry, x, y)" @close="close(entry.id)">
-        <MelodyLauncherWindow v-if="entry.kind === 'launcher'" v-model="selected" :background="appearance.backgroundMode === 'builtin' ? background : backgroundUrl" :background-fit="appearance.backgroundMode === 'builtin' ? 'fill' : appearance.fit" :footer="footer" :footer-style="footerStyle" :versions="versions" :accounts="accountOptions" :account-id="selectedAccountId" :busy="launchBusy" :inert="blocked(entry.id)" :on-open="kind => openWindow(kind, entry.id)" @account-change="session.selectAccount" @launch="launchGame(entry.id)" @folder="openFolder(entry.id)" @close="closeLauncher" />
+        <MelodyLauncherWindow v-if="entry.kind === 'launcher'" :model-value="selected" :background="appearance.backgroundMode === 'builtin' ? background : backgroundUrl" :background-fit="appearance.backgroundMode === 'builtin' ? 'fill' : appearance.fit" :footer="footer" :footer-style="footerStyle" :versions="versions" :accounts="accountOptions" :account-id="selectedAccountId" :busy="launchBusy" :inert="blocked(entry.id)" :on-open="kind => openWindow(kind, entry.id)" @update:model-value="session.selectInstance" @account-change="session.selectAccount" @launch="launchGame(entry.id)" @folder="openFolder(entry.id)" @close="closeLauncher" />
         <MelodyPreferencesWindow v-else-if="entry.kind === 'preferences'" :inert="blocked(entry.id)" @close="close(entry.id)" @legacy="openWindow('settings', entry.id)" @theme="leaveTheme" />
         <MelodyGamesWindow v-else-if="entry.kind === 'games'" :instance-id="entry.instanceId" :component-uid="entry.componentUid" :inert="blocked(entry.id)" @close="close(entry.id)" @clients="openWindow('clients', entry.id)" />
         <MelodyClientsWindow v-else-if="entry.kind === 'clients'" :inert="blocked(entry.id)" :on-games="() => openWindow('games', entry.id)" :on-edit="id => openWindow('client', entry.id, id)" @close="close(entry.id)" />
@@ -30,7 +30,7 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { invoke } from '@tauri-apps/api/core';
-import { launcher, type LauncherInstance } from '../../../boot/launcher-api';
+import { launcher, type LauncherSettingsEntry } from '../../../boot/launcher-api';
 import { neoUiPreferences, persistNeoUiPreferences, applyNeoUiPreferences, type NeoShell } from '../../../neo-ui-preferences';
 import MelodyWindowHost from '../components/MelodyWindowHost.vue';
 import MelodyLauncherWindow from './windows/MelodyLauncherWindow.vue';
@@ -140,17 +140,12 @@ async function message(text: string, parent = entries.value[0]?.id || 'launcher'
     entries.value.push({ id: 'message-error', kind: 'message', parent, message: String(error), x: 0, y: 0, z: 9999 });
   }
 }
-watch(selected, value => {
-  settings.game = value;
-  if (native) void invoke('set_melody_settings', { settings: { ...settings, password: '' } }).catch(error => console.error('Unable to persist Melody settings', error));
-  session.selectInstance(value);
-});
 async function loadStoredSettings() {
   if (!native) return;
   const stored = await invoke<Partial<MelodySettings> | null>('get_melody_settings');
   if (!stored) return;
   Object.assign(settings, stored, { password: '' });
-  session.selectInstance(settings.game);
+  if (!selected.value && settings.game) session.selectInstance(settings.game);
   background.value = chooseMelodyBackground(settings.skinMode);
 }
 function syncStorage(event: StorageEvent) {
@@ -180,8 +175,8 @@ onMounted(async () => {
       if (!instances.value.some(item => item.id === selected.value)) session.selectInstance(instances.value[0]?.id || '');
     }
     if (initialKind === 'settings') {
-      const result = await call('settings.list', { scope: 'launcher' });
-      for (const entry of result.entries || []) {
+      const entries = await call<LauncherSettingsEntry[]>('settings.list', { scope: 'launcher' });
+      for (const entry of entries) {
         if (entry.key === 'JavaPath') settings.javaPath = String(entry.value || '');
         if (entry.key === 'MaxMemAlloc') settings.memory = String(entry.value);
       }
@@ -200,7 +195,7 @@ onUnmounted(() => {
 async function saveSettings(value: MelodySettings, parent: string) {
   if (saving.value) return;
   const memory = Number(value.memory);
-  if (!Number.isInteger(memory) || memory < 128) { await message('最大内存必须是大于或等于 128 的整数。', parent); return; }
+  if (value.memoryMode === 'manual' && (!Number.isInteger(memory) || memory < 128)) { await message('最大内存必须是大于或等于 128 的整数。', parent); return; }
   saving.value = true;
   try {
     if (native) {
@@ -255,7 +250,7 @@ async function launchGame(parent: string) {
     let status = await call('neo.task.start', { operation: 'instance.launch', priority: 'high', parameters: { instance: selected.value, account: String(account.internalId || account.id || account.profileName) } });
     taskId = status.taskId;
     while (!status.finished && !disposed) {
-      task.stage = String(status.message || status.stage || '启动游戏');
+      task.stage = String(status.status || '启动游戏');
       const total = Number(status.total ?? status.totalProgress);
       const current = Number(status.current ?? status.progress);
       task.progress = total > 0 && Number.isFinite(current) ? Math.max(0, Math.min(100, current / total * 100)) : 0;
@@ -271,20 +266,20 @@ async function closeLauncher() {
   if (native) await close('launcher'); else await leaveTheme();
 }
 async function leaveTheme(shell: NeoShell = 'pcl') {
-  // Selecting Melody from its own settings is a valid choice. Keep the
-  // current native document in place; the root shell is already Melody.
-  if (shell === 'melody') {
-    neoUiPreferences.shell = 'melody';
-    persistNeoUiPreferences();
+  if (shell === 'melody') return;
+  if (native) {
+    try {
+      const preferences = { ...neoUiPreferences, shell };
+      await invoke('set_neo_ui_preferences', { preferences });
+      await invoke('exit_melody_theme');
+    } catch (error) { await message(String(error)); }
     return;
   }
-  if (!['neo', 'pcl', 'endfield'].includes(shell)) return;
   neoUiPreferences.shell = shell;
   persistNeoUiPreferences();
   const url = new URL(location.href);
   for (const name of ['theme', 'melodyWindow', 'message', 'title', 'instance', 'component']) url.searchParams.delete(name);
   url.hash = '/';
-  if (native) { await invoke('exit_melody_theme'); return; }
   location.replace(url.href);
 }
 </script>

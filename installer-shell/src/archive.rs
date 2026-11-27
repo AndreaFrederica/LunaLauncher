@@ -189,6 +189,14 @@ pub fn extract_atomic_with_progress(
 /// code-page interpretation. The resulting archive remains readable by
 /// standard ZIP tools without a private metadata format.
 pub fn create_zip(source: &Path, output: &Path) -> Result<usize> {
+    create_zip_with_version(source, output, None)
+}
+
+pub fn create_zip_with_version(
+    source: &Path,
+    output: &Path,
+    version: Option<crate::version::LauncherVersion>,
+) -> Result<usize> {
     if !source.is_dir() {
         bail!("ZIP source is not a directory: {}", source.display());
     }
@@ -208,6 +216,7 @@ pub fn create_zip(source: &Path, output: &Path) -> Result<usize> {
     // Never let a stale local marker make a freshly packaged release start in
     // the wrong data location.
     paths.retain(|(relative, _)| !is_runtime_state_marker(relative)
+        && !relative.as_os_str().eq_ignore_ascii_case(crate::version::PACKAGE_ENTRY)
         && !relative.components().next().is_some_and(|part| part.as_os_str().eq_ignore_ascii_case("UserData")));
     paths.sort_by(|left, right| left.0.cmp(&right.0));
 
@@ -230,6 +239,11 @@ pub fn create_zip(source: &Path, output: &Path) -> Result<usize> {
             let mut file = File::open(source_path)?;
             std::io::copy(&mut file, &mut writer)?;
         }
+        count += 1;
+    }
+    if let Some(version) = version {
+        writer.start_file(crate::version::PACKAGE_ENTRY, SimpleFileOptions::default())?;
+        writeln!(writer, "{version}")?;
         count += 1;
     }
     writer.finish()?;

@@ -106,8 +106,11 @@ class PCLPackTest : public QObject {
     void nestedCandidates()
     {
         const QStringList files{ "Plain Craft Launcher.exe", "modpack.mrpack", "PCL/Setup.ini", "wrapper/modpack.zip",
-                                 "too/deep/modpack.mrpack", "unrelated.zip" };
-        QCOMPARE(PCL::findNestedPackCandidates(files), QStringList({ "modpack.mrpack", "wrapper/modpack.zip" }));
+                                 "too/deep/modpack.mrpack", "MITE R196多模组整合包-v1.3.3.zip", "wrapper/Custom.MRPACK",
+                                 "mods/library.zip", "resourcepacks/textures.zip", "../escape.zip", "/absolute.zip",
+                                 "C:/drive.zip", ".minecraft/archive.zip" };
+        QCOMPARE(PCL::findNestedPackCandidates(files),
+                 QStringList({ "modpack.mrpack", "wrapper/modpack.zip", "MITE R196多模组整合包-v1.3.3.zip", "wrapper/Custom.MRPACK" }));
     }
 
     void javaAgents()
@@ -167,6 +170,34 @@ class PCLPackTest : public QObject {
         QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("cafebabe00000034")), 8);
         QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("000000000000003d")), 0);
         QCOMPARE(PCL::classFileJavaMajor(QByteArray::fromHex("cafebabe")), 0);
+    }
+
+    void plainPackProfileValidation()
+    {
+        const QString mainProfile = "versions/Main/Exported Name.json";
+        const QString forgeProfile = "versions/Forge/Forge.json";
+        const QString missingProfile = "versions/1.20.1/1.20.1.json";
+        const QString config = "versions/Main/settings.json";
+        const QStringList files{ mainProfile, forgeProfile, config, "versions/Main/Main.jar", "versions/1.20.1/1.20.1.jar" };
+        const QHash<QString, QJsonObject> profiles{
+            { mainProfile, { { "id", "Exported Name" }, { "minecraftVersion", "1.20.1" }, { "mainClass", "example.Main" } } },
+            { forgeProfile, { { "id", "Forge" }, { "inheritsFrom", "1.20.1" } } },
+            { config, { { "id", "Settings" } } },
+        };
+        auto choices = PCL::findPlainPackCandidates(files, profiles);
+        QCOMPARE(choices.size(), 3);
+        QCOMPARE(choices.at(0).profilePath, mainProfile);
+        QCOMPARE(choices.at(1).profilePath, forgeProfile);
+        QCOMPARE(choices.at(2).profilePath, missingProfile);
+
+        const QSet<QString> fileSet(files.cbegin(), files.cend());
+        for (auto& choice : choices)
+            PCL::validatePlainPackCandidate(choice, profiles, fileSet);
+        QCOMPARE(choices.at(0).version, QString("Main"));
+        QVERIFY(choices.at(0).error.isEmpty());
+        QCOMPARE(choices.at(0).details, QString("Minecraft 1.20.1"));
+        QCOMPARE(choices.at(1).error, QString("Missing parent version 1.20.1 (1.20.1.json)."));
+        QCOMPARE(choices.at(2).error, QString("Missing version JSON: %1").arg(missingProfile));
     }
 
     void fishModLoaderCoordinate()

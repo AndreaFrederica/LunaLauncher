@@ -45,6 +45,7 @@ struct LunaInstallBackend {
     setup: LauncherSetup,
     launch_after: bool,
     launch_monitor: Option<platform::LaunchMonitor>,
+    setup_executable: Option<PathBuf>,
 }
 
 impl InstallBackend for LunaInstallBackend {
@@ -87,6 +88,11 @@ impl InstallBackend for LunaInstallBackend {
         config::save(&config::InstallConfig {
             install_dir: destination.to_path_buf(),
             installed_entries: installed_entries.to_vec(),
+            adjacent_setup: self.setup_executable.as_ref().and_then(|path| {
+                let install_dir = destination.canonicalize().ok()?;
+                let parent = config::adjacent_setup_directory(&install_dir)?;
+                (path.parent()? == parent).then_some(PathBuf::from(path.file_name()?))
+            }),
             entry_point: self.entry_point,
             desktop_shortcuts: self.desktop_shortcuts,
             start_menu_shortcuts: self.start_menu_shortcuts,
@@ -219,6 +225,10 @@ pub(crate) fn install_with_progress(
         setup,
         launch_after,
         launch_monitor,
+        setup_executable: source.footer.and_then(|_| {
+            let executable = std::env::current_exe().ok()?.canonicalize().ok()?;
+            (source.path.canonicalize().ok()? == executable).then_some(executable)
+        }),
     };
     engine::install(
         InstallRequest {

@@ -22,20 +22,24 @@ PROBE = r"""
 const config = __CONFIG__;
 const report = value => fetch(config.report, {method:'POST', body:JSON.stringify(value)});
 const check = (value, message) => { if (!value) throw new Error(message); };
+const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 const ok = async (operation, parameters = {}) => {
-  const result = await luna.execute(operation, parameters);
+  const result = await invoke('launcher_request', {
+    method:'launcher/execute', parameters:{operation, parameters},
+  });
   check(result.ok, operation + ': ' + JSON.stringify(result));
   return result.data;
 };
 const wait = async predicate => {
   const deadline = Date.now() + 30000;
-  while (!predicate()) {
+  while (!await predicate()) {
     if (Date.now() > deadline) throw new Error('Wizard did not reach expected state: ' + predicate.toString() + '; heading=' + heading() + '; error=' + card()?.querySelector('.setup-error')?.textContent);
     await new Promise(resolve => setTimeout(resolve, 60));
   }
 };
 const card = () => document.querySelector('.neo-setup-card');
 const heading = () => card()?.querySelector('h3')?.textContent;
+const stage = () => card()?.dataset.setupStage;
 const button = label => [...card().querySelectorAll('button')].find(item => item.textContent.trim() === label);
 const next = async () => {
   await wait(() => card()?.querySelector('[data-setup-next]') && !card().querySelector('[data-setup-next]').disabled);
@@ -73,17 +77,34 @@ async function run() {
   } else {
     await wait(() => heading() === '欢迎使用 NeoUI');
     await next();
-    await wait(() => ['迁移旧数据', '常用设置'].includes(heading()));
-    if (heading() === '迁移旧数据') {
-      while (button('跳过')) {
-        await wait(() => !button('跳过').disabled);
-        const count = card().querySelectorAll('.migration-list .migration-item').length;
-        button('跳过').click();
-        await wait(() => card().querySelectorAll('.migration-list .migration-item').length < count);
-      }
-      await next();
+    await wait(() => heading() === '迁移旧数据');
+    while (button('跳过')) {
+      await wait(() => !button('跳过').disabled);
+      const count = card().querySelectorAll('.migration-list .migration-item').length;
+      button('跳过').click();
+      await wait(() => card().querySelectorAll('.migration-list .migration-item').length < count);
     }
+    const source = card().querySelector('#setup-migration-source');
+    const migrate = button('迁移');
+    check(source && button('浏览') && migrate.disabled, 'Custom migration controls are missing');
+    // Model a config written after the wizard first displayed the migration step.
+    await ok('settings.set', {scope:'launcher', key:'Language', value:'zh_CN'});
+    setInput(source, config.profile);
+    await wait(() => !migrate.disabled);
+    migrate.click();
+    await wait(() => card().querySelector('.setup-error'));
+    setInput(source, config.source);
+    await wait(() => !migrate.disabled);
+    migrate.click();
+    await wait(() => card().textContent.includes('迁移数据。') && !card().querySelector('.setup-error'));
+    check((await ok('instance.list')).some(instance => instance.id === 'migration-fixture'), 'Migrated instance is missing from the live backend');
+    check(card().querySelector('#setup-migration-source').value === '', 'Source input was not cleared');
+    const migratedSettings = await ok('settings.list', {scope:'launcher'});
+    check(Number(migratedSettings.find(item => item.key === 'MinMemAlloc')?.value) === 768, 'Legacy setting was not imported');
+    check(migratedSettings.find(item => item.key === 'Language')?.value === 'zh_CN', 'Existing Luna language was overwritten');
+    await next();
     await wait(() => heading() === '常用设置');
+    check(memory('最小内存')?.value === '768', 'Preferences did not refresh after migration');
     check(card().classList.contains('pcl-dialog') === (config.shell === 'pcl'), 'Wrong wizard shell');
     check(card().querySelector('img[alt="Luna Launcher"]')?.naturalWidth > 0, 'Launcher logo missing');
     if (config.shell === 'pcl') {
@@ -92,7 +113,7 @@ async function run() {
       const accent = getComputedStyle(card()).getPropertyValue('--setup-accent');
       await choose('preset', 'PCL');
       await wait(() => getComputedStyle(card()).getPropertyValue('--setup-accent') !== accent);
-      check(JSON.parse(localStorage.getItem('luna-neo-ui.preferences')).pclLoadingAnimation === 'pcl-pickaxe', 'PCL preset was not applied');
+      await wait(async () => (await invoke('get_neo_ui_preferences'))?.pclLoadingAnimation === 'pcl-pickaxe');
       const darkHighlight = getComputedStyle(card()).getPropertyValue('--pcl-c2');
       await choose('color', '浅色');
       await wait(() => document.documentElement.dataset.neoTheme === 'light');
@@ -102,7 +123,7 @@ async function run() {
       layout();
       await choose('preset', 'Luna Neo（默认）');
       await wait(() => getComputedStyle(card()).getPropertyValue('--setup-accent') === accent);
-      check(JSON.parse(localStorage.getItem('luna-neo-ui.preferences')).pclLoadingAnimation === 'luna-spinner', 'Luna preset was not applied');
+      await wait(async () => (await invoke('get_neo_ui_preferences'))?.pclLoadingAnimation === 'luna-spinner');
       await choose('color', '深色');
       await wait(() => document.documentElement.dataset.neoTheme === 'dark');
       check(getComputedStyle(card()).backgroundColor === background, 'Wizard background did not return to dark theme');
@@ -122,15 +143,15 @@ async function run() {
     setInput(memory('最大内存'), '8192');
     layout();
     await next();
-    await wait(() => heading() === '添加账户');
-    button('上一步').click();
-    await wait(() => heading() === '常用设置');
+    await wait(() => stage() === 'account');
+    (button('上一步') || button('Previous step')).click();
+    await wait(() => stage() === 'preferences');
     check(memory('最大内存').value === '8192', 'Back navigation lost preferences');
     await next();
-    await wait(() => heading() === '添加账户');
+    await wait(() => stage() === 'account');
     await next();
-    await wait(() => heading() === '设置完成');
-    button('开始使用').click();
+    await wait(() => stage() === 'finish');
+    (button('开始使用') || button('Get started')).click();
     await wait(() => !card());
     const status = await ok('startup.status');
     check(status.setupComplete && !status.needsSetup && !status.migrations.length, 'Setup did not finish');
@@ -153,6 +174,7 @@ def main():
     args = parser.parse_args()
     executable = args.exe.resolve(strict=True)
     cli = (args.cli or executable.with_name('lunalauncher-cli.exe')).resolve(strict=True)
+    os.environ['LUNA_DISABLE_BACKGROUND_DOWNLOADS'] = '1'
     events = queue.Queue()
 
     class Receiver(BaseHTTPRequestHandler):
@@ -172,6 +194,24 @@ def main():
     try:
         with temporary_profile(executable.parent) as temporary:
             root = Path(temporary)
+            source = root / '旧 Prism 配置'
+            source.mkdir()
+            external = root / 'external-instances'
+            fixture = external / 'migration-fixture'
+            fixture.mkdir(parents=True)
+            (fixture / 'instance.cfg').write_text(
+                '[General]\nConfigVersion=1.3\nInstanceType=OneSix\nname=Migration Fixture\n', encoding='utf-8'
+            )
+            (fixture / 'mmc-pack.json').write_text(json.dumps({
+                'formatVersion': 1, 'components': [{'uid': 'net.minecraft', 'version': '1.20.1'}],
+            }), encoding='utf-8')
+            (source / 'prismlauncher.cfg').write_text(
+                f'[General]\nConfigVersion=1.3\nInstanceDir={external.as_posix()}\nMinMemAlloc=768\nLanguage=en_US\n', encoding='utf-8'
+            )
+            (source / 'assets').mkdir()
+            (source / 'assets' / 'existing.txt').write_text('Prism', encoding='utf-8')
+            (source / 'assets' / 'new.txt').write_text('imported asset', encoding='utf-8')
+            (source / 'accounts.json').write_text('{"formatVersion":3,"accounts":[]}', encoding='utf-8')
             profile = root / 'profile'
             profile.mkdir()
             relative = Path(os.path.relpath(profile, cli.parent))
@@ -189,6 +229,19 @@ def main():
                     assert (profile / (candidate['name'] + '_nomigrate.txt')).is_file()
                 assert not sidecar.ok('startup.status')['migrations']
                 print('PASS: native startup status, relative data path, pending-migration guard and skip markers', flush=True)
+                (profile / 'assets').mkdir(exist_ok=True)
+                (profile / 'assets' / 'existing.txt').write_text('Luna', encoding='utf-8')
+                duplicate = profile / 'instances' / fixture.name
+                duplicate.mkdir(parents=True)
+                (duplicate / 'keep.txt').write_text('keep whole directory', encoding='utf-8')
+                sidecar.ok('settings.set', scope='launcher', key='Language', value='zh_CN')
+                for _ in range(2):
+                    sidecar.ok('startup.migrate', source=str(source))
+                assert (profile / 'assets' / 'existing.txt').read_text(encoding='utf-8') == 'Luna'
+                assert (profile / 'assets' / 'new.txt').read_text(encoding='utf-8') == 'imported asset'
+                assert (profile / 'accounts.json').read_bytes() == (source / 'accounts.json').read_bytes()
+                assert sorted(p.name for p in duplicate.iterdir()) == ['keep.txt']
+                print('PASS: idempotent merge with existing settings, asset and instance directory', flush=True)
             finally:
                 sidecar.close()
 
@@ -198,15 +251,17 @@ def main():
                 profile.mkdir()
                 ui = profile / 'webui/setup-test'
                 shutil.copytree(args.spa, ui)
+                preferences = {'shell':shell, 'theme':'dark', 'pclStylePreset':'luna-neo'}
+                (ui.parent / 'neo-ui-preferences.json').write_text(json.dumps(preferences), encoding='utf-8')
                 index = ui / 'index.html'
                 html = index.read_text(encoding='utf-8').replace('<head>', '<head><script src="./setup-preferences.js"></script>')
                 index.write_text(html.replace('</body>', '<script src="./setup-probe.js"></script></body>'), encoding='utf-8')
                 for reopen, expected in [(False, 'complete'), (True, 'reopen')]:
-                    config = {'report':f'http://127.0.0.1:{server.server_port}/', 'reopen':reopen, 'shell':shell}
+                    config = {'report':f'http://127.0.0.1:{server.server_port}/', 'reopen':reopen,
+                              'shell':shell, 'source':str(source), 'profile':str(profile)}
                     (ui / 'setup-probe.js').write_text(PROBE.replace('__CONFIG__', json.dumps(config)), encoding='utf-8')
-                    preferences = {'shell':shell, 'theme':'dark', 'pclStylePreset':'luna-neo'}
                     (ui / 'setup-preferences.js').write_text('' if reopen else
-                        'localStorage.setItem("luna-neo-ui.preferences", ' + json.dumps(json.dumps(preferences)) + ');', encoding='utf-8')
+                        'localStorage.setItem("luna-neo-ui-locale", "zh-CN");', encoding='utf-8')
                     environment = dict(os.environ, LUNA_LAUNCHER_CLI=str(cli), LUNA_LAUNCHER_DATA=str(profile),
                                        LUNA_WEB_UI='data/setup-test', WEBVIEW2_USER_DATA_FOLDER=str(root / ('webview-' + shell)))
                     environment.pop('LUNALAUNCHER_DATA_DIR', None)
@@ -222,6 +277,7 @@ def main():
                             return True
                         wait_until(received, process, expected, timeout=90)
                         assert process.wait(timeout=15) == 0
+                        assert (profile / 'instances' / fixture.name / 'instance.cfg').is_file()
                         print(f'PASS: {shell} wizard {expected}, theme/controls, Java deferral, memory validation, navigation and persistence', flush=True)
                     finally:
                         if process.poll() is None:

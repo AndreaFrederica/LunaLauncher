@@ -17,6 +17,15 @@ def run(command, cwd):
     pixi_bin = Path(sys.executable).parent
     if (pixi_bin / ("node.exe" if sys.platform == "win32" else "node")).is_file():
         env["PATH"] = str(pixi_bin) + os.pathsep + env.get("PATH", "")
+    if sys.platform == "win32" and Path(command[0]).suffix.lower() == ".bat":
+        # pnpm adds node_modules bins before starting cmd.exe. Leave space
+        # for them when Meson's MSVC environment inherits a long user PATH.
+        tool_roots = [str(pixi_bin), env.get("SystemRoot", r"C:\Windows")]
+        prefixes = [root.rstrip("\\/").casefold() + "\\" for root in tool_roots]
+        paths = env["PATH"].split(os.pathsep)
+        env["PATH"] = os.pathsep.join(dict.fromkeys(
+            path for path in paths if (path.rstrip("\\/").casefold() + "\\").startswith(tuple(prefixes))
+        ))
     subprocess.check_call([str(part) for part in command], cwd=cwd, env=env)
 
 

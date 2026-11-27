@@ -83,12 +83,18 @@ std::optional<int> CliInteraction::select(const QString& prompt, const QJsonArra
     err << prompt << Qt::endl;
     for (int i = 0; i < choices.size(); ++i) {
         const auto choice = choices.at(i).toObject();
-        err << "  " << (i + 1) << ". " << choice.value("name").toString() << " [" << choice.value("id").toString() << "]" << Qt::endl;
+        const auto label = choices.at(i).isString() ? choices.at(i).toString() : choice.value("name").toString();
+        err << "  " << (i + 1) << ". " << label;
+        if (choice.contains("id")) err << " [" << choice.value("id").toString() << "]";
+        if (choice.value("disabled").toBool()) err << " — " << choice.value("error").toString();
+        err << Qt::endl;
     }
     err << "Selection: " << Qt::flush;
     bool ok = false;
     const int selection = readLine(false).toInt(&ok);
     if (!ok || selection < 1 || selection > choices.size())
+        return std::nullopt;
+    if (choices.at(selection - 1).toObject().value("disabled").toBool())
         return std::nullopt;
     return selection - 1;
 }

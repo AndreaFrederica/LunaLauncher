@@ -296,6 +296,10 @@ void McpServer::handleMessage(const QJsonObject& request)
             writeError(id, -32602, QStringLiteral("Expected text or a valid zero-based choice index."));
             return;
         }
+        if (!cancel && m_choiceCount >= 0 && m_choiceOptions.at(answer.toInt()).toObject().value("disabled").toBool()) {
+            writeError(id, -32602, tr("The selected version did not pass validation."));
+            return;
+        }
         m_interactionAnswer = cancel ? QJsonValue() : answer;
         auto loop = m_interactionLoop;
         m_interactionLoop = nullptr;
@@ -507,6 +511,7 @@ QJsonValue McpServer::requestInteraction(const QString& prompt, bool secret, con
     m_interactionLoop = &loop;
     m_interactionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_choiceCount = choices ? choices->size() : -1;
+    m_choiceOptions = choices ? *choices : QJsonArray{};
     m_interactionAnswer = QJsonValue();
     QJsonObject event{ { "requestId", m_activeRequestId }, { "kind", "input" }, { "interactionId", m_interactionId },
                        { "prompt", prompt }, { "secret", secret }, { "expiresIn", 300 } };

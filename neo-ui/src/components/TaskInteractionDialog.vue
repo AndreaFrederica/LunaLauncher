@@ -4,14 +4,14 @@
       class="task-interaction"
       :class="{
         'task-interaction--pcl': pcl,
-        'task-interaction--restricted': restricted,
+        'task-interaction--restricted': restricted || choosingProfile,
         'pcl-dialog': pcl,
       }"
     >
       <q-card-section>
-        <h3>{{ restricted ? t(downloadFailure ? 'importErrors.downloadTitle' : 'neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h3>
+        <h3>{{ choosingProfile ? t('importProfiles.title') : restricted ? t(downloadFailure ? 'importErrors.downloadTitle' : 'neo.auto2.k2c6ada7570') : current?.request.choices ? t('neo.auto2.k9deb52e20d') : t('neo.auto2.k87758bee86') }}</h3>
         <p v-if="restricted">{{ t(downloadFailure ? 'importErrors.downloadHint' : 'neo.auto2.k7c306073f8') }}</p>
-        <p v-else>{{ current?.request.prompt }}</p>
+        <p v-else-if="!choosingProfile">{{ current?.request.prompt }}</p>
         <p v-if="error || current?.request.error" class="task-interaction__error" role="alert">{{ error || current?.request.error }}</p>
       </q-card-section>
       <q-card-section v-if="restricted" class="task-interaction__body">
@@ -40,14 +40,18 @@
           </li>
         </ul>
       </q-card-section>
-      <q-card-section v-else>
+      <q-card-section v-else-if="choosingProfile" class="task-interaction__body">
+        <ImportProfileChoices v-model="answer" :choices="current?.request.choices || []" :disabled="submitting" />
+      </q-card-section>
+      <q-card-section v-else-if="!confirming">
         <PclSelect v-if="current?.request.choices" v-model="answer" :options="choiceOptions" />
         <PclInput v-else v-model="answer" :type="current?.request.secret ? 'password' : 'text'" />
       </q-card-section>
       <q-card-actions align="right">
-        <PclButton :variant="pcl ? 'ghost' : 'normal'" :disabled="submitting" @click="submit(null)">{{ restricted ? t('neo.auto2.kaa385c0338') : t('neo.auto2.k4d0b4688c7') }}</PclButton>
-        <PclButton variant="highlight" :disabled="submitting || (restricted && !current?.request.complete)"
-          @click="submit(restricted ? 'continue' : answer)">{{ restricted ? t('neo.auto2.k4523bfbe2f') : current?.request.choices ? t('neo.auto2.k1fc1afc5c5') : t('neo.auto2.kb56d9ac6c5') }}</PclButton>
+        <PclButton :variant="pcl ? 'ghost' : 'normal'" :disabled="submitting" @click="submit(confirming ? 0 : null)">{{ restricted ? t('neo.auto2.kaa385c0338') : choosingProfile && !hasValidProfile ? t('importProfiles.close') : t('neo.auto2.k4d0b4688c7') }}</PclButton>
+        <PclButton v-if="!choosingProfile || hasValidProfile" variant="highlight"
+          :disabled="submitting || (restricted && !current?.request.complete) || (choosingProfile && !validProfileSelected)"
+          @click="submit(restricted ? 'continue' : confirming ? 1 : answer)">{{ restricted ? t('neo.auto2.k4523bfbe2f') : choosingProfile ? t('importProfiles.confirm') : current?.request.choices ? t('neo.auto2.k1fc1afc5c5') : t('neo.auto2.kb56d9ac6c5') }}</PclButton>
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -59,7 +63,9 @@ const { t } = useI18n();
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { launcher } from '../boot/launcher-api';
+import { isContinueConfirmation } from '../common/continueConfirmation';
 import { formatError } from '../common/formatError';
+import ImportProfileChoices from './ImportProfileChoices.vue';
 import PclButton from '../themes/pcl/components/PclButton.vue';
 import PclInput from '../themes/pcl/components/PclInput.vue';
 import PclSelect from '../themes/pcl/components/PclSelect.vue';
@@ -75,7 +81,7 @@ const props = defineProps<{
   execute: (operation: string, parameters?: Record<string, unknown>) => Promise<any>;
   pcl?: boolean; legacy?: { interactionId: string; context: Request } | null;
 }>();
-const emit = defineEmits<{ 'legacy-finished': [] }>();
+const emit = defineEmits<{ 'legacy-finished': []; 'prompt-open': [open: boolean] }>();
 const tasks = ref<any[]>([]);
 const submitted = new Set<string>();
 const current = computed(() => {
@@ -92,12 +98,21 @@ const choiceOptions = computed(() => (current.value?.request.choices || []).map(
   label: typeof choice === 'string' ? choice : choice.label || choice.name || String(value), value,
 })));
 const answer = ref<string | number>('');
+const confirming = computed(() => isContinueConfirmation(current.value?.request.choices));
+const choosingProfile = computed(() => current.value?.request.choices?.[0]?.kind === 'import-profile');
+const promptOpen = computed(() => choosingProfile.value || confirming.value);
+watch(promptOpen, open => emit('prompt-open', open));
+const hasValidProfile = computed(() => current.value?.request.choices?.some(choice => !choice.disabled));
+const validProfileSelected = computed(() => {
+  const choice = current.value?.request.choices?.[Number(answer.value)];
+  return typeof answer.value === 'number' && choice && !choice.disabled;
+});
 const error = ref('');
 const submitting = ref(false);
 let stopped = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(() => current.value?.request.interactionId, () => {
-  answer.value = current.value?.request.choices ? 0 : '';
+  answer.value = current.value?.request.choices && !choosingProfile.value && !confirming.value ? 0 : '';
   error.value = '';
 });
 
@@ -109,11 +124,11 @@ async function refresh() {
   if (!stopped) timer = setTimeout(refresh, 800);
 }
 onMounted(() => { void refresh(); });
-onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
+onBeforeUnmount(() => { stopped = true; clearTimeout(timer); if (promptOpen.value) emit('prompt-open', false); });
 
 async function submit(value: string | number | null) {
   const pending = current.value;
-  if (!pending || submitting.value) return;
+  if (!pending || submitting.value || (choosingProfile.value && value !== null && !validProfileSelected.value)) return;
   submitting.value = true;
   error.value = '';
   try {

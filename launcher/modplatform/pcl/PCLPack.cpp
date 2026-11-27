@@ -266,13 +266,22 @@ int customRamMegabytes(int value)
 QStringList findNestedPackCandidates(const QStringList& archiveFiles)
 {
     QStringList result;
+    const QSet<QString> excluded{ ".minecraft", "minecraft", "assets", "libraries", "mods", "config", "saves",
+                                  "resourcepacks", "shaderpacks" };
     for (const auto& rawPath : archiveFiles) {
         const auto path = QDir::fromNativeSeparators(rawPath);
+        if (QDir::isAbsolutePath(path) || path.contains(':'))
+            continue;
         const auto parts = path.split('/', Qt::SkipEmptyParts);
         if (parts.size() < 1 || parts.size() > 2)
             continue;
+        bool excludedPath = false;
+        for (const auto& part : parts)
+            excludedPath |= part == "." || part == ".." || excluded.contains(part.toLower());
+        if (excludedPath)
+            continue;
         const auto name = parts.constLast();
-        if (name.compare("modpack.mrpack", Qt::CaseInsensitive) == 0 || name.compare("modpack.zip", Qt::CaseInsensitive) == 0)
+        if (name.endsWith(".mrpack", Qt::CaseInsensitive) || name.endsWith(".zip", Qt::CaseInsensitive))
             result.append(rawPath);
     }
     result.removeDuplicates();

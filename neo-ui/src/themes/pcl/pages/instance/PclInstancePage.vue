@@ -122,6 +122,9 @@
             @component-version="(component, version) => emit('component-version', component, version)"
             @export="emit('export', $event)"
             @save="emit('save-setting', $event.key, $event.value)"
+            @install-start="emit('install-start', $event)"
+            @install-progress="emit('install-progress', $event)"
+            @install-done="emit('install-done', $event)"
             @console="emit('connect-console')"
           />
 

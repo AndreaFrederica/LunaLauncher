@@ -15,7 +15,7 @@
         <q-toggle v-model="preferences.animations" dark :label="t('appearance.animations')" />
       </div>
       <div class="accent-row"><span>{{ t('appearance.accent') }}</span><q-btn v-for="color in accents" :key="color" round size="sm" :style="{ background: color }" :class="{ selected: preferences.accent === color }" @click="preferences.accent = color" /></div>
-      <div class="preview" :class="{ 'preview-pcl': preferences.shell === 'pcl', 'preview-endfield': preferences.shell === 'endfield' }" :style="{ '--preview-accent': preferences.accent }"><div class="preview-dot"/><div><strong>{{ preferences.shell === 'pcl' ? 'PCL Style' : preferences.shell === 'endfield' ? '终末地' : preferences.shell === 'melody' ? '忘却的旋律' : 'Demo' }}</strong><small>{{ themeLabel }} · {{ densityLabel }}</small></div><q-icon name="check_circle" color="primary"/></div>
+      <div class="preview" :class="{ 'preview-pcl': preferences.shell === 'pcl', 'preview-endfield': preferences.shell === 'endfield' }" :style="{ '--preview-accent': preferences.accent }"><div class="preview-dot"/><div><strong>{{ preferences.shell === 'pcl' ? 'PCL Style' : preferences.shell === 'endfield' ? '终末地' : preferences.shell === 'melody' ? '忘却的旋律' : t('appearance.native') }}</strong><small>{{ themeLabel }} · {{ densityLabel }}</small></div><q-icon name="check_circle" color="primary"/></div>
       <q-btn flat :label="t('appearance.reset')" icon="restart_alt" class="q-mt-md" @click="resetNeoUiPreferences" />
     </div>
     <div class="preference-card"><div class="preference-heading"><q-icon name="language"/><div><strong>{{ t('language.title') }}</strong><p>{{ t('language.nativeUi') }}</p></div></div><q-banner dense class="bg-grey-9">{{ t('language.introBody') }}</q-banner></div>
@@ -35,7 +35,7 @@ async function openWebUiManager() {
 }
 const preferences = neoUiPreferences;
 const accents = ['#818cf8', '#38bdf8', '#34d399', '#f59e0b', '#f472b6', '#fb7185'];
-const shellOptions = computed(() => [{ label: 'PCL Style', value: 'pcl' }, { label: '终末地', value: 'endfield' }, { label: '忘却的旋律', value: 'melody' }, { label: 'Demo', value: 'neo' }]);
+const shellOptions = computed(() => [{ label: 'PCL Style', value: 'pcl' }, { label: '终末地', value: 'endfield' }, { label: '忘却的旋律', value: 'melody' }, { label: t('appearance.native'), value: 'neo' }]);
 const themeOptions = computed(() => [{ label: t('appearance.dark'), value: 'dark' }, { label: t('appearance.light'), value: 'light' }, { label: t('appearance.system'), value: 'system' }]);
 const densityOptions = computed(() => [{ label: t('appearance.comfortable'), value: 'comfortable' }, { label: t('appearance.compact'), value: 'compact' }]);
 const backgroundOptions = computed(() => [{ label: t('appearance.gradient'), value: 'gradient' }, { label: t('appearance.solid'), value: 'solid' }]);

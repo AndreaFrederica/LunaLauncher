@@ -68,7 +68,14 @@
 #include "net/ApiDownload.h"
 #include "net/Download.h"
 
+#include <QBuffer>
+#include <QDialogButtonBox>
 #include <QFileInfo>
+#include <QLabel>
+#include <QPalette>
+#include <QPushButton>
+#include <QTreeWidget>
+#include <QVBoxLayout>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QInputDialog>
@@ -153,6 +160,60 @@ class DiscardWriteDevice final : public QIODevice {
     qint64 writeData(const char*, qint64 size) override { return size; }
 };
 
+namespace {
+std::optional<int> selectPackProfile(QWidget* parent, const QString& title, const QString& prompt, const QJsonArray& choices)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(title);
+    dialog.resize(720, 390);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* description = new QLabel(prompt, &dialog);
+    description->setTextFormat(Qt::PlainText);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    auto* tree = new QTreeWidget(&dialog);
+    tree->setRootIsDecorated(false);
+    tree->setWordWrap(true);
+    tree->setHeaderLabels({ QObject::tr("Version"), QObject::tr("Validation") });
+    for (qsizetype index = 0; index < choices.size(); ++index) {
+        const auto choice = choices.at(index).toObject();
+        const auto error = choice.value("error").toString();
+        auto* row = new QTreeWidgetItem(tree, {
+            choice.value("name").toString() + '\n' + choice.value("path").toString(),
+            error.isEmpty() ? QObject::tr("Ready to import") + '\n' + choice.value("details").toString() : error,
+        });
+        row->setData(0, Qt::UserRole, static_cast<int>(index));
+        if (!error.isEmpty()) {
+            row->setFlags(row->flags() & ~Qt::ItemIsSelectable);
+            row->setForeground(1, dialog.palette().brush(QPalette::LinkVisited));
+        }
+    }
+    tree->setColumnWidth(0, 330);
+    layout->addWidget(tree);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
+    auto* confirm = buttons->addButton(QObject::tr("Import selected version"), QDialogButtonBox::AcceptRole);
+    confirm->setEnabled(false);
+    QObject::connect(tree, &QTreeWidget::itemSelectionChanged, &dialog, [tree, confirm] {
+        confirm->setEnabled(!tree->selectedItems().isEmpty());
+    });
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted || tree->selectedItems().isEmpty()) return std::nullopt;
+    return tree->selectedItems().constFirst()->data(0, Qt::UserRole).toInt();
+}
+
+QJsonObject readArchiveProfile(MMCZip::ArchiveReader::File& file)
+{
+    if (file.size() < 0 || file.size() > 4 * 1024 * 1024) return {};
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    if (!file.copyTo(buffer, 4 * 1024 * 1024)) return {};
+    return QJsonDocument::fromJson(buffer.data()).object();
+}
+}  // namespace
+
 void InstanceImportTask::processZipPack()
 {
     setStatus(tr("Attempting to determine instance type"));
@@ -166,6 +227,8 @@ void InstanceImportTask::processZipPack()
     QString root;
     QStringList nestedPackCandidates;
     QStringList archiveFiles;
+    QHash<QString, QJsonObject> profiles;
+    QSet<QString> encryptedProfiles;
     QString encryptedValidationPath;
     qint64 encryptedValidationSize = std::numeric_limits<qint64>::max();
     m_modpackType = ModpackType::Unknown;
@@ -174,14 +237,22 @@ void InstanceImportTask::processZipPack()
     // Especially Flame has a very common filename for its manifest, which may appear inside overrides for example
     // https://docs.modrinth.com/docs/modpacks/format_definition/#storage
     auto detectInstance = [this, &extractDir, &root, &nestedPackCandidates, &archiveFiles, &encryptedValidationPath,
-                           &encryptedValidationSize](MMCZip::ArchiveReader::File* f, bool& stop) {
+                           &encryptedValidationSize, &profiles, &encryptedProfiles](MMCZip::ArchiveReader::File* f, bool& stop) {
         if (!isRunning()) {
             stop = true;
             return true;
         }
         auto fileName = f->filename();
         if (f->isFile()) {
-            archiveFiles.append(fileName);
+            const auto path = QDir::cleanPath(QString(fileName).replace('\\', '/'));
+            archiveFiles.append(path);
+            const QFileInfo profilePath(path);
+            if (m_modpackType == ModpackType::Unknown
+                && (PCL::isVersionProfilePath(path) || (profilePath.suffix() == "json"
+                    && profilePath.completeBaseName() == profilePath.dir().dirName()))) {
+                if (f->isEncrypted()) encryptedProfiles.insert(path);
+                else profiles.insert(path, readArchiveProfile(*f));
+            }
             const auto fileSize = f->size();
             if (f->isEncrypted() && fileSize >= 0 &&
                 (encryptedValidationSize == std::numeric_limits<qint64>::max() ||
@@ -222,12 +293,16 @@ void InstanceImportTask::processZipPack()
         emitFailed(tr("Unable to open supplied modpack zip file."));
         return;
     }
+    if (!isRunning())
+        return;
     auto requestArchivePassphrase = [this, &encryptedValidationPath]() {
         if (encryptedValidationPath.isEmpty() || !m_archivePassphrase.isEmpty())
             return true;
+        const auto prompt = tr("请输入压缩包 %1 的解压密码：")
+                                .arg(m_nestedArchiveName.isEmpty() ? QFileInfo(m_archivePath).fileName() : m_nestedArchiveName);
         if (APPLICATION->isHeadless()) {
             while (activeUserInteraction) {
-                const auto password = activeUserInteraction->input(tr("Enter the archive password:"), true);
+                const auto password = activeUserInteraction->input(prompt, true);
                 if (!password) { emitAborted(); return false; }
                 MMCZip::ArchiveReader validator(m_archivePath, *password);
                 auto encryptedFile = validator.goToFile(encryptedValidationPath);
@@ -239,7 +314,7 @@ void InstanceImportTask::processZipPack()
         }
         while (true) {
             bool accepted = false;
-            const auto passphrase = QInputDialog::getText(m_parent, tr("Encrypted modpack"), tr("Enter the archive password:"),
+            const auto passphrase = QInputDialog::getText(m_parent, tr("Encrypted modpack"), prompt,
                                                           QLineEdit::Password, QString(), &accepted);
             if (!accepted) {
                 emitAborted();
@@ -259,14 +334,41 @@ void InstanceImportTask::processZipPack()
         }
     };
     if (m_modpackType == ModpackType::Unknown) {
+        if (!encryptedProfiles.isEmpty()) {
+            if (!requestArchivePassphrase()) return;
+            MMCZip::ArchiveReader reader(m_archivePath, m_archivePassphrase);
+            if (!reader.parse([&](MMCZip::ArchiveReader::File* file, bool& stop) {
+                if (!isRunning()) { stop = true; return true; }
+                const auto path = QDir::cleanPath(file->filename().replace('\\', '/'));
+                if (encryptedProfiles.remove(path)) profiles.insert(path, readArchiveProfile(*file));
+                stop = encryptedProfiles.isEmpty();
+                QCoreApplication::processEvents();
+                return true;
+            })) {
+                emitFailed(tr("Could not read the encrypted version profiles."));
+                return;
+            }
+            if (!isRunning()) return;
+        }
+        auto candidates = PCL::findPlainPackCandidates(archiveFiles, profiles);
+        const auto installers = LegacyJarModPack::findCandidates(archiveFiles);
+        for (const auto& candidate : installers) {
+            const auto path = candidate.root + candidate.version + '/' + candidate.version + ".json";
+            candidates.removeIf( [&](const auto& entry) { return entry.profilePath == path; });
+            candidates.append({ candidate.root, candidate.version, path, {}, {} });
+        }
+        // Prefer a game profile in this archive over resource ZIPs bundled with it.
+        if (!candidates.isEmpty())
+            nestedPackCandidates.clear();
         nestedPackCandidates.removeDuplicates();
         if (nestedPackCandidates.size() > 1) {
-            emitFailed(tr("Archive contains multiple nested modpacks. Remove all but one modpack.mrpack or modpack.zip and try again."));
+            emitFailed(tr("压缩包中有多个内层 ZIP / MRPACK，无法确定要导入哪一个。请解压外层后，直接导入所需的整合包：\n%1")
+                           .arg(nestedPackCandidates.join('\n')));
             return;
         }
         if (nestedPackCandidates.size() == 1) {
             if (m_nestedArchiveDepth >= 1) {
-                emitFailed(tr("Nested modpack depth exceeds the supported PCL wrapper format."));
+                emitFailed(tr("内层压缩包仍包含其他压缩包，已停止继续嵌套解压。请解压外层后，直接导入包含游戏文件的 ZIP / MRPACK。"));
                 return;
             }
 
@@ -276,86 +378,77 @@ void InstanceImportTask::processZipPack()
             auto nestedFile = nestedSource.goToFile(nestedPackCandidates.constFirst());
             constexpr qint64 MAX_NESTED_PACK_SIZE = 8LL * 1024 * 1024 * 1024;
             if (!nestedFile || !nestedFile->isFile() || nestedFile->size() <= 0 || nestedFile->size() > MAX_NESTED_PACK_SIZE) {
-                emitFailed(tr("The nested PCL modpack is empty or exceeds the 8 GiB safety limit."));
+                emitFailed(tr("内层整合包为空或超过 8 GiB 大小限制：%1").arg(nestedPackCandidates.constFirst()));
                 return;
             }
 
-            auto temporary = std::make_unique<QTemporaryFile>(QDir::tempPath() + "/luna-pcl-XXXXXX.mrpack");
+            setStatus(tr("正在读取内层整合包：%1").arg(nestedPackCandidates.constFirst()));
+            auto temporary = std::make_unique<QTemporaryFile>(QDir::tempPath() + "/luna-nested-XXXXXX.zip");
             temporary->setAutoRemove(true);
             if (!temporary->open() || !nestedFile->copyTo(*temporary) || !temporary->flush()) {
-                emitFailed(tr("Could not extract the nested PCL modpack."));
+                emitFailed(tr("无法读取内层整合包：%1").arg(nestedPackCandidates.constFirst()));
                 return;
             }
             temporary->close();
 
-            MMCZip::ArchiveReader nestedReader(temporary->fileName());
-            bool hasModrinthIndex = false;
-            const bool validArchive = nestedReader.parse([&hasModrinthIndex](MMCZip::ArchiveReader::File* file, bool& stop) {
-                if (QDir::fromNativeSeparators(file->filename()).compare("modrinth.index.json", Qt::CaseInsensitive) == 0) {
-                    hasModrinthIndex = true;
-                    stop = true;
-                }
-                return true;
-            });
-            if (!validArchive || !hasModrinthIndex) {
-                emitFailed(tr("The nested PCL modpack is not a valid Modrinth pack."));
-                return;
-            }
-
             m_nestedArchive = std::move(temporary);
+            m_nestedArchiveName = nestedPackCandidates.constFirst();
             m_archivePath = m_nestedArchive->fileName();
             m_archivePassphrase.clear();
             m_nestedArchiveDepth++;
-            m_pclWrapperDetected = true;
-            setStatus(tr("Opening nested PCL modpack"));
+            const auto nestedName = QFileInfo(m_nestedArchiveName).fileName();
+            m_pclWrapperDetected |= nestedName.compare("modpack.zip", Qt::CaseInsensitive) == 0 ||
+                                    nestedName.compare("modpack.mrpack", Qt::CaseInsensitive) == 0;
+            // Reuse the complete detector, converter and password interaction for
+            // the inner archive, including vanilla directory and patched JAR packs.
             processZipPack();
             return;
         }
-        struct DirectoryCandidate { QString root; QString version; bool installer = false; };
-        QList<DirectoryCandidate> candidates;
-        const auto installers = LegacyJarModPack::findCandidates(archiveFiles);
-        for (const auto& candidate : PCL::findPlainPackCandidates(archiveFiles)) {
-            const bool installer = std::any_of(installers.cbegin(), installers.cend(), [&](const auto& item) {
-                return item.root + item.version == candidate.root + "versions/" + candidate.version;
-            });
-            if (!installer) candidates.append({candidate.root, candidate.version, false});
-        }
-        for (const auto& candidate : installers) candidates.append({candidate.root, candidate.version, true});
         if (!candidates.isEmpty()) {
-            int selectedIndex = 0;
-            if (candidates.size() > 1) {
-                if (APPLICATION->isHeadless()) {
-                    QJsonArray choices;
-                    for (const auto& candidate : candidates) choices.append(candidate.version + " (" + candidate.root + ")");
-                    const auto selected = activeUserInteraction ? activeUserInteraction->select(tr("Select the HMCL / PCL version to import:"), choices) : std::nullopt;
-                    if (!selected) { emitAborted(); return; }
-                    selectedIndex = *selected;
-                } else {
-                    QStringList labels;
-                    for (const auto& candidate : candidates)
-                        labels.append(
-                            QString("%1 (%2)").arg(candidate.version, candidate.root.isEmpty() ? tr("archive root") : candidate.root));
-                    bool accepted = false;
-                    const auto selected = QInputDialog::getItem(m_parent, tr("Select HMCL / PCL version"),
-                                                                tr("This archive contains multiple game profiles. Select the one to import:"),
-                                                                labels, 0, false, &accepted);
-                    if (!accepted) {
-                        emitAborted();
-                        return;
-                    }
-                    selectedIndex = labels.indexOf(selected);
-                }
+            const QSet<QString> files(archiveFiles.cbegin(), archiveFiles.cend());
+            QJsonArray choices;
+            QStringList errors;
+            QList<bool> legacy;
+            for (auto& candidate : candidates) {
+                const bool installer = std::any_of(installers.cbegin(), installers.cend(), [&](const auto& entry) {
+                    return candidate.profilePath == entry.root + entry.version + '/' + entry.version + ".json";
+                });
+                legacy.append(installer);
+                PCL::validatePlainPackCandidate(candidate, profiles, files, installer);
+                if (!candidate.error.isEmpty())
+                    errors.append(candidate.version + ": " + candidate.error);
+                choices.append(QJsonObject{ { "name", candidate.version }, { "id", candidate.profilePath },
+                    { "path", candidate.profilePath }, { "details", candidate.details }, { "error", candidate.error },
+                    { "disabled", !candidate.error.isEmpty() }, { "kind", "import-profile" } });
+            }
+            std::optional<int> selection = 0;
+            if (candidates.size() > 1 || !errors.isEmpty()) {
+                const auto title = tr("Select a version to import");
+                const auto prompt = errors.size() == candidates.size()
+                    ? tr("None of the detected versions can be imported.")
+                    : tr("Choose a version that passed validation to continue.");
+                if (APPLICATION->isHeadless())
+                    selection = activeUserInteraction ? activeUserInteraction->select(title, choices) : std::nullopt;
+                else
+                    selection = selectPackProfile(m_parent, title, prompt, choices);
             }
 
-            if (selectedIndex < 0 || selectedIndex >= candidates.size()) { emitAborted(); return; }
-            const auto candidate = candidates.at(selectedIndex);
+            if (!selection || *selection < 0 || *selection >= candidates.size() || !candidates.at(*selection).error.isEmpty()) {
+                if (errors.size() == candidates.size()) emitFailed(errors.join('\n'));
+                else emitAborted();
+                return;
+            }
+            const auto& candidate = candidates.at(*selection);
             m_modpackType = ModpackType::PCLPlain;
             m_pclPlainVersion = candidate.version;
-            m_legacyJarMod = candidate.installer;
+            m_legacyJarMod = legacy.at(*selection);
+            m_pclProfilePath = candidate.profilePath.mid(candidate.root.size());
             root = candidate.root;
             m_pclWrapperDetected = true;
         } else {
-            emitFailed(tr("Archive does not contain a recognized modpack type."));
+            emitFailed(m_nestedArchiveName.isEmpty()
+                           ? tr("Archive does not contain a recognized modpack type.")
+                           : tr("内层压缩包 %1 未包含可识别的整合包类型。").arg(m_nestedArchiveName));
             return;
         }
     }
@@ -377,6 +470,15 @@ void InstanceImportTask::processZipPack()
     });
 
     connect(zipTask.get(), &Task::succeeded, this, [this] {
+        if (m_modpackType == ModpackType::PCLPlain && !m_legacyJarMod) {
+            const QDir source(FS::PathCombine(m_stagingPath, "pcl-source"));
+            const auto canonical = source.filePath("versions/" + m_pclPlainVersion + '/' + m_pclPlainVersion + ".json");
+            const auto selected = source.filePath(m_pclProfilePath);
+            if (selected != canonical && !QFile::copy(selected, canonical)) {
+                emitFailed(tr("Could not prepare the selected version JSON: %1").arg(m_pclProfilePath));
+                return;
+            }
+        }
         if (m_legacyJarMod) prepareLegacyJarMod();
         else extractFinished();
     }, Qt::QueuedConnection);
